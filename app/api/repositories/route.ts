@@ -21,16 +21,6 @@ export async function GET() {
             isActive: true,
           },
         },
-        branchConfigs: {
-          include: {
-            aiModel: {
-              select: {
-                id: true,
-                provider: true,
-              },
-            },
-          },
-        },
         _count: {
           select: {
             reviewLogs: true,
@@ -106,24 +96,36 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, isActive, autoReview, defaultAIModelId } = body
+    const { id, isActive, autoReview, defaultAIModelId, customPrompt, watchBranches } = body
 
     const updateData: any = {}
     if (isActive !== undefined) updateData.isActive = isActive
     if (autoReview !== undefined) updateData.autoReview = autoReview
     if (defaultAIModelId !== undefined) updateData.defaultAIModelId = defaultAIModelId
+    if (customPrompt !== undefined) updateData.customPrompt = customPrompt
+    if (watchBranches !== undefined) updateData.watchBranches = watchBranches
 
     const repository = await prisma.repository.update({
       where: { id },
       data: updateData,
       include: {
-        gitLabAccount: true,
+        gitLabAccount: {
+          select: {
+            id: true,
+            url: true,
+          },
+        },
         defaultAIModel: {
           select: {
             id: true,
             provider: true,
             modelId: true,
             isActive: true,
+          },
+        },
+        _count: {
+          select: {
+            reviewLogs: true,
           },
         },
       },
