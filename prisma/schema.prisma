@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// GitLab 账号配置
+model GitLabAccount {
+  id                String        @id @default(cuid())
+  url               String        // GitLab 实例 URL，如 https://gitlab.com
+  accessToken       String        // 访问令牌
+  webhookSecret     String?       // Webhook 密钥（可选）
+  isActive          Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  repositories      Repository[]  // 关联的仓库
+
+  @@map("gitlab_accounts")
+}
+
+// AI 模型配置
+model AIModel {
+  id                String        @id @default(cuid())
+  provider          String        // 提供商: openai, claude, custom
+  modelId           String        // 模型 ID，如 "gpt-4", "claude-3-5-sonnet"
+  apiKey            String        // API 密钥
+  apiEndpoint       String?       // 自定义 API 端点（仅用于自定义模型）
+  maxTokens         Int?          // 最大 token 数（可选）
+  temperature       Float?        // 温度参数（可选）
+  isActive          Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  branchConfigs     BranchConfig[] // 关联的分支配置
+  repositories      Repository[]  // 使用此模型作为默认的仓库
+
+  @@map("ai_models")
+}
+
+// 仓库配置
+model Repository {
+  id                String        @id @default(cuid())
+  gitLabProjectId   Int           // GitLab 项目 ID
+  name              String        // 仓库名称
+  path              String        // 仓库路径，如 namespace/project-name
+  description       String?       // 仓库描述（可选）
+  gitLabAccountId   String
+  gitLabAccount     GitLabAccount @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
+  isActive          Boolean       @default(true)
+  autoReview        Boolean       @default(false) // 是否自动审查
+  defaultAIModelId  String?       // 默认 AI 模型 ID（可选，为空时使用全局默认）
+  defaultAIModel    AIModel?      @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  branchConfigs     BranchConfig[] // 关联的分支配置
+  reviewLogs        ReviewLog[]   // 关联的审查日志
+
+  @@unique([gitLabProjectId, gitLabAccountId])
+  @@map("repositories")
+}
+
+// 分支配置
+model BranchConfig {
+  id                String        @id @default(cuid())
+  repositoryId      String
+  repository        Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branchPattern     String        // 分支匹配模式，如 "main", "develop", "feature/*"
+  aiModelId         String
+  aiModel           AIModel       @relation(fields: [aiModelId], references: [id])
+  systemPrompt      String        // 系统 Prompt
+  isActive          Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  reviewLogs        ReviewLog[]   // 关联的审查日志
+
+  @@map("branch_configs")
+}
+
+// 审查日志
+model ReviewLog {
+  id                String          @id @default(cuid())
+  repositoryId      String
+  repository        Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branchConfigId    String
+  branchConfig      BranchConfig    @relation(fields: [branchConfigId], references: [id])
+  mergeRequestId    Int             // GitLab MR ID
+  mergeRequestIid   Int             // GitLab MR 内部 ID
+  sourceBranch      String          // 源分支
+  targetBranch      String          // 目标分支
+  author            String          // MR 作者
+  title             String          // MR 标题
+  description       String?         // MR 描述（可选）
+  commitSha         String          // 提交的 SHA
+  commitShortId     String          // 提交的短 ID
+  status            String          // 状态: pending, completed, failed
+  error             String?         // 错误信息（如果有）
+  totalFiles        Int             // 总文件数
+  reviewedFiles     Int             @default(0) // 已审查文件数
+  criticalIssues    Int             @default(0) // 严重问题数
+  normalIssues      Int             @default(0) // 一般问题数
+  suggestions       Int             @default(0) // 建议数
+  startedAt         DateTime        @default(now())
+  completedAt       DateTime?       // 完成时间
+  comments          ReviewComment[] // 关联的审查评论
+
+  @@map("review_logs")
+}
+
+// 审查评论
+model ReviewComment {
+  id                String        @id @default(cuid())
+  reviewLogId       String
+  reviewLog         ReviewLog     @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
+  filePath          String        // 文件路径
+  lineNumber        Int           // 行号
+  lineRangeEnd      Int?          // 行范围结束（可选，用于多行评论）
+  severity          String        // 严重级别: critical, normal, suggestion
+  content           String        // 评论内容
+  diffHunk          String?       // diff 片段（可选）
+  gitlabCommentId   Int?          // GitLab 评论 ID（已创建后）
+  isPosted          Boolean       @default(false) // 是否已发布到 GitLab
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@map("review_comments")
+}
