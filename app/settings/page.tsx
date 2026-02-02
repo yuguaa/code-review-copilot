@@ -518,12 +518,12 @@ export default function SettingsPage() {
                   <h3 className="text-lg font-semibold">
                     {editingModel ? '编辑 AI 模型' : '添加 AI 模型'}
                   </h3>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-4">
                     <div className="space-y-2">
                       <Label>提供商</Label>
                       <Select
                         value={modelForm.provider}
-                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as any, modelId: '' })}
+                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as any })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -537,31 +537,25 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>模型 ID</Label>
-                      <Select
+                      <Input
+                        placeholder={modelForm.provider === 'openai' ? '例如: gpt-4o, gpt-4-turbo' : modelForm.provider === 'claude' ? '例如: claude-3-5-sonnet-20241022' : '例如: llama-3-70b-instruct'}
                         value={modelForm.modelId}
-                        onValueChange={(value) => setModelForm({ ...modelForm, modelId: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={modelForm.provider === 'custom' ? '输入自定义模型 ID' : '选择模型'} />
-                        </SelectTrigger>
-                        <SelectContent>
+                        onChange={(e) => setModelForm({ ...modelForm, modelId: e.target.value })}
+                      />
+                      {modelForm.provider !== 'custom' && (
+                        <p className="text-xs text-muted-foreground">
+                          也可以从常用模型中选择：
                           {getModelSuggestions().map((suggestion) => (
-                            <SelectItem key={suggestion.value} value={suggestion.value}>
+                            <button
+                              key={suggestion.value}
+                              type="button"
+                              className="text-xs text-sidebar-primary hover:underline ml-2"
+                              onClick={() => setModelForm({ ...modelForm, modelId: suggestion.value })}
+                            >
                               {suggestion.label}
-                            </SelectItem>
+                            </button>
                           ))}
-                          {modelForm.provider === 'custom' && (
-                            <SelectItem value="custom-input">自定义输入</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {modelForm.provider === 'custom' && modelForm.modelId === 'custom-input' && (
-                        <Input
-                          className="mt-2"
-                          placeholder="例如: llama-3-70b-instruct"
-                          value={modelForm.modelId}
-                          onChange={(e) => setModelForm({ ...modelForm, modelId: e.target.value })}
-                        />
+                        </p>
                       )}
                     </div>
                   </div>
@@ -633,12 +627,12 @@ export default function SettingsPage() {
               ) : (
                 <div className="p-6 border rounded-lg space-y-4">
                   <h3 className="text-lg font-semibold">添加 AI 模型</h3>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-4">
                     <div className="space-y-2">
                       <Label>提供商</Label>
                       <Select
                         value={modelForm.provider}
-                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as any, modelId: '' })}
+                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as any })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -652,31 +646,25 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>模型 ID</Label>
-                      <Select
+                      <Input
+                        placeholder={modelForm.provider === 'openai' ? '例如: gpt-4o, gpt-4-turbo' : modelForm.provider === 'claude' ? '例如: claude-3-5-sonnet-20241022' : '例如: llama-3-70b-instruct'}
                         value={modelForm.modelId}
-                        onValueChange={(value) => setModelForm({ ...modelForm, modelId: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={modelForm.provider === 'custom' ? '输入自定义模型 ID' : '选择模型'} />
-                        </SelectTrigger>
-                        <SelectContent>
+                        onChange={(e) => setModelForm({ ...modelForm, modelId: e.target.value })}
+                      />
+                      {modelForm.provider !== 'custom' && (
+                        <p className="text-xs text-muted-foreground">
+                          也可以从常用模型中选择：
                           {getModelSuggestions().map((suggestion) => (
-                            <SelectItem key={suggestion.value} value={suggestion.value}>
+                            <button
+                              key={suggestion.value}
+                              type="button"
+                              className="text-xs text-sidebar-primary hover:underline ml-2"
+                              onClick={() => setModelForm({ ...modelForm, modelId: suggestion.value })}
+                            >
                               {suggestion.label}
-                            </SelectItem>
+                            </button>
                           ))}
-                          {modelForm.provider === 'custom' && (
-                            <SelectItem value="custom-input">自定义输入</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {modelForm.provider === 'custom' && modelForm.modelId === 'custom-input' && (
-                        <Input
-                          className="mt-2"
-                          placeholder="例如: llama-3-70b-instruct"
-                          value={modelForm.modelId}
-                          onChange={(e) => setModelForm({ ...modelForm, modelId: e.target.value })}
-                        />
+                        </p>
                       )}
                     </div>
                   </div>
