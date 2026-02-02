@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
@@ -21,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, GitFork, Loader2, Search, X, Settings } from 'lucide-react'
+import { Plus, GitFork, Loader2, Search, X, Settings, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 
 // 获取模型显示名称
@@ -69,11 +70,12 @@ type Repository = {
   autoReview: boolean
   defaultAIModelId: string | null
   defaultAIModel: AIModel | null
+  watchBranches: string | null
+  customPrompt: string | null
   gitLabAccount: {
     id: string
     url: string
   } | null
-  branchConfigs: any[]
   _count: {
     reviewLogs: number
   }
@@ -163,7 +165,6 @@ export default function RepositoriesPage() {
   // 打开添加对话框时加载项目
   const handleOpenAddDialog = () => {
     setShowAddDialog(true)
-    loadGitLabProjects()
   }
 
   // 搜索项目
@@ -331,7 +332,7 @@ export default function RepositoriesPage() {
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">仓库名称</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">GitLab 账号</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">AI 模型</TableHead>
-                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">分支配置</TableHead>
+                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">监听分支</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">自动审查</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">状态</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground text-right">审查数</TableHead>
@@ -377,9 +378,13 @@ export default function RepositoriesPage() {
                       </Button>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <span className="text-sm text-muted-foreground">
-                        {repo.branchConfigs?.length || 0} 个配置
-                      </span>
+                      {repo.watchBranches ? (
+                        <Badge variant="outline" className="text-xs">
+                          {repo.watchBranches}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">所有分支</span>
+                      )}
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       <Button
@@ -401,6 +406,16 @@ export default function RepositoriesPage() {
                       {repo._count?.reviewLogs || 0}
                     </TableCell>
                     <TableCell className="px-4 py-3 text-right">
+                      <Link href={`/repositories/${repo.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-3"
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />
+                          配置
+                        </Button>
+                      </Link>
                       <Button
                         variant="ghost"
                         size="icon"

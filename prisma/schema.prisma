@@ -36,7 +36,6 @@ model AIModel {
   isActive          Boolean       @default(true)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-  branchConfigs     BranchConfig[] // 关联的分支配置
   repositories      Repository[]  // 使用此模型作为默认的仓库
 
   @@map("ai_models")
@@ -55,30 +54,14 @@ model Repository {
   autoReview        Boolean       @default(false) // 是否自动审查
   defaultAIModelId  String?       // 默认 AI 模型 ID（可选，为空时使用全局默认）
   defaultAIModel    AIModel?      @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
+  watchBranches     String?       // 监听的分支（逗号分隔或通配符，如 "main,develop,feature/*"）
+  customPrompt      String?       // 自定义审查 Prompt（可选，为空时使用全局默认）
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-  branchConfigs     BranchConfig[] // 关联的分支配置
   reviewLogs        ReviewLog[]   // 关联的审查日志
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@map("repositories")
-}
-
-// 分支配置
-model BranchConfig {
-  id                String        @id @default(cuid())
-  repositoryId      String
-  repository        Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  branchPattern     String        // 分支匹配模式，如 "main", "develop", "feature/*"
-  aiModelId         String
-  aiModel           AIModel       @relation(fields: [aiModelId], references: [id])
-  systemPrompt      String        // 系统 Prompt
-  isActive          Boolean       @default(true)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  reviewLogs        ReviewLog[]   // 关联的审查日志
-
-  @@map("branch_configs")
 }
 
 // 审查日志
@@ -86,8 +69,6 @@ model ReviewLog {
   id                String          @id @default(cuid())
   repositoryId      String
   repository        Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  branchConfigId    String
-  branchConfig      BranchConfig    @relation(fields: [branchConfigId], references: [id])
   mergeRequestId    Int             // GitLab MR ID
   mergeRequestIid   Int             // GitLab MR 内部 ID
   sourceBranch      String          // 源分支

@@ -8,7 +8,7 @@ export async function GET() {
       include: {
         _count: {
           select: {
-            branchConfigs: true,
+            repositories: true,
           },
         },
       },
