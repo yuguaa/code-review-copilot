@@ -270,17 +270,6 @@ export class ReviewService {
 
     for (const comment of reviewLog.comments) {
       try {
-        // 构建 GitLab 位置信息
-        const position = {
-          base_sha: mr.diff_refs.base_sha,
-          head_sha: mr.diff_refs.head_sha,
-          start_sha: mr.diff_refs.start_sha,
-          old_path: comment.filePath,
-          new_path: comment.filePath,
-          position_type: 'text' as const,
-          new_line: comment.lineNumber,
-        }
-
         // 添加严重级别标签
         const severityLabel = {
           critical: '🔴 严重',
@@ -288,25 +277,62 @@ export class ReviewService {
           suggestion: '💡 建议',
         }[comment.severity]
 
-        const commentBody = `${severityLabel}\n\n${comment.content}`
+        const commentBody = `${severityLabel}\n\n**文件**: \`${comment.filePath}\` (行 ${comment.lineNumber})\n\n${comment.content}`
 
-        const result = await gitlabService.createMergeRequestComment(
-          reviewLog.repository.gitLabProjectId,
-          reviewLog.mergeRequestIid,
-          commentBody,
-          position
-        )
+        // 先尝试带 position 的行内评论
+        try {
+          const position = {
+            base_sha: mr.diff_refs.base_sha,
+            head_sha: mr.diff_refs.head_sha,
+            start_sha: mr.diff_refs.start_sha,
+            old_path: comment.filePath,
+            new_path: comment.filePath,
+            position_type: 'text' as const,
+            new_line: comment.lineNumber,
+          }
 
-        // 更新评论状态
-        await prisma.reviewComment.update({
-          where: { id: comment.id },
-          data: {
-            isPosted: true,
-            gitlabCommentId: result.id,
-          },
-        })
+          const result = await gitlabService.createMergeRequestComment(
+            reviewLog.repository.gitLabProjectId,
+            reviewLog.mergeRequestIid,
+            commentBody,
+            position
+          )
+
+          // 更新评论状态
+          await prisma.reviewComment.update({
+            where: { id: comment.id },
+            data: {
+              isPosted: true,
+              gitlabCommentId: result.id,
+            },
+          })
+
+          console.log(`✅ Posted inline comment to MR: ${comment.filePath}:${comment.lineNumber}`)
+        } catch (positionError) {
+          // 如果带 position 失败，回退到不带 position 的通用评论
+          console.log(`⚠️ Inline comment failed, posting as general comment...`)
+          
+          const result = await gitlabService.createMergeRequestComment(
+            reviewLog.repository.gitLabProjectId,
+            reviewLog.mergeRequestIid,
+            commentBody,
+            undefined  // 不带 position
+          )
+
+          // 更新评论状态
+          await prisma.reviewComment.update({
+            where: { id: comment.id },
+            data: {
+              isPosted: true,
+              gitlabCommentId: result.id,
+            },
+          })
+
+          console.log(`✅ Posted general comment to MR`)
+        }
       } catch (error) {
-        console.error(`Failed to post comment ${comment.id} to GitLab:`, error)
+        console.error(`❌ Failed to post comment ${comment.id} to GitLab:`, error)
+        // 继续处理其他评论
       }
     }
   }

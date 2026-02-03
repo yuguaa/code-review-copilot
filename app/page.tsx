@@ -68,7 +68,7 @@ async function getDashboardStats() {
       take: 5,
     }),
     prisma.reviewLog.groupBy({
-      by: ['author'],
+      by: ['authorUsername'],
       _count: {
         id: true,
       },
@@ -83,6 +83,11 @@ async function getDashboardStats() {
         },
       },
       take: 5,
+      where: {
+        authorUsername: {
+          not: null,
+        },
+      },
     }),
   ])
 
@@ -99,6 +104,23 @@ async function getDashboardStats() {
   })
 
   const repoMap = new Map(repositories.map((r: any) => [r.id, r.name]))
+
+  // 获取用户姓名映射
+  const usernames = topUsers.map((u: any) => u.authorUsername).filter((id: string | null) => id !== null)
+  const reviewLogsForUsers = await prisma.reviewLog.findMany({
+    where: {
+      authorUsername: { in: usernames as string[] },
+    },
+    select: {
+      authorUsername: true,
+      author: true,
+    },
+    distinct: ['authorUsername'],
+  })
+
+  const userMap = new Map(
+    reviewLogsForUsers.map((log: any) => [log.authorUsername as string, log.author])
+  )
 
   const topReposWithNames = topRepositories.map((r: any) => ({
     repositoryId: r.repositoryId,
@@ -119,7 +141,8 @@ async function getDashboardStats() {
     },
     topRepositories: topReposWithNames,
     topUsers: topUsers.map((u: any) => ({
-      username: u.author,
+      employeeId: u.authorUsername,
+      name: userMap.get(u.authorUsername) || 'Unknown',
       reviewCount: u._count.id,
       issueCount: (u._sum.criticalIssues || 0) + (u._sum.normalIssues || 0) + (u._sum.suggestions || 0),
     })),
@@ -294,7 +317,8 @@ async function DashboardContent() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b-2">
-                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">用户名</TableHead>
+                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">工号</TableHead>
+                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">姓名</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground text-right">被审查数</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground text-right">发现问题</TableHead>
                 </TableRow>
@@ -302,14 +326,15 @@ async function DashboardContent() {
               <TableBody>
                 {stats.topUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                       暂无数据
                     </TableCell>
                   </TableRow>
                 ) : (
                   stats.topUsers.map((user: any, index: number) => (
                     <TableRow key={index} className="hover:bg-sidebar/50">
-                      <TableCell className="px-4 py-3 font-medium text-foreground">{user.username}</TableCell>
+                      <TableCell className="px-4 py-3 font-medium text-foreground">{user.employeeId}</TableCell>
+                      <TableCell className="px-4 py-3 font-medium text-foreground">{user.name}</TableCell>
                       <TableCell className="px-4 py-3 text-right text-muted-foreground">{user.reviewCount}</TableCell>
                       <TableCell className="px-4 py-3 text-right text-muted-foreground">{user.issueCount}</TableCell>
                     </TableRow>

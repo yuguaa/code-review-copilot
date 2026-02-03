@@ -181,7 +181,14 @@ export class GitLabService {
         data
       )
       return response.data
-    } catch (error) {
+    } catch (error: any) {
+      // 打印详细的错误信息
+      if (error.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      }
+      if (error.response?.data?.message) {
+        console.error('GitLab API error message:', error.response.data.message)
+      }
       console.error('Failed to create merge request comment:', error)
       throw new Error('Failed to create comment on GitLab')
     }
@@ -212,6 +219,7 @@ export class GitLabService {
   /**
    * 在 Commit 上创建评论（用于 Push 事件）
    * GitLab API: POST /projects/:id/repository/commits/:sha/comments
+   * 注意：如果要在特定行上评论需要 line_code，这里简化为通用评论
    */
   async createCommitComment(
     projectId: number | string,
@@ -224,25 +232,54 @@ export class GitLabService {
     }
   ): Promise<any> {
     try {
-      const data: any = {
-        note: comment,  // GitLab commit comment 使用 note 而不是 body
+      // 如果有文件路径和行号，把它们包含在评论内容中
+      let fullComment = comment
+      if (options?.path) {
+        fullComment = `**文件**: \`${options.path}\`${options.line ? ` (行 ${options.line})` : ''}\n\n${comment}`
       }
 
-      // 如果指定了文件和行号，添加位置信息
-      if (options?.path) {
-        data.path = options.path
+      const data: any = {
+        note: fullComment,  // GitLab commit comment 使用 note 而不是 body
       }
-      if (options?.line) {
+
+      // 尝试添加位置信息（某些 GitLab 版本支持）
+      if (options?.path && options?.line) {
+        data.path = options.path
         data.line = options.line
         data.line_type = options.line_type || 'new'
       }
+
+      console.log('Creating commit comment with data:', JSON.stringify(data, null, 2))
 
       const response = await this.client.post(
         `/projects/${projectId}/repository/commits/${commitSha}/comments`,
         data
       )
       return response.data
-    } catch (error) {
+    } catch (error: any) {
+      // 如果带行号失败，尝试创建不带行号的评论
+      if (error.response?.status === 400 && options?.path) {
+        console.log('Retry without line info...')
+        try {
+          let fullComment = comment
+          if (options?.path) {
+            fullComment = `**文件**: \`${options.path}\`${options.line ? ` (行 ${options.line})` : ''}\n\n${comment}`
+          }
+
+          const response = await this.client.post(
+            `/projects/${projectId}/repository/commits/${commitSha}/comments`,
+            { note: fullComment }
+          )
+          return response.data
+        } catch (retryError) {
+          console.error('Retry also failed:', retryError)
+        }
+      }
+
+      // 打印详细的错误信息
+      if (error.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      }
       console.error('Failed to create commit comment:', error)
       throw new Error('Failed to create comment on GitLab commit')
     }

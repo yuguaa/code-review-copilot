@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     console.log(JSON.stringify(body, null, 2))
     console.log('===================')
 
-    const { object_kind, project, object_attributes, ref, checkout_sha, user_username } = body
+    const { object_kind, project, object_attributes, ref, checkout_sha, user_username, user } = body
 
     const projectId = project?.id
     console.log('Looking for repository with gitLabProjectId:', projectId)
@@ -96,9 +96,9 @@ export async function POST(request: NextRequest) {
       const mrIid = mr.iid
       const action = mr.action
 
-      // 获取作者工号和姓名
-      const mrAuthorUsername = mr.author?.username || 'unknown'
-      const mrAuthorName = mr.author?.name || ''
+      // 获取作者工号和姓名（从 user 字段获取）
+      const mrAuthorUsername = user?.username || user_username || 'unknown'
+      const mrAuthorName = user?.name || ''
       const mrAuthor = mrAuthorName ? `${mrAuthorName}(${mrAuthorUsername})` : mrAuthorUsername
 
       console.log(`🔀 MR Event: ${action} !${mrIid}`)
@@ -106,32 +106,43 @@ export async function POST(request: NextRequest) {
       console.log(`👤 Author: ${mrAuthor}`)
       console.log(`📝 Title: ${mr.title}`)
 
-      // 只处理新建或更新的 MR
-      if (!['open', 'update', 'reopen'].includes(action)) {
-        console.log(`⏭️ Skipping MR action: ${action}`)
+      // 只处理非关闭的 MR 事件（排除 close 和 closed）
+      if (['close', 'closed'].includes(action)) {
+        console.log(`⏭️ Skipping MR action: ${action} (closed MRs are not reviewed)`)
         return NextResponse.json({ received: true })
       }
 
-      // 检查分支是否匹配监听规则
-      const shouldReview = checkBranchMatch(mr.source_branch, repository.watchBranches)
+      // 检查分支是否匹配监听规则（MR 事件检查目标分支）
+      const shouldReview = checkBranchMatch(mr.target_branch, repository.watchBranches)
       if (!shouldReview) {
-        console.log(`⏭️ Branch ${mr.source_branch} does not match watch rules: ${repository.watchBranches}`)
+        console.log(`⏭️ Target branch ${mr.target_branch} does not match watch rules: ${repository.watchBranches}`)
         return NextResponse.json({ received: true })
       }
 
-      console.log(`✅ Branch ${mr.source_branch} matches watch rules`)
+      console.log(`✅ Target branch ${mr.target_branch} matches watch rules`)
 
-      // 检查是否已经审查过这个 MR
-      const existingReview = await prisma.reviewLog.findFirst({
+      // 获取 commit SHA（优先使用 diff_refs，否则使用 last_commit）
+      const commitSha = mr.diff_refs?.head_sha || mr.last_commit?.id
+      if (!commitSha) {
+        console.error('❌ Cannot find commit SHA in MR event')
+        return NextResponse.json({ error: 'Missing commit SHA' }, { status: 400 })
+      }
+
+      // 检查是否有正在进行的审查（避免重复触发）
+      // 只检查最近 5 分钟内的 pending 审查
+      const recentPendingReview = await prisma.reviewLog.findFirst({
         where: {
           repositoryId: repository.id,
           mergeRequestIid: mrIid,
-          commitSha: mr.diff_refs.head_sha,
+          status: 'pending',
+          startedAt: {
+            gte: new Date(Date.now() - 5 * 60 * 1000), // 最近 5 分钟
+          },
         },
       })
 
-      if (existingReview) {
-        console.log(`⏭️ MR !${mrIid} already reviewed for commit ${mr.diff_refs.head_sha}`)
+      if (recentPendingReview) {
+        console.log(`⏭️ MR !${mrIid} has a recent pending review, skipping`)
         return NextResponse.json({ received: true })
       }
 
@@ -147,8 +158,8 @@ export async function POST(request: NextRequest) {
           authorUsername: mrAuthorUsername, // 工号
           title: mr.title,
           description: mr.description,
-          commitSha: mr.diff_refs.head_sha,
-          commitShortId: mr.diff_refs.head_sha.substring(0, 8),
+          commitSha: commitSha,
+          commitShortId: commitSha.substring(0, 8),
           status: 'pending',
           totalFiles: 0,
         },

@@ -111,7 +111,7 @@ model ReviewComment {
   severity          String        // 严重级别: critical, normal, suggestion
   content           String        // 评论内容
   diffHunk          String?       // diff 片段（可选）
-  gitlabCommentId   Int?          // GitLab 评论 ID（已创建后）
+  gitlabCommentId   String?       // GitLab 评论 ID（已创建后）
   isPosted          Boolean       @default(false) // 是否已发布到 GitLab
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
