@@ -56,6 +56,13 @@ model Repository {
   defaultAIModel    AIModel?      @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
   watchBranches     String?       // 监听的分支（逗号分隔或通配符，如 "main,develop,feature/*"）
   customPrompt      String?       // 自定义审查 Prompt（可选，为空时使用全局默认）
+  // 自定义 AI 模型配置（优先级高于 defaultAIModelId）
+  customProvider    String?       // 自定义提供商: openai, claude, custom
+  customModelId     String?       // 自定义模型 ID
+  customApiKey      String?       // 自定义 API 密钥
+  customApiEndpoint String?       // 自定义 API 端点（仅用于 custom 提供商）
+  customMaxTokens   Int?          // 自定义最大 token 数
+  customTemperature Float?        // 自定义温度参数
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   reviewLogs        ReviewLog[]   // 关联的审查日志

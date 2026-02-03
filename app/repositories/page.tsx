@@ -15,14 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Plus, GitFork, Loader2, Search, X, Settings, Pencil } from 'lucide-react'
+import { Plus, GitFork, Loader2, Search, X, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 
 // 获取模型显示名称
@@ -72,6 +65,13 @@ type Repository = {
   defaultAIModel: AIModel | null
   watchBranches: string | null
   customPrompt: string | null
+  // 自定义 AI 模型配置
+  customProvider: string | null
+  customModelId: string | null
+  customApiKey: string | null
+  customApiEndpoint: string | null
+  customMaxTokens: number | null
+  customTemperature: number | null
   gitLabAccount: {
     id: string
     url: string
@@ -92,12 +92,6 @@ export default function RepositoriesPage() {
   const [gitlabProjects, setGitlabProjects] = useState<GitLabProject[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
 
-  // 模型配置对话框状态
-  const [showModelDialog, setShowModelDialog] = useState(false)
-  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
-  const [selectedModelId, setSelectedModelId] = useState<string>('')
-  const [aiModels, setAiModels] = useState<AIModel[]>([])
-
   const loadRepositories = async () => {
     try {
       const response = await fetch('/api/repositories')
@@ -117,50 +111,38 @@ export default function RepositoriesPage() {
     }
   }
 
-  const loadAIModels = async () => {
-    try {
-      const response = await fetch('/api/settings/models')
-      const data = await response.json()
-      // 确保返回的是数组
-      if (Array.isArray(data)) {
-        setAiModels(data)
-      } else {
-        console.error('Unexpected AI models response format:', data)
-        setAiModels([])
-      }
-    } catch (error) {
-      console.error('Failed to load AI models:', error)
-      setAiModels([])
-    }
-  }
-
   useEffect(() => {
     loadRepositories()
-    loadAIModels()
   }, [])
 
   // 加载 GitLab 项目列表
-  const loadGitLabProjects = async (search?: string) => {
-    setLoadingProjects(true)
-    try {
-      const url = new URL('/api/settings/gitlab/projects', window.location.origin)
-      if (search) {
-        url.searchParams.set('search', search)
-      }
-      const response = await fetch(url.toString())
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to load projects')
-      }
-      const projects = await response.json()
-      setGitlabProjects(projects)
-    } catch (error) {
-      toast.error('加载项目失败: ' + (error instanceof Error ? error.message : '未知错误'))
-      setGitlabProjects([])
-    } finally {
-      setLoadingProjects(false)
-    }
-  }
+  const loadGitLabProjects = async (search?: string) => { // 加载 GitLab 项目列表，支持搜索条件
+    setLoadingProjects(true) // 标记项目列表进入加载状态
+    try { // 捕获网络或解析异常
+      const url = new URL('/api/settings/gitlab/projects', window.location.origin) // 构造请求 URL
+      if (search) { // 当存在搜索条件时
+        url.searchParams.set('search', search) // 写入查询参数
+      } // 结束搜索条件处理
+      const response = await fetch(url.toString()) // 发送请求获取项目列表
+      if (!response.ok) { // 当接口返回非 2xx 状态
+        const error = await response.json() // 读取错误响应体
+        throw new Error(error.error || 'Failed to load projects') // 抛出标准化错误信息
+      } // 结束错误状态处理
+      const projects = await response.json() // 解析项目列表响应体
+      if (Array.isArray(projects)) { // 校验响应是否为数组
+        setGitlabProjects(projects) // 设置项目列表
+      } else { // 处理非数组响应
+        console.error('Unexpected GitLab projects response format:', projects) // 输出格式异常日志
+        setGitlabProjects([]) // 兜底为空数组避免渲染报错
+        toast.error('加载项目失败: 响应格式不正确') // 提示用户响应格式异常
+      } // 结束响应格式校验
+    } catch (error) { // 捕获请求或解析异常
+      toast.error('加载项目失败: ' + (error instanceof Error ? error.message : '未知错误')) // 弹出失败提示
+      setGitlabProjects([]) // 兜底清空列表
+    } finally { // 无论成功与否都执行
+      setLoadingProjects(false) // 关闭加载状态
+    } // 结束 finally
+  } // 结束 loadGitLabProjects
 
   // 打开添加对话框时加载项目
   const handleOpenAddDialog = () => {
@@ -176,41 +158,6 @@ export default function RepositoriesPage() {
       return () => clearTimeout(timeoutId)
     }
   }, [searchQuery, showAddDialog])
-
-  // 打开模型配置对话框
-  const handleOpenModelDialog = (repo: Repository) => {
-    setSelectedRepo(repo)
-    setSelectedModelId(repo.defaultAIModelId || '')
-    setShowModelDialog(true)
-  }
-
-  // 保存模型配置
-  const handleSaveModel = async () => {
-    if (!selectedRepo) return
-
-    setSubmitting(true)
-    try {
-      const response = await fetch('/api/repositories', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedRepo.id,
-          defaultAIModelId: selectedModelId || null,
-        }),
-      })
-
-      if (!response.ok) throw new Error('Failed to update repository')
-
-      const updated = await response.json()
-      setRepositories(repositories.map(r => r.id === selectedRepo.id ? updated : r))
-      setShowModelDialog(false)
-      toast.success(`模型配置已更新`)
-    } catch (error) {
-      toast.error('操作失败: ' + (error instanceof Error ? error.message : '未知错误'))
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   // 添加仓库
   const handleAddRepository = async (project: GitLabProject) => {
@@ -359,23 +306,17 @@ export default function RepositoriesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2"
-                        onClick={() => handleOpenModelDialog(repo)}
-                      >
-                        {repo.defaultAIModel ? (
-                          <Badge variant="default" className="font-normal">
-                            {getModelDisplayName(repo.defaultAIModel)}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">
-                            全局默认
-                          </Badge>
-                        )}
-                        <Settings className="h-3 w-3 ml-1 opacity-50" />
-                      </Button>
+                      {repo.defaultAIModel ? (
+                        <Badge variant="default" className="font-normal">
+                          {getModelDisplayName(repo.defaultAIModel)}
+                        </Badge>
+                      ) : repo.customProvider ? (
+                        <Badge variant="secondary" className="font-normal">
+                          {repo.customModelId} ({repo.customProvider})
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">未配置</span>
+                      )}
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       {repo.watchBranches ? (
@@ -485,7 +426,7 @@ export default function RepositoriesPage() {
                     <p className="text-xs mt-2">请尝试其他搜索关键词</p>
                   </div>
                 ) : (
-                  gitlabProjects.map((project) => {
+                  (Array.isArray(gitlabProjects) ? gitlabProjects : []).map((project) => { // 渲染项目列表并兜底非数组情况
                     const isAdded = isProjectAdded(project.id)
                     return (
                       <div
@@ -522,73 +463,6 @@ export default function RepositoriesPage() {
                     )
                   })
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* 模型配置对话框 */}
-      {showModelDialog && selectedRepo && (
-        <div className="fixed inset-0 bg-background/80 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>配置 AI 模型</CardTitle>
-                  <CardDescription>
-                    为仓库 {selectedRepo.name} 选择 AI 模型
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowModelDialog(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>AI 模型</Label>
-                <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="使用全局默认模型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">使用全局默认模型</SelectItem>
-                    {aiModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {getModelDisplayName(model)}
-                        <span className="text-muted-foreground text-xs ml-2">
-                          ({model.provider})
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  如果不选择模型，将使用配置页面中设置的全局默认模型
-                </p>
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowModelDialog(false)}
-                >
-                  取消
-                </Button>
-                <Button onClick={handleSaveModel} disabled={submitting}>
-                  {submitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      保存中
-                    </>
-                  ) : (
-                    '保存'
-                  )}
-                </Button>
               </div>
             </CardContent>
           </Card>

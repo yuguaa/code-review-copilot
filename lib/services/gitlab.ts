@@ -5,13 +5,25 @@ export class GitLabService {
   private client: AxiosInstance
 
   constructor(baseUrl: string, accessToken: string) {
-    this.client = axios.create({
-      baseURL: baseUrl,
-      headers: {
-        'PRIVATE-TOKEN': accessToken,
-      },
-    })
+    const normalizedBaseUrl = GitLabService.normalizeApiBaseUrl(baseUrl) // 规范化 GitLab API 基础地址
+    this.client = axios.create({ // 创建 Axios 客户端实例
+      baseURL: normalizedBaseUrl, // 使用规范化后的 API 基础地址
+      headers: { // 设置请求头
+        'PRIVATE-TOKEN': accessToken, // 携带 GitLab 私有访问令牌
+      }, // 结束请求头配置
+    }) // 结束 Axios 实例创建
   }
+
+  private static normalizeApiBaseUrl(baseUrl: string): string { // 规范化 GitLab API 基础地址
+    const trimmedBaseUrl = baseUrl.trim() // 去除首尾空格
+    const parsedUrl = new URL(trimmedBaseUrl) // 解析为 URL 对象
+    const origin = parsedUrl.origin // 提取协议与域名
+    const hasApiPath = parsedUrl.pathname.includes('/api/v4') // 判断是否包含 API 前缀
+    if (hasApiPath) { // 当原始地址已包含 /api/v4
+      return `${origin}/api/v4` // 统一返回标准 API 根路径
+    } // 结束包含检查
+    return `${origin}/api/v4` // 默认拼接 API v4 根路径
+  } // 结束 normalizeApiBaseUrl
 
   /**
    * 获取所有项目（仓库）
