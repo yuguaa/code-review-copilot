@@ -73,7 +73,7 @@ export default function ReviewsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const pageSize = 100 // 每页 100 条
+  const pageSize = 20 // 每页 20 条
 
   // 获取审查记录
   const fetchReviews = async (page = 1) => {

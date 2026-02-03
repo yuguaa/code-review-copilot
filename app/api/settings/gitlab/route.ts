@@ -48,7 +48,6 @@ export async function POST(request: NextRequest) {
     // 创建账号
     const account = await prisma.gitLabAccount.create({
       data: {
-        name,
         url,
         accessToken,
         webhookSecret,
@@ -74,7 +73,6 @@ export async function PUT(request: NextRequest) {
     const account = await prisma.gitLabAccount.update({
       where: { id },
       data: {
-        name: name !== undefined ? name : undefined,
         url: url !== undefined ? url : undefined,
         accessToken: accessToken !== undefined ? accessToken : undefined,
         webhookSecret: webhookSecret !== undefined ? webhookSecret : undefined,

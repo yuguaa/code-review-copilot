@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '100')  // 默认每页 100 条
+    const limit = parseInt(searchParams.get('limit') || '20')  // 默认每页 20 条
     const repositoryId = searchParams.get('repositoryId')
     const status = searchParams.get('status')
 

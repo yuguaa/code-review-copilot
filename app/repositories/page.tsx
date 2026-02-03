@@ -350,11 +350,10 @@ export default function RepositoriesPage() {
                       <Link href={`/repositories/${repo.id}`}>
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="h-8 px-3"
+                          size="icon"
+                          className="h-8 w-8"
                         >
-                          <Pencil className="h-3 w-3 mr-1" />
-                          配置
+                          <Pencil className="h-4 w-4" />
                         </Button>
                       </Link>
                       <Button
