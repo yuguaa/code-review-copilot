@@ -39,30 +39,20 @@ export default function HelpPage() {
             '点击"添加仓库"按钮',
             '从列表中选择或搜索要添加的仓库',
             '为仓库选择默认 AI 模型（或使用全局默认）',
+            '（可选）配置自定义提示词和提示词模式（扩展/替换）',
+            '（可选）配置自定义 AI 模型（优先级高于默认模型）',
             '（可选）启用自动审查功能'
           ]
         },
         {
-          icon: <FileKey className="h-5 w-5 text-sidebar-primary" />,
-          title: '4. 配置分支规则',
-          description: '为不同分支配置审查规则',
-          details: [
-            '进入仓库详情页',
-            '添加分支配置，支持通配符（如 feature/*）',
-            '为每个配置设置专用的 AI 模型',
-            '自定义系统 Prompt 以指导审查重点',
-            '启用或禁用特定配置'
-          ]
-        },
-        {
           icon: <Webhook className="h-5 w-5 text-sidebar-primary" />,
-          title: '5. 配置 Webhook',
+          title: '4. 配置 Webhook',
           description: '在 GitLab 中配置 Webhook 以触发自动审查',
           details: [
             '进入 GitLab 仓库的 Settings → Webhooks',
             'URL 填写：https://your-domain.com/api/webhook/gitlab',
-            '勾选 Merge request events',
-            '（可选）如果在配置中设置了密钥，需在 URL 中添加 ?secret=YOUR_SECRET',
+            '勾选 Merge request events 和 Push events',
+            '（可选）如果在配置中设置了密钥，需在 Secret token 中填写密钥',
             '点击"Add webhook"完成配置'
           ]
         }
@@ -96,25 +86,25 @@ export default function HelpPage() {
       ]
     },
     {
-      id: 'branch-config',
-      title: '分支配置',
+      id: 'repository-config',
+      title: '仓库配置',
       icon: <Code2 className="h-5 w-5 text-sidebar-primary" />,
       content: [
         {
-          question: '什么是分支配置？',
-          answer: '分支配置允许你为不同的分支设置不同的审查规则。例如：\n• main 分支：使用严格审查，高 Temperature\n• feature/* 分支：使用常规审查\n• hotfix/* 分支：快速审查，只关注关键问题'
+          question: '什么是自定义提示词？',
+          answer: '自定义提示词允许你为每个仓库定制 AI 审查的行为和重点。例如：\n• 指定特定的编码规范\n• 强调某些安全要求\n• 针对特定技术栈的最佳实践'
         },
         {
-          question: '如何使用通配符匹配分支？',
-          answer: '支持以下通配符模式：\n• feature/*：匹配所有 feature 开头的分支\n• */dev：匹配所有以 dev 结尾的分支\n• release-*：匹配所有 release- 开头的分支\n• *：匹配所有分支（慎用）'
+          question: '提示词模式：扩展 vs 替换？',
+          answer: '• 扩展模式（默认）：在内置提示词基础上追加你的自定义要求，保留基本审查功能\n• 替换模式：完全使用你的自定义提示词，适合需要完全自定义审查行为的场景\n\n注意：替换模式仍会保留输出格式要求以确保系统能正确解析结果'
         },
         {
-          question: '如何自定义系统 Prompt？',
-          answer: '在分支配置中，可以编写自定义系统 Prompt 来指导 AI 审查重点。例如：\n\n"请重点关注以下方面：\n1. 安全漏洞和潜在风险\n2. 性能问题\n3. 代码可维护性\n4. 测试覆盖率"'
+          question: '如何使用监听分支？',
+          answer: '监听分支允许你指定哪些分支需要自动审查：\n• 留空：监听所有分支\n• 单个分支：main\n• 多个分支：main,develop（逗号分隔）\n• 通配符：feature/*,hotfix/*'
         },
         {
-          question: '一个仓库可以有多个分支配置吗？',
-          answer: '可以。一个仓库可以添加多个分支配置，系统会按照配置顺序匹配第一个符合条件的规则。建议将具体分支放在前面，通配符规则放在后面。'
+          question: '如何为仓库配置独立的 AI 模型？',
+          answer: '在仓库配置中可以设置自定义 AI 模型配置，优先级为：\n1. 仓库自定义模型（最高优先级）\n2. 仓库默认 AI 模型\n3. 全局默认模型\n\n这样可以为不同项目使用不同的模型和参数'
         }
       ]
     },
@@ -133,11 +123,15 @@ export default function HelpPage() {
         },
         {
           question: 'Webhook URL 是什么？',
-          answer: 'Webhook URL 格式为：https://your-domain.com/api/webhook/gitlab\n如果设置了密钥，URL 应为：https://your-domain.com/api/webhook/gitlab?secret=YOUR_SECRET'
+          answer: 'Webhook URL 格式为：https://your-domain.com/api/webhook/gitlab\n如果设置了密钥，需要在 GitLab Webhook 配置的 Secret token 字段中填写密钥'
         },
         {
           question: '配置 Webhook 后没有反应？',
-          answer: '请检查：\n1. Webhook URL 是否正确\n2. GitLab 中是否勾选了 "Merge request events"\n3. 仓库是否启用了"自动审查"\n4. 查看系统日志确认 Webhook 是否被触发'
+          answer: '请检查：\n1. Webhook URL 是否正确\n2. GitLab 中是否勾选了 "Merge request events" 和 "Push events"\n3. 仓库是否启用了"自动审查"\n4. 如果设置了密钥，确认 Secret token 填写正确\n5. 查看系统日志确认 Webhook 是否被触发'
+        },
+        {
+          question: '支持哪些触发事件？',
+          answer: '目前支持两种触发事件：\n• Merge Request events：创建或更新 MR 时触发审查\n• Push events：直接推送到分支时触发审查\n\n建议同时启用两种事件以覆盖所有场景'
         }
       ]
     },
@@ -160,7 +154,11 @@ export default function HelpPage() {
         },
         {
           question: '如何查看历史审查记录？',
-          answer: '在审查记录页面，你可以查看所有历史审查，包括：\n• 审查状态（进行中/完成/失败）\n• 审查的仓库和分支\n• 发现的问题统计\n• 详细的审查评论'
+          answer: '在审查历史页面，你可以查看所有历史审查，包括：\n• 审查状态（进行中/完成/失败）\n• 审查的仓库和分支\n• 发现的问题统计\n• 详细的审查评论\n• AI 原始响应和总结\n\n支持分页浏览，每页显示 20 条记录'
+        },
+        {
+          question: 'AI 会在 GitLab 上留下什么样的评论？',
+          answer: '评论格式包含：\n1. 具体的问题描述或建议\n2. 分隔线\n3. Code Review Copilot 徽章和作者信息\n\n评论会尽可能以行内评论形式发布，如果失败则会发布为普通评论'
         }
       ]
     },
@@ -183,7 +181,11 @@ export default function HelpPage() {
         },
         {
           question: '如何删除不需要的配置？',
-          answer: '• 删除仓库：在仓库列表中点击删除按钮\n• 删除分支配置：在仓库详情中删除特定配置\n• 删除 AI 模型：在设置页面删除模型\n• 删除 GitLab 账号：删除账号会同时删除关联的所有仓库'
+          answer: '• 删除仓库：在仓库列表中点击操作菜单的删除图标\n• 删除 AI 模型：在设置页面的模型列表中删除\n• 删除 GitLab 账号：在设置页面删除账号（会同时删除关联的所有仓库）'
+        },
+        {
+          question: '系统性能和限制？',
+          answer: '• 审查历史支持分页，每页 20 条记录\n• 大型 PR 会自动分批处理\n• API 调用受限于所配置 AI 模型的速率限制\n• 建议为不同项目配置不同的 API 密钥以避免配额用尽'
         }
       ]
     }
