@@ -86,11 +86,65 @@ npm run dev
 
 ### 第四步：配置 Webhook（可选）
 
+#### 生产环境
+
 如需自动审查，在 GitLab 仓库中配置 Webhook：
 
 - URL: `http://your-server/api/webhook/gitlab`
-- 触发事件: Merge Request events
+- 触发事件: Merge Request events + Push events
 - Secret: （如果配置了）
+
+#### 本地开发配置
+
+本地开发时 GitLab 无法直接访问 `localhost`，需要使用内网穿透工具：
+
+**方案 1：使用 ngrok（推荐）**
+
+```bash
+# 安装 ngrok
+brew install ngrok  # macOS
+# 或访问 https://ngrok.com 下载
+
+# 启动隧道
+ngrok http 3000
+```
+
+启动后会得到一个公网地址，如 `https://abc123.ngrok.io`
+
+**GitLab Webhook 配置：**
+- URL: `https://abc123.ngrok.io/api/webhook/gitlab`
+- 触发事件: Merge Request events + Push events
+
+**方案 2：使用 Cloudflare Tunnel**
+
+```bash
+# 安装 cloudflared
+brew install cloudflared  # macOS
+
+# 启动隧道
+cloudflared tunnel --url http://localhost:3000
+```
+
+**方案 3：使用 localtunnel**
+
+```bash
+npx localtunnel --port 3000
+```
+
+**方案 4：自建 GitLab 允许本地地址**
+
+如果是自建 GitLab，可以配置允许本地网络地址：
+
+GitLab Omnibus 配置 (`/etc/gitlab/gitlab.rb`)：
+
+```ruby
+gitlab_rails['webhook_timeout'] = 10
+gitlab_rails['outbound_local_requests_whitelist'] = ['localhost', '127.0.0.1', 'host.docker.internal']
+```
+
+重启 GitLab 后，Webhook URL 可以是：
+- `http://localhost:3000/api/webhook/gitlab`
+- `http://host.docker.internal:3000/api/webhook/gitlab`（GitLab 在 Docker 中）
 
 ### 第五步：查看审查结果
 

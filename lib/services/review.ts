@@ -15,11 +15,7 @@ export class ReviewService {
         repository: {
           include: {
             gitLabAccount: true,
-          },
-        },
-        branchConfig: {
-          include: {
-            aiModel: true,
+            defaultAIModel: true,
           },
         },
       },
@@ -73,17 +69,18 @@ export class ReviewService {
         data: { totalFiles: relevantDiffs.length },
       })
 
-      // 准备 AI 模型配置
+      // 准备 AI 模型配置 - 优先使用自定义模型配置，其次使用默认模型
+      const repository = reviewLog.repository
       const modelConfig: AIModelConfig = {
-        id: reviewLog.branchConfig.aiModel.id,
-        name: reviewLog.branchConfig.aiModel.name,
-        provider: reviewLog.branchConfig.aiModel.provider as any,
-        modelId: reviewLog.branchConfig.aiModel.modelId,
-        apiKey: reviewLog.branchConfig.aiModel.apiKey,
-        apiEndpoint: reviewLog.branchConfig.aiModel.apiEndpoint || undefined,
-        maxTokens: reviewLog.branchConfig.aiModel.maxTokens || undefined,
-        temperature: reviewLog.branchConfig.aiModel.temperature || undefined,
-        isActive: reviewLog.branchConfig.aiModel.isActive,
+        id: repository.customProvider ? 'custom' : (repository.defaultAIModel?.id || 'default'),
+        name: repository.customModelId || repository.defaultAIModel?.modelId || 'default',
+        provider: (repository.customProvider || repository.defaultAIModel?.provider || 'openai') as any,
+        modelId: repository.customModelId || repository.defaultAIModel?.modelId || 'gpt-4o',
+        apiKey: repository.customApiKey || repository.defaultAIModel?.apiKey || '',
+        apiEndpoint: repository.customApiEndpoint || repository.defaultAIModel?.apiEndpoint || undefined,
+        maxTokens: repository.customMaxTokens || repository.defaultAIModel?.maxTokens || undefined,
+        temperature: repository.customTemperature || repository.defaultAIModel?.temperature || undefined,
+        isActive: true,
       }
 
       // 首先总结所有变更
@@ -194,6 +191,7 @@ export class ReviewService {
     const reviewLog = await prisma.reviewLog.findUnique({
       where: { id: reviewLogId },
       include: {
+        repository: true,
         comments: {
           where: { isPosted: false },
         },
@@ -205,7 +203,7 @@ export class ReviewService {
     }
 
     const mr = await gitlabService.getMergeRequest(
-      reviewLog.repositoryId,
+      reviewLog.repository.gitLabProjectId,
       reviewLog.mergeRequestIid
     )
 
@@ -232,7 +230,7 @@ export class ReviewService {
         const commentBody = `${severityLabel}\n\n${comment.content}`
 
         const result = await gitlabService.createMergeRequestComment(
-          reviewLog.repositoryId,
+          reviewLog.repository.gitLabProjectId,
           reviewLog.mergeRequestIid,
           commentBody,
           position
