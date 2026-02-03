@@ -1,118 +1,67 @@
-export interface PromptInputs {
-  title: string
-  description: string
-  file_diff: string
-  filename: string
-  patches: string
-  short_summary: string
-  [key: string]: string
-}
+/**
+ * 代码审查系统提示词
+ * 只包含通用的系统级配置，具体的审查内容由调用时动态传入
+ */
 
-export class Prompts {
-  // 审查单个文件的 diff
-  reviewFileDiff = `## GitLab Merge Request Title
+// 问题严重等级
+export const SEVERITY = {
+  CRITICAL: '严重',  // 安全漏洞、重大 Bug、性能问题
+  NORMAL: '一般',    // 代码质量、小 Bug
+  SUGGESTION: '建议', // 最佳实践、优化建议
+} as const
 
-\`$title\`
+// 系统提示词：定义 AI 角色和输出格式
+export const SYSTEM_PROMPT = `你是一名专业代码审查助手。请仅针对代码变更，逐行指出具体、可操作的问题。
+【审查条件】
+1. 这是一个公司内部项目，要求快速部署快速迭代
+2. 不对外开放，包括代码内容外界无法访问，因此贡献指南，readme之类的开源项目关注的东西这里不需要。
 
-## Description
+【输出要求】
+1. 每条问题单独列出，格式如下：
+  行号: [严重/一般/建议] 问题描述
+2. 只输出真实存在的问题，避免泛泛而谈。
+3. 没有问题时，仅回复：LGTM!
+4. 回复务必简洁、直接、中文。
 
-\`\`\`
-$description
-\`\`\`
-
-## Summary of changes
-
-\`\`\`
-$short_summary
-\`\`\`
-
-## IMPORTANT Instructions
-
-Input: New hunks annotated with line numbers and old hunks (replaced code). Hunks represent incomplete code fragments.
-Additional Context: MR title, description, summaries and comment chains.
-Task: Review new hunks for substantive issues using provided context and respond with comments if necessary.
-
-## Review Levels
-
-Please categorize issues by severity:
-- **严重** (Critical): Security vulnerabilities, major bugs, performance issues, breaking changes
-- **一般** (Normal): Code quality issues, minor bugs, inconsistent patterns
-- **建议** (Suggestion): Best practices, optimizations, style improvements
-
-## Output Format (MUST FOLLOW EXACTLY)
-
-You MUST respond in the following exact format. Each comment starts with a line number (or range) followed by a colon on its own line, then the comment content, then "---" as separator:
-
-\`\`\`
-10:
-[严重/一般/建议] 这里是评论内容，说明问题是什么以及如何修复
----
-15-20:
-[严重/一般/建议] 这里是另一条评论，针对第 15 到 20 行的代码
----
-\`\`\`
-
-Rules:
-- Line number MUST be on its own line, followed by a colon and nothing else
-- Use single line number like "10:" for single line, or range like "15-20:" for multiple lines
-- Each comment MUST be separated by "---" on its own line
-- Start each comment with severity level in brackets: [严重], [一般], or [建议]
-- If there are no issues, respond with ONLY the text: LGTM!
-
-Do NOT:
-- Provide general feedback or summaries
-- Explain changes or praise good code
-- Use suggestion code blocks
-- Add any text before or after the formatted comments
-
-## Changes made to \`$filename\` for your review
-
-$patches
-
+【示例】
+12: [一般] 变量命名不规范，建议使用驼峰命名
+25: [严重] 存在 SQL 注入风险，建议参数化查询
 `
 
-  // 总结整个 MR 的变更
-  summarizeChanges = `## GitLab Merge Request
+// 构建审查提示词
+export function buildReviewPrompt(params: {
+  title: string
+  description?: string
+  filename: string
+  diff: string
+  summary?: string
+}): string {
+  // 精简版审查提示词，突出变更上下文和 diff
+  // customPrompt 现在在系统提示词中处理（支持 replace/extend 模式）
+  const parts = [
+    params.title ? `【变更主题】${params.title}` : '',
+    params.summary ? `【概要】${params.summary}` : '',
+    params.description ? `【描述】${params.description}` : '',
+    `【文件】${params.filename}`,
+    '```diff',
+    params.diff,
+    '```',
+  ]
+  return parts.filter(Boolean).join('\n')
+}
 
-Title: \`$title\`
+// 构建总结提示词
+export function buildSummaryPrompt(params: {
+  title: string
+  description?: string
+  diffs: string
+}): string {
+  return `请简要总结以下代码变更（100字以内）：
 
-Description:
-\`\`\`
-$description
-\`\`\`
-
-## All File Diffs
+## ${params.title}
+${params.description || ''}
 
 \`\`\`diff
-$file_diff
-\`\`\`
-
-## Instructions
-
-Please provide a concise summary of all changes in this merge request. Focus on:
-1. Main functionality changes
-2. Key architectural or structural changes
-3. Important bug fixes or features
-4. Any breaking changes or migration considerations
-
-Keep the summary under 500 words and be specific about what actually changed.
-`
-
-  renderReviewFileDiff(inputs: PromptInputs): string {
-    let prompt = this.reviewFileDiff
-    for (const [key, value] of Object.entries(inputs)) {
-      prompt = prompt.replace(`$${key}`, value || '')
-    }
-    return prompt
-  }
-
-  renderSummarizeChanges(inputs: PromptInputs): string {
-    let prompt = this.summarizeChanges
-    for (const [key, value] of Object.entries(inputs)) {
-      prompt = prompt.replace(`$${key}`, value || '')
-    }
-    return prompt
-  }
+${params.diffs}
+\`\`\``
 }
-
-export const prompts = new Prompts()

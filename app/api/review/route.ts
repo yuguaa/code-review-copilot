@@ -8,14 +8,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { repositoryId, mergeRequestIid } = body
 
-    // 查找仓库
+    // 查找仓库（包含 GitLab 账号信息）
     const repository = await prisma.repository.findUnique({
       where: { id: repositoryId },
       include: {
         gitLabAccount: true,
-        branchConfigs: {
-          where: { isActive: true },
-        },
       },
     })
 
@@ -38,31 +35,16 @@ export async function POST(request: NextRequest) {
       mergeRequestIid
     )
 
-    // 查找匹配的分支配置
-    const branchConfig = repository.branchConfigs.find((config: any) => {
-      // 简单匹配：完全匹配或通配符匹配
-      const pattern = config.branchPattern.replace('*', '.*')
-      const regex = new RegExp(`^${pattern}$`)
-      return regex.test(mr.source_branch)
-    })
-
-    if (!branchConfig) {
-      return NextResponse.json(
-        { error: 'No matching branch configuration found' },
-        { status: 400 }
-      )
-    }
-
     // 创建审查日志
     const reviewLog = await prisma.reviewLog.create({
       data: {
         repositoryId: repository.id,
-        branchConfigId: branchConfig.id,
         mergeRequestId: mr.id,
         mergeRequestIid: mr.iid,
         sourceBranch: mr.source_branch,
         targetBranch: mr.target_branch,
-        author: mr.author.username,
+        author: mr.author?.name || mr.author?.username || 'unknown',
+        authorUsername: mr.author?.username,
         title: mr.title,
         description: mr.description,
         commitSha: mr.diff_refs.head_sha,

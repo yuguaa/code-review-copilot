@@ -151,7 +151,7 @@ export class GitLabService {
   }
 
   /**
-   * 在 Merge Request 中创建评论
+   * 在 Merge Request 中创建评论（普通评论或行内评论）
    */
   async createMergeRequestComment(
     projectId: number | string,
@@ -164,7 +164,8 @@ export class GitLabService {
       old_path: string
       new_path: string
       position_type: 'text'
-      new_line: number
+      new_line?: number
+      old_line?: number
     }
   ): Promise<any> {
     try {
@@ -172,8 +173,23 @@ export class GitLabService {
         body: comment,
       }
 
+      // 如果提供了 position，添加行内评论的位置信息
       if (position) {
-        data.position = position
+        data.position = {
+          base_sha: position.base_sha,
+          head_sha: position.head_sha,
+          start_sha: position.start_sha,
+          old_path: position.old_path,
+          new_path: position.new_path,
+          position_type: position.position_type,
+        }
+        // 只添加存在的行号
+        if (position.new_line) {
+          data.position.new_line = position.new_line
+        }
+        if (position.old_line) {
+          data.position.old_line = position.old_line
+        }
       }
 
       const response = await this.client.post(
@@ -189,8 +205,7 @@ export class GitLabService {
       if (error.response?.data?.message) {
         console.error('GitLab API error message:', error.response.data.message)
       }
-      console.error('Failed to create merge request comment:', error)
-      throw new Error('Failed to create comment on GitLab')
+      throw error  // 抛出原始错误以便上层处理
     }
   }
 

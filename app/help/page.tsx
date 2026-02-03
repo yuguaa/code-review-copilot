@@ -257,42 +257,6 @@ export default function HelpPage() {
           </div>
         </Card>
       ))}
-
-      {/* 联系支持 */}
-      <Card className="border-border/40">
-        <div className="p-6">
-          <h2 className="text-lg font-semibold text-foreground mb-4">需要更多帮助？</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            如果你在使用过程中遇到问题，可以通过以下方式联系我们
-          </p>
-          <div className="flex gap-4">
-            <a
-              href="https://github.com/your-repo/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-sidebar-primary hover:underline"
-            >
-              GitHub Issues
-            </a>
-            <span className="text-muted-foreground">•</span>
-            <a
-              href="mailto:support@example.com"
-              className="text-sm text-sidebar-primary hover:underline"
-            >
-              Email 支持
-            </a>
-            <span className="text-muted-foreground">•</span>
-            <a
-              href="https://github.com/your-repo/wiki"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-sidebar-primary hover:underline"
-            >
-              文档中心
-            </a>
-          </div>
-        </div>
-      </Card>
     </div>
   )
 }

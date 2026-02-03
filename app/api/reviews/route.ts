@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     // 获取查询参数
     const searchParams = request.nextUrl.searchParams
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const limit = parseInt(searchParams.get('limit') || '100')  // 默认每页 100 条
     const repositoryId = searchParams.get('repositoryId')
     const status = searchParams.get('status')
 
@@ -78,6 +78,8 @@ export async function GET(request: NextRequest) {
       criticalIssues: review.criticalIssues,
       normalIssues: review.normalIssues,
       suggestions: review.suggestions,
+      aiSummary: review.aiSummary, // AI 变更总结
+      aiResponse: review.aiResponse, // AI 完整回复（JSON 格式）
       startedAt: review.startedAt,
       completedAt: review.completedAt,
       comments: review.comments,

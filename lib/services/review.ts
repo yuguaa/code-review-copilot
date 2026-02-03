@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { createGitLabService } from './gitlab'
 import { aiService } from './ai'
-import { prompts } from '@/lib/prompts'
+import { buildReviewPrompt, buildSummaryPrompt, SYSTEM_PROMPT } from '@/lib/prompts'
 import type { AIModelConfig, ReviewComment } from '@/lib/types'
 
 export class ReviewService {
@@ -112,19 +112,23 @@ export class ReviewService {
 
       // 首先总结所有变更
       const allDiffsText = diffs.map((d) => d.diff).join('\n')
-      const summaryPrompt = prompts.renderSummarizeChanges({
+      const summaryPrompt = buildSummaryPrompt({
         title: mr?.title || reviewLog.title,
         description: mr?.description || reviewLog.description || '',
-        file_diff: allDiffsText,
-        filename: '',
-        patches: '',
-        short_summary: '',
+        diffs: allDiffsText,
       })
 
       const summary = await aiService.reviewCode(summaryPrompt, modelConfig)
 
-      // 逐个文件进行审查
+      // 保存 AI 总结到数据库
+      await prisma.reviewLog.update({
+        where: { id: reviewLogId },
+        data: { aiSummary: summary },
+      })
+
+      // 逐个文件进行审查，记录每个文件的 AI 回复
       let totalComments: ReviewComment[] = []
+      const aiResponsesByFile: Record<string, string> = {} // 按文件存储 AI 回复
 
       for (const diff of relevantDiffs) {
         const filePath = diff.new_path
@@ -133,16 +137,35 @@ export class ReviewService {
         // 生成该文件的 patch
         const patch = this.generatePatch(diff)
 
-        const reviewPrompt = prompts.renderReviewFileDiff({
+        // 构建系统提示词：根据 customPromptMode 决定是替换还是扩展
+        // - "replace": 完全使用自定义提示词，忽略内置提示词
+        // - "extend": 在内置提示词基础上追加自定义提示词（默认）
+        let systemPrompt = SYSTEM_PROMPT
+        if (repository.customPrompt) {
+          const promptMode = (repository as any).customPromptMode || 'extend'
+          if (promptMode === 'replace') {
+            // 替换模式：完全使用自定义提示词
+            systemPrompt = repository.customPrompt
+            console.log(`📝 [ReviewService] Using REPLACE mode - custom prompt only`)
+          } else {
+            // 扩展模式：内置 + 自定义
+            systemPrompt = `${SYSTEM_PROMPT}\n\n【仓库自定义要求】\n${repository.customPrompt}`
+            console.log(`📝 [ReviewService] Using EXTEND mode - built-in + custom prompt`)
+          }
+        }
+
+        const reviewPrompt = buildReviewPrompt({
           title: mr?.title || reviewLog.title,
           description: mr?.description || reviewLog.description || '',
-          file_diff: diff.diff,
           filename: filePath,
-          patches: patch,
-          short_summary: summary,
+          diff: patch,
+          summary: summary,
         })
 
-        const aiResponse = await aiService.reviewCode(reviewPrompt, modelConfig)
+        const aiResponse = await aiService.reviewCode(reviewPrompt, modelConfig, systemPrompt)
+
+        // 保存该文件的 AI 原始回复
+        aiResponsesByFile[filePath] = aiResponse
 
         // 打印 AI 原始响应，便于调试解析问题
         console.log(`\n🤖 [ReviewService] AI Response for ${filePath}:`)
@@ -200,7 +223,7 @@ export class ReviewService {
         })
       }
 
-      // 更新审查日志状态
+      // 更新审查日志状态，并保存 AI 完整回复
       await prisma.reviewLog.update({
         where: { id: reviewLogId },
         data: {
@@ -209,6 +232,7 @@ export class ReviewService {
           criticalIssues,
           normalIssues,
           suggestions,
+          aiResponse: JSON.stringify(aiResponsesByFile), // 保存所有文件的 AI 回复
         },
       })
 
@@ -268,71 +292,67 @@ export class ReviewService {
       reviewLog.mergeRequestIid
     )
 
+    // 为每个评论创建行内评论
     for (const comment of reviewLog.comments) {
       try {
-        // 添加严重级别标签
-        const severityLabel = {
-          critical: '🔴 严重',
-          normal: '⚠️ 一般',
-          suggestion: '💡 建议',
-        }[comment.severity]
+        // 简洁的评论格式：直接显示内容 + 来源信息
+        const commentBody = `${comment.content}\n\n---\n<sub>🤖comment by code review copilot, written by yuguaa</sub>`
 
-        const commentBody = `${severityLabel}\n\n**文件**: \`${comment.filePath}\` (行 ${comment.lineNumber})\n\n${comment.content}`
-
-        // 先尝试带 position 的行内评论
-        try {
-          const position = {
-            base_sha: mr.diff_refs.base_sha,
-            head_sha: mr.diff_refs.head_sha,
-            start_sha: mr.diff_refs.start_sha,
-            old_path: comment.filePath,
-            new_path: comment.filePath,
-            position_type: 'text' as const,
-            new_line: comment.lineNumber,
-          }
-
-          const result = await gitlabService.createMergeRequestComment(
-            reviewLog.repository.gitLabProjectId,
-            reviewLog.mergeRequestIid,
-            commentBody,
-            position
-          )
-
-          // 更新评论状态
-          await prisma.reviewComment.update({
-            where: { id: comment.id },
-            data: {
-              isPosted: true,
-              gitlabCommentId: result.id,
-            },
-          })
-
-          console.log(`✅ Posted inline comment to MR: ${comment.filePath}:${comment.lineNumber}`)
-        } catch (positionError) {
-          // 如果带 position 失败，回退到不带 position 的通用评论
-          console.log(`⚠️ Inline comment failed, posting as general comment...`)
-          
-          const result = await gitlabService.createMergeRequestComment(
-            reviewLog.repository.gitLabProjectId,
-            reviewLog.mergeRequestIid,
-            commentBody,
-            undefined  // 不带 position
-          )
-
-          // 更新评论状态
-          await prisma.reviewComment.update({
-            where: { id: comment.id },
-            data: {
-              isPosted: true,
-              gitlabCommentId: result.id,
-            },
-          })
-
-          console.log(`✅ Posted general comment to MR`)
+        // 构建 position 用于行内评论
+        const position = {
+          base_sha: mr.diff_refs.base_sha,
+          head_sha: mr.diff_refs.head_sha,
+          start_sha: mr.diff_refs.start_sha,
+          old_path: comment.filePath,
+          new_path: comment.filePath,
+          position_type: 'text' as const,
+          new_line: comment.lineNumber,
         }
+
+        const result = await gitlabService.createMergeRequestComment(
+          reviewLog.repository.gitLabProjectId,
+          reviewLog.mergeRequestIid,
+          commentBody,
+          position
+        )
+
+        // 更新评论状态
+        await prisma.reviewComment.update({
+          where: { id: comment.id },
+          data: {
+            isPosted: true,
+            gitlabCommentId: result.id?.toString(),
+          },
+        })
+
+        console.log(`✅ Posted inline comment: ${comment.filePath}:${comment.lineNumber}`)
       } catch (error) {
-        console.error(`❌ Failed to post comment ${comment.id} to GitLab:`, error)
-        // 继续处理其他评论
+        // 行内评论失败，尝试发布普通评论
+        console.log(`⚠️ Inline comment failed for ${comment.filePath}:${comment.lineNumber}, trying general comment...`)
+        
+        try {
+          // 简洁的评论格式：直接显示内容 + 来源信息
+          const commentBody = `${comment.content}\n\n---\n<sub>🤖comment by code review copilot, written by yuguaa</sub>`
+
+          const result = await gitlabService.createMergeRequestComment(
+            reviewLog.repository.gitLabProjectId,
+            reviewLog.mergeRequestIid,
+            commentBody,
+            undefined  // 普通评论
+          )
+
+          await prisma.reviewComment.update({
+            where: { id: comment.id },
+            data: {
+              isPosted: true,
+              gitlabCommentId: result.id?.toString(),
+            },
+          })
+
+          console.log(`✅ Posted general comment for: ${comment.filePath}:${comment.lineNumber}`)
+        } catch (fallbackError) {
+          console.error(`❌ Failed to post comment for ${comment.filePath}:${comment.lineNumber}`)
+        }
       }
     }
   }
@@ -350,19 +370,13 @@ export class ReviewService {
 
     console.log(`📤 [ReviewService] Posting ${comments.length} comments to commit ${reviewLog.commitSha}`)
 
+    // 为每个评论创建 Commit 行内评论
     for (const comment of comments) {
       try {
-        // 添加严重级别标签
-        const severityLabel = {
-          critical: '🔴 严重',
-          normal: '⚠️ 一般',
-          suggestion: '💡 建议',
-        }[comment.severity as string] || '💬'
+        // 简洁的评论格式：直接显示内容 + 来源信息
+        const commentBody = `${comment.content}\n\n---\n<sub>🤖comment by code review copilot, written by yuguaa</sub>`
 
-        // 构建评论内容
-        const commentBody = `**${severityLabel}** (第 ${comment.lineNumber} 行)\n\n${comment.content}`
-
-        // 调用 GitLab API 创建 Commit 评论
+        // 尝试行内评论
         const result = await gitlabService.createCommitComment(
           reviewLog.repository.gitLabProjectId,
           reviewLog.commitSha,
@@ -374,9 +388,6 @@ export class ReviewService {
           }
         )
 
-        console.log(`✅ Posted comment to commit: ${comment.filePath}:${comment.lineNumber}`)
-
-        // 更新评论状态
         await prisma.reviewComment.update({
           where: { id: comment.id },
           data: {
@@ -384,9 +395,35 @@ export class ReviewService {
             gitlabCommentId: result.id?.toString(),
           },
         })
+
+        console.log(`✅ Posted inline comment to commit: ${comment.filePath}:${comment.lineNumber}`)
       } catch (error) {
-        console.error(`❌ Failed to post comment ${comment.id} to commit:`, error)
-        // 继续处理其他评论，不中断整个流程
+        // 行内评论失败，尝试普通评论
+        console.log(`⚠️ Inline commit comment failed, trying general comment...`)
+        
+        try {
+          // 简洁的评论格式：直接显示内容 + 来源信息
+          const commentBody = `${comment.content}\n\n---\n<sub>🤖comment by code review copilot, written by yuguaa</sub>`
+
+          const result = await gitlabService.createCommitComment(
+            reviewLog.repository.gitLabProjectId,
+            reviewLog.commitSha,
+            commentBody,
+            undefined  // 普通评论
+          )
+
+          await prisma.reviewComment.update({
+            where: { id: comment.id },
+            data: {
+              isPosted: true,
+              gitlabCommentId: result.id?.toString(),
+            },
+          })
+
+          console.log(`✅ Posted general comment to commit`)
+        } catch (fallbackError) {
+          console.error(`❌ Failed to post comment to commit: ${comment.filePath}:${comment.lineNumber}`)
+        }
       }
     }
   }

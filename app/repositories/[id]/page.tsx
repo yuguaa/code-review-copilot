@@ -35,6 +35,7 @@ type Repository = {
   defaultAIModelId: string | null
   defaultAIModel: AIModel | null
   customPrompt: string | null
+  customPromptMode: string | null  // 提示词模式: 'extend' | 'replace'
   watchBranches: string | null
   // 自定义 AI 模型配置
   customProvider: string | null
@@ -107,6 +108,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   // 配置表单状态
   const [config, setConfig] = useState({
     customPrompt: '',
+    customPromptMode: 'extend' as 'extend' | 'replace',  // 提示词模式：扩展或替换
     watchBranches: '',
   })
 
@@ -137,6 +139,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       setRepository(data) // 更新仓库详情
       setConfig({ // 初始化表单配置
         customPrompt: data.customPrompt || '', // 回填自定义提示词
+        customPromptMode: data.customPromptMode || 'extend', // 回填提示词模式
         watchBranches: data.watchBranches || '', // 回填监听分支
       }) // 结束 setConfig
 
@@ -265,6 +268,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
           id: repositoryId,
           defaultAIModelId: selectedModelId === '__custom__' ? null : selectedModelId,
           customPrompt: config.customPrompt || null,
+          customPromptMode: config.customPromptMode || 'extend', // 提示词模式
           watchBranches: config.watchBranches || null,
           // 自定义模型配置
           ...(selectedModelId === '__custom__' ? {
@@ -617,6 +621,31 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             <p className="text-xs text-muted-foreground">
               为此仓库定制审查规则。留空则使用全局默认 Prompt。
             </p>
+
+            {/* 提示词模式选择 */}
+            {config.customPrompt && (
+              <div className="flex items-center gap-4 pt-2">
+                <Label className="text-sm">提示词模式：</Label>
+                <Select
+                  value={config.customPromptMode}
+                  onValueChange={(value: 'extend' | 'replace') => setConfig({ ...config, customPromptMode: value })}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="extend">扩展模式</SelectItem>
+                    <SelectItem value="replace">替换模式</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {config.customPromptMode === 'extend' 
+                    ? '在内置提示词基础上追加自定义内容' 
+                    : '完全使用自定义提示词，忽略内置提示词'}
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2 mt-2">
               <span className="text-xs text-muted-foreground">快捷模板：</span>
               {defaultPrompts.map((template) => (

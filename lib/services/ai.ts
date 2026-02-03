@@ -3,6 +3,7 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { streamText, generateText } from 'ai'
 import OpenAI from 'openai'
 import type { AIModelConfig, ReviewSeverity } from '@/lib/types'
+import { SYSTEM_PROMPT } from '@/lib/prompts'
 
 export interface ReviewComment {
   filePath: string
@@ -14,9 +15,16 @@ export interface ReviewComment {
 }
 
 export class AIService {
+  /**
+   * 代码审查方法
+   * @param prompt - 用户提示词（具体的审查内容）
+   * @param modelConfig - AI 模型配置
+   * @param systemPrompt - 可选的系统提示词（默认使用内置 SYSTEM_PROMPT）
+   */
   async reviewCode(
     prompt: string,
-    modelConfig: AIModelConfig
+    modelConfig: AIModelConfig,
+    systemPrompt: string = SYSTEM_PROMPT
   ): Promise<string> {
     try {
       // 对于自定义模型（如智谱 GLM），直接使用 OpenAI SDK 调用
@@ -47,9 +55,13 @@ export class AIService {
       }
 
       // 调用 AI SDK 的 generateText 方法生成文本
+      // 使用 messages 格式，分离系统提示词和用户提示词
       const response = await generateText({
         model, // AI 模型实例
-        prompt, // 代码审查提示词
+        messages: [
+          { role: 'system', content: systemPrompt }, // 系统提示词：定义 AI 角色和输出格式
+          { role: 'user', content: prompt }, // 用户提示词：具体的审查内容
+        ],
       })
 
       // 打印调试信息，便于排查问题
@@ -77,7 +89,8 @@ export class AIService {
    */
   private async reviewCodeWithOpenAISDK(
     prompt: string,
-    modelConfig: AIModelConfig
+    modelConfig: AIModelConfig,
+    systemPrompt: string = SYSTEM_PROMPT
   ): Promise<string> {
     console.log('🔧 Using custom API for model:', modelConfig.modelId)
     console.log('🔧 API Endpoint:', modelConfig.apiEndpoint)
@@ -87,10 +100,10 @@ export class AIService {
 
     if (isAnthropicFormat) {
       // 使用 Anthropic 格式调用
-      return await this.callAnthropicAPI(prompt, modelConfig)
+      return await this.callAnthropicAPI(prompt, modelConfig, systemPrompt)
     } else {
       // 使用 OpenAI 格式调用
-      return await this.callOpenAIAPI(prompt, modelConfig)
+      return await this.callOpenAIAPI(prompt, modelConfig, systemPrompt)
     }
   }
 
@@ -99,7 +112,8 @@ export class AIService {
    */
   private async callOpenAIAPI(
     prompt: string,
-    modelConfig: AIModelConfig
+    modelConfig: AIModelConfig,
+    systemPrompt: string = SYSTEM_PROMPT
   ): Promise<string> {
     // 创建 OpenAI 客户端，配置自定义 API 端点
     const client = new OpenAI({
@@ -112,7 +126,11 @@ export class AIService {
       model: modelConfig.modelId,
       messages: [
         {
-          role: 'user',
+          role: 'system', // 系统提示词：定义 AI 角色和输出格式
+          content: systemPrompt,
+        },
+        {
+          role: 'user', // 用户提示词：具体的审查内容
           content: prompt,
         },
       ],
@@ -141,6 +159,7 @@ export class AIService {
   private async callAnthropicAPI(
     prompt: string,
     modelConfig: AIModelConfig,
+    systemPrompt: string = SYSTEM_PROMPT,
     retries = 3
   ): Promise<string> {
     // 智能处理 API 端点
@@ -157,6 +176,7 @@ export class AIService {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         // 构建 Anthropic 格式的请求
+        // Anthropic API 使用 system 参数而不是 messages 中的 system role
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
@@ -167,6 +187,7 @@ export class AIService {
           body: JSON.stringify({
             model: modelConfig.modelId,
             max_tokens: modelConfig.maxTokens || 4096,
+            system: systemPrompt, // Anthropic 的系统提示词放在 system 参数中
             messages: [
               {
                 role: 'user',

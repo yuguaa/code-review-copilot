@@ -19,6 +19,7 @@ export async function GET() {
         defaultAIModelId: true,
         watchBranches: true,
         customPrompt: true,
+        customPromptMode: true, // 提示词模式: extend/replace
         // 自定义模型配置
         customProvider: true,
         customModelId: true,
@@ -142,6 +143,7 @@ export async function PUT(request: NextRequest) {
       autoReview,
       defaultAIModelId,
       customPrompt,
+      customPromptMode, // 提示词模式: extend/replace
       watchBranches,
       // 自定义模型配置
       customProvider,
@@ -157,6 +159,7 @@ export async function PUT(request: NextRequest) {
     if (autoReview !== undefined) updateData.autoReview = autoReview
     if (defaultAIModelId !== undefined) updateData.defaultAIModelId = defaultAIModelId
     if (customPrompt !== undefined) updateData.customPrompt = customPrompt
+    if (customPromptMode !== undefined) updateData.customPromptMode = customPromptMode // 提示词模式
     if (watchBranches !== undefined) updateData.watchBranches = watchBranches
     // 自定义模型配置
     if (customProvider !== undefined) updateData.customProvider = customProvider

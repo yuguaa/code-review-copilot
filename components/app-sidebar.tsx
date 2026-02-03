@@ -90,7 +90,7 @@ export function AppSidebar({
         </div>
 
         {/* 导航菜单 */}
-        <nav className="flex-1 space-y-1 px-2">
+        <nav className="flex-1 space-y-1 p-2">
           {navItems.map((item) => {
             const Icon = item.icon
             const isActive = pathname === item.href

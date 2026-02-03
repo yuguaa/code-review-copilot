@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { reviewService } from '@/lib/services/review'
-import crypto from 'crypto'
 
 /**
  * 检查分支是否匹配监听规则
@@ -50,10 +49,6 @@ export async function POST(request: NextRequest) {
 
     // 处理不同类型的事件
     const body = await request.json()
-    console.log('=== WEBHOOK BODY ===')
-    console.log(JSON.stringify(body, null, 2))
-    console.log('===================')
-
     const { object_kind, project, object_attributes, ref, checkout_sha, user_username, user } = body
 
     const projectId = project?.id

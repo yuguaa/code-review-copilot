@@ -28,6 +28,7 @@ export async function GET(
         defaultAIModelId: true,
         watchBranches: true,
         customPrompt: true,
+        customPromptMode: true, // 提示词模式: extend/replace
         // 自定义模型配置
         customProvider: true,
         customModelId: true,
