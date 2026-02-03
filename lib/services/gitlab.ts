@@ -210,6 +210,45 @@ export class GitLabService {
   }
 
   /**
+   * 在 Commit 上创建评论（用于 Push 事件）
+   * GitLab API: POST /projects/:id/repository/commits/:sha/comments
+   */
+  async createCommitComment(
+    projectId: number | string,
+    commitSha: string,
+    comment: string,
+    options?: {
+      path?: string      // 文件路径
+      line?: number       // 行号（新文件的行号）
+      line_type?: 'new' | 'old'  // 行类型
+    }
+  ): Promise<any> {
+    try {
+      const data: any = {
+        note: comment,  // GitLab commit comment 使用 note 而不是 body
+      }
+
+      // 如果指定了文件和行号，添加位置信息
+      if (options?.path) {
+        data.path = options.path
+      }
+      if (options?.line) {
+        data.line = options.line
+        data.line_type = options.line_type || 'new'
+      }
+
+      const response = await this.client.post(
+        `/projects/${projectId}/repository/commits/${commitSha}/comments`,
+        data
+      )
+      return response.data
+    } catch (error) {
+      console.error('Failed to create commit comment:', error)
+      throw new Error('Failed to create comment on GitLab commit')
+    }
+  }
+
+  /**
    * 测试 GitLab 连接
    */
   async testConnection(): Promise<boolean> {

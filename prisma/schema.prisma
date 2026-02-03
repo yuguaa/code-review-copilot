@@ -80,7 +80,8 @@ model ReviewLog {
   mergeRequestIid   Int             // GitLab MR 内部 ID
   sourceBranch      String          // 源分支
   targetBranch      String          // 目标分支
-  author            String          // MR 作者
+  author            String          // 作者姓名
+  authorUsername    String?         // 作者工号/用户名
   title             String          // MR 标题
   description       String?         // MR 描述（可选）
   commitSha         String          // 提交的 SHA
