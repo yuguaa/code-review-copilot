@@ -1,8 +1,13 @@
+/**
+ * @file /api/settings/gitlab
+ * @description GitLab 账号配置管理 API
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createGitLabService } from '@/lib/services/gitlab'
 
-// GET /api/settings/gitlab - 获取所有 GitLab 账号
+/** GET /api/settings/gitlab - 获取所有 GitLab 账号 */
 export async function GET() {
   try {
     const accounts = await prisma.gitLabAccount.findMany({
@@ -28,7 +33,7 @@ export async function GET() {
   }
 }
 
-// POST /api/settings/gitlab - 添加 GitLab 账号
+/** POST /api/settings/gitlab - 添加 GitLab 账号 */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/settings/gitlab - 更新 GitLab 账号
+/** PUT /api/settings/gitlab - 更新 GitLab 账号 */
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
@@ -90,7 +95,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE /api/settings/gitlab - 删除 GitLab 账号
+/** DELETE /api/settings/gitlab - 删除 GitLab 账号 */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)

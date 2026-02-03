@@ -1,9 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server' // 引入 Next.js 请求与响应类型
-import { Prisma } from '@prisma/client' // 引入 Prisma 错误类型
-import { prisma } from '@/lib/prisma' // 引入 Prisma Client 实例
-import { createGitLabService } from '@/lib/services/gitlab' // 引入 GitLab 服务创建方法
+/**
+ * @file /api/repositories
+ * @description 仓库管理 API 路由
+ */
 
-// GET /api/repositories - 获取所有仓库
+import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import { createGitLabService } from '@/lib/services/gitlab'
+
+/** GET /api/repositories - 获取所有仓库 */
 export async function GET() {
   try {
     const repositories = await prisma.repository.findMany({
@@ -19,8 +24,7 @@ export async function GET() {
         defaultAIModelId: true,
         watchBranches: true,
         customPrompt: true,
-        customPromptMode: true, // 提示词模式: extend/replace
-        // 自定义模型配置
+        customPromptMode: true,
         customProvider: true,
         customModelId: true,
         customApiKey: true,
@@ -64,34 +68,30 @@ export async function GET() {
   }
 }
 
-// POST /api/repositories - 添加新仓库
+/** POST /api/repositories - 添加新仓库 */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() // 解析请求体
-    const { gitLabAccountId, gitLabProjectId } = body // 读取 GitLab 账号与项目参数
+    const body = await request.json()
+    const { gitLabAccountId, gitLabProjectId } = body
 
-    if (!gitLabProjectId) { // 校验项目 ID 是否存在
-      return NextResponse.json( // 返回参数错误响应
-        { error: 'GitLab project ID is required' }, // 错误信息
-        { status: 400 } // HTTP 400
-      ) // 结束响应
-    } // 结束参数校验
+    if (!gitLabProjectId) {
+      return NextResponse.json(
+        { error: 'GitLab project ID is required' },
+        { status: 400 }
+      )
+    }
 
-    // 验证 GitLab 账号
-    const gitLabAccount = gitLabAccountId // 判断是否传入账号 ID
-      ? await prisma.gitLabAccount.findUnique({ // 通过 ID 查找指定账号
-          where: { id: gitLabAccountId }, // 按主键查询
-        }) // 结束 findUnique
-      : await prisma.gitLabAccount.findFirst({ // 未传账号时使用激活账号
-          where: { isActive: true }, // 选择激活账号
-        }) // 结束 findFirst
+    // 获取 GitLab 账号（优先使用指定账号，否则使用激活账号）
+    const gitLabAccount = gitLabAccountId
+      ? await prisma.gitLabAccount.findUnique({ where: { id: gitLabAccountId } })
+      : await prisma.gitLabAccount.findFirst({ where: { isActive: true } })
 
-    if (!gitLabAccount) { // 当找不到 GitLab 账号
-      return NextResponse.json( // 返回账号不存在响应
-        { error: 'GitLab account not found' }, // 错误信息
-        { status: 404 } // HTTP 404
-      ) // 结束响应
-    } // 结束账号校验
+    if (!gitLabAccount) {
+      return NextResponse.json(
+        { error: 'GitLab account not found' },
+        { status: 404 }
+      )
+    }
 
     // 从 GitLab 获取项目信息
     const gitlabService = createGitLabService(
@@ -102,38 +102,38 @@ export async function POST(request: NextRequest) {
     const project = await gitlabService.getProject(gitLabProjectId)
 
     // 创建仓库配置
-    const repository = await prisma.repository.create({ // 创建仓库配置记录
-      data: { // 写入仓库字段
-        gitLabProjectId: project.id, // 记录 GitLab 项目 ID
-        name: project.name, // 记录仓库名称
-        path: project.path_with_namespace, // 记录仓库路径
-        description: project.description, // 记录仓库描述
-        gitLabAccountId: gitLabAccount.id, // 绑定实际找到的 GitLab 账号 ID
-      }, // 结束 data
-      include: { // 返回关联数据
-        gitLabAccount: true, // 包含 GitLab 账号信息
-      }, // 结束 include
-    }) // 结束 create
+    const repository = await prisma.repository.create({
+      data: {
+        gitLabProjectId: project.id,
+        name: project.name,
+        path: project.path_with_namespace,
+        description: project.description,
+        gitLabAccountId: gitLabAccount.id,
+      },
+      include: {
+        gitLabAccount: true,
+      },
+    })
 
     return NextResponse.json(repository)
-  } catch (error) { // 捕获创建仓库流程中的异常
-    if (error instanceof Prisma.PrismaClientKnownRequestError) { // 判断是否为 Prisma 可识别错误
-      if (error.code === 'P2002') { // 唯一约束冲突
-        return NextResponse.json( // 返回冲突响应
-          { error: 'Repository already exists' }, // 提示仓库已存在
-          { status: 409 } // HTTP 409
-        ) // 结束响应
-      } // 结束唯一约束判断
-    } // 结束 Prisma 错误处理
-    console.error('Failed to create repository:', error) // 输出错误日志
-    return NextResponse.json( // 返回通用错误响应
-      { error: error instanceof Error ? error.message : 'Failed to create repository' }, // 输出更明确的错误信息
-      { status: 500 } // HTTP 500
-    ) // 结束响应
-  } // 结束 catch
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'Repository already exists' },
+          { status: 409 }
+        )
+      }
+    }
+    console.error('Failed to create repository:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to create repository' },
+      { status: 500 }
+    )
+  }
 }
 
-// PUT /api/repositories - 更新仓库配置
+/** PUT /api/repositories - 更新仓库配置 */
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
@@ -143,9 +143,8 @@ export async function PUT(request: NextRequest) {
       autoReview,
       defaultAIModelId,
       customPrompt,
-      customPromptMode, // 提示词模式: extend/replace
+      customPromptMode,
       watchBranches,
-      // 自定义模型配置
       customProvider,
       customModelId,
       customApiKey,
@@ -159,9 +158,8 @@ export async function PUT(request: NextRequest) {
     if (autoReview !== undefined) updateData.autoReview = autoReview
     if (defaultAIModelId !== undefined) updateData.defaultAIModelId = defaultAIModelId
     if (customPrompt !== undefined) updateData.customPrompt = customPrompt
-    if (customPromptMode !== undefined) updateData.customPromptMode = customPromptMode // 提示词模式
+    if (customPromptMode !== undefined) updateData.customPromptMode = customPromptMode
     if (watchBranches !== undefined) updateData.watchBranches = watchBranches
-    // 自定义模型配置
     if (customProvider !== undefined) updateData.customProvider = customProvider
     if (customModelId !== undefined) updateData.customModelId = customModelId
     if (customApiKey !== undefined) updateData.customApiKey = customApiKey
@@ -205,7 +203,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE /api/repositories - 删除仓库
+/** DELETE /api/repositories - 删除仓库 */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)

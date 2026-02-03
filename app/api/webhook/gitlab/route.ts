@@ -1,32 +1,34 @@
+/**
+ * @file /api/webhook/gitlab
+ * @description GitLab Webhook 处理器
+ *
+ * 支持 Merge Request Hook 和 Push Hook 事件，自动触发代码审查。
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { reviewService } from '@/lib/services/review'
 
 /**
  * 检查分支是否匹配监听规则
- * @param sourceBranch 源分支名称
- * @param watchBranches 监听规则（逗号分隔，支持通配符 *）
- * @returns 是否匹配
+ * @param sourceBranch - 源分支名称
+ * @param watchBranches - 监听规则（逗号分隔，支持通配符 *）
  */
 function checkBranchMatch(sourceBranch: string, watchBranches: string | null): boolean {
-  // 如果没有设置监听规则，默认监听所有分支
   if (!watchBranches || watchBranches.trim() === '') {
     return true
   }
 
-  // 分割多个规则
   const patterns = watchBranches.split(',').map(p => p.trim())
 
-  // 检查是否匹配任意一个规则
   return patterns.some(pattern => {
-    // 将通配符 * 转换为正则表达式
     const regexPattern = pattern.replace(/\*/g, '.*')
     const regex = new RegExp(`^${regexPattern}$`)
     return regex.test(sourceBranch)
   })
 }
 
-// POST /api/webhook/gitlab - 处理 GitLab Webhook
+/** POST /api/webhook/gitlab - 处理 GitLab Webhook */
 export async function POST(request: NextRequest) {
   console.log(' ')
   console.log('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')

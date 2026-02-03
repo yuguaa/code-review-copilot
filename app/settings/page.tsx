@@ -56,7 +56,13 @@ export default function SettingsPage() {
   const [gitlabAccount, setGitLabAccount] = useState<GitLabAccount | null>(null)
   const [aiModels, setAiModels] = useState<AIModel[]>([])
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
+
+  // 分离的 loading 状态
+  const [gitlabTesting, setGitlabTesting] = useState(false)
+  const [gitlabFormTesting, setGitlabFormTesting] = useState(false)
+  const [gitlabSaving, setGitlabSaving] = useState(false)
+  const [aiModelTesting, setAiModelTesting] = useState(false)
+  const [aiModelSaving, setAiModelSaving] = useState(false)
 
   // AI 模型表单状态
   const [editingModel, setEditingModel] = useState<AIModel | null>(null)
@@ -112,7 +118,7 @@ export default function SettingsPage() {
   const testConnection = async () => {
     if (!gitlabAccount) return
 
-    setSubmitting(true)
+    setGitlabTesting(true)
     try {
       const response = await fetch('/api/settings/gitlab/test', {
         method: 'POST',
@@ -133,7 +139,7 @@ export default function SettingsPage() {
     } catch (error) {
       toast.error('请检查 URL 和访问令牌是否正确')
     } finally {
-      setSubmitting(false)
+      setGitlabTesting(false)
     }
   }
 
@@ -144,7 +150,7 @@ export default function SettingsPage() {
       return
     }
 
-    setSubmitting(true)
+    setGitlabFormTesting(true)
     try {
       const response = await fetch('/api/settings/gitlab/test', {
         method: 'POST',
@@ -165,7 +171,7 @@ export default function SettingsPage() {
     } catch (error) {
       toast.error('请检查 URL 和访问令牌是否正确')
     } finally {
-      setSubmitting(false)
+      setGitlabFormTesting(false)
     }
   }
 
@@ -176,7 +182,7 @@ export default function SettingsPage() {
       return
     }
 
-    setSubmitting(true)
+    setGitlabSaving(true)
     try {
       const response = await fetch('/api/settings/gitlab/account', {
         method: 'POST',
@@ -200,7 +206,7 @@ export default function SettingsPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '未知错误')
     } finally {
-      setSubmitting(false)
+      setGitlabSaving(false)
     }
   }
 
@@ -217,7 +223,7 @@ export default function SettingsPage() {
       return
     }
 
-    setSubmitting(true)
+    setAiModelSaving(true)
     try {
       const url = '/api/settings/models'
       const method = editingModel ? 'PUT' : 'POST'
@@ -252,7 +258,7 @@ export default function SettingsPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '未知错误')
     } finally {
-      setSubmitting(false)
+      setAiModelSaving(false)
     }
   }
 
@@ -327,7 +333,7 @@ export default function SettingsPage() {
       return
     }
 
-    setSubmitting(true)
+    setAiModelTesting(true)
     try {
       const response = await fetch('/api/settings/models/test', {
         method: 'POST',
@@ -352,7 +358,7 @@ export default function SettingsPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '连接测试失败，请检查配置')
     } finally {
-      setSubmitting(false)
+      setAiModelTesting(false)
     }
   }
 
@@ -454,12 +460,12 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={testFormConnection} disabled={submitting}>
-                      {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    <Button variant="outline" onClick={testFormConnection} disabled={gitlabFormTesting || gitlabSaving}>
+                      {gitlabFormTesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                       测试连接
                     </Button>
-                    <Button onClick={saveGitLabAccount} disabled={submitting}>
-                      {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    <Button onClick={saveGitLabAccount} disabled={gitlabFormTesting || gitlabSaving}>
+                      {gitlabSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                       保存
                     </Button>
                   </div>
@@ -474,11 +480,11 @@ export default function SettingsPage() {
                       <p className="text-sm text-muted-foreground break-all">{gitlabAccount.url}</p>
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="outline" onClick={testConnection} disabled={submitting}>
-                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '测试连接'}
+                      <Button variant="outline" onClick={testConnection} disabled={gitlabTesting}>
+                        {gitlabTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : '测试连接'}
                       </Button>
-                      <Button onClick={updateGitLabAccount} disabled={submitting}>
-                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : gitlabAccount.isActive ? '禁用' : '启用'}
+                      <Button onClick={updateGitLabAccount}>
+                        {gitlabAccount.isActive ? '禁用' : '启用'}
                       </Button>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
@@ -608,19 +614,19 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       onClick={cancelEditModel}
-                      disabled={submitting}
+                      disabled={aiModelTesting || aiModelSaving}
                     >
                       取消
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => testAIModelConnection(editingModel || undefined)}
-                      disabled={submitting}
+                      disabled={aiModelTesting || aiModelSaving}
                     >
-                      {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '测试连接'}
+                      {aiModelTesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '测试连接'}
                     </Button>
-                    <Button onClick={saveAIModel} disabled={submitting}>
-                      {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '保存'}
+                    <Button onClick={saveAIModel} disabled={aiModelTesting || aiModelSaving}>
+                      {aiModelSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '保存'}
                     </Button>
                   </div>
                 </div>
@@ -717,12 +723,12 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       onClick={() => testAIModelConnection()}
-                      disabled={submitting}
+                      disabled={aiModelTesting || aiModelSaving}
                     >
-                      {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '测试连接'}
+                      {aiModelTesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '测试连接'}
                     </Button>
-                    <Button onClick={saveAIModel} disabled={submitting}>
-                      {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '添加模型'}
+                    <Button onClick={saveAIModel} disabled={aiModelTesting || aiModelSaving}>
+                      {aiModelSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : '添加模型'}
                     </Button>
                   </div>
                 </div>
@@ -751,8 +757,8 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => testAIModelConnection(model)}>
-                          {submitting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : '测试'}
+                        <Button variant="ghost" size="sm" onClick={() => testAIModelConnection(model)} disabled={aiModelTesting}>
+                          {aiModelTesting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : '测试'}
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => editModel(model)}>
                           <Pencil className="h-3 w-3 mr-1" />

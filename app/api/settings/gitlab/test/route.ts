@@ -1,7 +1,12 @@
+/**
+ * @file /api/settings/gitlab/test
+ * @description GitLab 连接测试 API
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createGitLabService } from '@/lib/services/gitlab'
 
-// POST /api/settings/gitlab/test - 测试 GitLab 连接
+/** POST /api/settings/gitlab/test - 测试 GitLab 连接 */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

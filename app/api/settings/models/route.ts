@@ -1,7 +1,12 @@
+/**
+ * @file /api/settings/models
+ * @description AI 模型配置管理 API
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// GET /api/settings/models - 获取所有 AI 模型
+/** GET /api/settings/models - 获取所有 AI 模型 */
 export async function GET() {
   try {
     const models = await prisma.aIModel.findMany({
@@ -27,7 +32,7 @@ export async function GET() {
   }
 }
 
-// POST /api/settings/models - 创建 AI 模型配置
+/** POST /api/settings/models - 创建 AI 模型配置 */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -54,7 +59,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/settings/models - 更新 AI 模型配置
+/** PUT /api/settings/models - 更新 AI 模型配置 */
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
@@ -83,7 +88,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE /api/settings/models - 删除 AI 模型配置
+/** DELETE /api/settings/models - 删除 AI 模型配置 */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)

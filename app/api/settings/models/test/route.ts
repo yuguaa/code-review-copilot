@@ -1,7 +1,12 @@
+/**
+ * @file /api/settings/models/test
+ * @description AI 模型连接测试 API
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
-// POST /api/settings/models/test - 测试 AI 模型连接
+/** POST /api/settings/models/test - 测试 AI 模型连接 */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

@@ -1,29 +1,39 @@
+/**
+ * GitLab 服务模块
+ * 
+ * 封装 GitLab API v4 的所有交互逻辑，包括：
+ * - 项目/仓库管理
+ * - Merge Request 操作
+ * - Commit 和 Diff 获取
+ * - 评论发布
+ */
+
 import axios, { AxiosInstance } from 'axios'
 import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit } from '@/lib/types'
 
+/**
+ * GitLab 服务类
+ */
 export class GitLabService {
   private client: AxiosInstance
 
   constructor(baseUrl: string, accessToken: string) {
-    const normalizedBaseUrl = GitLabService.normalizeApiBaseUrl(baseUrl) // 规范化 GitLab API 基础地址
-    this.client = axios.create({ // 创建 Axios 客户端实例
-      baseURL: normalizedBaseUrl, // 使用规范化后的 API 基础地址
-      headers: { // 设置请求头
-        'PRIVATE-TOKEN': accessToken, // 携带 GitLab 私有访问令牌
-      }, // 结束请求头配置
-    }) // 结束 Axios 实例创建
+    const normalizedBaseUrl = GitLabService.normalizeApiBaseUrl(baseUrl)
+    this.client = axios.create({
+      baseURL: normalizedBaseUrl,
+      headers: { 'PRIVATE-TOKEN': accessToken },
+    })
   }
 
-  private static normalizeApiBaseUrl(baseUrl: string): string { // 规范化 GitLab API 基础地址
-    const trimmedBaseUrl = baseUrl.trim() // 去除首尾空格
-    const parsedUrl = new URL(trimmedBaseUrl) // 解析为 URL 对象
-    const origin = parsedUrl.origin // 提取协议与域名
-    const hasApiPath = parsedUrl.pathname.includes('/api/v4') // 判断是否包含 API 前缀
-    if (hasApiPath) { // 当原始地址已包含 /api/v4
-      return `${origin}/api/v4` // 统一返回标准 API 根路径
-    } // 结束包含检查
-    return `${origin}/api/v4` // 默认拼接 API v4 根路径
-  } // 结束 normalizeApiBaseUrl
+  /**
+   * 规范化 GitLab API 基础地址
+   */
+  private static normalizeApiBaseUrl(baseUrl: string): string {
+    const trimmedBaseUrl = baseUrl.trim()
+    const parsedUrl = new URL(trimmedBaseUrl)
+    const origin = parsedUrl.origin
+    return `${origin}/api/v4`
+  }
 
   /**
    * 获取所有项目（仓库）
@@ -115,18 +125,13 @@ export class GitLabService {
   }
 
   /**
-   * 获取 Merge Request 的单个 commit
-   * 只获取最新一次提交的 staged diff
+   * 获取 MR 的最新 Commit
    */
   async getMergeRequestCommits(projectId: number | string, mergeRequestIid: number): Promise<GitLabCommit[]> {
     try {
       const response = await this.client.get(
         `/projects/${projectId}/merge_requests/${mergeRequestIid}/commits`,
-        {
-          params: {
-            per_page: 1, // 只获取最新的 commit
-          },
-        }
+        { params: { per_page: 1 } }
       )
       return response.data
     } catch (error) {
@@ -151,7 +156,7 @@ export class GitLabService {
   }
 
   /**
-   * 在 Merge Request 中创建评论（普通评论或行内评论）
+   * 在 MR 中创建评论（支持行内评论）
    */
   async createMergeRequestComment(
     projectId: number | string,
@@ -169,11 +174,8 @@ export class GitLabService {
     }
   ): Promise<any> {
     try {
-      const data: any = {
-        body: comment,
-      }
+      const data: any = { body: comment }
 
-      // 如果提供了 position，添加行内评论的位置信息
       if (position) {
         data.position = {
           base_sha: position.base_sha,
@@ -183,13 +185,8 @@ export class GitLabService {
           new_path: position.new_path,
           position_type: position.position_type,
         }
-        // 只添加存在的行号
-        if (position.new_line) {
-          data.position.new_line = position.new_line
-        }
-        if (position.old_line) {
-          data.position.old_line = position.old_line
-        }
+        if (position.new_line) data.position.new_line = position.new_line
+        if (position.old_line) data.position.old_line = position.old_line
       }
 
       const response = await this.client.post(
@@ -198,14 +195,10 @@ export class GitLabService {
       )
       return response.data
     } catch (error: any) {
-      // 打印详细的错误信息
       if (error.response?.data) {
         console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
       }
-      if (error.response?.data?.message) {
-        console.error('GitLab API error message:', error.response.data.message)
-      }
-      throw error  // 抛出原始错误以便上层处理
+      throw error
     }
   }
 
@@ -233,31 +226,25 @@ export class GitLabService {
 
   /**
    * 在 Commit 上创建评论（用于 Push 事件）
-   * GitLab API: POST /projects/:id/repository/commits/:sha/comments
-   * 注意：如果要在特定行上评论需要 line_code，这里简化为通用评论
    */
   async createCommitComment(
     projectId: number | string,
     commitSha: string,
     comment: string,
     options?: {
-      path?: string      // 文件路径
-      line?: number       // 行号（新文件的行号）
-      line_type?: 'new' | 'old'  // 行类型
+      path?: string
+      line?: number
+      line_type?: 'new' | 'old'
     }
   ): Promise<any> {
     try {
-      // 如果有文件路径和行号，把它们包含在评论内容中
       let fullComment = comment
       if (options?.path) {
         fullComment = `**文件**: \`${options.path}\`${options.line ? ` (行 ${options.line})` : ''}\n\n${comment}`
       }
 
-      const data: any = {
-        note: fullComment,  // GitLab commit comment 使用 note 而不是 body
-      }
+      const data: any = { note: fullComment }
 
-      // 尝试添加位置信息（某些 GitLab 版本支持）
       if (options?.path && options?.line) {
         data.path = options.path
         data.line = options.line
@@ -272,7 +259,7 @@ export class GitLabService {
       )
       return response.data
     } catch (error: any) {
-      // 如果带行号失败，尝试创建不带行号的评论
+      // 如果带行号失败，重试不带行号
       if (error.response?.status === 400 && options?.path) {
         console.log('Retry without line info...')
         try {
@@ -280,7 +267,6 @@ export class GitLabService {
           if (options?.path) {
             fullComment = `**文件**: \`${options.path}\`${options.line ? ` (行 ${options.line})` : ''}\n\n${comment}`
           }
-
           const response = await this.client.post(
             `/projects/${projectId}/repository/commits/${commitSha}/comments`,
             { note: fullComment }
@@ -291,7 +277,6 @@ export class GitLabService {
         }
       }
 
-      // 打印详细的错误信息
       if (error.response?.data) {
         console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
       }
@@ -314,6 +299,9 @@ export class GitLabService {
   }
 }
 
+/**
+ * 创建 GitLab 服务实例
+ */
 export function createGitLabService(baseUrl: string, accessToken: string): GitLabService {
   return new GitLabService(baseUrl, accessToken)
 }

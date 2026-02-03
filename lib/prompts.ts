@@ -1,16 +1,19 @@
 /**
- * 代码审查系统提示词
- * 只包含通用的系统级配置，具体的审查内容由调用时动态传入
+ * @file prompts.ts
+ * @description 代码审查 AI 提示词管理模块
+ *
+ * 包含系统提示词、输出格式定义、以及构建用户提示词的工具函数。
+ * 只包含通用的系统级配置，具体的审查内容由调用时动态传入。
  */
 
-// 问题严重等级
+/** 问题严重等级枚举 */
 export const SEVERITY = {
-  CRITICAL: '严重',  // 安全漏洞、重大 Bug、性能问题
-  NORMAL: '一般',    // 代码质量、小 Bug
-  SUGGESTION: '建议', // 最佳实践、优化建议
+  CRITICAL: '严重',
+  NORMAL: '一般',
+  SUGGESTION: '建议',
 } as const
 
-// 系统提示词：定义 AI 角色和输出格式
+/** 系统提示词：定义 AI 角色和输出格式 */
 export const SYSTEM_PROMPT = `你是一名专业代码审查助手。请仅针对代码变更，逐行指出具体、可操作的问题。
 【审查条件】
 1. 这是一个公司内部项目，要求快速部署快速迭代
@@ -28,13 +31,21 @@ export const SYSTEM_PROMPT = `你是一名专业代码审查助手。请仅针�
 25: [严重] 存在 SQL 注入风险，建议参数化查询
 `
 
-// 基础输出格式要求（用于替换模式，确保解析器可以正确解析）
+/** 基础输出格式要求（用于替换模式，确保解析器可以正确解析） */
 export const OUTPUT_FORMAT = `
 【输出格式要求】
 每条问题单独列出，格式如下：
 行号: [严重/一般/建议] 问题描述`
 
-// 构建审查提示词
+/**
+ * 构建代码审查提示词
+ * @param params - 审查参数
+ * @param params.title - 变更主题（MR 标题或 commit message）
+ * @param params.description - 变更描述
+ * @param params.filename - 文件名
+ * @param params.diff - diff 内容
+ * @param params.summary - 变更概要
+ */
 export function buildReviewPrompt(params: {
   title: string
   description?: string
@@ -42,8 +53,6 @@ export function buildReviewPrompt(params: {
   diff: string
   summary?: string
 }): string {
-  // 精简版审查提示词，突出变更上下文和 diff
-  // customPrompt 现在在系统提示词中处理（支持 replace/extend 模式）
   const parts = [
     params.title ? `【变更主题】${params.title}` : '',
     params.summary ? `【概要】${params.summary}` : '',
@@ -56,7 +65,13 @@ export function buildReviewPrompt(params: {
   return parts.filter(Boolean).join('\n')
 }
 
-// 构建总结提示词
+/**
+ * 构建总结提示词
+ * @param params - 总结参数
+ * @param params.title - 变更主题
+ * @param params.description - 变更描述
+ * @param params.diffs - 所有 diff 内容
+ */
 export function buildSummaryPrompt(params: {
   title: string
   description?: string

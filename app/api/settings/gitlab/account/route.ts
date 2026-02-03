@@ -1,8 +1,13 @@
+/**
+ * @file /api/settings/gitlab/account
+ * @description GitLab 账号配置 API（单账号模式）
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createGitLabService } from '@/lib/services/gitlab'
 
-// GET /api/settings/gitlab/account - 获取单个 GitLab 账号
+/** GET /api/settings/gitlab/account - 获取单个 GitLab 账号 */
 export async function GET() {
   try {
     const account = await prisma.gitLabAccount.findFirst({
@@ -29,7 +34,7 @@ export async function GET() {
   }
 }
 
-// POST /api/settings/gitlab/account - 创建 GitLab 账号（首次配置）
+/** POST /api/settings/gitlab/account - 创建 GitLab 账号（首次配置） */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -81,7 +86,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/settings/gitlab/account - 更新 GitLab 账号
+/** PUT /api/settings/gitlab/account - 更新 GitLab 账号 */
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
@@ -123,7 +128,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE /api/settings/gitlab/account - 删除 GitLab 账号
+/** DELETE /api/settings/gitlab/account - 删除 GitLab 账号 */
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)

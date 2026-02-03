@@ -1,9 +1,20 @@
+/**
+ * @file types.ts
+ * @description 项目全局类型定义
+ *
+ * 包含 AI 服务、GitLab API、代码审查等相关的 TypeScript 类型定义。
+ */
+
+/** AI 服务提供商类型 */
 export type AIProvider = 'openai' | 'claude' | 'custom'
 
+/** 审查问题严重程度 */
 export type ReviewSeverity = 'critical' | 'normal' | 'suggestion'
 
+/** 审查状态 */
 export type ReviewStatus = 'pending' | 'completed' | 'failed'
 
+/** GitLab 项目信息 */
 export interface GitLabProject {
   id: number
   name: string
@@ -14,6 +25,7 @@ export interface GitLabProject {
   web_url: string
 }
 
+/** GitLab 合并请求信息 */
 export interface GitLabMergeRequest {
   id: number
   iid: number
@@ -37,6 +49,7 @@ export interface GitLabMergeRequest {
   }
 }
 
+/** GitLab 文件变更信息 */
 export interface GitLabDiff {
   diff: string
   new_path: string
@@ -46,6 +59,7 @@ export interface GitLabDiff {
   deleted_file: boolean
 }
 
+/** GitLab 提交信息 */
 export interface GitLabCommit {
   id: string
   short_id: string
@@ -56,6 +70,7 @@ export interface GitLabCommit {
   created_at: string
 }
 
+/** AI 模型配置 */
 export interface AIModelConfig {
   id: string
   name: string
@@ -68,6 +83,7 @@ export interface AIModelConfig {
   isActive: boolean
 }
 
+/** 代码审查评论 */
 export interface ReviewComment {
   filePath: string
   lineNumber: number
@@ -77,6 +93,7 @@ export interface ReviewComment {
   diffHunk?: string
 }
 
+/** 代码审查输入参数 */
 export interface ReviewInput {
   mergeRequest: GitLabMergeRequest
   diffs: GitLabDiff[]
@@ -85,10 +102,12 @@ export interface ReviewInput {
   modelConfig: AIModelConfig
 }
 
+/** 代码审查输出结果 */
 export interface ReviewOutput {
   comments: ReviewComment[]
 }
 
+/** 仪表盘统计数据 */
 export interface DashboardStats {
   totalRepositories: number
   activeRepositories: number

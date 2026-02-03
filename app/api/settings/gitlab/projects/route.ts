@@ -1,8 +1,13 @@
+/**
+ * @file /api/settings/gitlab/projects
+ * @description GitLab 项目列表查询 API
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createGitLabService } from '@/lib/services/gitlab'
 
-// GET /api/settings/gitlab/projects - 从 GitLab 获取项目列表（支持搜索）
+/** GET /api/settings/gitlab/projects - 从 GitLab 获取项目列表 */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -33,7 +38,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/settings/gitlab/projects - 从 GitLab 获取项目列表（支持搜索）
+/** POST /api/settings/gitlab/projects - 从 GitLab 获取项目列表 */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

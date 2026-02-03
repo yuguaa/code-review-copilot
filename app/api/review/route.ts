@@ -1,41 +1,35 @@
+/**
+ * @file /api/review
+ * @description 手动触发代码审查 API
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { reviewService } from '@/lib/services/review'
 
-// POST /api/review - 手动触发代码审查
+/** POST /api/review - 手动触发代码审查 */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { repositoryId, mergeRequestIid } = body
 
-    // 查找仓库（包含 GitLab 账号信息）
     const repository = await prisma.repository.findUnique({
       where: { id: repositoryId },
-      include: {
-        gitLabAccount: true,
-      },
+      include: { gitLabAccount: true },
     })
 
     if (!repository) {
-      return NextResponse.json(
-        { error: 'Repository not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Repository not found' }, { status: 404 })
     }
 
-    // 创建 GitLab 服务并获取 MR 信息
     const { createGitLabService } = await import('@/lib/services/gitlab')
     const gitlabService = createGitLabService(
       repository.gitLabAccount.url,
       repository.gitLabAccount.accessToken
     )
 
-    const mr = await gitlabService.getMergeRequest(
-      repository.gitLabProjectId,
-      mergeRequestIid
-    )
+    const mr = await gitlabService.getMergeRequest(repository.gitLabProjectId, mergeRequestIid)
 
-    // 创建审查日志
     const reviewLog = await prisma.reviewLog.create({
       data: {
         repositoryId: repository.id,
@@ -54,7 +48,6 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // 异步执行审查
     reviewService.performReview(reviewLog.id).catch((error) => {
       console.error('Review failed:', error)
     })
@@ -66,14 +59,11 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Failed to start review:', error)
-    return NextResponse.json(
-      { error: 'Failed to start review' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to start review' }, { status: 500 })
   }
 }
 
-// GET /api/review?logId=xxx - 获取审查状态
+/** GET /api/review?logId=xxx - 获取审查状态 */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
