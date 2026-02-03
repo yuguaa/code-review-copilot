@@ -28,6 +28,12 @@ export const SYSTEM_PROMPT = `你是一名专业代码审查助手。请仅针�
 25: [严重] 存在 SQL 注入风险，建议参数化查询
 `
 
+// 基础输出格式要求（用于替换模式，确保解析器可以正确解析）
+export const OUTPUT_FORMAT = `
+【输出格式要求】
+每条问题单独列出，格式如下：
+行号: [严重/一般/建议] 问题描述`
+
 // 构建审查提示词
 export function buildReviewPrompt(params: {
   title: string

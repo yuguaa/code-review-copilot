@@ -308,17 +308,19 @@ export class AIService {
     let currentContent: string[] = []
     let inCodeBlock = false
 
+    // 匹配格式: "行号: [级别] 内容" 或 "行号-行号: [级别] 内容" 或 "行号:"
+    // 例如: "12: [一般] 变量命名不规范" 或 "10-15:" 或 "10:"
+    const lineStartPattern = /^(\d+)(?:-(\d+))?:\s*(.*)$/
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-
-      // 匹配行号范围，例如 "10-15:" 或 "10:"
-      const lineMatch = line.match(/^(\d+)(?:-(\d+))?:\s*$/)
+      const lineMatch = line.match(lineStartPattern)
 
       if (lineMatch) {
         // 保存之前的评论
         if (currentComment.lineNumber && currentContent.length > 0) {
-          const content = currentContent.join('\n').trim()
-          if (content !== 'LGTM!') {
+          const content = this.cleanCommentContent(currentContent.join('\n').trim())
+          if (content && content !== 'LGTM!') {
             comments.push({
               filePath,
               lineNumber: currentComment.lineNumber,
@@ -329,14 +331,22 @@ export class AIService {
           }
         }
 
+        // 提取行后面的内容（可能包含 [级别] 和描述）
+        const restOfLine = lineMatch[3] || ''
+
         // 开始新评论
         currentComment = {
           lineNumber: parseInt(lineMatch[1]),
           lineRangeEnd: lineMatch[2] ? parseInt(lineMatch[2]) : undefined,
-          severity: this.inferSeverity(line),
+          severity: this.inferSeverity(restOfLine || line),
         }
         currentContent = []
         inCodeBlock = false
+
+        // 如果行号后面有内容，加入到评论内容中
+        if (restOfLine.trim()) {
+          currentContent.push(restOfLine)
+        }
       } else if (currentComment.lineNumber) {
         // 收集评论内容
         if (line.startsWith('```')) {
@@ -350,8 +360,8 @@ export class AIService {
 
     // 保存最后一个评论
     if (currentComment.lineNumber && currentContent.length > 0) {
-      const content = currentContent.join('\n').trim()
-      if (content !== 'LGTM!') {
+      const content = this.cleanCommentContent(currentContent.join('\n').trim())
+      if (content && content !== 'LGTM!') {
         comments.push({
           filePath,
           lineNumber: currentComment.lineNumber,
@@ -363,6 +373,22 @@ export class AIService {
     }
 
     return comments
+  }
+
+  /**
+   * 清理评论内容，移除级别标签前缀
+   * 例如: "[一般] 变量命名不规范" -> "变量命名不规范"
+   */
+  private cleanCommentContent(content: string): string {
+    // 移除开头的 [严重]、[一般]、[建议] 等标签
+    return content
+      .replace(/^\[严重\]\s*/i, '')
+      .replace(/^\[一般\]\s*/i, '')
+      .replace(/^\[建议\]\s*/i, '')
+      .replace(/^\[Critical\]\s*/i, '')
+      .replace(/^\[Normal\]\s*/i, '')
+      .replace(/^\[Suggestion\]\s*/i, '')
+      .trim()
   }
 
   /**
