@@ -12,10 +12,10 @@ import { reviewService } from '@/lib/services/review'
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const reviewId = params.id
+    const { id: reviewId } = await params
 
     // 查找审查记录
     const reviewLog = await prisma.reviewLog.findUnique({
