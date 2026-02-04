@@ -12,18 +12,29 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Clock, 
-  AlertCircle, 
-  ExternalLink, 
-  CheckCircle, 
-  GitCommit, 
-  GitMerge, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+import {
+  Clock,
+  AlertCircle,
+  CheckCircle,
+  GitCommit,
+  GitMerge,
+  Gitlab,
   RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  Bot
+  Copy,
+  Check
 } from 'lucide-react'
 
 // 审查记录类型定义
@@ -32,6 +43,7 @@ interface Review {
   repositoryId: string
   repositoryName: string
   repositoryPath: string
+  gitlabUrl: string
   mergeRequestId: number
   mergeRequestIid: number
   sourceBranch: string
@@ -51,6 +63,9 @@ interface Review {
   suggestions: number
   aiSummary: string | null  // AI 变更总结
   aiResponse: string | null // AI 完整回复（JSON 格式）
+  reviewPrompts: string | null // 发送给 AI 的完整 Prompt
+  aiModelProvider: string | null // AI 模型提供商
+  aiModelId: string | null // AI 模型 ID
   startedAt: string
   completedAt: string | null
   eventType: 'push' | 'merge_request'
@@ -65,15 +80,17 @@ interface Review {
 }
 
 export default function ReviewsPage() {
-  const [reviews, setReviews] = useState<Review[]>([])  // 初始化为空数组
+  const [reviews, setReviews] = useState<Review[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null) // 展开的审查记录 ID
+  const [selectedReview, setSelectedReview] = useState<Review | null>(null)
+  const [retryingReviewId, setRetryingReviewId] = useState<string | null>(null)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const pageSize = 20 // 每页 20 条
+  const pageSize = 20
 
   // 获取审查记录
   const fetchReviews = async (page = 1) => {
@@ -100,9 +117,43 @@ export default function ReviewsPage() {
     }
   }
 
+  // 重新触发审查
+  const retryReview = async (reviewId: string, event: React.MouseEvent) => {
+    event.stopPropagation() // 阻止事件冒泡，避免触发行点击
+    
+    if (retryingReviewId) {
+      return // 如果已有审查正在进行，不允许重复触发
+    }
+    
+    try {
+      setRetryingReviewId(reviewId)
+      const response = await fetch(`/api/review/${reviewId}/retry`, {
+        method: 'POST',
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to retry review')
+      }
+      
+      // 刷新审查记录列表
+      await fetchReviews(currentPage)
+      
+      // 如果当前打开的详情就是这个审查，关闭详情窗口
+      if (selectedReview?.id === reviewId) {
+        setSelectedReview(null)
+      }
+    } catch (err) {
+      console.error('Failed to retry review:', err)
+      alert(err instanceof Error ? err.message : '重新审查失败，请稍后重试')
+    } finally {
+      setRetryingReviewId(null)
+    }
+  }
+
   // 切换展开/折叠审查详情
-  const toggleExpand = (reviewId: string) => {
-    setExpandedReviewId(expandedReviewId === reviewId ? null : reviewId)
+  const openReviewDialog = (review: Review) => {
+    setSelectedReview(review)
   }
 
   // 解析 AI 回复 JSON
@@ -113,6 +164,18 @@ export default function ReviewsPage() {
     } catch {
       return {}
     }
+  }
+
+  const getGitlabLink = (review: Review) => {
+    const base = review.gitlabUrl?.replace(/\/+$/, '')
+    if (!base || !review.repositoryPath) return null
+    if (review.eventType === 'merge_request' && review.mergeRequestIid) {
+      return `${base}/${review.repositoryPath}/-/merge_requests/${review.mergeRequestIid}`
+    }
+    if (review.eventType === 'push' && review.commitSha) {
+      return `${base}/${review.repositoryPath}/-/commit/${review.commitSha}`
+    }
+    return `${base}/${review.repositoryPath}`
   }
 
   // 获取严重级别样式
@@ -143,6 +206,28 @@ export default function ReviewsPage() {
     }
   }
 
+  // 格式化时间差
+  const formatDuration = (started: string, completed: string | null) => {
+    if (!completed) return null
+    const start = new Date(started).getTime()
+    const end = new Date(completed).getTime()
+    const diff = Math.floor((end - start) / 1000)
+
+    if (diff < 60) return `${diff}秒`
+    if (diff < 3600) return `${Math.floor(diff / 60)}分钟`
+    return `${Math.floor(diff / 3600)}小时${Math.floor((diff % 3600) / 60)}分钟`
+  }
+
+  const handleCopy = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedKey(key)
+      window.setTimeout(() => setCopiedKey(null), 1500)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
   useEffect(() => {
     fetchReviews()
   }, [])
@@ -159,6 +244,8 @@ export default function ReviewsPage() {
         return <Badge className="bg-sidebar text-sidebar-foreground border-border/40">{status}</Badge>
     }
   }
+
+  const selectedGitlabLink = selectedReview ? getGitlabLink(selectedReview) : null
 
   return (
     <div className="p-8">
@@ -217,15 +304,15 @@ export default function ReviewsPage() {
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">状态</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">问题</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">时间</TableHead>
-                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground w-12"></TableHead>
+                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reviews.map((review: Review) => (
-                  <React.Fragment key={review.id}>
                   <TableRow 
-                    className={`hover:bg-sidebar/50 cursor-pointer ${expandedReviewId === review.id ? 'bg-sidebar/30' : ''}`}
-                    onClick={() => toggleExpand(review.id)}
+                    key={review.id}
+                    className="hover:bg-sidebar/50 cursor-pointer"
+                    onClick={() => openReviewDialog(review)}
                   >
                     <TableCell className="px-4 py-3">
                       {review.eventType === 'push' ? (
@@ -304,102 +391,20 @@ export default function ReviewsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        {expandedReviewId === review.id ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                      </Button>
+                      {(review.status === 'failed' || review.status === 'completed') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => retryReview(review.id, e)}
+                          disabled={retryingReviewId === review.id}
+                          className="h-8 text-xs"
+                        >
+                          <RefreshCw className={`h-3 w-3 mr-1 ${retryingReviewId === review.id ? 'animate-spin' : ''}`} />
+                          {retryingReviewId === review.id ? '重审中' : '重新审查'}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
-                  
-                  {/* 展开的详情面板 */}
-                  {expandedReviewId === review.id && (
-                    <TableRow key={`${review.id}-details`} className="bg-sidebar/20 hover:bg-sidebar/20">
-                      <TableCell colSpan={9} className="px-6 py-4">
-                        <div className="space-y-4">
-                          {/* AI 变更总结 */}
-                          {review.aiSummary && (
-                            <div className="bg-background rounded-lg p-4 border border-border/40">
-                              <div className="flex items-center gap-2 mb-3">
-                                <Bot className="h-5 w-5 text-sidebar-primary" />
-                                <h4 className="font-medium text-foreground">AI 变更总结</h4>
-                              </div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                                {review.aiSummary}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* 审查评论列表 */}
-                          {review.comments && review.comments.length > 0 && (
-                            <div className="bg-background rounded-lg p-4 border border-border/40">
-                              <div className="flex items-center gap-2 mb-3">
-                                <FileText className="h-5 w-5 text-sidebar-primary" />
-                                <h4 className="font-medium text-foreground">审查意见 ({review.comments.length})</h4>
-                              </div>
-                              <div className="space-y-3">
-                                {review.comments.map((comment) => (
-                                  <div 
-                                    key={comment.id}
-                                    className={`p-3 rounded-md border-l-4 ${getSeverityStyle(comment.severity)}`}
-                                  >
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <span>{getSeverityIcon(comment.severity)}</span>
-                                      <span className="text-xs font-mono text-muted-foreground">
-                                        {comment.filePath}:{comment.lineNumber}
-                                      </span>
-                                      {comment.isPosted && (
-                                        <Badge variant="outline" className="text-xs h-5">
-                                          <CheckCircle className="h-3 w-3 mr-1" />
-                                          已发布
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-sm text-foreground whitespace-pre-wrap">
-                                      {comment.content}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* AI 原始回复（按文件） */}
-                          {review.aiResponse && (
-                            <div className="bg-background rounded-lg p-4 border border-border/40">
-                              <div className="flex items-center gap-2 mb-3">
-                                <Bot className="h-5 w-5 text-muted-foreground" />
-                                <h4 className="font-medium text-foreground">AI 原始回复</h4>
-                              </div>
-                              <div className="space-y-3">
-                                {Object.entries(parseAiResponse(review.aiResponse)).map(([filePath, response]) => (
-                                  <details key={filePath} className="group">
-                                    <summary className="cursor-pointer text-sm font-mono text-muted-foreground hover:text-foreground flex items-center gap-2">
-                                      <ChevronDown className="h-4 w-4 group-open:rotate-180 transition-transform" />
-                                      {filePath}
-                                    </summary>
-                                    <pre className="mt-2 p-3 bg-sidebar/50 rounded-md text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap">
-                                      {response}
-                                    </pre>
-                                  </details>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 无审查内容提示 */}
-                          {!review.aiSummary && (!review.comments || review.comments.length === 0) && !review.aiResponse && (
-                            <div className="text-center py-4 text-muted-foreground">
-                              <p className="text-sm">暂无审查详情</p>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -436,6 +441,245 @@ export default function ReviewsPage() {
           )}
         </div>
       </Card>
+
+      {/* 审查详情弹窗 */}
+      <Dialog open={!!selectedReview} onOpenChange={() => setSelectedReview(null)}>
+        <DialogContent className="w-full max-w-[96vw] max-h-[90vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={true}>
+          {selectedReview && (
+            <div className="flex flex-col h-[88vh] min-w-0">
+              <DialogHeader className="px-6 py-4 border-b border-border/40 bg-sidebar/30">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <DialogTitle className="text-xl font-semibold">
+                        审查详情
+                      </DialogTitle>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(selectedReview.status)}
+                        {(selectedReview.status === 'failed' || selectedReview.status === 'completed') && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => retryReview(selectedReview.id, e)}
+                            disabled={retryingReviewId === selectedReview.id}
+                            className="h-7 px-2 text-xs"
+                          >
+                            <RefreshCw className={`h-3 w-3 mr-1 ${retryingReviewId === selectedReview.id ? 'animate-spin' : ''}`} />
+                            {retryingReviewId === selectedReview.id ? '重审中...' : '重新审查'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <DialogDescription asChild>
+                      <div className="mt-2 space-y-3 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-foreground">{selectedReview.title}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                          <span>仓库：{selectedReview.repositoryName}</span>
+                          <span>作者：{selectedReview.author}</span>
+                          <span className="flex items-center gap-2">
+                            {selectedReview.eventType === 'push'
+                              ? `提交：${selectedReview.commitShortId}`
+                              : `MR：!${selectedReview.mergeRequestIid}`}
+                            {selectedGitlabLink && (
+                              <a
+                                href={selectedGitlabLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-sidebar-primary hover:text-sidebar-primary/80"
+                                aria-label={`在 GitLab 中打开${selectedReview.eventType === 'merge_request' ? ' MR' : '提交'}`}
+                                title={`在 GitLab 中打开${selectedReview.eventType === 'merge_request' ? ' MR' : '提交'}`}
+                              >
+                                <Gitlab className="h-4 w-4" />
+                              </a>
+                            )}
+                          </span>
+                          <span>
+                            分支：{selectedReview.sourceBranch}
+                            {selectedReview.targetBranch && ` → ${selectedReview.targetBranch}`}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                          <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1">
+                            开始：{new Date(selectedReview.startedAt).toLocaleString('zh-CN')}
+                          </div>
+                          <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1">
+                            用时：{formatDuration(selectedReview.startedAt, selectedReview.completedAt) || '进行中'}
+                          </div>
+                          <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1">
+                            变更文件：{selectedReview.reviewedFiles}/{selectedReview.totalFiles}
+                          </div>
+                          {selectedReview.status === 'completed' && selectedReview.criticalIssues === 0 && selectedReview.normalIssues === 0 && selectedReview.suggestions === 0 && (
+                            <div className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-2.5 py-1 text-emerald-700">
+                              LGTM
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="px-2 py-4 flex-1 min-h-0 overflow-hidden min-w-0">
+                <Tabs
+                  defaultValue={
+                    selectedReview.aiSummary
+                      ? 'summary'
+                      : selectedReview.comments?.length
+                        ? 'comments'
+                        : selectedReview.aiResponse
+                          ? 'ai'
+                          : selectedReview.reviewPrompts
+                            ? 'prompts'
+                            : 'model'
+                  }
+                  className="w-full h-full flex flex-col min-w-0"
+                >
+                  <TabsList className="mb-4 flex h-10 w-full flex-nowrap gap-2 overflow-x-auto whitespace-nowrap border border-border/40 bg-background/80 p-1 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 no-scrollbar">
+                    <TabsTrigger value="summary" className="h-full">AI 总结</TabsTrigger>
+                    <TabsTrigger value="comments" className="h-full">审查意见 {selectedReview.comments?.length ? `(${selectedReview.comments.length})` : ''}</TabsTrigger>
+                    <TabsTrigger value="ai" className="h-full">AI 原始回复</TabsTrigger>
+                    <TabsTrigger value="prompts" className="h-full">Prompt 追溯</TabsTrigger>
+                    <TabsTrigger value="model" className="h-full">模型信息</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="summary" className="flex-1 min-h-0 overflow-y-auto min-w-0">
+                    {selectedReview.aiSummary ? (
+                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
+                        <pre className="text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
+                          {selectedReview.aiSummary}
+                        </pre>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm">暂无 AI 总结</div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="comments" className="flex-1 min-h-0 overflow-y-auto min-w-0">
+                    {selectedReview.comments && selectedReview.comments.length > 0 ? (
+                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
+                        <div className="space-y-3">
+                          {selectedReview.comments.map((comment) => (
+                            <div 
+                              key={comment.id}
+                              className={`p-3 rounded-md border-l-4 ${getSeverityStyle(comment.severity)}`}
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <span>{getSeverityIcon(comment.severity)}</span>
+                                <span className="text-xs font-mono text-muted-foreground">
+                                  {comment.filePath}:{comment.lineNumber}
+                                </span>
+                                {comment.isPosted && (
+                                  <Badge variant="outline" className="text-xs h-5">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    已发布
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-foreground whitespace-pre-wrap">
+                                {comment.content}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm">暂无审查意见</div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="ai" className="flex-1 min-h-0 overflow-auto min-w-0">
+                    {selectedReview.aiResponse ? (
+                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
+                        <div className="space-y-4">
+                          {Object.entries(parseAiResponse(selectedReview.aiResponse)).map(([filePath, response]) => (
+                            <div key={filePath}>
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <p className="text-xs font-mono text-muted-foreground">{filePath}</p>
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => handleCopy(response, `ai-${filePath}`)}
+                                >
+                                  {copiedKey === `ai-${filePath}` ? (
+                                    <>
+                                      <Check className="h-3 w-3" /> 已复制
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3 w-3" /> 复制
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                              <pre className="p-3 bg-sidebar/50 rounded-md text-xs text-muted-foreground whitespace-pre min-w-max">
+                                {response}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm">暂无原始回复</div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="prompts" className="flex-1 min-h-0 overflow-auto min-w-0">
+                    {selectedReview.reviewPrompts ? (
+                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
+                        <div className="space-y-4">
+                          {Object.entries(parseAiResponse(selectedReview.reviewPrompts)).map(([filePath, prompt]) => (
+                            <div key={filePath}>
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <p className="text-xs font-mono text-muted-foreground">{filePath}</p>
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => handleCopy(prompt, `prompt-${filePath}`)}
+                                >
+                                  {copiedKey === `prompt-${filePath}` ? (
+                                    <>
+                                      <Check className="h-3 w-3" /> 已复制
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3 w-3" /> 复制
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                              <pre className="p-3 bg-sidebar/50 rounded-md text-xs text-muted-foreground whitespace-pre min-w-max">
+                                {prompt}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm">暂无 Prompt 记录</div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="model" className="flex-1 min-h-0 overflow-y-auto min-w-0">
+                    {(selectedReview.aiModelProvider || selectedReview.aiModelId) ? (
+                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <p>提供商: <span className="text-foreground font-mono">{selectedReview.aiModelProvider || 'N/A'}</span></p>
+                          <p>模型: <span className="text-foreground font-mono">{selectedReview.aiModelId || 'N/A'}</span></p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm">暂无模型信息</div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

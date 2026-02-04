@@ -125,18 +125,35 @@ export class GitLabService {
   }
 
   /**
-   * 获取 MR 的最新 Commit
+   * 获取 MR 的所有 Commits
+   * @param per_page 每页返回的 commit 数量，默认 100
    */
-  async getMergeRequestCommits(projectId: number | string, mergeRequestIid: number): Promise<GitLabCommit[]> {
+  async getMergeRequestCommits(projectId: number | string, mergeRequestIid: number, per_page: number = 100): Promise<GitLabCommit[]> {
     try {
       const response = await this.client.get(
         `/projects/${projectId}/merge_requests/${mergeRequestIid}/commits`,
-        { params: { per_page: 1 } }
+        { params: { per_page } }
       )
       return response.data
     } catch (error) {
       console.error('Failed to fetch merge request commits:', error)
       throw new Error('Failed to fetch merge request commits from GitLab')
+    }
+  }
+
+  /**
+   * 获取 MR 的所有变更（使用 version API 获取完整 diff）
+   * 这是获取 MR 所有变更的正确方法，不会遗漏任何 commit 的变更
+   */
+  async getMergeRequestChanges(projectId: number | string, mergeRequestIid: number): Promise<GitLabDiff[]> {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/merge_requests/${mergeRequestIid}/changes`
+      )
+      return response.data.changes || response.data
+    } catch (error) {
+      console.error('Failed to fetch merge request changes:', error)
+      throw new Error('Failed to fetch merge request changes from GitLab')
     }
   }
 
@@ -199,6 +216,69 @@ export class GitLabService {
         console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
       }
       throw error
+    }
+  }
+
+  /**
+   * 更新 MR 中的 Discussion 评论
+   * @param projectId - 项目 ID
+   * @param mergeRequestIid - MR IID
+   * @param discussionId - Discussion ID
+   * @param noteId - Note ID（评论的具体 ID）
+   * @param newBody - 新的评论内容
+   */
+  async updateMergeRequestComment(
+    projectId: number | string,
+    mergeRequestIid: number,
+    discussionId: string,
+    noteId: number,
+    newBody: string
+  ): Promise<any> {
+    try {
+      // GitLab API: PUT /projects/:id/merge_requests/:merge_request_iid/discussions/:discussion_id/notes/:note_id
+      const response = await this.client.put(
+        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}/notes/${noteId}`,
+        { body: newBody }
+      )
+      return response.data
+    } catch (error: any) {
+      if (error.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      }
+      console.error('Failed to update MR comment:', error)
+      throw new Error('Failed to update comment on GitLab MR')
+    }
+  }
+
+  /**
+   * 更新 Commit 上的评论
+   * @param projectId - 项目 ID
+   * @param commitSha - Commit SHA
+   * @param noteId - Note ID（评论的具体 ID）
+   * @param newBody - 新的评论内容
+   */
+  async updateCommitComment(
+    projectId: number | string,
+    commitSha: string,
+    noteId: number,
+    newBody: string
+  ): Promise<any> {
+    try {
+      // GitLab API: PUT /projects/:id/repository/commits/:sha/comments/:note_id
+      // 注意：GitLab Commit comments 的更新 API 可能不支持，尝试使用通用 notes API
+      const response = await this.client.put(
+        `/projects/${projectId}/repository/commits/${commitSha}/comments/${noteId}`,
+        { note: newBody }
+      )
+      return response.data
+    } catch (error: any) {
+      // 如果更新失败，回退到创建新评论（某些 GitLab 版本不支持更新 commit comments）
+      console.warn('Failed to update commit comment, falling back to create new comment')
+      if (error.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      }
+      // 回退：创建新评论
+      return await this.createCommitComment(projectId, commitSha, newBody)
     }
   }
 

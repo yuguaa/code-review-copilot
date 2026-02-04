@@ -32,6 +32,11 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             path: true,
+            gitLabAccount: {
+              select: {
+                url: true,
+              },
+            },
           },
         },
         comments: {
@@ -61,6 +66,7 @@ export async function GET(request: NextRequest) {
       repositoryId: review.repositoryId,
       repositoryName: review.repository.name,
       repositoryPath: review.repository.path,
+      gitlabUrl: review.repository.gitLabAccount.url,
       mergeRequestId: review.mergeRequestId,
       mergeRequestIid: review.mergeRequestIid,
       sourceBranch: review.sourceBranch,
@@ -80,6 +86,9 @@ export async function GET(request: NextRequest) {
       suggestions: review.suggestions,
       aiSummary: review.aiSummary, // AI 变更总结
       aiResponse: review.aiResponse, // AI 完整回复（JSON 格式）
+      reviewPrompts: review.reviewPrompts, // 发送给 AI 的完整 Prompt（用于追溯）
+      aiModelProvider: review.aiModelProvider, // AI 模型提供商
+      aiModelId: review.aiModelId, // AI 模型 ID
       startedAt: review.startedAt,
       completedAt: review.completedAt,
       comments: review.comments,

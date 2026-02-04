@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { reviewService } from '@/lib/services/review'
+import { createGitLabService } from '@/lib/services/gitlab'
 
 /**
  * 检查分支是否匹配监听规则
@@ -32,7 +33,7 @@ function checkBranchMatch(sourceBranch: string, watchBranches: string | null): b
 export async function POST(request: NextRequest) {
   console.log(' ')
   console.log('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
-  console.log('%%%    WEBHOOK REQUEST RECEIVED    %%%')
+  console.log('%%%    🤖WEBHOOK REQUEST RECEIVED    %%%')
   console.log('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
   console.log(' ')
 
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
 
     // 处理不同类型的事件
     const body = await request.json()
+    console.log(`🚀 ~ body:`, body)
     const { object_kind, project, object_attributes, ref, checkout_sha, user_username, user } = body
 
     const projectId = project?.id
@@ -165,6 +167,44 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Created review log: ${reviewLog.id}`)
       console.log(`🚀 Starting review process...`)
 
+      // 创建 GitLab 服务实例
+      const gitlabService = createGitLabService(
+        repository.gitLabAccount.url,
+        repository.gitLabAccount.accessToken
+      )
+
+      // 先在 GitLab MR 中创建一个占位评论，表示正在审查中
+      let placeholderCommentInfo: { discussionId: string; noteId: number } | null = null
+      try {
+        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
+        
+        const placeholderResult = await gitlabService.createMergeRequestComment(
+          repository.gitLabProjectId,
+          mr.iid,
+          placeholderBody
+        )
+        
+        // 保存 discussion ID 和 note ID，用于后续更新
+        placeholderCommentInfo = {
+          discussionId: placeholderResult.id,
+          noteId: placeholderResult.notes?.[0]?.id || placeholderResult.id
+        }
+        
+        console.log(`📝 Created placeholder comment: discussionId=${placeholderCommentInfo.discussionId}, noteId=${placeholderCommentInfo.noteId}`)
+        
+        // 更新 reviewLog 记录占位评论信息
+        await prisma.reviewLog.update({
+          where: { id: reviewLog.id },
+          data: {
+            gitlabDiscussionId: placeholderCommentInfo.discussionId,
+            gitlabNoteId: placeholderCommentInfo.noteId
+          }
+        })
+      } catch (error) {
+        console.error('⚠️ Failed to create placeholder comment:', error)
+        // 占位评论创建失败不影响审查流程
+      }
+
       // 异步执行审查
       reviewService.performReview(reviewLog.id).catch((error) => {
         console.error('❌ Review failed:', error)
@@ -240,6 +280,39 @@ export async function POST(request: NextRequest) {
 
       console.log(`✅ Created review log: ${reviewLog.id}`)
       console.log(`🚀 Starting review process...`)
+
+      // 创建 GitLab 服务实例
+      const gitlabService = createGitLabService(
+        repository.gitLabAccount.url,
+        repository.gitLabAccount.accessToken
+      )
+
+      // 先在 GitLab Commit 上创建一个占位评论，表示正在审查中
+      let placeholderNoteId: number | null = null
+      try {
+        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
+        
+        const placeholderResult = await gitlabService.createCommitComment(
+          repository.gitLabProjectId,
+          commitSha,
+          placeholderBody
+        )
+        
+        placeholderNoteId = placeholderResult.id
+        
+        console.log(`📝 Created placeholder commit comment: noteId=${placeholderNoteId}`)
+        
+        // 更新 reviewLog 记录占位评论信息
+        await prisma.reviewLog.update({
+          where: { id: reviewLog.id },
+          data: {
+            gitlabNoteId: placeholderNoteId
+          }
+        })
+      } catch (error) {
+        console.error('⚠️ Failed to create placeholder commit comment:', error)
+        // 占位评论创建失败不影响审查流程
+      }
 
       // 异步执行审查
       reviewService.performReview(reviewLog.id).catch((error) => {
