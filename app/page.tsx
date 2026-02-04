@@ -24,11 +24,16 @@ import {
 } from 'lucide-react'
 
 async function getDashboardStats() {
+  const now = Date.now()
+  const lastWeekStart = new Date(now - 7 * 24 * 60 * 60 * 1000)
+  const twoWeeksAgoStart = new Date(now - 14 * 24 * 60 * 60 * 1000)
+
   const [
     totalRepositories,
     activeRepositories,
     totalReviews,
     reviewsThisWeek,
+    reviewsLastWeek,
     issueStats,
     topRepositories,
     topUsers,
@@ -39,7 +44,15 @@ async function getDashboardStats() {
     prisma.reviewLog.count({
       where: {
         startedAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          gte: lastWeekStart,
+        },
+      },
+    }),
+    prisma.reviewLog.count({
+      where: {
+        startedAt: {
+          gte: twoWeeksAgoStart,
+          lt: lastWeekStart,
         },
       },
     }),
@@ -91,6 +104,19 @@ async function getDashboardStats() {
     }),
   ])
 
+  // 计算审查数量趋势（与上周相比的增长百分比）
+  let reviewTrend: string | null = null
+  if (reviewsLastWeek > 0) {
+    const growth = ((reviewsThisWeek - reviewsLastWeek) / reviewsLastWeek) * 100
+    if (growth > 0) {
+      reviewTrend = `+${growth.toFixed(1)}%`
+    } else if (growth < 0) {
+      reviewTrend = `${growth.toFixed(1)}%`
+    }
+  } else if (reviewsThisWeek > 0) {
+    reviewTrend = '+100%' // 上周为0，本周有审查
+  }
+
   // 获取仓库名称
   const repositoryIds = topRepositories.map((r: any) => r.repositoryId)
   const repositories = await prisma.repository.findMany({
@@ -134,6 +160,7 @@ async function getDashboardStats() {
     activeRepositories,
     totalReviews,
     reviewsThisWeek,
+    reviewTrend,
     totalIssues: {
       critical: issueStats._sum.criticalIssues || 0,
       normal: issueStats._sum.normalIssues || 0,
@@ -160,7 +187,7 @@ function StatCard({
   value: string | number
   description?: string | React.ReactNode
   icon: any
-  trend?: string
+  trend?: string | null
 }) {
   return (
     <Card className="border-border/40">
@@ -176,7 +203,9 @@ function StatCard({
               <div className="mt-2">{description}</div>
             )}
             {trend && (
-              <p className="text-xs text-green-600 flex items-center mt-1">
+              <p className={`text-xs flex items-center mt-1 ${
+                trend.startsWith('+') ? 'text-green-600' : 'text-red-600'
+              }`}>
                 <TrendingUp className="h-3 w-3 mr-1" />
                 {trend}
               </p>
@@ -241,7 +270,7 @@ async function DashboardContent() {
           value={stats.totalReviews}
           description={`本周 ${stats.reviewsThisWeek} 次`}
           icon={FileCode}
-          trend="+12%"
+          trend={stats.reviewTrend}
         />
         <StatCard
           title="发现问题"
