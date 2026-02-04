@@ -369,6 +369,8 @@ export class ReviewService {
 
   /**
    * 发布评论到 GitLab MR
+   * 如果存在占位评论（gitlabDiscussionId + gitlabNoteId），则更新占位评论
+   * 否则创建新评论
    */
   async postCommentsToGitLab(reviewLogId: string, gitlabService: any) {
     const reviewLog = await prisma.reviewLog.findUnique({
@@ -401,12 +403,32 @@ export class ReviewService {
 
     try {
       const commentBody = this.formatSummaryComment(reviewLog, comments);
-      const result = await gitlabService.createMergeRequestComment(
-        reviewLog.repository.gitLabProjectId,
-        reviewLog.mergeRequestIid,
-        commentBody,
-        undefined,
-      );
+      
+      // 检查是否有占位评论需要更新
+      const hasPlaceholderComment = reviewLog.gitlabDiscussionId && reviewLog.gitlabNoteId;
+      
+      let result: any;
+      if (hasPlaceholderComment) {
+        // 更新占位评论
+        console.log(`📝 [ReviewService] Updating placeholder comment: discussionId=${reviewLog.gitlabDiscussionId}, noteId=${reviewLog.gitlabNoteId}`);
+        result = await gitlabService.updateMergeRequestComment(
+          reviewLog.repository.gitLabProjectId,
+          reviewLog.mergeRequestIid,
+          reviewLog.gitlabDiscussionId,
+          reviewLog.gitlabNoteId,
+          commentBody
+        );
+        console.log(`✅ Updated placeholder comment to MR !${reviewLog.mergeRequestIid}`);
+      } else {
+        // 创建新评论
+        result = await gitlabService.createMergeRequestComment(
+          reviewLog.repository.gitLabProjectId,
+          reviewLog.mergeRequestIid,
+          commentBody,
+          undefined,
+        );
+        console.log(`✅ Posted new summary comment to MR !${reviewLog.mergeRequestIid}`);
+      }
 
       await prisma.reviewComment.updateMany({
         where: { reviewLogId, isPosted: false },
@@ -415,16 +437,16 @@ export class ReviewService {
           gitlabCommentId: result.id ? result.id.toString() : null,
         },
       });
-
-      console.log(`✅ Posted summary comment to MR !${reviewLog.mergeRequestIid}`);
     } catch (error) {
-      console.error(`❌ Failed to post summary comment to MR !${reviewLog.mergeRequestIid}`);
+      console.error(`❌ Failed to post/update comment to MR !${reviewLog.mergeRequestIid}`);
       throw error;
     }
   }
 
   /**
    * 发布评论到 GitLab Commit（Push 事件）
+   * 如果存在占位评论（gitlabNoteId），则尝试更新占位评论
+   * 否则创建新评论
    */
   async postCommentsToCommit(reviewLog: any, gitlabService: any) {
     const comments = reviewLog.comments;
@@ -438,12 +460,31 @@ export class ReviewService {
 
     try {
       const commentBody = this.formatSummaryComment(reviewLog, comments);
-      const result = await gitlabService.createCommitComment(
-        reviewLog.repository.gitLabProjectId,
-        reviewLog.commitSha,
-        commentBody,
-        undefined,
-      );
+      
+      // 检查是否有占位评论需要更新
+      const hasPlaceholderComment = !!reviewLog.gitlabNoteId;
+      
+      let result: any;
+      if (hasPlaceholderComment) {
+        // 尝试更新占位评论
+        console.log(`📝 [ReviewService] Updating placeholder commit comment: noteId=${reviewLog.gitlabNoteId}`);
+        result = await gitlabService.updateCommitComment(
+          reviewLog.repository.gitLabProjectId,
+          reviewLog.commitSha,
+          reviewLog.gitlabNoteId,
+          commentBody
+        );
+        console.log(`✅ Updated placeholder comment to commit ${reviewLog.commitShortId}`);
+      } else {
+        // 创建新评论
+        result = await gitlabService.createCommitComment(
+          reviewLog.repository.gitLabProjectId,
+          reviewLog.commitSha,
+          commentBody,
+          undefined,
+        );
+        console.log(`✅ Posted new summary comment to commit ${reviewLog.commitShortId}`);
+      }
 
       await prisma.reviewComment.updateMany({
         where: { reviewLogId: reviewLog.id, isPosted: false },
@@ -452,10 +493,8 @@ export class ReviewService {
           gitlabCommentId: result.id ? result.id.toString() : null,
         },
       });
-
-      console.log(`✅ Posted summary comment to commit ${reviewLog.commitShortId}`);
     } catch (error) {
-      console.error(`❌ Failed to post summary comment to commit ${reviewLog.commitShortId}`);
+      console.error(`❌ Failed to post/update summary comment to commit ${reviewLog.commitShortId}`);
       throw error;
     }
   }

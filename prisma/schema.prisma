@@ -99,6 +99,8 @@ model ReviewLog {
   reviewPrompts     String?         // 发送给 AI 的完整 Prompt（用于追溯）
   aiModelProvider   String?         // 使用的 AI 模型提供商
   aiModelId         String?         // 使用的 AI 模型 ID
+  gitlabDiscussionId String?        // GitLab MR Discussion ID（用于更新占位评论）
+  gitlabNoteId      Int?            // GitLab Note ID（用于更新占位评论）
   startedAt         DateTime        @default(now())
   completedAt       DateTime?       // 完成时间
   comments          ReviewComment[] // 关联的审查评论
