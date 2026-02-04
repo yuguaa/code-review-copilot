@@ -10,12 +10,14 @@
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "./gitlab";
 import { aiService } from "./ai";
+import { createHash } from "crypto";
 import {
   buildReviewPrompt,
   buildSummaryPrompt,
   buildBatchReviewPrompt,
   SYSTEM_PROMPT,
   OUTPUT_FORMAT,
+  SUMMARY_SYSTEM_PROMPT,
 } from "@/lib/prompts";
 import type { AIModelConfig, ReviewComment } from "@/lib/types";
 
@@ -162,7 +164,12 @@ export class ReviewService {
         diffs: allDiffsText,
       });
 
-      const summary = await aiService.reviewCode(summaryPrompt, modelConfig);
+      // 摘要生成不要复用 SYSTEM_PROMPT（SYSTEM_PROMPT 可能要求输出统计行）
+      const summary = await aiService.reviewCode(
+        summaryPrompt,
+        modelConfig,
+        SUMMARY_SYSTEM_PROMPT,
+      );
 
       await prisma.reviewLog.update({
         where: { id: reviewLogId },
@@ -170,7 +177,8 @@ export class ReviewService {
       });
 
       // 逐文件进行审查
-      let totalComments: ReviewComment[] = [];
+      const criticalComments: ReviewComment[] = [];
+      const totalCounts = { critical: 0, normal: 0, suggestion: 0 };
       const aiResponsesByFile: Record<string, string> = {};
       const reviewPromptsByFile: Record<string, string> = {}; // 记录每个文件的 prompt
 
@@ -222,13 +230,22 @@ export class ReviewService {
         }
         console.log("└─────────────────────────────────────────────┘");
 
-        // 解析批量审查结果，创建一条总结性评论
-        totalComments.push({
-          filePath: "summary",
-          lineNumber: 1,
-          severity: "suggestion",
-          content: batchResponse.trim(),
+        const parsed = aiService.parseReviewSummary(batchResponse, {
+          maxCriticalItems: 3,
         });
+        totalCounts.critical += parsed.counts.critical;
+        totalCounts.normal += parsed.counts.normal;
+        totalCounts.suggestion += parsed.counts.suggestion;
+
+        for (const item of parsed.criticalItems) {
+          criticalComments.push({
+            filePath: item.filePath,
+            lineNumber: item.lineNumber,
+            lineRangeEnd: item.lineRangeEnd,
+            severity: "critical",
+            content: item.content,
+          });
+        }
 
         // 保存批量审查响应
         aiResponsesByFile["batch_review"] = batchResponse;
@@ -282,20 +299,23 @@ export class ReviewService {
           aiResponse.split("\n").forEach((line) => console.log(`│ ${line}`));
           console.log("└─────────────────────────────────────────────┘");
 
-          const comments = aiService.parseReviewComments(aiResponse, filePath);
+          const parsed = aiService.parseReviewSummary(aiResponse, {
+            defaultFilePath: filePath,
+            maxCriticalItems: 2,
+          });
+          totalCounts.critical += parsed.counts.critical;
+          totalCounts.normal += parsed.counts.normal;
+          totalCounts.suggestion += parsed.counts.suggestion;
 
-          // 无评论时使用原始响应
-          if (comments.length === 0) {
-            comments.push({
-              filePath,
-              lineNumber: 1,
-              severity: "suggestion" as const,
-              content: aiResponse.trim(),
+          for (const item of parsed.criticalItems) {
+            criticalComments.push({
+              filePath: item.filePath || filePath,
+              lineNumber: item.lineNumber,
+              lineRangeEnd: item.lineRangeEnd,
+              severity: "critical",
+              content: item.content,
             });
           }
-
-          console.log(`💬 [ReviewService] Found ${comments.length} comments in ${filePath}`);
-          totalComments.push(...comments);
 
           await prisma.reviewLog.update({
             where: { id: reviewLogId },
@@ -304,10 +324,10 @@ export class ReviewService {
         }
       }
 
-      // 统计问题
-      const criticalIssues = totalComments.filter((c) => c.severity === "critical").length;
-      const normalIssues = totalComments.filter((c) => c.severity === "normal").length;
-      const suggestions = totalComments.filter((c) => c.severity === "suggestion").length;
+      // 统计问题（来自“统计行”或 fallback 推断）
+      const criticalIssues = totalCounts.critical;
+      const normalIssues = totalCounts.normal;
+      const suggestions = totalCounts.suggestion;
 
       console.log(`📊 [ReviewService] Review complete:`);
       console.log(`   🔴 Critical: ${criticalIssues}`);
@@ -315,7 +335,8 @@ export class ReviewService {
       console.log(`   💡 Suggestions: ${suggestions}`);
 
       // 保存评论
-      for (const comment of totalComments) {
+      // 只存储“严重”问题的明细，其余仅计数，避免噪音。
+      for (const comment of criticalComments.slice(0, 3)) {
         await prisma.reviewComment.create({
           data: {
             reviewLogId,
@@ -349,7 +370,7 @@ export class ReviewService {
 
       return {
         success: true,
-        totalComments: totalComments.length,
+        totalComments: criticalIssues + normalIssues + suggestions,
         criticalIssues,
         normalIssues,
         suggestions,
@@ -376,7 +397,11 @@ export class ReviewService {
     const reviewLog = await prisma.reviewLog.findUnique({
       where: { id: reviewLogId },
       include: {
-        repository: true,
+        repository: {
+          include: {
+            gitLabAccount: true,
+          },
+        },
         comments: {
           where: { isPosted: false },
           orderBy: { createdAt: "asc" },
@@ -395,11 +420,7 @@ export class ReviewService {
       return;
     }
 
-    const comments = reviewLog.comments;
-    if (!comments || comments.length === 0) {
-      console.log(`📭 [ReviewService] No comments to post`);
-      return;
-    }
+    const comments = reviewLog.comments || [];
 
     try {
       const commentBody = this.formatSummaryComment(reviewLog, comments);
@@ -449,12 +470,7 @@ export class ReviewService {
    * 否则创建新评论
    */
   async postCommentsToCommit(reviewLog: any, gitlabService: any) {
-    const comments = reviewLog.comments;
-
-    if (!comments || comments.length === 0) {
-      console.log(`📭 [ReviewService] No comments to post`);
-      return;
-    }
+    const comments = reviewLog.comments || [];
 
     console.log(`📤 [ReviewService] Posting summary comment to commit`);
 
@@ -509,86 +525,86 @@ ${diff.diff}`;
   /** 汇总评论格式化（按文件分组） */
   private formatSummaryComment(reviewLog: any, comments: ReviewCommentLike[]): string {
     const lines: string[] = [];
-    const total = comments.length;
     const critical = reviewLog.criticalIssues ?? 0;
     const normal = reviewLog.normalIssues ?? 0;
     const suggestion = reviewLog.suggestions ?? 0;
     const totalFiles = reviewLog.totalFiles ?? 0;
     const reviewedFiles = reviewLog.reviewedFiles ?? 0;
 
-    // 检查是否是批量审查模式
-    const isBatchReview = comments.length === 1 && comments[0].filePath === "summary";
+    const baseUrl = reviewLog.repository?.gitLabAccount?.url?.replace(/\/+$/, "");
+    const projectPath = reviewLog.repository?.path;
+    const isPushEvent = reviewLog.mergeRequestIid === 0;
+    const ref = reviewLog.commitSha || reviewLog.sourceBranch;
 
-    if (isBatchReview) {
-      // 批量审查模式：直接输出 AI 的审查结果
-      lines.push("## Code Review Summary");
-      lines.push("");
-      lines.push(`**Files Reviewed:** ${totalFiles}`);
-      if (reviewLog.aiSummary && reviewLog.aiSummary.trim()) {
-        lines.push("");
-        lines.push("### Overview");
-        lines.push(reviewLog.aiSummary.trim());
-      }
-      lines.push("");
-      lines.push("### Review Findings");
-      lines.push(comments[0].content);
-      lines.push("");
-      lines.push("---");
-      lines.push(
-        "<sub>🤖 Code review by [Code Review Copilot](https://github.com/yuguaa/code-review-copilot)</sub>",
-      );
-    } else {
-      // 单文件审查模式：按文件分组输出
-      lines.push("## Code Review Summary");
-      lines.push("");
-      lines.push(
-        `**Files:** ${totalFiles} total (${reviewedFiles} reviewed)`,
-      );
-      lines.push(
-        `**Findings:** 🔴 ${critical} Critical | ⚠️ ${normal} Normal | 💡 ${suggestion} Suggestion | **Total:** ${total}`,
-      );
+    const encodePath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
+    const diffAnchor = (filePath: string, lineNumber: number, lineRangeEnd?: number | null) => {
+      const hash = createHash("sha1").update(filePath).digest("hex");
+      const end = lineRangeEnd && lineRangeEnd !== lineNumber ? lineRangeEnd : lineNumber;
+      return `${hash}_${lineNumber}_${end}`;
+    };
 
-      if (reviewLog.aiSummary && reviewLog.aiSummary.trim()) {
-        lines.push("");
-        lines.push("### Summary");
-        lines.push(reviewLog.aiSummary.trim());
-      }
+    const mrUrl =
+      baseUrl && projectPath && !isPushEvent
+        ? `${baseUrl}/${projectPath}/-/merge_requests/${reviewLog.mergeRequestIid}`
+        : null;
+    const mrDiffUrl = mrUrl ? `${mrUrl}/diffs` : null;
+    const commitUrl =
+      baseUrl && projectPath && ref
+        ? `${baseUrl}/${projectPath}/-/commit/${ref}`
+        : null;
 
-      lines.push("");
-      lines.push("### Findings by File");
+    const fileDiffUrl = (filePath: string, lineNumber: number, lineRangeEnd?: number | null) => {
+      if (!baseUrl || !projectPath || !ref || !filePath || !lineNumber) return null;
+      const anchor = diffAnchor(filePath, lineNumber, lineRangeEnd);
+      if (!isPushEvent && mrDiffUrl) return `${mrDiffUrl}#${anchor}`;
+      if (commitUrl) return `${commitUrl}#${anchor}`;
+      // fallback: blob view
+      const range =
+        lineRangeEnd && lineRangeEnd !== lineNumber
+          ? `#L${lineNumber}-${lineRangeEnd}`
+          : `#L${lineNumber}`;
+      return `${baseUrl}/${projectPath}/-/blob/${ref}/${encodePath(filePath)}${range}`;
+    };
 
-      const fileOrder: string[] = [];
-      const byFile: Record<string, ReviewCommentLike[]> = {};
+    lines.push("## Code Review Summary");
+    lines.push("");
+    lines.push(`**Files:** ${totalFiles} total (${reviewedFiles} reviewed)`);
+    lines.push(`**Counts:** 🔴 ${critical} | ⚠️ ${normal} | 💡 ${suggestion}`);
+    const totalCount = critical + normal + suggestion;
+    lines.push(`**Total Findings:** ${totalCount}`);
 
-      for (const comment of comments) {
-        const filePath = comment.filePath || "unknown";
-        if (!byFile[filePath]) {
-          byFile[filePath] = [];
-          fileOrder.push(filePath);
+    // 直接拼接 AI 原始输出（不加标题）
+    try {
+      const raw = typeof reviewLog.aiResponse === "string" ? reviewLog.aiResponse : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const batch = parsed?.batch_review;
+        let output = "";
+        if (typeof batch === "string" && batch.trim()) {
+          output = batch.trim();
+        } else {
+          const parts = Object.values(parsed)
+            .filter((v) => typeof v === "string")
+            .map((v) => (v as string).trim())
+            .filter(Boolean);
+          output = parts.join("\n\n");
         }
-        byFile[filePath].push(comment);
-      }
-
-      for (const filePath of fileOrder) {
-        lines.push("");
-        lines.push(`#### \`${filePath}\``);
-        for (const comment of byFile[filePath]) {
-          const range =
-            comment.lineRangeEnd && comment.lineRangeEnd !== comment.lineNumber
-              ? `L${comment.lineNumber}-${comment.lineRangeEnd}`
-              : `L${comment.lineNumber}`;
-          const severity = this.formatSeverityLabel(comment.severity);
-          const content = this.formatInlineContent(comment.content);
-          lines.push(`- ${range} [${severity}] ${content}`);
+        if (output) {
+          const maxLen = 6000;
+          const shown = output.length > maxLen ? `${output.slice(0, maxLen)}\n…(truncated)` : output;
+          lines.push("");
+          lines.push(shown);
         }
       }
-
-      lines.push("");
-      lines.push("---");
-      lines.push(
-        "<sub>🤖 Code review by [Code Review Copilot](https://github.com/yuguaa/code-review-copilot)</sub>",
-      );
+    } catch {
+      // ignore
     }
+
+    lines.push("");
+    lines.push("---");
+    lines.push(
+      "<sub>🤖 Code review by [Code Review Copilot](https://github.com/yuguaa/code-review-copilot)</sub>",
+    );
 
     return lines.join("\n");
   }
