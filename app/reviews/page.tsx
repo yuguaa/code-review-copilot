@@ -57,6 +57,9 @@ interface Review {
   suggestions: number
   aiSummary: string | null  // AI 变更总结
   aiResponse: string | null // AI 完整回复（JSON 格式）
+  reviewPrompts: string | null // 发送给 AI 的完整 Prompt
+  aiModelProvider: string | null // AI 模型提供商
+  aiModelId: string | null // AI 模型 ID
   startedAt: string
   completedAt: string | null
   eventType: 'push' | 'merge_request'
@@ -449,8 +452,45 @@ export default function ReviewsPage() {
                   </div>
                 )}
 
+                {/* AI 模型信息 */}
+                {(selectedReview.aiModelProvider || selectedReview.aiModelId) && (
+                  <div className="bg-background rounded-lg p-4 border border-border/40">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Bot className="h-5 w-5 text-muted-foreground" />
+                      <h4 className="font-medium text-foreground">AI 模型信息</h4>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <p>提供商: <span className="text-foreground font-mono">{selectedReview.aiModelProvider || 'N/A'}</span></p>
+                      <p>模型: <span className="text-foreground font-mono">{selectedReview.aiModelId || 'N/A'}</span></p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 审查 Prompt（用于追溯） */}
+                {selectedReview.reviewPrompts && (
+                  <div className="bg-background rounded-lg p-4 border border-border/40">
+                    <div className="flex items-center gap-2 mb-3">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <h4 className="font-medium text-foreground">审查 Prompt（追溯）</h4>
+                    </div>
+                    <div className="space-y-3">
+                      {Object.entries(parseAiResponse(selectedReview.reviewPrompts)).map(([filePath, prompt]) => (
+                        <details key={filePath} className="group">
+                          <summary className="cursor-pointer text-sm font-mono text-muted-foreground hover:text-foreground flex items-center gap-2">
+                            <ChevronDown className="h-4 w-4 group-open:rotate-180 transition-transform" />
+                            {filePath}
+                          </summary>
+                          <pre className="mt-2 p-3 bg-sidebar/50 rounded-md text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap">
+                            {prompt}
+                          </pre>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* 无审查内容提示 */}
-                {!selectedReview.aiSummary && (!selectedReview.comments || selectedReview.comments.length === 0) && !selectedReview.aiResponse && (
+                {!selectedReview.aiSummary && (!selectedReview.comments || selectedReview.comments.length === 0) && !selectedReview.aiResponse && !selectedReview.reviewPrompts && (
                   <div className="text-center py-8 text-muted-foreground">
                     <p className="text-sm">暂无审查详情</p>
                   </div>

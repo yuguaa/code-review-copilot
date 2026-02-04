@@ -96,6 +96,9 @@ model ReviewLog {
   suggestions       Int             @default(0) // 建议数
   aiSummary         String?         // AI 生成的代码变更总结
   aiResponse        String?         // AI 完整审查回复（JSON 格式，按文件存储）
+  reviewPrompts     String?         // 发送给 AI 的完整 Prompt（用于追溯）
+  aiModelProvider   String?         // 使用的 AI 模型提供商
+  aiModelId         String?         // 使用的 AI 模型 ID
   startedAt         DateTime        @default(now())
   completedAt       DateTime?       // 完成时间
   comments          ReviewComment[] // 关联的审查评论

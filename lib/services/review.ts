@@ -172,6 +172,7 @@ export class ReviewService {
       // 逐文件进行审查
       let totalComments: ReviewComment[] = [];
       const aiResponsesByFile: Record<string, string> = {};
+      const reviewPromptsByFile: Record<string, string> = {}; // 记录每个文件的 prompt
 
       // 根据文件数量选择审查策略
       const BATCH_THRESHOLD = 20; // 超过20个文件时使用批量审查
@@ -203,6 +204,9 @@ export class ReviewService {
           files: filesForBatchReview,
           fileCount: relevantDiffs.length,
         });
+
+        // 记录完整的 prompt（包含系统提示词）
+        reviewPromptsByFile["batch_review"] = `=== System Prompt ===\n${systemPrompt}\n\n=== User Prompt ===\n${batchReviewPrompt}`;
 
         const batchResponse = await aiService.reviewCode(
           batchReviewPrompt,
@@ -260,6 +264,9 @@ export class ReviewService {
             diff: patch,
             summary: summary,
           });
+
+          // 记录完整的 prompt（包含系统提示词）
+          reviewPromptsByFile[filePath] = `=== System Prompt ===\n${systemPrompt}\n\n=== User Prompt ===\n${reviewPrompt}`;
 
           const aiResponse = await aiService.reviewCode(
             reviewPrompt,
@@ -332,6 +339,9 @@ export class ReviewService {
           normalIssues,
           suggestions,
           aiResponse: JSON.stringify(aiResponsesByFile),
+          reviewPrompts: JSON.stringify(reviewPromptsByFile),
+          aiModelProvider: modelConfig.provider,
+          aiModelId: modelConfig.modelId,
         },
       });
 
