@@ -125,18 +125,35 @@ export class GitLabService {
   }
 
   /**
-   * 获取 MR 的最新 Commit
+   * 获取 MR 的所有 Commits
+   * @param per_page 每页返回的 commit 数量，默认 100
    */
-  async getMergeRequestCommits(projectId: number | string, mergeRequestIid: number): Promise<GitLabCommit[]> {
+  async getMergeRequestCommits(projectId: number | string, mergeRequestIid: number, per_page: number = 100): Promise<GitLabCommit[]> {
     try {
       const response = await this.client.get(
         `/projects/${projectId}/merge_requests/${mergeRequestIid}/commits`,
-        { params: { per_page: 1 } }
+        { params: { per_page } }
       )
       return response.data
     } catch (error) {
       console.error('Failed to fetch merge request commits:', error)
       throw new Error('Failed to fetch merge request commits from GitLab')
+    }
+  }
+
+  /**
+   * 获取 MR 的所有变更（使用 version API 获取完整 diff）
+   * 这是获取 MR 所有变更的正确方法，不会遗漏任何 commit 的变更
+   */
+  async getMergeRequestChanges(projectId: number | string, mergeRequestIid: number): Promise<GitLabDiff[]> {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/merge_requests/${mergeRequestIid}/changes`
+      )
+      return response.data.changes || response.data
+    } catch (error) {
+      console.error('Failed to fetch merge request changes:', error)
+      throw new Error('Failed to fetch merge request changes from GitLab')
     }
   }
 

@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
 
     // 处理不同类型的事件
     const body = await request.json()
+    console.log(`🚀 ~ body:`, body)
     const { object_kind, project, object_attributes, ref, checkout_sha, user_username, user } = body
 
     const projectId = project?.id

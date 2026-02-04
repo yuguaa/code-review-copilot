@@ -86,3 +86,44 @@ ${params.description || ''}
 ${params.diffs}
 \`\`\``
 }
+
+/**
+ * 构建批量审查提示词（用于审查大量文件时生成总结性评论）
+ * @param params - 批量审查参数
+ */
+export function buildBatchReviewPrompt(params: {
+  title: string
+  description?: string
+  files: Array<{ path: string; diff: string }>
+  fileCount: number
+}): string {
+  const fileSummary = params.files.map(f => `- ${f.path}`).join('\n')
+
+  return `你是一名专业代码审查助手。请对以下 ${params.fileCount} 个文件的代码变更进行审查。
+
+【变更主题】${params.title}
+${params.description ? `【描述】${params.description}\n` : ''}
+
+【变更文件列表】
+${fileSummary}
+
+【审查要求】
+1. 这是一个公司内部项目，要求快速部署快速迭代
+2. 不对外开放，包括代码内容外界无法访问
+3. 请重点关注：代码质量、潜在 bug、安全问题、性能问题
+4. 对于每个文件，给出具体的行号和问题描述
+5. 按文件分组输出结果
+
+【输出格式】
+## 文件名
+行号: [严重/一般/建议] 问题描述
+
+（如果没有问题，回复：LGTM!）
+
+【代码变更】
+${params.files.map(f => `
+### ${f.path}
+\`\`\`diff
+${f.diff}
+\`\`\``).join('\n')}`
+}

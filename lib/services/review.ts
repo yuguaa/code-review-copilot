@@ -13,10 +13,19 @@ import { aiService } from "./ai";
 import {
   buildReviewPrompt,
   buildSummaryPrompt,
+  buildBatchReviewPrompt,
   SYSTEM_PROMPT,
   OUTPUT_FORMAT,
 } from "@/lib/prompts";
 import type { AIModelConfig, ReviewComment } from "@/lib/types";
+
+type ReviewCommentLike = {
+  filePath: string;
+  lineNumber: number;
+  lineRangeEnd?: number | null;
+  severity?: string | null;
+  content: string;
+};
 
 /**
  * 代码审查服务类
@@ -80,30 +89,31 @@ export class ReviewService {
           reviewLog.mergeRequestIid,
         );
 
-        const commits = await gitlabService.getMergeRequestCommits(
+        // 使用 changes API 获取 MR 的所有变更（包含所有 commits 的 diff）
+        console.log(`📌 [ReviewService] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
+        diffs = await gitlabService.getMergeRequestChanges(
           reviewLog.repository.gitLabProjectId,
           reviewLog.mergeRequestIid,
         );
 
-        if (!commits || commits.length === 0) {
-          throw new Error("No commits found in merge request");
+        if (!diffs || diffs.length === 0) {
+          console.log(`⏭️ [ReviewService] No changes found in MR`);
+          throw new Error("No changes found in merge request");
         }
 
-        const latestCommit = commits[0];
-        diffs = await gitlabService.getCommitDiff(
-          reviewLog.repository.gitLabProjectId,
-          latestCommit.id,
-        );
+        console.log(`📌 [ReviewService] Found ${diffs.length} files with changes in MR`);
       }
 
       const relevantDiffs = diffs.filter((diff) => !diff.deleted_file);
 
-      console.log(`📁 [ReviewService] Total files changed: ${diffs.length}`);
-      console.log(`📁 [ReviewService] Files to review: ${relevantDiffs.length}`);
+      console.log(`📁 [ReviewService] Total files changed: ${relevantDiffs.length}`);
 
       await prisma.reviewLog.update({
         where: { id: reviewLogId },
-        data: { totalFiles: relevantDiffs.length },
+        data: {
+          totalFiles: relevantDiffs.length,
+          reviewedFiles: 0,
+        },
       });
 
       // 准备 AI 模型配置（优先级：自定义模型 > 仓库默认 > 全局默认）
@@ -163,75 +173,128 @@ export class ReviewService {
       let totalComments: ReviewComment[] = [];
       const aiResponsesByFile: Record<string, string> = {};
 
-      for (const diff of relevantDiffs) {
-        const filePath = diff.new_path;
-        console.log(`📄 [ReviewService] Reviewing file: ${filePath}`);
+      // 根据文件数量选择审查策略
+      const BATCH_THRESHOLD = 20; // 超过20个文件时使用批量审查
+      const useBatchReview = relevantDiffs.length > BATCH_THRESHOLD;
 
-        const patch = this.generatePatch(diff);
+      if (useBatchReview) {
+        console.log(`📊 [ReviewService] Using batch review mode for ${relevantDiffs.length} files`);
 
-        // 构建系统提示词（支持 extend/replace 模式）
+        // 准备批量审查的文件数据
+        const filesForBatchReview = relevantDiffs.map((diff) => ({
+          path: diff.new_path,
+          diff: this.generatePatch(diff),
+        }));
+
+        // 构建批量审查提示词
         let systemPrompt = SYSTEM_PROMPT;
-
-        console.log(`🔧 [ReviewService] Repository config:`);
-        console.log(
-          `   - customPrompt: ${repository.customPrompt ? "已设置" : "未设置"}`,
-        );
-        console.log(
-          `   - customPromptMode: ${(repository as any).customPromptMode || "extend"}`,
-        );
-
         if (repository.customPrompt) {
           const promptMode = (repository as any).customPromptMode || "extend";
           if (promptMode === "replace") {
             systemPrompt = repository.customPrompt + OUTPUT_FORMAT;
-            console.log(`📝 [ReviewService] Using REPLACE mode`);
           } else {
             systemPrompt = `${SYSTEM_PROMPT}\n\n【仓库自定义要求】\n${repository.customPrompt}`;
-            console.log(`📝 [ReviewService] Using EXTEND mode`);
           }
         }
 
-        const reviewPrompt = buildReviewPrompt({
+        const batchReviewPrompt = buildBatchReviewPrompt({
           title: mr?.title || reviewLog.title,
           description: mr?.description || reviewLog.description || "",
-          filename: filePath,
-          diff: patch,
-          summary: summary,
+          files: filesForBatchReview,
+          fileCount: relevantDiffs.length,
         });
 
-        const aiResponse = await aiService.reviewCode(
-          reviewPrompt,
+        const batchResponse = await aiService.reviewCode(
+          batchReviewPrompt,
           modelConfig,
           systemPrompt,
         );
 
-        aiResponsesByFile[filePath] = aiResponse;
-
-        // 调试：打印 AI 响应
-        console.log(`\n🤖 [ReviewService] AI Response for ${filePath}:`);
+        console.log(`\n🤖 [ReviewService] Batch review response received`);
         console.log("┌─────────────────────────────────────────────┐");
-        aiResponse.split("\n").forEach((line) => console.log(`│ ${line}`));
+        batchResponse.split("\n").slice(0, 20).forEach((line) => console.log(`│ ${line}`));
+        if (batchResponse.split("\n").length > 20) {
+          console.log(`│ ... (${batchResponse.split("\n").length - 20} more lines)`);
+        }
         console.log("└─────────────────────────────────────────────┘");
 
-        const comments = aiService.parseReviewComments(aiResponse, filePath);
+        // 解析批量审查结果，创建一条总结性评论
+        totalComments.push({
+          filePath: "summary",
+          lineNumber: 1,
+          severity: "suggestion",
+          content: batchResponse.trim(),
+        });
 
-        // 无评论时使用原始响应
-        if (comments.length === 0) {
-          comments.push({
-            filePath,
-            lineNumber: 1,
-            severity: "suggestion" as const,
-            content: aiResponse.trim(),
-          });
-        }
-
-        console.log(`💬 [ReviewService] Found ${comments.length} comments in ${filePath}`);
-        totalComments.push(...comments);
+        // 保存批量审查响应
+        aiResponsesByFile["batch_review"] = batchResponse;
 
         await prisma.reviewLog.update({
           where: { id: reviewLogId },
-          data: { reviewedFiles: { increment: 1 } },
+          data: { reviewedFiles: relevantDiffs.length },
         });
+      } else {
+        // 单文件审查模式（原有逻辑）
+        for (const diff of relevantDiffs) {
+          const filePath = diff.new_path;
+          console.log(`📄 [ReviewService] Reviewing file: ${filePath}`);
+
+          const patch = this.generatePatch(diff);
+
+          // 构建系统提示词（支持 extend/replace 模式）
+          let systemPrompt = SYSTEM_PROMPT;
+
+          if (repository.customPrompt) {
+            const promptMode = (repository as any).customPromptMode || "extend";
+            if (promptMode === "replace") {
+              systemPrompt = repository.customPrompt + OUTPUT_FORMAT;
+            } else {
+              systemPrompt = `${SYSTEM_PROMPT}\n\n【仓库自定义要求】\n${repository.customPrompt}`;
+            }
+          }
+
+          const reviewPrompt = buildReviewPrompt({
+            title: mr?.title || reviewLog.title,
+            description: mr?.description || reviewLog.description || "",
+            filename: filePath,
+            diff: patch,
+            summary: summary,
+          });
+
+          const aiResponse = await aiService.reviewCode(
+            reviewPrompt,
+            modelConfig,
+            systemPrompt,
+          );
+
+          aiResponsesByFile[filePath] = aiResponse;
+
+          // 调试：打印 AI 响应
+          console.log(`\n🤖 [ReviewService] AI Response for ${filePath}:`);
+          console.log("┌─────────────────────────────────────────────┐");
+          aiResponse.split("\n").forEach((line) => console.log(`│ ${line}`));
+          console.log("└─────────────────────────────────────────────┘");
+
+          const comments = aiService.parseReviewComments(aiResponse, filePath);
+
+          // 无评论时使用原始响应
+          if (comments.length === 0) {
+            comments.push({
+              filePath,
+              lineNumber: 1,
+              severity: "suggestion" as const,
+              content: aiResponse.trim(),
+            });
+          }
+
+          console.log(`💬 [ReviewService] Found ${comments.length} comments in ${filePath}`);
+          totalComments.push(...comments);
+
+          await prisma.reviewLog.update({
+            where: { id: reviewLogId },
+            data: { reviewedFiles: { increment: 1 } },
+          });
+        }
       }
 
       // 统计问题
@@ -304,6 +367,7 @@ export class ReviewService {
         repository: true,
         comments: {
           where: { isPosted: false },
+          orderBy: { createdAt: "asc" },
         },
       },
     });
@@ -319,62 +383,33 @@ export class ReviewService {
       return;
     }
 
-    const mr = await gitlabService.getMergeRequest(
-      reviewLog.repository.gitLabProjectId,
-      reviewLog.mergeRequestIid,
-    );
+    const comments = reviewLog.comments;
+    if (!comments || comments.length === 0) {
+      console.log(`📭 [ReviewService] No comments to post`);
+      return;
+    }
 
-    // 发布评论
-    for (const comment of reviewLog.comments) {
-      try {
-        const commentBody = `${comment.content}\n\n---\n<sub>🤖comments generate from code review copolit,written by [yuguaa](https://github.com/yuguaa)</sub>`;
+    try {
+      const commentBody = this.formatSummaryComment(reviewLog, comments);
+      const result = await gitlabService.createMergeRequestComment(
+        reviewLog.repository.gitLabProjectId,
+        reviewLog.mergeRequestIid,
+        commentBody,
+        undefined,
+      );
 
-        const position = {
-          base_sha: mr.diff_refs.base_sha,
-          head_sha: mr.diff_refs.head_sha,
-          start_sha: mr.diff_refs.start_sha,
-          old_path: comment.filePath,
-          new_path: comment.filePath,
-          position_type: "text" as const,
-          new_line: comment.lineNumber,
-        };
+      await prisma.reviewComment.updateMany({
+        where: { reviewLogId, isPosted: false },
+        data: {
+          isPosted: true,
+          gitlabCommentId: result.id ? result.id.toString() : null,
+        },
+      });
 
-        const result = await gitlabService.createMergeRequestComment(
-          reviewLog.repository.gitLabProjectId,
-          reviewLog.mergeRequestIid,
-          commentBody,
-          position,
-        );
-
-        await prisma.reviewComment.update({
-          where: { id: comment.id },
-          data: { isPosted: true, gitlabCommentId: result.id?.toString() },
-        });
-
-        console.log(`✅ Posted inline comment: ${comment.filePath}:${comment.lineNumber}`);
-      } catch (error) {
-        console.log(`⚠️ Inline comment failed, trying general comment...`);
-
-        try {
-          const commentBody = `${comment.content}\n\n---\n<sub>🤖comments generate from code review copolit,written by [yuguaa](https://github.com/yuguaa)</sub>`;
-
-          const result = await gitlabService.createMergeRequestComment(
-            reviewLog.repository.gitLabProjectId,
-            reviewLog.mergeRequestIid,
-            commentBody,
-            undefined,
-          );
-
-          await prisma.reviewComment.update({
-            where: { id: comment.id },
-            data: { isPosted: true, gitlabCommentId: result.id?.toString() },
-          });
-
-          console.log(`✅ Posted general comment for: ${comment.filePath}:${comment.lineNumber}`);
-        } catch (fallbackError) {
-          console.error(`❌ Failed to post comment for ${comment.filePath}:${comment.lineNumber}`);
-        }
-      }
+      console.log(`✅ Posted summary comment to MR !${reviewLog.mergeRequestIid}`);
+    } catch (error) {
+      console.error(`❌ Failed to post summary comment to MR !${reviewLog.mergeRequestIid}`);
+      throw error;
     }
   }
 
@@ -389,52 +424,29 @@ export class ReviewService {
       return;
     }
 
-    console.log(`📤 [ReviewService] Posting ${comments.length} comments to commit`);
+    console.log(`📤 [ReviewService] Posting summary comment to commit`);
 
-    for (const comment of comments) {
-      try {
-        const commentBody = `${comment.content}\n\n---\n<sub>🤖comments generate from code review copolit,written by [yuguaa](https://github.com/yuguaa)</sub>`;
+    try {
+      const commentBody = this.formatSummaryComment(reviewLog, comments);
+      const result = await gitlabService.createCommitComment(
+        reviewLog.repository.gitLabProjectId,
+        reviewLog.commitSha,
+        commentBody,
+        undefined,
+      );
 
-        const result = await gitlabService.createCommitComment(
-          reviewLog.repository.gitLabProjectId,
-          reviewLog.commitSha,
-          commentBody,
-          {
-            path: comment.filePath,
-            line: comment.lineNumber,
-            line_type: "new",
-          },
-        );
+      await prisma.reviewComment.updateMany({
+        where: { reviewLogId: reviewLog.id, isPosted: false },
+        data: {
+          isPosted: true,
+          gitlabCommentId: result.id ? result.id.toString() : null,
+        },
+      });
 
-        await prisma.reviewComment.update({
-          where: { id: comment.id },
-          data: { isPosted: true, gitlabCommentId: result.id?.toString() },
-        });
-
-        console.log(`✅ Posted comment to commit: ${comment.filePath}:${comment.lineNumber}`);
-      } catch (error) {
-        console.log(`⚠️ Inline commit comment failed, trying general comment...`);
-
-        try {
-          const commentBody = `${comment.content}\n\n---\n<sub>🤖comments generate from code review copolit,written by [yuguaa](https://github.com/yuguaa)</sub>`;
-
-          const result = await gitlabService.createCommitComment(
-            reviewLog.repository.gitLabProjectId,
-            reviewLog.commitSha,
-            commentBody,
-            undefined,
-          );
-
-          await prisma.reviewComment.update({
-            where: { id: comment.id },
-            data: { isPosted: true, gitlabCommentId: result.id?.toString() },
-          });
-
-          console.log(`✅ Posted general comment to commit`);
-        } catch (fallbackError) {
-          console.error(`❌ Failed to post comment to commit: ${comment.filePath}:${comment.lineNumber}`);
-        }
-      }
+      console.log(`✅ Posted summary comment to commit ${reviewLog.commitShortId}`);
+    } catch (error) {
+      console.error(`❌ Failed to post summary comment to commit ${reviewLog.commitShortId}`);
+      throw error;
     }
   }
 
@@ -443,6 +455,107 @@ export class ReviewService {
     return `--- a/${diff.old_path}
 +++ b/${diff.new_path}
 ${diff.diff}`;
+  }
+
+  /** 汇总评论格式化（按文件分组） */
+  private formatSummaryComment(reviewLog: any, comments: ReviewCommentLike[]): string {
+    const lines: string[] = [];
+    const total = comments.length;
+    const critical = reviewLog.criticalIssues ?? 0;
+    const normal = reviewLog.normalIssues ?? 0;
+    const suggestion = reviewLog.suggestions ?? 0;
+    const totalFiles = reviewLog.totalFiles ?? 0;
+    const reviewedFiles = reviewLog.reviewedFiles ?? 0;
+
+    // 检查是否是批量审查模式
+    const isBatchReview = comments.length === 1 && comments[0].filePath === "summary";
+
+    if (isBatchReview) {
+      // 批量审查模式：直接输出 AI 的审查结果
+      lines.push("## Code Review Summary");
+      lines.push("");
+      lines.push(`**Files Reviewed:** ${totalFiles}`);
+      if (reviewLog.aiSummary && reviewLog.aiSummary.trim()) {
+        lines.push("");
+        lines.push("### Overview");
+        lines.push(reviewLog.aiSummary.trim());
+      }
+      lines.push("");
+      lines.push("### Review Findings");
+      lines.push(comments[0].content);
+      lines.push("");
+      lines.push("---");
+      lines.push(
+        "<sub>🤖 Code review by [Code Review Copilot](https://github.com/yuguaa/code-review-copilot)</sub>",
+      );
+    } else {
+      // 单文件审查模式：按文件分组输出
+      lines.push("## Code Review Summary");
+      lines.push("");
+      lines.push(
+        `**Files:** ${totalFiles} total (${reviewedFiles} reviewed)`,
+      );
+      lines.push(
+        `**Findings:** 🔴 ${critical} Critical | ⚠️ ${normal} Normal | 💡 ${suggestion} Suggestion | **Total:** ${total}`,
+      );
+
+      if (reviewLog.aiSummary && reviewLog.aiSummary.trim()) {
+        lines.push("");
+        lines.push("### Summary");
+        lines.push(reviewLog.aiSummary.trim());
+      }
+
+      lines.push("");
+      lines.push("### Findings by File");
+
+      const fileOrder: string[] = [];
+      const byFile: Record<string, ReviewCommentLike[]> = {};
+
+      for (const comment of comments) {
+        const filePath = comment.filePath || "unknown";
+        if (!byFile[filePath]) {
+          byFile[filePath] = [];
+          fileOrder.push(filePath);
+        }
+        byFile[filePath].push(comment);
+      }
+
+      for (const filePath of fileOrder) {
+        lines.push("");
+        lines.push(`#### \`${filePath}\``);
+        for (const comment of byFile[filePath]) {
+          const range =
+            comment.lineRangeEnd && comment.lineRangeEnd !== comment.lineNumber
+              ? `L${comment.lineNumber}-${comment.lineRangeEnd}`
+              : `L${comment.lineNumber}`;
+          const severity = this.formatSeverityLabel(comment.severity);
+          const content = this.formatInlineContent(comment.content);
+          lines.push(`- ${range} [${severity}] ${content}`);
+        }
+      }
+
+      lines.push("");
+      lines.push("---");
+      lines.push(
+        "<sub>🤖 Code review by [Code Review Copilot](https://github.com/yuguaa/code-review-copilot)</sub>",
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  private formatSeverityLabel(severity?: string | null): string {
+    if (!severity) return "Normal";
+    const lower = severity.toLowerCase();
+    if (lower === "critical") return "Critical";
+    if (lower === "suggestion") return "Suggestion";
+    return "Normal";
+  }
+
+  private formatInlineContent(content: string): string {
+    const trimmed = content.trim();
+    if (!trimmed) return "";
+    return trimmed.replace(/\n+/g, "<br>");
   }
 }
 
