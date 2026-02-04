@@ -349,6 +349,119 @@ export class AIService {
   }
 
   /**
+   * 解析“总结优先”的审查输出：
+   * - 统计行（严格）：`统计: 严重=<n> 一般=<n> 建议=<n>`
+   * - 仅展开严重问题（可选）：`- path/to/file:12-15 问题描述`
+   *
+   * 为兼容旧输出，也会尝试从 `行号: [严重/一般/建议] ...` 中推断统计和严重项。
+   */
+  parseReviewSummary(
+    aiResponse: string,
+    options?: { defaultFilePath?: string; maxCriticalItems?: number }
+  ): {
+    counts: { critical: number; normal: number; suggestion: number }
+    criticalItems: Array<{
+      filePath: string
+      lineNumber: number
+      lineRangeEnd?: number
+      content: string
+    }>
+  } {
+    const defaultFilePath = options?.defaultFilePath
+    const maxCriticalItems = options?.maxCriticalItems ?? 12
+
+    const counts = { critical: 0, normal: 0, suggestion: 0 }
+    const criticalItems: Array<{
+      filePath: string
+      lineNumber: number
+      lineRangeEnd?: number
+      content: string
+    }> = []
+
+    const text = aiResponse || ''
+    const lines = text.split('\n')
+
+    // 1) Parse strict counts line
+    // Examples:
+    // - 统计: 严重=1 一般=2 建议=3
+    // - 统计：严重 1，一般 2，建议 3
+    // - Counts: Critical=1 Normal=2 Suggestion=3
+    const countsLine =
+      text.match(
+        /(?:^|\n)\s*(?:统计|Counts)\s*[:：]\s*([^\n]+)\n?/i
+      )?.[1] ?? ''
+    if (countsLine) {
+      const zh = countsLine.match(
+        /严重\s*=?\s*(\d+)[^\d]+一般\s*=?\s*(\d+)[^\d]+建议\s*=?\s*(\d+)/
+      )
+      const en = countsLine.match(
+        /critical\s*=?\s*(\d+)[^\d]+normal\s*=?\s*(\d+)[^\d]+suggestion\s*=?\s*(\d+)/i
+      )
+      const m = zh || en
+      if (m) {
+        counts.critical = Number(m[1] ?? 0)
+        counts.normal = Number(m[2] ?? 0)
+        counts.suggestion = Number(m[3] ?? 0)
+      }
+    }
+
+    // 2) Parse expanded critical list items
+    // Example: - apps/foo.ts:19-21 xxx
+    const criticalItemPattern =
+      /^\s*(?:[-*]|\d+\.)\s*`?([^\s`:]+(?:\/[^\s`:]+)*)`?:(\d+)(?:-(\d+))?\s+(.+?)\s*$/
+
+    for (const line of lines) {
+      if (criticalItems.length >= maxCriticalItems) break
+      const m = line.match(criticalItemPattern)
+      if (!m) continue
+      const filePath = m[1]
+      const lineNumber = Number(m[2])
+      const lineRangeEnd = m[3] ? Number(m[3]) : undefined
+      const content = m[4].trim()
+      if (!filePath || !lineNumber || !content) continue
+      criticalItems.push({ filePath, lineNumber, lineRangeEnd, content })
+    }
+
+    // 3) Fallback for old style output: file headings + `line: [严重/一般/建议] ...`
+    if (!countsLine || (counts.critical === 0 && counts.normal === 0 && counts.suggestion === 0)) {
+      let currentFile = defaultFilePath || ''
+      const fileHeadingPattern = /^\s*([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)\s*$/
+      const oldItemPattern = /^(\d+)(?:-(\d+))?:\s*(.*)$/
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line) continue
+
+        const fileM = line.match(fileHeadingPattern)
+        if (fileM) {
+          currentFile = fileM[1]
+          continue
+        }
+
+        const itemM = line.match(oldItemPattern)
+        if (!itemM) continue
+        const rest = itemM[3] || ''
+        const severity = this.inferSeverity(rest || line)
+        if (severity === 'critical') counts.critical += 1
+        else if (severity === 'suggestion') counts.suggestion += 1
+        else counts.normal += 1
+
+        if (severity === 'critical' && criticalItems.length < maxCriticalItems) {
+          const content = this.cleanCommentContent(rest).trim()
+          if (content && content !== 'LGTM!') {
+            const lineNumber = Number(itemM[1])
+            const lineRangeEnd = itemM[2] ? Number(itemM[2]) : undefined
+            const filePath = currentFile || defaultFilePath || 'unknown'
+            criticalItems.push({ filePath, lineNumber, lineRangeEnd, content })
+          }
+        }
+      }
+    }
+
+    return { counts, criticalItems }
+  }
+
+  /**
    * 清理评论内容，移除级别标签前缀
    */
   private cleanCommentContent(content: string): string {

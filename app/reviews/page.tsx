@@ -73,9 +73,11 @@ interface Review {
     id: string
     filePath: string
     lineNumber: number
+    lineRangeEnd?: number | null
     severity: string
     content: string
     isPosted: boolean
+    gitlabDiffUrl?: string | null
   }>
 }
 
@@ -170,12 +172,30 @@ export default function ReviewsPage() {
     const base = review.gitlabUrl?.replace(/\/+$/, '')
     if (!base || !review.repositoryPath) return null
     if (review.eventType === 'merge_request' && review.mergeRequestIid) {
-      return `${base}/${review.repositoryPath}/-/merge_requests/${review.mergeRequestIid}`
+      return `${base}/${review.repositoryPath}/-/merge_requests/${review.mergeRequestIid}/diffs`
     }
     if (review.eventType === 'push' && review.commitSha) {
       return `${base}/${review.repositoryPath}/-/commit/${review.commitSha}`
     }
     return `${base}/${review.repositoryPath}`
+  }
+
+  const getGitlabFileLink = (
+    review: Review,
+    filePath: string,
+    lineNumber: number,
+    lineRangeEnd?: number | null
+  ) => {
+    const base = review.gitlabUrl?.replace(/\/+$/, '')
+    if (!base || !review.repositoryPath || !filePath || !lineNumber) return null
+    const ref = review.commitSha || review.sourceBranch
+    // Encode each segment but keep `/`
+    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/')
+    const hash =
+      lineRangeEnd && lineRangeEnd !== lineNumber
+        ? `#L${lineNumber}-${lineRangeEnd}`
+        : `#L${lineNumber}`
+    return `${base}/${review.repositoryPath}/-/blob/${ref}/${encodedPath}${hash}`
   }
 
   // 获取严重级别样式
@@ -568,8 +588,31 @@ export default function ReviewsPage() {
                             >
                               <div className="flex items-center gap-2 mb-2">
                                 <span>{getSeverityIcon(comment.severity)}</span>
-                                <span className="text-xs font-mono text-muted-foreground">
+                                <span className="text-xs font-mono text-muted-foreground inline-flex items-center gap-1">
                                   {comment.filePath}:{comment.lineNumber}
+                                  {(() => {
+                                    const href =
+                                      comment.gitlabDiffUrl ||
+                                      getGitlabFileLink(
+                                        selectedReview,
+                                        comment.filePath,
+                                        comment.lineNumber,
+                                        comment.lineRangeEnd
+                                      )
+                                    if (!href) return null
+                                    return (
+                                      <a
+                                        href={href}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-sidebar-primary hover:text-sidebar-primary/80"
+                                        aria-label="在 GitLab 中打开该行"
+                                        title="在 GitLab 中打开该行"
+                                      >
+                                        <Gitlab className="h-3.5 w-3.5" />
+                                      </a>
+                                    )
+                                  })()}
                                 </span>
                                 {comment.isPosted && (
                                   <Badge variant="outline" className="text-xs h-5">
@@ -586,7 +629,14 @@ export default function ReviewsPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm">暂无审查意见</div>
+                      <div className="text-center py-8 text-muted-foreground text-sm space-y-2">
+                        <div>暂无可定位的审查意见</div>
+                        {(selectedReview.criticalIssues + selectedReview.normalIssues + selectedReview.suggestions) > 0 && (
+                          <div className="text-xs">
+                            统计：严重 {selectedReview.criticalIssues} / 一般 {selectedReview.normalIssues} / 建议 {selectedReview.suggestions}（可在「AI 原始回复」查看详情）
+                          </div>
+                        )}
+                      </div>
                     )}
                   </TabsContent>
 

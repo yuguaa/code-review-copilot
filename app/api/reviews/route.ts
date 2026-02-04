@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
             id: true,
             filePath: true,
             lineNumber: true,
+            lineRangeEnd: true,
             severity: true,
             content: true,
             isPosted: true,
@@ -61,40 +63,61 @@ export async function GET(request: NextRequest) {
     const total = await prisma.reviewLog.count({ where })
 
     // 格式化返回数据
-    const formattedReviews = reviews.map((review) => ({
-      id: review.id,
-      repositoryId: review.repositoryId,
-      repositoryName: review.repository.name,
-      repositoryPath: review.repository.path,
-      gitlabUrl: review.repository.gitLabAccount.url,
-      mergeRequestId: review.mergeRequestId,
-      mergeRequestIid: review.mergeRequestIid,
-      sourceBranch: review.sourceBranch,
-      targetBranch: review.targetBranch,
-      author: review.author,
-      authorUsername: review.authorUsername, // 添加工号字段
-      title: review.title,
-      description: review.description,
-      commitSha: review.commitSha,
-      commitShortId: review.commitShortId,
-      status: review.status,
-      error: review.error,
-      totalFiles: review.totalFiles,
-      reviewedFiles: review.reviewedFiles,
-      criticalIssues: review.criticalIssues,
-      normalIssues: review.normalIssues,
-      suggestions: review.suggestions,
-      aiSummary: review.aiSummary, // AI 变更总结
-      aiResponse: review.aiResponse, // AI 完整回复（JSON 格式）
-      reviewPrompts: review.reviewPrompts, // 发送给 AI 的完整 Prompt（用于追溯）
-      aiModelProvider: review.aiModelProvider, // AI 模型提供商
-      aiModelId: review.aiModelId, // AI 模型 ID
-      startedAt: review.startedAt,
-      completedAt: review.completedAt,
-      comments: review.comments,
-      // 判断是 Push 还是 MR
-      eventType: review.mergeRequestIid === 0 ? 'push' : 'merge_request',
-    }))
+    const formattedReviews = reviews.map((review) => {
+      const base = review.repository.gitLabAccount.url.replace(/\/+$/, '')
+      const projectPath = review.repository.path
+      const ref = review.commitSha || review.sourceBranch
+      const mrDiffUrl =
+        review.mergeRequestIid && review.mergeRequestIid !== 0
+          ? `${base}/${projectPath}/-/merge_requests/${review.mergeRequestIid}/diffs`
+          : null
+      const commitUrl = `${base}/${projectPath}/-/commit/${ref}`
+
+      const diffAnchor = (filePath: string, lineNumber: number, lineRangeEnd?: number | null) => {
+        const hash = createHash('sha1').update(filePath).digest('hex')
+        const end = lineRangeEnd && lineRangeEnd !== lineNumber ? lineRangeEnd : lineNumber
+        return `${hash}_${lineNumber}_${end}`
+      }
+
+      return {
+        id: review.id,
+        repositoryId: review.repositoryId,
+        repositoryName: review.repository.name,
+        repositoryPath: review.repository.path,
+        gitlabUrl: review.repository.gitLabAccount.url,
+        mergeRequestId: review.mergeRequestId,
+        mergeRequestIid: review.mergeRequestIid,
+        sourceBranch: review.sourceBranch,
+        targetBranch: review.targetBranch,
+        author: review.author,
+        authorUsername: review.authorUsername, // 添加工号字段
+        title: review.title,
+        description: review.description,
+        commitSha: review.commitSha,
+        commitShortId: review.commitShortId,
+        status: review.status,
+        error: review.error,
+        totalFiles: review.totalFiles,
+        reviewedFiles: review.reviewedFiles,
+        criticalIssues: review.criticalIssues,
+        normalIssues: review.normalIssues,
+        suggestions: review.suggestions,
+        aiSummary: review.aiSummary, // AI 变更总结
+        aiResponse: review.aiResponse, // AI 完整回复（JSON 格式）
+        reviewPrompts: review.reviewPrompts, // 发送给 AI 的完整 Prompt（用于追溯）
+        aiModelProvider: review.aiModelProvider, // AI 模型提供商
+        aiModelId: review.aiModelId, // AI 模型 ID
+        startedAt: review.startedAt,
+        completedAt: review.completedAt,
+        comments: review.comments.map((c) => {
+          const anchor = diffAnchor(c.filePath, c.lineNumber, c.lineRangeEnd)
+          const gitlabDiffUrl = mrDiffUrl ? `${mrDiffUrl}#${anchor}` : `${commitUrl}#${anchor}`
+          return { ...c, gitlabDiffUrl }
+        }),
+        // 判断是 Push 还是 MR
+        eventType: review.mergeRequestIid === 0 ? 'push' : 'merge_request',
+      }
+    })
 
     return NextResponse.json({
       reviews: formattedReviews,
