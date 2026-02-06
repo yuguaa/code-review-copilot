@@ -105,9 +105,9 @@ export async function POST(request: NextRequest) {
       console.log(`👤 Author: ${mrAuthor}`)
       console.log(`📝 Title: ${mr.title}`)
 
-      // 只处理非关闭的 MR 事件（排除 close 和 closed）
-      if (['close', 'closed'].includes(action)) {
-        console.log(`⏭️ Skipping MR action: ${action} (closed MRs are not reviewed)`)
+      // 跳过已合并、关闭的 MR 事件
+      if (['merge', 'merged', 'close', 'closed'].includes(action)) {
+        console.log(`⏭️ Skipping MR action: ${action} (merged/closed MRs are not reviewed)`)
         return NextResponse.json({ received: true })
       }
 
@@ -128,21 +128,37 @@ export async function POST(request: NextRequest) {
       }
 
       // 检查是否有正在进行的审查（避免重复触发）
-      // 只检查最近 5 分钟内的 pending 审查
+      // 只检查最近 10 分钟内的 pending 审查
       const recentPendingReview = await prisma.reviewLog.findFirst({
         where: {
           repositoryId: repository.id,
           mergeRequestIid: mrIid,
           status: 'pending',
           startedAt: {
-            gte: new Date(Date.now() - 5 * 60 * 1000), // 最近 5 分钟
+            gte: new Date(Date.now() - 10 * 60 * 1000), // 最近 10 分钟
           },
         },
       })
 
       if (recentPendingReview) {
-        console.log(`⏭️ MR !${mrIid} has a recent pending review, skipping`)
-        return NextResponse.json({ received: true })
+        console.log(`⏭️ MR !${mrIid} has a recent pending review (${recentPendingReview.id}), updating and returning existing review`)
+
+        // 更新已有 reviewLog 的信息（可能 MR 标题/描述有变化）
+        await prisma.reviewLog.update({
+          where: { id: recentPendingReview.id },
+          data: {
+            title: mr.title,
+            description: mr.description,
+          },
+        })
+
+        // 返回已有的审查 ID，让前端可以跟踪状态
+        return NextResponse.json({
+          success: true,
+          message: 'Review already in progress',
+          reviewLogId: recentPendingReview.id,
+          existingReview: true,
+        })
       }
 
       // 创建审查日志
@@ -246,7 +262,7 @@ export async function POST(request: NextRequest) {
 
       console.log(`✅ Branch ${branchName} matches watch rules`)
 
-      // 检查是否已经审查过这个提交
+      // 检查是否已经审查过这个提交或正在审查中
       const existingReview = await prisma.reviewLog.findFirst({
         where: {
           repositoryId: repository.id,
@@ -255,8 +271,17 @@ export async function POST(request: NextRequest) {
       })
 
       if (existingReview) {
+        if (existingReview.status === 'pending') {
+          console.log(`⏭️ Commit ${commitSha} has a pending review (${existingReview.id}), returning existing review`)
+          return NextResponse.json({
+            success: true,
+            message: 'Review already in progress',
+            reviewLogId: existingReview.id,
+            existingReview: true,
+          })
+        }
         console.log(`⏭️ Commit ${commitSha} already reviewed`)
-        return NextResponse.json({ received: true })
+        return NextResponse.json({ received: true, alreadyReviewed: true })
       }
 
       // 创建审查日志（Push 事件没有 mergeRequestId 等信息）
