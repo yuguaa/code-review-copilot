@@ -5,9 +5,14 @@
 
 import { StateGraph } from "@langchain/langgraph";
 import { ReviewStateAnnotation } from "./types";
+import type { ReviewState } from "./types";
 import { fetchDiffNode } from "./nodes/fetch-diff";
 import { generateSummaryNode } from "./nodes/generate-summary";
-import { reviewFileNode, shouldContinueReview, moveToNextFile } from "./nodes/review-file";
+import {
+  reviewFileNode,
+  shouldContinueReview,
+  moveToNextFile,
+} from "./nodes/review-file";
 import { aggregateResultsNode } from "./nodes/aggregate-results";
 import { publishCommentNode } from "./nodes/publish-comment";
 
@@ -16,7 +21,9 @@ import { publishCommentNode } from "./nodes/publish-comment";
  */
 function hasFilesToReview(state: ReviewState): "review" | "skip" {
   if (state.relevantDiffs.length === 0) {
-    console.log("⏭️ [hasFilesToReview] No files to review, skipping to aggregate");
+    console.log(
+      "⏭️ [hasFilesToReview] No files to review, skipping to aggregate",
+    );
     return "skip";
   }
   return "review";
@@ -40,24 +47,16 @@ export function createReviewGraph() {
     .addEdge("fetch_diff", "generate_summary")
 
     // 检查是否有文件需要审查
-    .addConditionalEdges(
-      "generate_summary",
-      hasFilesToReview,
-      {
-        review: "review_file",
-        skip: "aggregate_results",
-      }
-    )
+    .addConditionalEdges("generate_summary", hasFilesToReview, {
+      review: "review_file",
+      skip: "aggregate_results",
+    })
 
     // 循环逻辑
-    .addConditionalEdges(
-      "review_file",
-      shouldContinueReview,
-      {
-        continue: "next_file",
-        aggregate: "aggregate_results",
-      }
-    )
+    .addConditionalEdges("review_file", shouldContinueReview, {
+      continue: "next_file",
+      aggregate: "aggregate_results",
+    })
     .addEdge("next_file", "review_file")
 
     .addEdge("aggregate_results", "publish_comment")
