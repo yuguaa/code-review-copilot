@@ -99,6 +99,14 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
     const hasPlaceholderComment = reviewLog.gitlabDiscussionId && reviewLog.gitlabNoteId;
     const hasPlaceholderCommitComment = !!reviewLog.gitlabNoteId;
 
+    // 添加调试日志
+    console.log(`📋 [PublishCommentNode] Checking placeholder comment status:`);
+    console.log(`  - isPushEvent: ${isPushEvent}`);
+    console.log(`  - gitlabDiscussionId: ${reviewLog.gitlabDiscussionId}`);
+    console.log(`  - gitlabNoteId: ${reviewLog.gitlabNoteId}`);
+    console.log(`  - hasPlaceholderComment: ${hasPlaceholderComment}`);
+    console.log(`  - hasPlaceholderCommitComment: ${hasPlaceholderCommitComment}`);
+
     let result: { id: number | string } | null = null;
 
     if (isPushEvent) {

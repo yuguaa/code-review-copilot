@@ -75,13 +75,50 @@ export class ReviewService {
 
     } catch (error) {
       console.error("Review failed:", error);
+
+      // 更新数据库状态
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       await prisma.reviewLog.update({
         where: { id: reviewLogId },
         data: {
           status: "failed",
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: errorMessage,
         },
       });
+
+      // 尝试更新占位评论显示错误信息
+      // 使用之前已经查询过的 reviewLog（它已经包含了 repository 关联数据）
+      if (reviewLog.gitlabNoteId) {
+        try {
+          const errorBody = `## ❌ Code Review Failed\n\n审查过程中发生错误：\n\`\`\`\n${errorMessage}\n\`\`\`\n\n请检查日志或联系管理员。\n\n<sub>⏱️ 失败时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`;
+
+          const isPushEvent = reviewLog.mergeRequestIid === 0;
+
+          if (isPushEvent) {
+            // 更新 Commit 评论
+            await gitlabService.updateCommitComment(
+              reviewLog.repository.gitLabProjectId,
+              reviewLog.commitSha,
+              reviewLog.gitlabNoteId,
+              errorBody
+            );
+            console.log(`📝 Updated placeholder commit comment with error message`);
+          } else if (reviewLog.gitlabDiscussionId) {
+            // 更新 MR 评论
+            await gitlabService.updateMergeRequestComment(
+              reviewLog.repository.gitLabProjectId,
+              reviewLog.mergeRequestIid,
+              reviewLog.gitlabDiscussionId,
+              reviewLog.gitlabNoteId!,
+              errorBody
+            );
+            console.log(`📝 Updated placeholder MR comment with error message`);
+          }
+        } catch (updateError) {
+          console.error("Failed to update placeholder comment with error:", updateError);
+        }
+      }
+
       throw error;
     }
   }

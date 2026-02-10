@@ -193,21 +193,34 @@ export async function POST(request: NextRequest) {
       let placeholderCommentInfo: { discussionId: string; noteId: number } | null = null
       try {
         const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
-        
+
         const placeholderResult = await gitlabService.createMergeRequestComment(
           repository.gitLabProjectId,
           mr.iid,
           placeholderBody
         )
-        
+
+        // 从 GitLab API 响应中提取 ID
+        // discussionId 是字符串类型，noteId 是整数类型
+        const discussionId = placeholderResult.id
+        const noteId = placeholderResult.notes?.[0]?.id
+
+        // 验证必需的字段是否存在
+        if (!discussionId) {
+          throw new Error('Failed to get discussionId from GitLab API response')
+        }
+        if (!noteId || typeof noteId !== 'number') {
+          throw new Error(`Invalid noteId from GitLab API response: ${noteId} (type: ${typeof noteId})`)
+        }
+
         // 保存 discussion ID 和 note ID，用于后续更新
         placeholderCommentInfo = {
-          discussionId: placeholderResult.id,
-          noteId: placeholderResult.notes?.[0]?.id || placeholderResult.id
+          discussionId,
+          noteId
         }
-        
+
         console.log(`📝 Created placeholder comment: discussionId=${placeholderCommentInfo.discussionId}, noteId=${placeholderCommentInfo.noteId}`)
-        
+
         // 更新 reviewLog 记录占位评论信息
         await prisma.reviewLog.update({
           where: { id: reviewLog.id },
@@ -218,7 +231,8 @@ export async function POST(request: NextRequest) {
         })
       } catch (error) {
         console.error('⚠️ Failed to create placeholder comment:', error)
-        // 占位评论创建失败不影响审查流程
+        // 占位评论创建失败不影响审查流程，但需要记录日志
+        console.error('⚠️ Review will proceed without placeholder comment, so the final review will create a new comment instead of updating the placeholder')
       }
 
       // 异步执行审查
@@ -316,17 +330,23 @@ export async function POST(request: NextRequest) {
       let placeholderNoteId: number | null = null
       try {
         const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
-        
+
         const placeholderResult = await gitlabService.createCommitComment(
           repository.gitLabProjectId,
           commitSha,
           placeholderBody
         )
-        
-        placeholderNoteId = placeholderResult.id
-        
+
+        // 验证 noteId 是否为整数
+        const noteId = placeholderResult.id
+        if (!noteId || typeof noteId !== 'number') {
+          throw new Error(`Invalid noteId from GitLab API response: ${noteId} (type: ${typeof noteId})`)
+        }
+
+        placeholderNoteId = noteId
+
         console.log(`📝 Created placeholder commit comment: noteId=${placeholderNoteId}`)
-        
+
         // 更新 reviewLog 记录占位评论信息
         await prisma.reviewLog.update({
           where: { id: reviewLog.id },
@@ -336,7 +356,8 @@ export async function POST(request: NextRequest) {
         })
       } catch (error) {
         console.error('⚠️ Failed to create placeholder commit comment:', error)
-        // 占位评论创建失败不影响审查流程
+        // 占位评论创建失败不影响审查流程，但需要记录日志
+        console.error('⚠️ Review will proceed without placeholder comment, so the final review will create a new comment instead of updating the placeholder')
       }
 
       // 异步执行审查

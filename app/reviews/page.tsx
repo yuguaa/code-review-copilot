@@ -180,52 +180,6 @@ export default function ReviewsPage() {
     return `${base}/${review.repositoryPath}`
   }
 
-  const getGitlabFileLink = (
-    review: Review,
-    filePath: string,
-    lineNumber: number,
-    lineRangeEnd?: number | null
-  ) => {
-    const base = review.gitlabUrl?.replace(/\/+$/, '')
-    if (!base || !review.repositoryPath || !filePath || !lineNumber) return null
-    const ref = review.commitSha || review.sourceBranch
-    // Encode each segment but keep `/`
-    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/')
-    const hash =
-      lineRangeEnd && lineRangeEnd !== lineNumber
-        ? `#L${lineNumber}-${lineRangeEnd}`
-        : `#L${lineNumber}`
-    return `${base}/${review.repositoryPath}/-/blob/${ref}/${encodedPath}${hash}`
-  }
-
-  // 获取严重级别样式
-  const getSeverityStyle = (severity: string) => {
-    switch (severity) {
-      case 'critical':
-        return 'border-l-destructive bg-destructive/5'
-      case 'normal':
-        return 'border-l-amber-500 bg-amber-500/5'
-      case 'suggestion':
-        return 'border-l-blue-500 bg-blue-500/5'
-      default:
-        return 'border-l-muted-foreground bg-muted/5'
-    }
-  }
-
-  // 获取严重级别图标
-  const getSeverityIcon = (severity: string) => {
-    switch (severity) {
-      case 'critical':
-        return '🔴'
-      case 'normal':
-        return '⚠️'
-      case 'suggestion':
-        return '💡'
-      default:
-        return '💬'
-    }
-  }
-
   // 格式化时间差
   const formatDuration = (started: string, completed: string | null) => {
     if (!completed) return null
@@ -547,19 +501,16 @@ export default function ReviewsPage() {
                   defaultValue={
                     selectedReview.aiSummary
                       ? 'summary'
-                      : selectedReview.comments?.length
-                        ? 'comments'
-                        : selectedReview.aiResponse
-                          ? 'ai'
-                          : selectedReview.reviewPrompts
-                            ? 'prompts'
-                            : 'model'
+                      : selectedReview.aiResponse
+                        ? 'ai'
+                        : selectedReview.reviewPrompts
+                          ? 'prompts'
+                          : 'model'
                   }
                   className="w-full h-full flex flex-col min-w-0"
                 >
                   <TabsList className="mb-4 flex h-10 w-full flex-nowrap gap-2 overflow-x-auto whitespace-nowrap border border-border/40 bg-background/80 p-1 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 no-scrollbar">
                     <TabsTrigger value="summary" className="h-full">AI 总结</TabsTrigger>
-                    <TabsTrigger value="comments" className="h-full">审查意见 {selectedReview.comments?.length ? `(${selectedReview.comments.length})` : ''}</TabsTrigger>
                     <TabsTrigger value="ai" className="h-full">AI 原始回复</TabsTrigger>
                     <TabsTrigger value="prompts" className="h-full">Prompt 追溯</TabsTrigger>
                     <TabsTrigger value="model" className="h-full">模型信息</TabsTrigger>
@@ -574,69 +525,6 @@ export default function ReviewsPage() {
                       </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground text-sm">暂无 AI 总结</div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="comments" className="flex-1 min-h-0 overflow-y-auto min-w-0">
-                    {selectedReview.comments && selectedReview.comments.length > 0 ? (
-                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
-                        <div className="space-y-3">
-                          {selectedReview.comments.map((comment) => (
-                            <div 
-                              key={comment.id}
-                              className={`p-3 rounded-md border-l-4 ${getSeverityStyle(comment.severity)}`}
-                            >
-                              <div className="flex items-center gap-2 mb-2">
-                                <span>{getSeverityIcon(comment.severity)}</span>
-                                <span className="text-xs font-mono text-muted-foreground inline-flex items-center gap-1">
-                                  {comment.filePath}:{comment.lineNumber}
-                                  {(() => {
-                                    const href =
-                                      comment.gitlabDiffUrl ||
-                                      getGitlabFileLink(
-                                        selectedReview,
-                                        comment.filePath,
-                                        comment.lineNumber,
-                                        comment.lineRangeEnd
-                                      )
-                                    if (!href) return null
-                                    return (
-                                      <a
-                                        href={href}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sidebar-primary hover:text-sidebar-primary/80"
-                                        aria-label="在 GitLab 中打开该行"
-                                        title="在 GitLab 中打开该行"
-                                      >
-                                        <Gitlab className="h-3.5 w-3.5" />
-                                      </a>
-                                    )
-                                  })()}
-                                </span>
-                                {comment.isPosted && (
-                                  <Badge variant="outline" className="text-xs h-5">
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    已发布
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-sm text-foreground whitespace-pre-wrap">
-                                {comment.content}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm space-y-2">
-                        <div>暂无可定位的审查意见</div>
-                        {(selectedReview.criticalIssues + selectedReview.normalIssues + selectedReview.suggestions) > 0 && (
-                          <div className="text-xs">
-                            统计：严重 {selectedReview.criticalIssues} / 一般 {selectedReview.normalIssues} / 建议 {selectedReview.suggestions}（可在「AI 原始回复」查看详情）
-                          </div>
-                        )}
-                      </div>
                     )}
                   </TabsContent>
 

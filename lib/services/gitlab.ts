@@ -234,18 +234,20 @@ export class GitLabService {
     noteId: number,
     newBody: string
   ): Promise<any> {
+    console.log(`📝 [GitLabService] Attempting to update MR comment: discussionId=${discussionId}, noteId=${noteId}, mrIid=${mergeRequestIid}`)
     try {
       // GitLab API: PUT /projects/:id/merge_requests/:merge_request_iid/discussions/:discussion_id/notes/:note_id
       const response = await this.client.put(
         `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}/notes/${noteId}`,
         { body: newBody }
       )
+      console.log(`✅ [GitLabService] Successfully updated MR comment: discussionId=${discussionId}, noteId=${noteId}`)
       return response.data
     } catch (error: any) {
       if (error.response?.data) {
         console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
       }
-      console.error('Failed to update MR comment:', error)
+      console.error('❌ [GitLabService] Failed to update MR comment:', error)
       throw new Error('Failed to update comment on GitLab MR')
     }
   }
@@ -263,6 +265,7 @@ export class GitLabService {
     noteId: number,
     newBody: string
   ): Promise<any> {
+    console.log(`📝 [GitLabService] Attempting to update commit comment: noteId=${noteId}, commitSha=${commitSha.substring(0, 8)}`)
     try {
       // GitLab API: PUT /projects/:id/repository/commits/:sha/comments/:note_id
       // 注意：GitLab Commit comments 的更新 API 可能不支持，尝试使用通用 notes API
@@ -270,14 +273,17 @@ export class GitLabService {
         `/projects/${projectId}/repository/commits/${commitSha}/comments/${noteId}`,
         { note: newBody }
       )
+      console.log(`✅ [GitLabService] Successfully updated commit comment: noteId=${noteId}`)
       return response.data
     } catch (error: any) {
       // 如果更新失败，回退到创建新评论（某些 GitLab 版本不支持更新 commit comments）
-      console.warn('Failed to update commit comment, falling back to create new comment')
+      console.warn('⚠️ [GitLabService] Failed to update commit comment, falling back to create new comment')
+      console.warn(`⚠️ [GitLabService] Update error status: ${error.response?.status}, data:`, error.response?.data)
       if (error.response?.data) {
         console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
       }
       // 回退：创建新评论
+      console.log(`📝 [GitLabService] Creating new comment as fallback`)
       return await this.createCommitComment(projectId, commitSha, newBody)
     }
   }
