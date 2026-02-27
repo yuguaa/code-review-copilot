@@ -120,7 +120,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
             resolvedDiscussionId
           );
           const firstNoteId = discussion?.notes?.[0]?.id;
-          if (Number.isInteger(firstNoteId)) {
+          if (typeof firstNoteId === "number" && Number.isInteger(firstNoteId)) {
             resolvedNoteId = firstNoteId;
             await prisma.reviewLog.update({
               where: { id: state.reviewLogId },
