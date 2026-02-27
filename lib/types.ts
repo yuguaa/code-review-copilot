@@ -72,6 +72,18 @@ export interface GitLabCompareResult {
   compare_timeout?: boolean
 }
 
+/** GitLab Commit 评论 */
+export interface GitLabCommitComment {
+  id?: number
+  note_id?: number
+  note?: string
+  author?: {
+    id: number
+    name: string
+    username: string
+  }
+}
+
 /** GitLab 提交信息 */
 export interface GitLabCommit {
   id: string

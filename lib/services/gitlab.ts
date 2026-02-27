@@ -9,7 +9,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult } from '@/lib/types'
+import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment } from '@/lib/types'
 
 /**
  * GitLab 服务类
@@ -195,6 +195,21 @@ export class GitLabService {
     } catch (error) {
       console.error('Failed to compare commits:', error)
       throw new Error('Failed to compare commits from GitLab')
+    }
+  }
+
+  /**
+   * 获取 Commit 评论列表（用于按自定义 marker 回查占位评论）
+   */
+  async getCommitComments(projectId: number | string, commitSha: string): Promise<GitLabCommitComment[]> {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/repository/commits/${commitSha}/comments`
+      )
+      return Array.isArray(response.data) ? response.data : []
+    } catch (error) {
+      console.error('Failed to fetch commit comments:', error)
+      throw new Error('Failed to fetch commit comments from GitLab')
     }
   }
 

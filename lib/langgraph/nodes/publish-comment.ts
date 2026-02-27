@@ -66,12 +66,38 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
     let result: { id: number | string } | null = null;
 
     if (isPushEvent) {
-      if (hasPlaceholderCommitComment) {
-        console.log(`📝 [PublishCommentNode] Updating placeholder commit comment: noteId=${reviewLog.gitlabNoteId}`);
+      const pushMarker = reviewLog.gitlabDiscussionId || `CRC_PUSH_PLACEHOLDER:${state.reviewLogId}`;
+      let resolvedNoteId = reviewLog.gitlabNoteId || null;
+
+      if (!resolvedNoteId) {
+        try {
+          const commitComments = await gitlabService.getCommitComments(
+            projectId,
+            reviewLog.commitSha
+          );
+          const markerComment = [...commitComments]
+            .reverse()
+            .find((item) => typeof item.note === "string" && item.note.includes(pushMarker));
+          const markerNoteId = markerComment?.id || markerComment?.note_id || null;
+          if (markerNoteId) {
+            resolvedNoteId = markerNoteId;
+            await prisma.reviewLog.update({
+              where: { id: state.reviewLogId },
+              data: { gitlabNoteId: resolvedNoteId },
+            });
+            console.log(`📝 [PublishCommentNode] Resolved placeholder commit noteId=${resolvedNoteId} by marker=${pushMarker}`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ [PublishCommentNode] Failed to resolve commit placeholder by marker`, error);
+        }
+      }
+
+      if (resolvedNoteId || hasPlaceholderCommitComment) {
+        console.log(`📝 [PublishCommentNode] Updating placeholder commit comment: noteId=${resolvedNoteId || reviewLog.gitlabNoteId}`);
         result = await gitlabService.updateCommitComment(
           projectId,
           reviewLog.commitSha,
-          reviewLog.gitlabNoteId!,
+          (resolvedNoteId || reviewLog.gitlabNoteId)!,
           summaryContent
         ) as { id: number | string };
       } else {

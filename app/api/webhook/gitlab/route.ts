@@ -317,13 +317,14 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Created review log: ${reviewLog.id}`)
       console.log(`🚀 Starting review process...`)
 
-      // 在 GitLab Commit 上创建占位评论（后续会被总评更新或补发）
+      // Push 事件：创建占位评论，并写入唯一 marker 用于后续回查更新
       try {
         const gitlabService = createGitLabService(
           repository.gitLabAccount.url,
           repository.gitLabAccount.accessToken
         )
-        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
+        const pushMarker = `CRC_PUSH_PLACEHOLDER:${reviewLog.id}`
+        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<!-- ${pushMarker} -->\n<sub>追踪ID: ${pushMarker}</sub>\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
 
         const placeholderResult = await gitlabService.createCommitComment(
           repository.gitLabProjectId,
@@ -331,10 +332,17 @@ export async function POST(request: NextRequest) {
           placeholderBody
         )
 
-        const noteId = Number.isInteger(placeholderResult?.id) ? placeholderResult.id : null
+        const noteId = Number.isInteger(placeholderResult?.id)
+          ? placeholderResult.id
+          : (Number.isInteger(placeholderResult?.note_id) ? placeholderResult.note_id : null)
+
+        // 复用 gitlabDiscussionId 字段保存 push marker，供发布阶段回查使用
         await prisma.reviewLog.update({
           where: { id: reviewLog.id },
-          data: { gitlabNoteId: noteId }
+          data: {
+            gitlabDiscussionId: pushMarker,
+            gitlabNoteId: noteId,
+          }
         })
       } catch (error) {
         console.error('⚠️ Failed to create placeholder commit comment:', error)
