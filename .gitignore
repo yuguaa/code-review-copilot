@@ -29,6 +29,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+logs/
 
 
 # vercel
@@ -41,4 +43,5 @@ next-env.d.ts
 /lib/generated/prisma
 
 # local db
+/dev.db
 /prisma/dev.db
