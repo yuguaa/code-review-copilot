@@ -9,7 +9,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult } from '@/lib/types'
+import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment } from '@/lib/types'
 
 /**
  * GitLab 服务类
@@ -199,6 +199,21 @@ export class GitLabService {
   }
 
   /**
+   * 获取 Commit 评论列表（用于按自定义 marker 回查占位评论）
+   */
+  async getCommitComments(projectId: number | string, commitSha: string): Promise<GitLabCommitComment[]> {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/repository/commits/${commitSha}/comments`
+      )
+      return Array.isArray(response.data) ? response.data : []
+    } catch (error) {
+      console.error('Failed to fetch commit comments:', error)
+      throw new Error('Failed to fetch commit comments from GitLab')
+    }
+  }
+
+  /**
    * 在 MR 中创建评论（支持行内评论）
    */
   async createMergeRequestComment(
@@ -273,6 +288,27 @@ export class GitLabService {
       }
       console.error('Failed to update MR comment:', error)
       throw new Error('Failed to update comment on GitLab MR')
+    }
+  }
+
+  /**
+   * 获取 MR Discussion 详情（用于补偿获取 noteId）
+   */
+  async getMergeRequestDiscussion(
+    projectId: number | string,
+    mergeRequestIid: number,
+    discussionId: string
+  ): Promise<{ id: string; notes?: Array<{ id: number }> }> {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}`
+      )
+      return response.data
+    } catch (error: any) {
+      if (error.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      }
+      throw error
     }
   }
 
