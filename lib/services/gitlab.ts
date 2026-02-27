@@ -325,23 +325,26 @@ export class GitLabService {
     noteId: number,
     newBody: string
   ): Promise<any> {
-    try {
-      // GitLab API: PUT /projects/:id/repository/commits/:sha/comments/:note_id
-      // 注意：GitLab Commit comments 的更新 API 可能不支持，尝试使用通用 notes API
-      const response = await this.client.put(
-        `/projects/${projectId}/repository/commits/${commitSha}/comments/${noteId}`,
-        { note: newBody }
-      )
-      return response.data
-    } catch (error: any) {
-      // 如果更新失败，回退到创建新评论（某些 GitLab 版本不支持更新 commit comments）
-      console.warn('Failed to update commit comment, falling back to create new comment')
-      if (error.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+    const triedIds = [noteId]
+    let lastError: any = null
+
+    for (const id of triedIds) {
+      try {
+        const response = await this.client.put(
+          `/projects/${projectId}/repository/commits/${commitSha}/comments/${id}`,
+          { note: newBody }
+        )
+        return response.data
+      } catch (error: any) {
+        lastError = error
+        if (error.response?.data) {
+          console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+        }
+        console.error(`Failed to update commit comment with id=${id}:`, error?.response?.status || error)
       }
-      // 回退：创建新评论
-      return await this.createCommitComment(projectId, commitSha, newBody)
     }
+
+    throw new Error(`Failed to update comment on GitLab commit (tried ids: ${triedIds.join(', ')})${lastError?.response?.status ? `, status=${lastError.response.status}` : ''}`)
   }
 
   /**

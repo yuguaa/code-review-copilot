@@ -45,7 +45,7 @@ export async function aggregateResultsNode(state: ReviewState): Promise<Partial<
     ? state.reviewComments
     : state.criticalComments;
 
-  for (const comment of commentsToSave.slice(0, 24)) {
+  for (const comment of commentsToSave) {
     await prisma.reviewComment.create({
       data: {
         reviewLogId: state.reviewLogId,

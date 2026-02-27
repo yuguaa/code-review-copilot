@@ -90,8 +90,8 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
   // 解析结果
   const parsed = aiService.parseReviewSummary(aiResponse, {
     defaultFilePath: filePath,
-    maxCriticalItems: 2,
-    maxItems: 8,
+    maxCriticalItems: 200,
+    maxItems: 200,
   });
 
   // 构建文件审查结果

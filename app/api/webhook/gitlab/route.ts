@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
           repository.gitLabAccount.accessToken
         )
         const pushMarker = `CRC_PUSH_PLACEHOLDER:${reviewLog.id}`
-        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<!-- ${pushMarker} -->\n<sub>追踪ID: ${pushMarker}</sub>\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
+        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<!-- ${pushMarker} -->\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
 
         const placeholderResult = await gitlabService.createCommitComment(
           repository.gitLabProjectId,
@@ -332,9 +332,10 @@ export async function POST(request: NextRequest) {
           placeholderBody
         )
 
-        const noteId = Number.isInteger(placeholderResult?.id)
-          ? placeholderResult.id
-          : (Number.isInteger(placeholderResult?.note_id) ? placeholderResult.note_id : null)
+        // Commit comment 返回结构在不同 GitLab 版本存在差异，优先使用 note_id
+        const noteId = Number.isInteger(placeholderResult?.note_id)
+          ? placeholderResult.note_id
+          : (Number.isInteger(placeholderResult?.id) ? placeholderResult.id : null)
 
         // 复用 gitlabDiscussionId 字段保存 push marker，供发布阶段回查使用
         await prisma.reviewLog.update({

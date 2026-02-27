@@ -60,9 +60,6 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
 
   // 发布总体摘要评论
   try {
-    // 检查是否有占位评论需要更新
-    const hasPlaceholderCommitComment = !!reviewLog.gitlabNoteId;
-
     let result: { id: number | string } | null = null;
 
     if (isPushEvent) {
@@ -78,7 +75,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
           const markerComment = [...commitComments]
             .reverse()
             .find((item) => typeof item.note === "string" && item.note.includes(pushMarker));
-          const markerNoteId = markerComment?.id || markerComment?.note_id || null;
+          const markerNoteId = markerComment?.note_id || markerComment?.id || null;
           if (markerNoteId) {
             resolvedNoteId = markerNoteId;
             await prisma.reviewLog.update({
@@ -92,16 +89,25 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
         }
       }
 
-      if (resolvedNoteId || hasPlaceholderCommitComment) {
+      if (resolvedNoteId) {
         console.log(`📝 [PublishCommentNode] Updating placeholder commit comment: noteId=${resolvedNoteId || reviewLog.gitlabNoteId}`);
-        result = await gitlabService.updateCommitComment(
-          projectId,
-          reviewLog.commitSha,
-          (resolvedNoteId || reviewLog.gitlabNoteId)!,
-          summaryContent
-        ) as { id: number | string };
+        try {
+          result = await gitlabService.updateCommitComment(
+            projectId,
+            reviewLog.commitSha,
+            resolvedNoteId,
+            summaryContent
+          ) as { id: number | string };
+        } catch (updateError) {
+          console.warn(`⚠️ [PublishCommentNode] Failed to update commit placeholder(noteId=${resolvedNoteId}), fallback to create summary`, updateError);
+          result = await gitlabService.createCommitComment(
+            projectId,
+            reviewLog.commitSha,
+            summaryContent
+          ) as { id: number | string };
+        }
       } else {
-        console.log(`📝 [PublishCommentNode] Posting new commit comment`);
+        console.warn(`⚠️ [PublishCommentNode] Unable to resolve placeholder by marker=${pushMarker}, fallback to create summary`);
         result = await gitlabService.createCommitComment(
           projectId,
           reviewLog.commitSha,
@@ -275,34 +281,22 @@ function formatSummaryComment(
   lines.push(`<summary>📜 Review details</summary>`);
   lines.push("");
 
-  lines.push("### 高优先级问题");
-  if (criticalComments.length === 0) {
-    lines.push("- 本次未发现需要立即阻断合并的严重问题。");
+  lines.push("### 全部问题清单");
+  if (sortedComments.length === 0) {
+    lines.push("- 本次无可定位问题。");
   } else {
-    criticalComments.slice(0, 3).forEach((comment, index) => {
+    sortedComments.forEach((comment, index) => {
       const finding = parseStructuredFinding(comment.content);
       const location = comment.lineRangeEnd
         ? `${comment.filePath}:${comment.lineNumber}-${comment.lineRangeEnd}`
         : `${comment.filePath}:${comment.lineNumber}`;
+      const tag = comment.severity === "critical" ? "严重" : comment.severity === "normal" ? "一般" : "建议";
 
-      lines.push(`${index + 1}. \`${location}\``);
+      lines.push(`${index + 1}. [${tag}] \`${location}\``);
       lines.push(`   - 问题：${finding.issue}`);
       lines.push(`   - 影响：${finding.impact}`);
       lines.push(`   - 建议：${finding.suggestion}`);
     });
-  }
-
-  lines.push("");
-  lines.push("### 一般与建议（摘要）");
-  if (normalComments.length === 0 && suggestionComments.length === 0) {
-    lines.push("- 本次无一般/建议级问题。");
-  } else {
-    if (normalComments.length > 0) {
-      lines.push(`- ⚠️ 一般问题 ${normalComments.length} 条（示例：\`${normalComments[0].filePath}:${normalComments[0].lineNumber}\`）`);
-    }
-    if (suggestionComments.length > 0) {
-      lines.push(`- 💡 建议问题 ${suggestionComments.length} 条（示例：\`${suggestionComments[0].filePath}:${suggestionComments[0].lineNumber}\`）`);
-    }
   }
 
   lines.push("");
