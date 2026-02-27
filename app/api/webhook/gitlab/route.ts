@@ -127,6 +127,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Missing commit SHA' }, { status: 400 })
       }
 
+      // 同一个 MR 的同一个 head commit 只审查一次
+      const existingReviewedSameHead = await prisma.reviewLog.findFirst({
+        where: {
+          repositoryId: repository.id,
+          mergeRequestIid: mrIid,
+          commitSha,
+          status: 'completed',
+        },
+      })
+
+      if (existingReviewedSameHead) {
+        console.log(`⏭️ MR !${mrIid} commit ${commitSha} already reviewed (${existingReviewedSameHead.id})`)
+        return NextResponse.json({
+          received: true,
+          alreadyReviewed: true,
+          reviewLogId: existingReviewedSameHead.id,
+        })
+      }
+
       // 检查是否有正在进行的审查（避免重复触发）
       // 只检查最近 10 分钟内的 pending 审查
       const recentPendingReview = await prisma.reviewLog.findFirst({

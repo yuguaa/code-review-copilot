@@ -40,8 +40,12 @@ export async function aggregateResultsNode(state: ReviewState): Promise<Partial<
   console.log(`   ⚠️ Normal: ${statistics.normal}`);
   console.log(`   💡 Suggestions: ${statistics.suggestion}`);
 
-  // 保存严重问题到数据库
-  for (const comment of state.criticalComments.slice(0, 3)) {
+  // 保存问题到数据库（严重/一般/建议）
+  const commentsToSave = state.reviewComments.length > 0
+    ? state.reviewComments
+    : state.criticalComments;
+
+  for (const comment of commentsToSave.slice(0, 24)) {
     await prisma.reviewComment.create({
       data: {
         reviewLogId: state.reviewLogId,

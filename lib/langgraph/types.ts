@@ -30,6 +30,13 @@ export interface FileReviewResult {
     lineRangeEnd?: number | null;
     content: string;
   }>;
+  reviewItems: Array<{
+    filePath: string | null;
+    lineNumber: number;
+    lineRangeEnd?: number | null;
+    severity: "critical" | "normal" | "suggestion";
+    content: string;
+  }>;
 }
 
 /** 审查统计汇总 */
@@ -49,6 +56,7 @@ export interface GitLabServiceInstance {
   updateMergeRequestComment: (projectId: number | string, mrIid: number, discussionId: string, noteId: number, body: string) => Promise<any>;
   createCommitComment: (projectId: number | string, commitSha: string, note: string, options?: { path?: string; line?: number; line_type?: 'new' | 'old' }) => Promise<any>;
   updateCommitComment: (projectId: number | string, commitSha: string, noteId: number, body: string) => Promise<any>;
+  compareCommits: (projectId: number | string, fromSha: string, toSha: string) => Promise<{ diffs: GitLabDiff[] }>;
 }
 
 /** 仓库配置信息 */
@@ -113,6 +121,16 @@ export const ReviewStateAnnotation = Annotation.Root({
     default: () => [],
   }),
 
+  // 审查范围信息
+  reviewScope: Annotation<"full" | "incremental">({
+    reducer: (_, y) => y,
+    default: () => "full",
+  }),
+  incrementalBaseSha: Annotation<string | null>({
+    reducer: (_, y) => y,
+    default: () => null,
+  }),
+
   // 变更摘要
   summary: Annotation<string>({
     reducer: (_, y) => y,
@@ -145,6 +163,12 @@ export const ReviewStateAnnotation = Annotation.Root({
 
   // 严重问题列表
   criticalComments:Annotation<ReviewComment[]>({
+    reducer: (x, y) => [...x, ...y],
+    default: () => [],
+  }),
+
+  // 全量问题列表（严重/一般/建议）
+  reviewComments:Annotation<ReviewComment[]>({
     reducer: (x, y) => [...x, ...y],
     default: () => [],
   }),

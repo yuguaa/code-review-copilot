@@ -24,6 +24,9 @@ export async function generateSummaryNode(state: ReviewState): Promise<Partial<R
     title: state.mrInfo?.title || state.reviewLog?.title || "",
     description: state.mrInfo?.description || state.reviewLog?.description || "",
     diffs: allDiffsText,
+    reviewScope: state.reviewScope,
+    baseCommitSha: state.incrementalBaseSha,
+    headCommitSha: state.reviewLog?.commitSha,
   });
 
   const summary = await aiService.reviewCode(

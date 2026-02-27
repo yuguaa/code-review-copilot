@@ -9,7 +9,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit } from '@/lib/types'
+import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult } from '@/lib/types'
 
 /**
  * GitLab 服务类
@@ -169,6 +169,32 @@ export class GitLabService {
     } catch (error) {
       console.error('Failed to fetch commit diff:', error)
       throw new Error('Failed to fetch commit diff from GitLab')
+    }
+  }
+
+  /**
+   * 获取两个提交之间的增量 diff
+   */
+  async compareCommits(
+    projectId: number | string,
+    fromSha: string,
+    toSha: string
+  ): Promise<GitLabCompareResult> {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/repository/compare`,
+        {
+          params: {
+            from: fromSha,
+            to: toSha,
+            straight: true,
+          },
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Failed to compare commits:', error)
+      throw new Error('Failed to compare commits from GitLab')
     }
   }
 
