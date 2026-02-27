@@ -277,6 +277,27 @@ export class GitLabService {
   }
 
   /**
+   * 获取 MR Discussion 详情（用于补偿获取 noteId）
+   */
+  async getMergeRequestDiscussion(
+    projectId: number | string,
+    mergeRequestIid: number,
+    discussionId: string
+  ): Promise<{ id: string; notes?: Array<{ id: number }> }> {
+    try {
+      const response = await this.client.get(
+        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}`
+      )
+      return response.data
+    } catch (error: any) {
+      if (error.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      }
+      throw error
+    }
+  }
+
+  /**
    * 更新 Commit 上的评论
    * @param projectId - 项目 ID
    * @param commitSha - Commit SHA

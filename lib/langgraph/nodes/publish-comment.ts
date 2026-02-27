@@ -46,54 +46,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
   const isPushEvent = reviewLog.mergeRequestIid === 0;
   const projectId = reviewLog.repository.gitLabProjectId;
 
-  // 发布问题评论（严重/一般/建议）
-  const commentsToPublish = state.reviewComments.length > 0
-    ? state.reviewComments
-    : state.criticalComments;
-
-  for (const comment of commentsToPublish) {
-    try {
-      const inlineBody = formatInlineFindingComment(comment.severity, comment.content);
-      if (isPushEvent) {
-        // 发布到 Commit
-        await gitlabService.createCommitComment(
-          projectId,
-          reviewLog.commitSha,
-          inlineBody,
-          {
-            path: comment.filePath,
-            line: comment.lineNumber,
-            line_type: "new"
-          }
-        );
-      } else {
-        // 发布到 MR
-        // 查找 diff 以获取 position 信息
-        const diff = state.diffs.find((d) => d.new_path === comment.filePath);
-        if (diff) {
-          await gitlabService.createMergeRequestComment(
-            projectId,
-            reviewLog.mergeRequestIid,
-            inlineBody,
-            {
-              base_sha: state.mrInfo?.diff_refs?.base_sha,
-              start_sha: state.mrInfo?.diff_refs?.start_sha,
-              head_sha: state.mrInfo?.diff_refs?.head_sha,
-              old_path: diff.old_path,
-              new_path: diff.new_path,
-              position_type: "text",
-              new_line: comment.lineNumber,
-            }
-          );
-        }
-      }
-    } catch (error) {
-      console.error(
-        `❌ [PublishCommentNode] Failed to publish comment for ${comment.filePath}:${comment.lineNumber}`,
-        error
-      );
-    }
-  }
+  // 总评模式：不发布行内评论，所有内容汇总到总评中
 
   // 格式化汇总评论
   const summaryContent = formatSummaryComment(
@@ -108,7 +61,6 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
   // 发布总体摘要评论
   try {
     // 检查是否有占位评论需要更新
-    const hasPlaceholderComment = reviewLog.gitlabDiscussionId && reviewLog.gitlabNoteId;
     const hasPlaceholderCommitComment = !!reviewLog.gitlabNoteId;
 
     let result: { id: number | string } | null = null;
@@ -131,13 +83,37 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
         ) as { id: number | string };
       }
     } else {
-      if (hasPlaceholderComment) {
-        console.log(`📝 [PublishCommentNode] Updating placeholder MR comment: discussionId=${reviewLog.gitlabDiscussionId}`);
+      const resolvedDiscussionId = reviewLog.gitlabDiscussionId || null;
+      let resolvedNoteId = reviewLog.gitlabNoteId || null;
+
+      if (resolvedDiscussionId && !resolvedNoteId) {
+        try {
+          const discussion = await gitlabService.getMergeRequestDiscussion(
+            projectId,
+            reviewLog.mergeRequestIid,
+            resolvedDiscussionId
+          );
+          const firstNoteId = discussion?.notes?.[0]?.id;
+          if (Number.isInteger(firstNoteId)) {
+            resolvedNoteId = firstNoteId;
+            await prisma.reviewLog.update({
+              where: { id: state.reviewLogId },
+              data: { gitlabNoteId: resolvedNoteId },
+            });
+            console.log(`📝 [PublishCommentNode] Resolved placeholder noteId=${resolvedNoteId} from discussion`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ [PublishCommentNode] Failed to resolve placeholder noteId, fallback to create new summary`, error);
+        }
+      }
+
+      if (resolvedDiscussionId && resolvedNoteId) {
+        console.log(`📝 [PublishCommentNode] Updating placeholder MR comment: discussionId=${resolvedDiscussionId}`);
         result = await gitlabService.updateMergeRequestComment(
           projectId,
           reviewLog.mergeRequestIid,
-          reviewLog.gitlabDiscussionId!,
-          reviewLog.gitlabNoteId!,
+          resolvedDiscussionId,
+          resolvedNoteId,
           summaryContent
         ) as { id: number | string };
       } else {
@@ -369,36 +345,6 @@ function severityWeight(severity: string): number {
   return 1;
 }
 
-function formatInlineFindingComment(severity: string, content: string): string {
-  const finding = parseStructuredFinding(content);
-  const severityEmoji = severity === "critical" ? "🔴" : severity === "normal" ? "🟡" : "🔵";
-  const severityText = severity === "critical" ? "Potential issue / High" : severity === "normal" ? "Potential issue / Minor" : "Nitpick";
-
-  return [
-    `${severityEmoji} **${severityText}**`,
-    "",
-    `**${finding.issue}**`,
-    `**影响**：${finding.impact}`,
-    `**建议**：${finding.suggestion}`,
-    "",
-    "```text",
-    "Committable suggestion: 请根据建议修改对应代码（当前版本仅提供文本建议）。",
-    "```",
-    "",
-    "<details>",
-    "<summary>Prompt for AI Agents</summary>",
-    "",
-    "```text",
-    `在当前评论位置附近，问题是：${finding.issue}`,
-    `影响：${finding.impact}`,
-    `请按以下建议修复：${finding.suggestion}`,
-    "修复后请确保相关测试/校验通过，并更新必要文档。",
-    "```",
-    "</details>",
-    "",
-    "<sub>Code Review Copilot</sub>",
-  ].join("\n");
-}
 
 function shortSha(sha: string | null | undefined): string {
   if (!sha) return "unknown";

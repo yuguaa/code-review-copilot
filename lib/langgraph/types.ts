@@ -54,6 +54,7 @@ export interface GitLabServiceInstance {
   getCommitDiff: (projectId: number | string, commitSha: string) => Promise<GitLabDiff[]>;
   createMergeRequestComment: (projectId: number | string, mrIid: number, body: string, position?: any) => Promise<any>;
   updateMergeRequestComment: (projectId: number | string, mrIid: number, discussionId: string, noteId: number, body: string) => Promise<any>;
+  getMergeRequestDiscussion: (projectId: number | string, mrIid: number, discussionId: string) => Promise<{ id: string; notes?: Array<{ id: number }> }>;
   createCommitComment: (projectId: number | string, commitSha: string, note: string, options?: { path?: string; line?: number; line_type?: 'new' | 'old' }) => Promise<any>;
   updateCommitComment: (projectId: number | string, commitSha: string, noteId: number, body: string) => Promise<any>;
   compareCommits: (projectId: number | string, fromSha: string, toSha: string) => Promise<{ diffs: GitLabDiff[] }>;
