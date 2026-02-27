@@ -3,6 +3,8 @@ module.exports = {
     {
       // 应用名称（自定义，方便管理）
       name: "code-review-copilot",
+      // 固定工作目录，避免从其他目录启动时读取到错误的 .env / SQLite 路径
+      cwd: __dirname,
       // 启动脚本（Next.js 生产启动命令）
       script: "node_modules/next/dist/bin/next",
       // 启动参数（指定 start 命令，可选自定义端口）
@@ -20,6 +22,10 @@ module.exports = {
       out_file: "./logs/next-out.log",
       // 日志时间戳
       log_date_format: "YYYY-MM-DD HH:mm:ss",
+      env: {
+        NODE_ENV: "production",
+        DATABASE_URL: "file:./dev.db",
+      },
     }
   ]
 };

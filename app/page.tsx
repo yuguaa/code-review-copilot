@@ -23,6 +23,8 @@ import {
   TrendingUp
 } from 'lucide-react'
 
+export const dynamic = 'force-dynamic'
+
 async function getDashboardStats() {
   const now = Date.now()
   const lastWeekStart = new Date(now - 7 * 24 * 60 * 60 * 1000)
