@@ -61,6 +61,8 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
   const isPushEvent = reviewLog.mergeRequestIid === 0;
   let mr: GitLabMergeRequest | null = null;
   let diffs: GitLabDiff[] = [];
+  let reviewScope: "full" | "incremental" = "full";
+  let incrementalBaseSha: string | null = null;
 
   if (isPushEvent) {
     console.log(
@@ -76,12 +78,45 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
       reviewLog.mergeRequestIid,
     );
 
-    // 使用 changes API 获取 MR 的所有变更（包含所有 commits 的 diff）
-    console.log(`📌 [FetchDiffNode] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
-    diffs = await gitlabService.getMergeRequestChanges(
-      reviewLog.repository.gitLabProjectId,
-      reviewLog.mergeRequestIid,
-    );
+    // 优先增量审查：仅审查“上次已审 commit -> 当前 commit”的新增变更
+    const previousCompletedReview = await prisma.reviewLog.findFirst({
+      where: {
+        repositoryId: reviewLog.repositoryId,
+        mergeRequestIid: reviewLog.mergeRequestIid,
+        status: "completed",
+        id: { not: reviewLog.id },
+      },
+      orderBy: { completedAt: "desc" },
+      select: { commitSha: true },
+    });
+
+    if (previousCompletedReview?.commitSha && previousCompletedReview.commitSha !== reviewLog.commitSha) {
+      try {
+        const compareResult = await gitlabService.compareCommits(
+          reviewLog.repository.gitLabProjectId,
+          previousCompletedReview.commitSha,
+          reviewLog.commitSha
+        );
+
+        if (Array.isArray(compareResult.diffs) && compareResult.diffs.length > 0) {
+          reviewScope = "incremental";
+          incrementalBaseSha = previousCompletedReview.commitSha;
+          diffs = compareResult.diffs;
+          console.log(`📌 [FetchDiffNode] Incremental review enabled: ${incrementalBaseSha} -> ${reviewLog.commitSha}, files=${diffs.length}`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ [FetchDiffNode] Incremental compare failed, fallback to full MR changes`, error);
+      }
+    }
+
+    // 回退全量：没有可用增量基线或增量为空时，审查 MR 全量变更
+    if (diffs.length === 0) {
+      console.log(`📌 [FetchDiffNode] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
+      diffs = await gitlabService.getMergeRequestChanges(
+        reviewLog.repository.gitLabProjectId,
+        reviewLog.mergeRequestIid,
+      );
+    }
 
     if (!diffs || diffs.length === 0) {
       console.log(`⏭️ [FetchDiffNode] No changes found in MR`);
@@ -136,6 +171,8 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
     mrInfo: mr,
     diffs,
     relevantDiffs,
+    reviewScope,
+    incrementalBaseSha,
     modelConfig,
     repositoryConfig,
   };

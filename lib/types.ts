@@ -59,6 +59,19 @@ export interface GitLabDiff {
   deleted_file: boolean
 }
 
+/** GitLab Compare API 返回 */
+export interface GitLabCompareResult {
+  commit: {
+    id: string
+    short_id: string
+    title: string
+  }
+  commits: GitLabCommit[]
+  diffs: GitLabDiff[]
+  compare_same_ref?: boolean
+  compare_timeout?: boolean
+}
+
 /** GitLab 提交信息 */
 export interface GitLabCommit {
   id: string

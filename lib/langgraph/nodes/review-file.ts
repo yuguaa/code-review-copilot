@@ -91,6 +91,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
   const parsed = aiService.parseReviewSummary(aiResponse, {
     defaultFilePath: filePath,
     maxCriticalItems: 2,
+    maxItems: 8,
   });
 
   // 构建文件审查结果
@@ -109,6 +110,13 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
       lineRangeEnd: item.lineRangeEnd,
       content: item.content,
     })),
+    reviewItems: parsed.commentItems.map((item) => ({
+      filePath: item.filePath || filePath,
+      lineNumber: item.lineNumber,
+      lineRangeEnd: item.lineRangeEnd,
+      severity: item.severity,
+      content: item.content,
+    })),
   };
 
   // 更新数据库进度
@@ -117,14 +125,15 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
     data: { reviewedFiles: { increment: 1 } },
   });
 
-  // 收集严重问题
-  const criticalComments = parsed.criticalItems.map((item) => ({
+  // 收集三种级别问题
+  const reviewComments = parsed.commentItems.map((item) => ({
     filePath: item.filePath || filePath,
     lineNumber: item.lineNumber,
     lineRangeEnd: item.lineRangeEnd,
-    severity: "critical" as const,
+    severity: item.severity,
     content: item.content,
   }));
+  const criticalComments = reviewComments.filter((item) => item.severity === "critical");
 
   const result = {
     // 不返回 currentFileIndex，让它保持不变（由 moveToNextFile 负责更新）
@@ -141,6 +150,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
       [filePath]: fullPrompt,
     },
     criticalComments,
+    reviewComments,
   };
   console.log(`✅ [ReviewFileNode] Completed review for ${filePath}, NOT returning currentFileIndex`);
   return result;
