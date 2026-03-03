@@ -189,9 +189,14 @@ function formatSummaryComment(
   incrementalBaseSha: string | null
 ): string {
   const lines: string[] = [];
-  const critical = reviewLog.criticalIssues ?? 0;
-  const normal = reviewLog.normalIssues ?? 0;
-  const suggestion = reviewLog.suggestions ?? 0;
+  const sortedComments = [...postedComments].sort((a, b) => severityWeight(b.severity) - severityWeight(a.severity));
+  const criticalComments = sortedComments.filter((item) => item.severity === "critical");
+  const normalComments = sortedComments.filter((item) => item.severity === "normal");
+  const suggestionComments = sortedComments.filter((item) => item.severity === "suggestion");
+  // 评论展示统计口径：按“实际可展示的问题清单”计算，避免与概览不一致
+  const critical = criticalComments.length;
+  const normal = normalComments.length;
+  const suggestion = suggestionComments.length;
   const totalFiles = reviewLog.totalFiles ?? 0;
   const reviewedFiles = reviewLog.reviewedFiles ?? 0;
 
@@ -230,55 +235,34 @@ function formatSummaryComment(
   }
 
   lines.push("");
-  const sortedComments = [...postedComments].sort((a, b) => severityWeight(b.severity) - severityWeight(a.severity));
-  const criticalComments = sortedComments.filter((item) => item.severity === "critical");
-  const normalComments = sortedComments.filter((item) => item.severity === "normal");
-  const suggestionComments = sortedComments.filter((item) => item.severity === "suggestion");
   const actionableCount = criticalComments.length + normalComments.length;
   const nitpickCount = suggestionComments.length;
 
   lines.push("### Review Index");
   lines.push(`Actionable comments posted: **${actionableCount}**`);
   lines.push("");
-  lines.push(`<details>`);
-  lines.push(`<summary>🔧 Actionable comments (${actionableCount})</summary>`);
-  lines.push("");
   if (actionableCount === 0) {
     lines.push("- 无需要立即处理的问题。");
   } else {
-    const actionablePreview = [...criticalComments, ...normalComments].slice(0, 5);
-    actionablePreview.forEach((comment) => {
+    [...criticalComments, ...normalComments].forEach((comment) => {
       const location = comment.lineRangeEnd
         ? `${comment.filePath}:${comment.lineNumber}-${comment.lineRangeEnd}`
         : `${comment.filePath}:${comment.lineNumber}`;
       lines.push(`- \`${location}\` (${comment.severity === "critical" ? "严重" : "一般"})`);
-    });
-    if (actionableCount > actionablePreview.length) {
-      lines.push(`- 以及其余 ${actionableCount - actionablePreview.length} 条`);
-    }
+    })
   }
-  lines.push(`</details>`);
   lines.push("");
-  lines.push(`<details>`);
-  lines.push(`<summary>🧹 Nitpick comments (${nitpickCount})</summary>`);
-  lines.push("");
+  lines.push(`Nitpick comments: **${nitpickCount}**`);
   if (nitpickCount === 0) {
     lines.push("- 无 nitpick。");
   } else {
-    suggestionComments.slice(0, 5).forEach((comment) => {
+    suggestionComments.forEach((comment) => {
       const location = comment.lineRangeEnd
         ? `${comment.filePath}:${comment.lineNumber}-${comment.lineRangeEnd}`
         : `${comment.filePath}:${comment.lineNumber}`;
       lines.push(`- \`${location}\``);
-    });
-    if (nitpickCount > 5) {
-      lines.push(`- 以及其余 ${nitpickCount - 5} 条`);
-    }
+    })
   }
-  lines.push(`</details>`);
-  lines.push("");
-  lines.push(`<details>`);
-  lines.push(`<summary>📜 Review details</summary>`);
   lines.push("");
 
   lines.push("### 全部问题清单");
@@ -325,8 +309,6 @@ function formatSummaryComment(
 
   lines.push("");
   lines.push(`<sub>完成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`);
-  lines.push("");
-  lines.push(`</details>`);
 
   return lines.join("\n");
 }
