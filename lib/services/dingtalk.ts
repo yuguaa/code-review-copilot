@@ -83,6 +83,7 @@ export async function sendReviewToDingTalk(params: {
   repositoryName: string;
   repositoryPath: string;
   gitlabUrl: string;
+  messageOverride?: string;
 }): Promise<void> {
   const setting = await prisma.notificationSetting.findUnique({
     where: { scope: "global" },
@@ -104,39 +105,47 @@ export async function sendReviewToDingTalk(params: {
   }
 
   const { reviewLog, repositoryName, repositoryPath, gitlabUrl } = params;
-  const critical = reviewLog.criticalIssues ?? 0;
-  const normal = reviewLog.normalIssues ?? 0;
-  const suggestion = reviewLog.suggestions ?? 0;
-  const conclusion = getReviewConclusion(critical, normal, suggestion);
   const link = buildGitlabLink(reviewLog, gitlabUrl, repositoryPath);
 
-  const eventLabel = reviewLog.mergeRequestIid && reviewLog.mergeRequestIid !== 0
-    ? `MR !${reviewLog.mergeRequestIid}`
-    : `Commit ${reviewLog.commitShortId || (reviewLog.commitSha || "").slice(0, 8)}`;
-
-  const summary = reviewLog.aiSummary ? compactText(reviewLog.aiSummary, 240) : "";
   const lines: string[] = [];
+  if (params.messageOverride) {
+    lines.push(params.messageOverride);
+    if (link) {
+      lines.push("");
+      lines.push(`[查看 GitLab 详情](${link})`);
+    }
+  } else {
+    const critical = reviewLog.criticalIssues ?? 0;
+    const normal = reviewLog.normalIssues ?? 0;
+    const suggestion = reviewLog.suggestions ?? 0;
+    const conclusion = getReviewConclusion(critical, normal, suggestion);
+    const eventLabel = reviewLog.mergeRequestIid && reviewLog.mergeRequestIid !== 0
+      ? `MR !${reviewLog.mergeRequestIid}`
+      : `Commit ${reviewLog.commitShortId || (reviewLog.commitSha || "").slice(0, 8)}`;
 
-  lines.push("### 🤖 Code Review 完成");
-  lines.push("");
-  lines.push(`- 仓库：${repositoryName}`);
-  lines.push(`- 事件：${eventLabel}`);
-  lines.push(`- 标题：${compactText(reviewLog.title || "", 120)}`);
-  lines.push(`- 作者：${reviewLog.author}${reviewLog.authorUsername ? `（${reviewLog.authorUsername}）` : ""}`);
-  lines.push(`- 分支：${reviewLog.sourceBranch}${reviewLog.targetBranch ? ` → ${reviewLog.targetBranch}` : ""}`);
-  lines.push(`- 结论：${conclusion}`);
-  lines.push(`- 问题统计：🔴 ${critical} / ⚠️ ${normal} / 💡 ${suggestion}`);
-  lines.push(`- 审查文件：${reviewLog.reviewedFiles}/${reviewLog.totalFiles}`);
-  if (summary) {
+    const summary = reviewLog.aiSummary ? compactText(reviewLog.aiSummary, 240) : "";
+
+    lines.push("### 🤖 Code Review 完成");
     lines.push("");
-    lines.push(`**变更摘要**：${summary}`);
-  }
-  if (link) {
+    lines.push(`- 仓库：${repositoryName}`);
+    lines.push(`- 事件：${eventLabel}`);
+    lines.push(`- 标题：${compactText(reviewLog.title || "", 120)}`);
+    lines.push(`- 作者：${reviewLog.author}${reviewLog.authorUsername ? `（${reviewLog.authorUsername}）` : ""}`);
+    lines.push(`- 分支：${reviewLog.sourceBranch}${reviewLog.targetBranch ? ` → ${reviewLog.targetBranch}` : ""}`);
+    lines.push(`- 结论：${conclusion}`);
+    lines.push(`- 问题统计：🔴 ${critical} / ⚠️ ${normal} / 💡 ${suggestion}`);
+    lines.push(`- 审查文件：${reviewLog.reviewedFiles}/${reviewLog.totalFiles}`);
+    if (summary) {
+      lines.push("");
+      lines.push(`**变更摘要**：${summary}`);
+    }
+    if (link) {
+      lines.push("");
+      lines.push(`[查看 GitLab 详情](${link})`);
+    }
     lines.push("");
-    lines.push(`[查看 GitLab 详情](${link})`);
+    lines.push(`<sub>完成时间：${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`);
   }
-  lines.push("");
-  lines.push(`<sub>完成时间：${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`);
 
   const payload: DingTalkMarkdownMessage = {
     msgtype: "markdown",

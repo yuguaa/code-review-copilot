@@ -181,6 +181,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
     repositoryName: reviewLog.repository.name,
     repositoryPath: reviewLog.repository.path,
     gitlabUrl: reviewLog.repository.gitLabAccount.url,
+    messageOverride: summaryContent,
   });
 
   return {
