@@ -126,3 +126,16 @@ model ReviewComment {
 
   @@map("review_comments")
 }
+
+// 通知配置（全局）
+model NotificationSetting {
+  id                  String   @id @default(cuid())
+  scope               String   @unique @default("global")
+  dingtalkWebhookUrl  String?
+  dingtalkSecret      String?
+  dingtalkEnabled     Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("notification_settings")
+}

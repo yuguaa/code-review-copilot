@@ -34,6 +34,14 @@ type AIModel = {
   createdAt: string
 }
 
+type DingTalkSetting = {
+  id: string
+  dingtalkWebhookUrl: string | null
+  dingtalkSecret: string | null
+  dingtalkEnabled: boolean
+  updatedAt: string
+}
+
 // 获取模型显示名称
 const getModelDisplayName = (model: AIModel) => {
   if (model.provider === 'custom') {
@@ -55,6 +63,7 @@ const getModelDisplayName = (model: AIModel) => {
 export default function SettingsPage() {
   const [gitlabAccount, setGitLabAccount] = useState<GitLabAccount | null>(null)
   const [aiModels, setAiModels] = useState<AIModel[]>([])
+  const [dingtalkSetting, setDingtalkSetting] = useState<DingTalkSetting | null>(null)
   const [loading, setLoading] = useState(true)
 
   // 分离的 loading 状态
@@ -63,6 +72,8 @@ export default function SettingsPage() {
   const [gitlabSaving, setGitlabSaving] = useState(false)
   const [aiModelTesting, setAiModelTesting] = useState(false)
   const [aiModelSaving, setAiModelSaving] = useState(false)
+  const [dingtalkTesting, setDingtalkTesting] = useState(false)
+  const [dingtalkSaving, setDingtalkSaving] = useState(false)
 
   // AI 模型表单状态
   const [editingModel, setEditingModel] = useState<AIModel | null>(null)
@@ -82,14 +93,30 @@ export default function SettingsPage() {
     webhookSecret: '',
   })
 
+  // 钉钉机器人表单状态
+  const [dingtalkForm, setDingtalkForm] = useState({
+    webhookUrl: '',
+    secret: '',
+    enabled: false,
+  })
+
   // 加载数据
   useEffect(() => {
     Promise.all([
       fetch('/api/settings/gitlab/account').then(r => r.json()),
       fetch('/api/settings/models').then(r => r.json()),
-    ]).then(([account, models]) => {
+      fetch('/api/settings/notifications/dingtalk').then(r => r.json()),
+    ]).then(([account, models, dingtalk]) => {
       setGitLabAccount(account)
       setAiModels(models)
+      setDingtalkSetting(dingtalk)
+      if (dingtalk) {
+        setDingtalkForm({
+          webhookUrl: dingtalk.dingtalkWebhookUrl || '',
+          secret: dingtalk.dingtalkSecret || '',
+          enabled: Boolean(dingtalk.dingtalkEnabled),
+        })
+      }
       setLoading(false)
     })
   }, [])
@@ -379,6 +406,102 @@ export default function SettingsPage() {
       accessToken: '',
       webhookSecret: '',
     })
+  }
+
+  const saveDingTalkSetting = async () => {
+    if (dingtalkForm.enabled && !dingtalkForm.webhookUrl) {
+      toast.error('启用钉钉通知前请先填写 Webhook URL')
+      return
+    }
+
+    setDingtalkSaving(true)
+    try {
+      const response = await fetch('/api/settings/notifications/dingtalk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dingtalkWebhookUrl: dingtalkForm.webhookUrl || null,
+          dingtalkSecret: dingtalkForm.secret || null,
+          dingtalkEnabled: dingtalkForm.enabled,
+        }),
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '保存失败')
+      }
+
+      const saved = await response.json()
+      setDingtalkSetting(saved)
+      toast.success('钉钉配置已保存')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '未知错误')
+    } finally {
+      setDingtalkSaving(false)
+    }
+  }
+
+  const testDingTalk = async () => {
+    if (!dingtalkForm.webhookUrl) {
+      toast.error('Webhook URL 为必填项')
+      return
+    }
+
+    setDingtalkTesting(true)
+    try {
+      const response = await fetch('/api/settings/notifications/dingtalk/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhookUrl: dingtalkForm.webhookUrl,
+          secret: dingtalkForm.secret || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '测试失败')
+      }
+
+      toast.success('测试消息已发送')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '测试失败')
+    } finally {
+      setDingtalkTesting(false)
+    }
+  }
+
+  const toggleDingTalkEnabled = async () => {
+    if (!dingtalkForm.webhookUrl) {
+      toast.error('请先填写 Webhook URL')
+      return
+    }
+
+    const nextEnabled = !dingtalkForm.enabled
+    setDingtalkSaving(true)
+    try {
+      const response = await fetch('/api/settings/notifications/dingtalk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dingtalkWebhookUrl: dingtalkForm.webhookUrl || null,
+          dingtalkSecret: dingtalkForm.secret || null,
+          dingtalkEnabled: nextEnabled,
+        }),
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '更新失败')
+      }
+
+      const saved = await response.json()
+      setDingtalkSetting(saved)
+      setDingtalkForm({ ...dingtalkForm, enabled: nextEnabled })
+      toast.success(`钉钉通知已${nextEnabled ? '启用' : '禁用'}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '未知错误')
+    } finally {
+      setDingtalkSaving(false)
+    }
   }
 
   // 获取常用模型 ID 建议
@@ -775,6 +898,65 @@ export default function SettingsPage() {
                     </div>
                   ))
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 钉钉机器人配置 */}
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>通知 - 钉钉机器人</CardTitle>
+                <CardDescription>
+                  审查完成后自动推送消息到钉钉群
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center gap-3">
+                <Badge variant={dingtalkForm.enabled ? 'default' : 'secondary'}>
+                  {dingtalkForm.enabled ? '已启用' : '未启用'}
+                </Badge>
+                {dingtalkSetting?.updatedAt ? (
+                  <span className="text-xs text-muted-foreground">
+                    上次更新：{new Date(dingtalkSetting.updatedAt).toLocaleString('zh-CN')}
+                  </span>
+                ) : null}
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Webhook URL</Label>
+                  <Input
+                    placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."
+                    value={dingtalkForm.webhookUrl}
+                    onChange={(e) => setDingtalkForm({ ...dingtalkForm, webhookUrl: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    在钉钉群的机器人设置中获取 Webhook 地址
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>加签密钥（可选）</Label>
+                  <Input
+                    type="password"
+                    placeholder="启用加签时填写"
+                    value={dingtalkForm.secret}
+                    onChange={(e) => setDingtalkForm({ ...dingtalkForm, secret: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={testDingTalk} disabled={dingtalkTesting || dingtalkSaving}>
+                  {dingtalkTesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  测试消息
+                </Button>
+                <Button onClick={saveDingTalkSetting} disabled={dingtalkTesting || dingtalkSaving}>
+                  {dingtalkSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  保存
+                </Button>
+                <Button variant="outline" onClick={toggleDingTalkEnabled} disabled={dingtalkTesting || dingtalkSaving}>
+                  {dingtalkForm.enabled ? '禁用' : '启用'}
+                </Button>
               </div>
             </CardContent>
           </Card>

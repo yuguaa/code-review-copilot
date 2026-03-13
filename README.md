@@ -178,6 +178,9 @@ AI 模型配置（OpenAI/Claude/自定义）
 
 ```env
 DATABASE_URL="file:./dev.db"
+DINGTALK_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+# 可选：开启加签时填写（钉钉机器人安全设置中的加签密钥）
+DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
 ```
 
 ## 目录结构

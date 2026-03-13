@@ -9,6 +9,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { sendReviewToDingTalk } from "@/lib/services/dingtalk";
 import type { ReviewComment, ReviewLog } from "@prisma/client";
 import type { ReviewState } from "../types";
 
@@ -173,6 +174,14 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
       error
     );
   }
+
+  // 发送钉钉机器人通知（不影响主流程）
+  await sendReviewToDingTalk({
+    reviewLog,
+    repositoryName: reviewLog.repository.name,
+    repositoryPath: reviewLog.repository.path,
+    gitlabUrl: reviewLog.repository.gitLabAccount.url,
+  });
 
   return {
     completed: true,
