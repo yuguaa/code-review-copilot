@@ -59,7 +59,7 @@ function buildChartData(data: ContributionResponse, rangeMonths: number) {
     .filter((item) => new Date(`${item.date}T00:00:00`).getTime() >= cutoff.getTime());
 
   return filtered.map((item) => {
-    const row: Record<string, number | string> = { date };
+    const row: Record<string, number | string> = { date: item.date };
     let total = 0;
     data.authors.forEach((author) => {
       const value = author.counts[item.index] || 0;
