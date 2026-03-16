@@ -57,6 +57,15 @@ const LINE_COLORS = [
   "var(--chart-3)",
   "var(--chart-4)",
   "var(--chart-5)",
+  "#10b981",
+  "#f59e0b",
+  "#3b82f6",
+  "#ec4899",
+  "#8b5cf6",
+  "#22d3ee",
+  "#84cc16",
+  "#f97316",
+  "#ef4444",
 ];
 
 function buildChartData(data: ContributionResponse, rangeMonths: number) {
@@ -212,12 +221,9 @@ export function ContributionsChart() {
                 {data?.authorOptions.map((name) => (
                   <DropdownMenuCheckboxItem
                     key={name}
-                    checked={selectedAuthors.length === 0 ? true : selectedAuthors.includes(name)}
+                    checked={selectedAuthors.includes(name)}
                     onCheckedChange={(checked) => {
                       setSelectedAuthors((prev) => {
-                        if (prev.length === 0) {
-                          return checked ? [name] : [];
-                        }
                         if (checked) {
                           return prev.includes(name) ? prev : [...prev, name];
                         }
