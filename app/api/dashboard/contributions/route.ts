@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createGitLabService } from "@/lib/services/gitlab";
 
 function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -32,52 +31,101 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const repositoryId = searchParams.get("repositoryId");
+    const authorFilter = searchParams.get("author");
     const days = 365;
 
     const repositories = repositoryId
       ? await prisma.repository.findMany({
           where: { id: repositoryId },
-          include: { gitLabAccount: true },
         })
       : await prisma.repository.findMany({
           where: { isActive: true },
-          include: { gitLabAccount: true },
         });
 
     const { dates, start, end } = buildDateRange(days);
     const counts = new Map(dates.map((date) => [date, 0]));
     const authorMap = new Map<string, number[]>();
+    const topReviewedUsers = await prisma.reviewLog.groupBy({
+      by: ["authorUsername"],
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 10,
+      where: {
+        authorUsername: { not: null },
+        startedAt: { gte: start },
+      },
+    });
+    const usernames = topReviewedUsers
+      .map((item) => item.authorUsername)
+      .filter((value): value is string => Boolean(value));
+    const reviewedAuthors = await prisma.reviewLog.findMany({
+      where: {
+        authorUsername: { in: usernames },
+      },
+      select: {
+        author: true,
+        authorUsername: true,
+      },
+      distinct: ["authorUsername"],
+    });
+    const allAuthorOptions = Array.from(
+      new Set(
+        reviewedAuthors
+          .flatMap((item) => [item.author, item.authorUsername])
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+    const authorSet = new Set(
+      reviewedAuthors
+        .flatMap((item) => [item.author, item.authorUsername])
+        .filter((value): value is string => Boolean(value))
+    );
+    if (authorFilter) {
+      authorSet.clear();
+      authorSet.add(authorFilter);
+    }
 
-    for (const repo of repositories) {
-      const gitlabService = createGitLabService(
-        repo.gitLabAccount.url,
-        repo.gitLabAccount.accessToken
-      );
+    const repositoryIds = repositories.map((repo) => repo.id);
+    const reviewLogs = await prisma.reviewLog.findMany({
+      where: {
+        repositoryId: repositoryId ? repositoryId : { in: repositoryIds },
+        startedAt: {
+          gte: start,
+          lte: end,
+        },
+        OR: authorFilter
+          ? [
+              { authorUsername: authorFilter },
+              { author: authorFilter },
+            ]
+          : [
+              { authorUsername: { in: usernames } },
+              { author: { in: Array.from(authorSet) } },
+            ],
+      },
+      select: {
+        author: true,
+        authorUsername: true,
+        startedAt: true,
+      },
+    });
 
-      const commits = await gitlabService.getProjectCommits(repo.gitLabProjectId, {
-        since: start.toISOString(),
-        until: end.toISOString(),
-        per_page: 100,
-        max_pages: 200,
-      });
+    for (const log of reviewLogs) {
+      const key = log.startedAt.toISOString().slice(0, 10);
+      if (!counts.has(key)) continue;
 
-      for (const commit of commits) {
-        const key = commit.created_at
-          ? commit.created_at.slice(0, 10)
-          : null;
-        if (key && counts.has(key)) {
-          counts.set(key, (counts.get(key) || 0) + 1);
-          const author = commit.author_name || "未知";
-          let series = authorMap.get(author);
-          if (!series) {
-            series = new Array(dates.length).fill(0);
-            authorMap.set(author, series);
-          }
-          const index = dates.indexOf(key);
-          if (index >= 0) {
-            series[index] += 1;
-          }
-        }
+      const author = log.author || log.authorUsername || "未知";
+      if (!authorSet.has(author)) continue;
+
+      counts.set(key, (counts.get(key) || 0) + 1);
+      let series = authorMap.get(author);
+      if (!series) {
+        series = new Array(dates.length).fill(0);
+        authorMap.set(author, series);
+      }
+      const index = dates.indexOf(key);
+      if (index >= 0) {
+        series[index] += 1;
       }
     }
 
@@ -98,6 +146,7 @@ export async function GET(request: NextRequest) {
       series,
       authors,
       dates,
+      authorOptions: allAuthorOptions,
       repositories: repositories.map((repo) => ({
         id: repo.id,
         name: repo.name,

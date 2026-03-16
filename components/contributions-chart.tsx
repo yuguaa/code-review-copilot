@@ -1,9 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
 
 type ContributionPoint = {
@@ -20,89 +31,75 @@ type ContributionResponse = {
   series: ContributionPoint[];
   dates: string[];
   authors: Array<{ name: string; counts: number[]; total: number }>;
+  authorOptions: string[];
   repositories: RepoOption[];
 };
 
-function buildPath(points: ContributionPoint[], width: number, height: number, padding: number) {
-  if (points.length === 0) return "";
-  const max = Math.max(...points.map((p) => p.count), 1);
-  const stepX = (width - padding * 2) / Math.max(points.length - 1, 1);
-  const scaleY = (height - padding * 2) / max;
+const RANGE_OPTIONS = [
+  { label: "1 个月", value: "1" },
+  { label: "3 个月", value: "3" },
+  { label: "6 个月", value: "6" },
+  { label: "12 个月", value: "12" },
+];
 
-  return points
-    .map((point, index) => {
-      const x = padding + index * stepX;
-      const y = height - padding - point.count * scaleY;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
+const LINE_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
-function buildSeriesPath(values: number[], max: number, width: number, height: number, padding: number) {
-  if (values.length === 0) return "";
-  const stepX = (width - padding * 2) / Math.max(values.length - 1, 1);
-  const scaleY = (height - padding * 2) / Math.max(max, 1);
-  return values
-    .map((value, index) => {
-      const x = padding + index * stepX;
-      const y = height - padding - value * scaleY;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
+function buildChartData(data: ContributionResponse, rangeMonths: number) {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - rangeMonths);
+  const filtered = data.dates
+    .map((date, index) => ({ date, index }))
+    .filter((item) => new Date(`${item.date}T00:00:00`).getTime() >= cutoff.getTime());
 
-function buildArea(points: ContributionPoint[], width: number, height: number, padding: number) {
-  if (points.length === 0) return "";
-  const max = Math.max(...points.map((p) => p.count), 1);
-  const stepX = (width - padding * 2) / Math.max(points.length - 1, 1);
-  const scaleY = (height - padding * 2) / max;
-
-  const path = points
-    .map((point, index) => {
-      const x = padding + index * stepX;
-      const y = height - padding - point.count * scaleY;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-
-  const lastX = padding + (points.length - 1) * stepX;
-  const baselineY = height - padding;
-  return `${path} L ${lastX.toFixed(2)} ${baselineY} L ${padding} ${baselineY} Z`;
-}
-
-function buildMonthTicks(points: ContributionPoint[], width: number, padding: number) {
-  const ticks: Array<{ x: number; label: string }> = [];
-  if (points.length === 0) return ticks;
-
-  const stepX = (width - padding * 2) / Math.max(points.length - 1, 1);
-  let lastMonth = "";
-  points.forEach((point, index) => {
-    const month = point.date.slice(0, 7);
-    if (month !== lastMonth) {
-      const label = `${point.date.slice(5, 7)}月`;
-      ticks.push({ x: padding + index * stepX, label });
-      lastMonth = month;
-    }
+  return filtered.map((item) => {
+    const row: Record<string, number | string> = { date };
+    let total = 0;
+    data.authors.forEach((author) => {
+      const value = author.counts[item.index] || 0;
+      row[author.name] = value;
+      total += value;
+    });
+    row.__total = total;
+    return row;
   });
-  return ticks;
+}
+
+function formatDateLabel(value: string) {
+  return value.slice(5).replace("-", "/");
+}
+
+function formatTooltipLabel(value: string) {
+  return value.replace(/-/g, "/");
 }
 
 export function ContributionsChart() {
   const [repositoryId, setRepositoryId] = useState<string>("all");
+  const [author, setAuthor] = useState<string>("all");
+  const [range, setRange] = useState<string>("1");
   const [data, setData] = useState<ContributionResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    const query = repositoryId === "all" ? "" : `?repositoryId=${repositoryId}`;
+    const params = new URLSearchParams();
+    if (repositoryId !== "all") params.set("repositoryId", repositoryId);
+    if (author !== "all") params.set("author", author);
+    const query = params.toString() ? `?${params.toString()}` : "";
     fetch(`/api/dashboard/contributions${query}`)
       .then((res) => res.json())
       .then((json) => {
         if (mounted) setData(json);
       })
       .catch(() => {
-        if (mounted) setData({ series: [], dates: [], authors: [], repositories: [] });
+        if (mounted) setData({ series: [], dates: [], authors: [], authorOptions: [], repositories: [] });
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -110,52 +107,44 @@ export function ContributionsChart() {
     return () => {
       mounted = false;
     };
-  }, [repositoryId]);
+  }, [repositoryId, author]);
+
+  const chartData = useMemo(() => {
+    if (!data) return [];
+    return buildChartData(data, parseInt(range, 10));
+  }, [data, range]);
 
   const totals = useMemo(() => {
-    if (!data) return { total: 0, max: 0 };
-    const total = data.series.reduce((sum, item) => sum + item.count, 0);
-    const max = data.series.reduce((m, item) => Math.max(m, item.count), 0);
-    return { total, max };
-  }, [data]);
-
-  const authorMax = useMemo(() => {
-    if (!data) return 0;
-    return data.authors.reduce((m, author) => {
-      const localMax = author.counts.reduce((max, value) => Math.max(max, value), 0);
-      return Math.max(m, localMax);
-    }, 0);
-  }, [data]);
-
-  const width = 900;
-  const height = 240;
-  const padding = 28;
-  const path = data ? buildPath(data.series, width, height, padding) : "";
-  const area = data ? buildArea(data.series, width, height, padding) : "";
-  const ticks = data ? buildMonthTicks(data.series, width, padding) : [];
-  const lineColors = [
-    "var(--color-chart-1)",
-    "var(--color-chart-2)",
-    "var(--color-chart-3)",
-    "var(--color-chart-4)",
-    "var(--color-chart-5)",
-  ];
+    if (!data) return { total: 0, max: 0, authors: 0 };
+    const total = chartData.reduce((sum, item) => sum + (Number(item.__total) || 0), 0);
+    const max = chartData.reduce((m, item) => Math.max(m, Number(item.__total) || 0), 0);
+    return { total, max, authors: data.authors.length };
+  }, [data, chartData]);
 
   return (
     <Card className="border-border/40">
       <CardContent className="p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
           <div>
-            <h3 className="text-base font-semibold text-foreground mb-1">贡献趋势（最近一年）</h3>
-            <p className="text-sm text-muted-foreground">所有作者按天提交数（多折线）</p>
+            <h3 className="text-base font-semibold text-foreground mb-1">贡献趋势</h3>
+            <p className="text-sm text-muted-foreground">按天统计，被审查人员的审查触发记录（默认近 1 个月）</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Badge className="bg-sidebar text-foreground border-border/40 hover:bg-sidebar-accent">
               总提交 {totals.total}
             </Badge>
             <Badge className="bg-sidebar text-foreground border-border/40 hover:bg-sidebar-accent">
-              作者 {data?.authors.length || 0}
+              作者 {totals.authors}
             </Badge>
+            <Tabs value={range} onValueChange={setRange}>
+              <TabsList className="grid grid-cols-4">
+                {RANGE_OPTIONS.map((option) => (
+                  <TabsTrigger key={option.value} value={option.value}>
+                    {option.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
             <Select value={repositoryId} onValueChange={(value) => setRepositoryId(value)}>
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="选择仓库" />
@@ -169,77 +158,82 @@ export function ContributionsChart() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={author} onValueChange={(value) => setAuthor(value)}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="选择人员" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部人员</SelectItem>
+                {data?.authorOptions.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-[240px] text-muted-foreground">
+          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
             <Loader2 className="h-5 w-5 mr-2 animate-spin" />
             正在拉取 GitLab 提交数据
           </div>
-        ) : data && data.series.length > 0 ? (
-          <div className="w-full overflow-x-auto">
-            <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[900px] w-full h-[240px]">
-              <defs>
-                <linearGradient id="contribution-gradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity="0.04" />
-                </linearGradient>
-              </defs>
-
-              <path d={area} fill="url(#contribution-gradient)" stroke="none" />
-              <path d={path} fill="none" stroke="var(--color-chart-2)" strokeWidth="2.2" />
-
-              {data.authors.map((author, index) => {
-                const color = lineColors[index % lineColors.length];
-                const authorPath = buildSeriesPath(author.counts, authorMax, width, height, padding);
-                return (
-                  <path
+        ) : data && chartData.length > 0 ? (
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="total-gradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" className="stroke-border/40" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDateLabel}
+                  className="text-xs text-muted-foreground"
+                  tickMargin={8}
+                  minTickGap={24}
+                />
+                <YAxis className="text-xs text-muted-foreground" tickMargin={6} />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: "var(--card)",
+                    color: "var(--foreground)",
+                  }}
+                  labelFormatter={(value) => formatTooltipLabel(String(value))}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="__total"
+                  stroke="var(--chart-2)"
+                  fill="url(#total-gradient)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                {data.authors.map((author, index) => (
+                  <Line
                     key={author.name}
-                    d={authorPath}
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="1.6"
-                    opacity="0.85"
+                    type="monotone"
+                    dataKey={author.name}
+                    stroke={LINE_COLORS[index % LINE_COLORS.length]}
+                    strokeWidth={1.5}
+                    dot={false}
+                    opacity={0.75}
                   />
-                );
-              })}
-
-              {ticks.map((tick, idx) => (
-                <g key={idx}>
-                  <line
-                    x1={tick.x}
-                    y1={padding}
-                    x2={tick.x}
-                    y2={height - padding}
-                    stroke="var(--border)"
-                    strokeDasharray="4 6"
-                    opacity="0.4"
-                  />
-                  <text
-                    x={tick.x}
-                    y={height - 6}
-                    textAnchor="middle"
-                    fontSize="11"
-                    fill="var(--muted-foreground)"
-                  >
-                    {tick.label}
-                  </text>
-                </g>
-              ))}
-            </svg>
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-[240px] text-muted-foreground">
+          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
             暂无提交数据
           </div>
         )}
-
-        {data && !loading ? (
-          <div className="mt-3 text-xs text-muted-foreground">
-            峰值 {totals.max} 次/天（单作者峰值 {authorMax}）
-          </div>
-        ) : null}
 
         {data && data.authors.length > 0 ? (
           <div className="mt-4 max-h-[160px] overflow-y-auto border border-border/40 rounded-lg p-3">
@@ -249,7 +243,7 @@ export function ContributionsChart() {
                 <div key={author.name} className="flex items-center gap-2 text-xs text-foreground">
                   <span
                     className="inline-block h-2 w-2 rounded-full"
-                    style={{ backgroundColor: lineColors[index % lineColors.length] }}
+                    style={{ backgroundColor: LINE_COLORS[index % LINE_COLORS.length] }}
                   />
                   <span>{author.name}</span>
                   <span className="text-muted-foreground">({author.total})</span>
