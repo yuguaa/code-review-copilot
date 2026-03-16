@@ -102,7 +102,7 @@ export function ContributionsChart() {
         if (mounted) setData(json);
       })
       .catch(() => {
-        if (mounted) setData({ series: [], repositories: [] });
+        if (mounted) setData({ series: [], dates: [], authors: [], repositories: [] });
       })
       .finally(() => {
         if (mounted) setLoading(false);
