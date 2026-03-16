@@ -16,6 +16,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Loader2 } from "lucide-react";
 
 type ContributionPoint = {
@@ -168,6 +176,60 @@ export function ContributionsChart() {
                 ))}
               </SelectContent>
             </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="min-w-[180px] justify-between">
+                  {selectedAuthors.length === 0 ? "人员：全部" : `人员：已选 ${selectedAuthors.length}`}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[240px] max-h-[280px] overflow-y-auto">
+                <DropdownMenuLabel>选择对比人员</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <div className="px-2 pb-2 flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedAuthors([])}
+                  >
+                    全部
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => data?.authorOptions && setSelectedAuthors(data.authorOptions)}
+                  >
+                    全选
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedAuthors([])}
+                  >
+                    清空
+                  </Button>
+                </div>
+                <DropdownMenuSeparator />
+                {data?.authorOptions.map((name) => (
+                  <DropdownMenuCheckboxItem
+                    key={name}
+                    checked={selectedAuthors.length === 0 ? true : selectedAuthors.includes(name)}
+                    onCheckedChange={(checked) => {
+                      setSelectedAuthors((prev) => {
+                        if (prev.length === 0) {
+                          return checked ? [name] : [];
+                        }
+                        if (checked) {
+                          return prev.includes(name) ? prev : [...prev, name];
+                        }
+                        return prev.filter((item) => item !== name);
+                      });
+                    }}
+                  >
+                    {name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -180,12 +242,6 @@ export function ContributionsChart() {
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="total-gradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="4 4" className="stroke-border/40" />
                 <XAxis
                   dataKey="date"
@@ -203,14 +259,6 @@ export function ContributionsChart() {
                     color: "var(--foreground)",
                   }}
                   labelFormatter={(value) => formatTooltipLabel(String(value))}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="__total"
-                  stroke="var(--chart-2)"
-                  fill="url(#total-gradient)"
-                  strokeWidth={2}
-                  dot={false}
                 />
                 {filteredAuthors.map((author, index) => (
                   <Line
@@ -232,52 +280,20 @@ export function ContributionsChart() {
           </div>
         )}
 
-        {data && data.authorOptions.length > 0 ? (
-          <div className="mt-4 border border-border/40 rounded-lg p-3">
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <div className="text-xs text-muted-foreground">选择对比人员</div>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedAuthors([])}>
-                全部
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedAuthors(data.authorOptions)}>
-                全选
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedAuthors([])}>
-                清空
-              </Button>
-            </div>
+        {data && data.authors.length > 0 ? (
+          <div className="mt-4 max-h-[160px] overflow-y-auto border border-border/40 rounded-lg p-3">
             <div className="text-xs text-muted-foreground mb-2">作者列表（按总提交降序）</div>
             <div className="flex flex-wrap gap-2">
-              {data.authors.map((author, index) => {
-                const active = selectedAuthors.length === 0 || selectedAuthors.includes(author.name);
-                return (
-                  <button
-                    key={author.name}
-                    type="button"
-                    onClick={() => {
-                      setSelectedAuthors((prev) => {
-                        if (prev.length === 0) return [author.name];
-                        if (prev.includes(author.name)) {
-                          return prev.filter((item) => item !== author.name);
-                        }
-                        return [...prev, author.name];
-                      });
-                    }}
-                    className={`flex items-center gap-2 text-xs rounded-full border px-2 py-1 transition ${
-                      active
-                        ? "border-border bg-sidebar text-foreground"
-                        : "border-border/40 text-muted-foreground"
-                    }`}
-                  >
-                    <span
-                      className="inline-block h-2 w-2 rounded-full"
-                      style={{ backgroundColor: LINE_COLORS[index % LINE_COLORS.length] }}
-                    />
-                    <span>{author.name}</span>
-                    <span className="text-muted-foreground">({author.total})</span>
-                  </button>
-                );
-              })}
+              {data.authors.map((author, index) => (
+                <div key={author.name} className="flex items-center gap-2 text-xs text-foreground">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: LINE_COLORS[index % LINE_COLORS.length] }}
+                  />
+                  <span>{author.name}</span>
+                  <span className="text-muted-foreground">({author.total})</span>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}
