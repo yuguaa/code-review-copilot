@@ -142,6 +142,51 @@ export class GitLabService {
   }
 
   /**
+   * 获取项目的提交列表（支持分页聚合）
+   */
+  async getProjectCommits(
+    projectId: number | string,
+    params?: {
+      since?: string
+      until?: string
+      ref_name?: string
+      author?: string
+      per_page?: number
+      max_pages?: number
+    }
+  ): Promise<GitLabCommit[]> {
+    const perPage = params?.per_page ?? 100
+    const maxPages = params?.max_pages ?? 200
+    const commits: GitLabCommit[] = []
+
+    for (let page = 1; page <= maxPages; page += 1) {
+      try {
+        const response = await this.client.get(
+          `/projects/${projectId}/repository/commits`,
+          {
+            params: {
+              per_page: perPage,
+              page,
+              since: params?.since,
+              until: params?.until,
+              ref_name: params?.ref_name,
+              author: params?.author,
+            },
+          }
+        )
+        const batch = Array.isArray(response.data) ? response.data : []
+        commits.push(...batch)
+        if (batch.length < perPage) break
+      } catch (error) {
+        console.error('Failed to fetch project commits:', error)
+        throw new Error('Failed to fetch project commits from GitLab')
+      }
+    }
+
+    return commits
+  }
+
+  /**
    * 获取 MR 的所有变更（使用 version API 获取完整 diff）
    * 这是获取 MR 所有变更的正确方法，不会遗漏任何 commit 的变更
    */

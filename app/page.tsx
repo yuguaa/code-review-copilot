@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { prisma } from '@/lib/prisma'
+import { ContributionsChart } from '@/components/contributions-chart'
 import {
   Card,
   CardContent,
@@ -376,6 +377,8 @@ async function DashboardContent() {
           </div>
         </Card>
       </div>
+
+      <ContributionsChart />
 
       {/* 问题分布 */}
       <Card className="border-border/40">
