@@ -1,3 +1,1 @@
--- AlterTable
-ALTER TABLE "review_logs" ADD COLUMN "gitlabDiscussionId" TEXT;
-ALTER TABLE "review_logs" ADD COLUMN "gitlabNoteId" INTEGER;
+-- PostgreSQL baseline keeps this historical migration as a no-op.

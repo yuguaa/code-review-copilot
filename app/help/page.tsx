@@ -1,5 +1,5 @@
-import { Card, CardContent } from '@/components/ui/card'
-import { Code2, GitFork, Settings, HelpCircle, Clock, Webhook, FileKey, Shield, Zap } from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { Code2, GitFork, Settings, HelpCircle, Webhook, Shield, Zap } from 'lucide-react'
 
 export default function HelpPage() {
   const sections = [

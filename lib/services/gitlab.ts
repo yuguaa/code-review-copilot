@@ -8,8 +8,58 @@
  * - 评论发布
  */
 
-import axios, { AxiosInstance } from 'axios'
+import axios, { AxiosError, AxiosInstance } from 'axios'
 import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment } from '@/lib/types'
+
+type GitLabApiError = AxiosError<{ message?: string; error?: string }>
+
+type MergeRequestPosition = {
+  base_sha: string
+  head_sha: string
+  start_sha: string
+  old_path: string
+  new_path: string
+  position_type: 'text'
+  new_line?: number
+  old_line?: number
+}
+
+type MergeRequestCommentPayload = {
+  body: string
+  position?: {
+    base_sha: string
+    head_sha: string
+    start_sha: string
+    old_path: string
+    new_path: string
+    position_type: 'text'
+    new_line?: number
+    old_line?: number
+  }
+}
+
+type CommitCommentPayload = {
+  note: string
+  path?: string
+  line?: number
+  line_type?: 'new' | 'old'
+}
+
+type GitLabDiscussionResult = {
+  id: number | string
+  notes?: Array<{ id: number }>
+}
+
+type GitLabCommentResult = {
+  id?: number | string
+  note_id?: number
+  notes?: Array<{ id: number }>
+}
+
+type GitLabWebhookResult = {
+  id: number
+  url: string
+}
 
 /**
  * GitLab 服务类
@@ -265,19 +315,10 @@ export class GitLabService {
     projectId: number | string,
     mergeRequestIid: number,
     comment: string,
-    position?: {
-      base_sha: string
-      head_sha: string
-      start_sha: string
-      old_path: string
-      new_path: string
-      position_type: 'text'
-      new_line?: number
-      old_line?: number
-    }
-  ): Promise<any> {
+    position?: MergeRequestPosition
+  ): Promise<GitLabDiscussionResult> {
     try {
-      const data: any = { body: comment }
+      const data: MergeRequestCommentPayload = { body: comment }
 
       if (position) {
         data.position = {
@@ -297,9 +338,10 @@ export class GitLabService {
         data
       )
       return response.data
-    } catch (error: any) {
-      if (error.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+    } catch (error) {
+      const apiError = error as GitLabApiError
+      if (apiError.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
       throw error
     }
@@ -319,7 +361,7 @@ export class GitLabService {
     discussionId: string,
     noteId: number,
     newBody: string
-  ): Promise<any> {
+  ): Promise<GitLabCommentResult> {
     try {
       // GitLab API: PUT /projects/:id/merge_requests/:merge_request_iid/discussions/:discussion_id/notes/:note_id
       const response = await this.client.put(
@@ -327,9 +369,10 @@ export class GitLabService {
         { body: newBody }
       )
       return response.data
-    } catch (error: any) {
-      if (error.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+    } catch (error) {
+      const apiError = error as GitLabApiError
+      if (apiError.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
       console.error('Failed to update MR comment:', error)
       throw new Error('Failed to update comment on GitLab MR')
@@ -349,9 +392,10 @@ export class GitLabService {
         `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}`
       )
       return response.data
-    } catch (error: any) {
-      if (error.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+    } catch (error) {
+      const apiError = error as GitLabApiError
+      if (apiError.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
       throw error
     }
@@ -369,9 +413,9 @@ export class GitLabService {
     commitSha: string,
     noteId: number,
     newBody: string
-  ): Promise<any> {
+  ): Promise<GitLabCommentResult> {
     const triedIds = [noteId]
-    let lastError: any = null
+    let lastError: GitLabApiError | null = null
 
     for (const id of triedIds) {
       try {
@@ -380,12 +424,13 @@ export class GitLabService {
           { note: newBody }
         )
         return response.data
-      } catch (error: any) {
-        lastError = error
-        if (error.response?.data) {
-          console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      } catch (error) {
+        const apiError = error as GitLabApiError
+        lastError = apiError
+        if (apiError.response?.data) {
+          console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
         }
-        console.error(`Failed to update commit comment with id=${id}:`, error?.response?.status || error)
+        console.error(`Failed to update commit comment with id=${id}:`, apiError.response?.status || error)
       }
     }
 
@@ -399,7 +444,7 @@ export class GitLabService {
     projectId: number | string,
     webhookUrl: string,
     webhookSecret?: string
-  ): Promise<any> {
+  ): Promise<GitLabWebhookResult> {
     try {
       const response = await this.client.post(`/projects/${projectId}/hooks`, {
         url: webhookUrl,
@@ -426,14 +471,14 @@ export class GitLabService {
       line?: number
       line_type?: 'new' | 'old'
     }
-  ): Promise<any> {
+  ): Promise<GitLabCommentResult> {
     try {
       let fullComment = comment
       if (options?.path) {
         fullComment = `**文件**: \`${options.path}\`${options.line ? ` (行 ${options.line})` : ''}\n\n${comment}`
       }
 
-      const data: any = { note: fullComment }
+      const data: CommitCommentPayload = { note: fullComment }
 
       if (options?.path && options?.line) {
         data.path = options.path
@@ -448,9 +493,10 @@ export class GitLabService {
         data
       )
       return response.data
-    } catch (error: any) {
+    } catch (error) {
+      const apiError = error as GitLabApiError
       // 如果带行号失败，重试不带行号
-      if (error.response?.status === 400 && options?.path) {
+      if (apiError.response?.status === 400 && options?.path) {
         console.log('Retry without line info...')
         try {
           let fullComment = comment
@@ -467,8 +513,8 @@ export class GitLabService {
         }
       }
 
-      if (error.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(error.response.data, null, 2))
+      if (apiError.response?.data) {
+        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
       console.error('Failed to create commit comment:', error)
       throw new Error('Failed to create comment on GitLab commit')

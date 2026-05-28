@@ -116,6 +116,7 @@ export interface ReviewComment {
   severity: ReviewSeverity
   content: string
   diffHunk?: string
+  confidence?: number
 }
 
 /** 代码审查输入参数 */

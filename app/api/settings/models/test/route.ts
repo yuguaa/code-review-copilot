@@ -6,6 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 /** POST /api/settings/models/test - 测试 AI 模型连接 */
 export async function POST(request: NextRequest) {
   try {
@@ -74,7 +78,7 @@ export async function POST(request: NextRequest) {
     })
 
     try {
-      const completion = await openai.chat.completions.create({
+      await openai.chat.completions.create({
         model: modelId,
         messages: [
           {
@@ -89,18 +93,18 @@ export async function POST(request: NextRequest) {
         success: true,
         message: `${provider === 'custom' ? '自定义' : provider} 模型连接成功`,
       })
-    } catch (error: any) {
+    } catch (error) {
       return NextResponse.json(
         {
-          error: error.message || 'Failed to connect to AI model',
+          error: getErrorMessage(error, 'Failed to connect to AI model'),
         },
         { status: 400 }
       )
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('Failed to test AI model:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to test AI model' },
+      { error: getErrorMessage(error, 'Failed to test AI model') },
       { status: 500 }
     )
   }

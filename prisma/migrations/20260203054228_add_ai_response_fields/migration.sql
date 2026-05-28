@@ -1,1 +1,1 @@
--- This is an empty migration.
+-- PostgreSQL baseline keeps this historical migration as a no-op.

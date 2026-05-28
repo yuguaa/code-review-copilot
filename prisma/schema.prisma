@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -67,6 +67,10 @@ model Repository {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   reviewLogs        ReviewLog[]   // 关联的审查日志
+  memorySnapshots   RepositoryMemorySnapshot[]
+  codeFileNodes     CodeFileNode[]
+  codeRelationEdges CodeRelationEdge[]
+  memoryFacts       RepositoryMemoryFact[]
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@map("repositories")
@@ -104,7 +108,9 @@ model ReviewLog {
   startedAt         DateTime        @default(now())
   completedAt       DateTime?       // 完成时间
   comments          ReviewComment[] // 关联的审查评论
+  agentTrace        ReviewAgentTrace?
 
+  @@unique([repositoryId, mergeRequestIid, commitSha])
   @@map("review_logs")
 }
 
@@ -119,6 +125,7 @@ model ReviewComment {
   severity          String        // 严重级别: critical, normal, suggestion
   content           String        // 评论内容
   diffHunk          String?       // diff 片段（可选）
+  confidence        Float?        // AI 置信度（0-1）
   gitlabCommentId   String?       // GitLab 评论 ID（已创建后）
   isPosted          Boolean       @default(false) // 是否已发布到 GitLab
   createdAt         DateTime      @default(now())
@@ -138,4 +145,143 @@ model NotificationSetting {
   updatedAt           DateTime @updatedAt
 
   @@map("notification_settings")
+}
+
+// 仓库 Memory Wiki 快照
+model RepositoryMemorySnapshot {
+  id                  String     @id @default(cuid())
+  repositoryId        String
+  repository          Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branch              String
+  commitSha           String
+  status              String
+  architectureSummary String
+  memoryJson          Json?
+  entrypointsJson     Json?
+  layersJson          Json?
+  conventionsJson     Json?
+  risksJson           Json?
+  confidence          Float      @default(0.7)
+  lastIndexedAt       DateTime   @default(now())
+  error               String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  agentTraces         ReviewAgentTrace[]
+
+  @@unique([repositoryId, branch, commitSha])
+  @@index([repositoryId, branch, status])
+  @@map("repository_memory_snapshots")
+}
+
+// 代码文件节点
+model CodeFileNode {
+  id                String             @id @default(cuid())
+  repositoryId      String
+  repository        Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branch            String
+  commitSha         String
+  filePath          String
+  contentHash       String
+  language          String
+  role              String
+  summary           String
+  importsJson       Json?
+  exportsJson       Json?
+  lastIndexedAt     DateTime           @default(now())
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  symbols           CodeSymbolNode[]
+  outgoingRelations CodeRelationEdge[] @relation("FromFile")
+  incomingRelations CodeRelationEdge[] @relation("ToFile")
+
+  @@unique([repositoryId, branch, commitSha, filePath])
+  @@index([repositoryId, branch, commitSha])
+  @@index([repositoryId, branch, role])
+  @@map("code_file_nodes")
+}
+
+// 代码符号节点
+model CodeSymbolNode {
+  id                String             @id @default(cuid())
+  fileNodeId        String
+  fileNode          CodeFileNode       @relation(fields: [fileNodeId], references: [id], onDelete: Cascade)
+  name              String
+  kind              String
+  signature         String?
+  startLine         Int
+  endLine           Int
+  summary           String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  outgoingRelations CodeRelationEdge[] @relation("FromSymbol")
+  incomingRelations CodeRelationEdge[] @relation("ToSymbol")
+
+  @@index([fileNodeId, kind])
+  @@index([name])
+  @@map("code_symbol_nodes")
+}
+
+// 代码关系边
+model CodeRelationEdge {
+  id               String          @id @default(cuid())
+  repositoryId     String
+  repository       Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branch           String
+  fromFileNodeId   String
+  fromFileNode     CodeFileNode    @relation("FromFile", fields: [fromFileNodeId], references: [id], onDelete: Cascade)
+  fromSymbolNodeId String?
+  fromSymbolNode   CodeSymbolNode? @relation("FromSymbol", fields: [fromSymbolNodeId], references: [id], onDelete: SetNull)
+  toFileNodeId     String?
+  toFileNode       CodeFileNode?   @relation("ToFile", fields: [toFileNodeId], references: [id], onDelete: SetNull)
+  toSymbolNodeId   String?
+  toSymbolNode     CodeSymbolNode? @relation("ToSymbol", fields: [toSymbolNodeId], references: [id], onDelete: SetNull)
+  relationType     String
+  confidence       Float           @default(0.7)
+  evidence         String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([repositoryId, branch, fromFileNodeId])
+  @@index([repositoryId, branch, toFileNodeId])
+  @@index([repositoryId, branch, relationType])
+  @@map("code_relation_edges")
+}
+
+// 可持续更新的仓库记忆事实
+model RepositoryMemoryFact {
+  id                 String     @id @default(cuid())
+  repositoryId       String
+  repository         Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branch             String
+  type               String
+  content            String
+  source             String
+  confidence         Float
+  evidence           String
+  lastVerifiedCommit String
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@unique([repositoryId, branch, type, content])
+  @@index([repositoryId, branch, type])
+  @@map("repository_memory_facts")
+}
+
+// Agent 审查轨迹
+model ReviewAgentTrace {
+  id                   String                    @id @default(cuid())
+  reviewLogId          String                    @unique
+  reviewLog            ReviewLog                 @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
+  memorySnapshotId     String?
+  memorySnapshot       RepositoryMemorySnapshot? @relation(fields: [memorySnapshotId], references: [id], onDelete: SetNull)
+  loopIterationsJson   Json?
+  retrievedContextJson Json?
+  finalPlanJson        Json?
+  criticJson           Json?
+  memoryUpdatesJson    Json?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  @@index([memorySnapshotId])
+  @@map("review_agent_traces")
 }

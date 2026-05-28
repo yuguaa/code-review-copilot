@@ -22,32 +22,50 @@
 ## 技术栈
 
 - **框架**: Next.js 16 (App Router)
-- **数据库**: SQLite + Prisma ORM
+- **数据库**: PostgreSQL + Prisma ORM
 - **UI 库**: shadcn/ui + Tailwind CSS
 - **AI SDK**: Vercel AI SDK (@ai-sdk/openai, @ai-sdk/anthropic)
 - **HTTP 客户端**: Axios
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. Docker 一键启动
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
+
+访问 http://localhost:3000
+
+应用容器启动时会自动执行 `prisma migrate deploy`，然后启动 Next.js。
+
+### 2. SQLite 历史数据迁移
+
+```bash
+# 只启动 PostgreSQL
+docker compose up -d postgres
+```
+
+如果你是从旧版 SQLite 升级，需要先迁移历史数据：
+
+```bash
+# 本机已安装 npm 依赖时，可直接在宿主机校验和迁移
+npm run db:migrate:sqlite -- --dry-run
+npm run db:migrate:sqlite -- --source prisma/dev.db --force
+
+# 或者使用 Docker 容器执行迁移，并挂载旧 SQLite 文件
+docker compose run --rm \
+  -v "$PWD/prisma/dev.db:/app/prisma/dev.db:ro" \
+  app npm run db:migrate:sqlite -- --source prisma/dev.db --force
+```
+
+### 3. 本地开发
 
 ```bash
 npm install
-```
-
-### 2. 数据库设置
-
-```bash
-# 生成 Prisma Client
-npx prisma generate
-
-# 运行数据库迁移
-npx prisma migrate dev
-```
-
-### 3. 启动开发服务器
-
-```bash
+docker compose up -d postgres
+npm run db:deploy
 npm run dev
 ```
 
@@ -163,24 +181,66 @@ AI 模型配置（OpenAI/Claude/自定义）
 ### Repository
 仓库配置，关联 GitLab 账号
 
-### BranchConfig
-分支配置，关联 AI 模型和系统 Prompt
-
 ### ReviewLog
 审查日志，记录每次审查的统计信息
 
 ### ReviewComment
 审查评论，存储具体的代码问题
 
+### RepositoryMemorySnapshot
+仓库 Memory Wiki 快照，保存架构摘要和索引状态
+
+### CodeFileNode / CodeSymbolNode / CodeRelationEdge
+代码调用图节点与关系边，用于跨文件上下文检索
+
+### RepositoryMemoryFact
+可持续更新的仓库记忆事实
+
+### ReviewAgentTrace
+Agent Loop 的每轮工具调用、上下文和 Critic 轨迹
+
 ## 环境变量
 
 创建 `.env` 文件：
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://code_review:code_review@localhost:5432/code_review_copilot?schema=public"
 DINGTALK_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
 # 可选：开启加签时填写（钉钉机器人安全设置中的加签密钥）
 DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
+```
+
+## SQLite 历史数据迁移
+
+从 SQLite 切换到 PostgreSQL 时，历史配置和审查记录不能丢。
+
+迁移脚本默认读取 `prisma/dev.db`，并按依赖顺序写入 PostgreSQL：
+
+1. GitLab 账号
+2. AI 模型
+3. 仓库配置
+4. 审查日志
+5. 审查评论
+6. 通知配置
+
+迁移规则：
+
+- 保留旧数据的 `id`、创建时间、更新时间和外键关系。
+- 目标库已存在相同 `id` 时跳过，不覆盖已有记录。
+- 旧 SQLite schema 不匹配当前可迁移结构时快速失败。
+- 迁移不会自动生成 Memory Wiki 或 Code Graph 数据，这些数据会在后续审查或手动刷新 Memory 时创建。
+
+常用命令：
+
+```bash
+# 校验默认源库 prisma/dev.db
+npm run db:migrate:sqlite -- --dry-run
+
+# 指定其他 SQLite 文件校验
+npm run db:migrate:sqlite -- --source ./backup/dev.db --dry-run
+
+# 写入 PostgreSQL
+npm run db:migrate:sqlite -- --source prisma/dev.db --force
 ```
 
 ## 目录结构

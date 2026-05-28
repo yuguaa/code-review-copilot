@@ -36,6 +36,7 @@ export interface FileReviewResult {
     lineRangeEnd?: number | null;
     severity: "critical" | "normal" | "suggestion";
     content: string;
+    confidence?: number;
   }>;
 }
 
@@ -47,18 +48,48 @@ export interface ReviewStatistics {
   total: number;
 }
 
+type MergeRequestPosition = {
+  base_sha: string;
+  head_sha: string;
+  start_sha: string;
+  old_path: string;
+  new_path: string;
+  position_type: "text";
+  new_line?: number;
+  old_line?: number;
+};
+
+type GitLabDiscussionResult = {
+  id: number | string;
+  notes?: Array<{ id: number }>;
+};
+
+type GitLabCommentResult = {
+  id?: number | string;
+  note_id?: number;
+  notes?: Array<{ id: number }>;
+};
+
 /** GitLab 服务实例 */
 export interface GitLabServiceInstance {
   getMergeRequest: (projectId: number | string, mrIid: number) => Promise<GitLabMergeRequest>;
   getMergeRequestChanges: (projectId: number | string, mrIid: number) => Promise<GitLabDiff[]>;
   getCommitDiff: (projectId: number | string, commitSha: string) => Promise<GitLabDiff[]>;
-  createMergeRequestComment: (projectId: number | string, mrIid: number, body: string, position?: any) => Promise<any>;
-  updateMergeRequestComment: (projectId: number | string, mrIid: number, discussionId: string, noteId: number, body: string) => Promise<any>;
+  createMergeRequestComment: (projectId: number | string, mrIid: number, body: string, position?: MergeRequestPosition) => Promise<GitLabDiscussionResult>;
+  updateMergeRequestComment: (projectId: number | string, mrIid: number, discussionId: string, noteId: number, body: string) => Promise<GitLabCommentResult>;
   getMergeRequestDiscussion: (projectId: number | string, mrIid: number, discussionId: string) => Promise<{ id: string; notes?: Array<{ id: number }> }>;
   getCommitComments: (projectId: number | string, commitSha: string) => Promise<Array<{ id?: number; note_id?: number; note?: string }>>;
-  createCommitComment: (projectId: number | string, commitSha: string, note: string, options?: { path?: string; line?: number; line_type?: 'new' | 'old' }) => Promise<any>;
-  updateCommitComment: (projectId: number | string, commitSha: string, noteId: number, body: string) => Promise<any>;
+  createCommitComment: (projectId: number | string, commitSha: string, note: string, options?: { path?: string; line?: number; line_type?: 'new' | 'old' }) => Promise<GitLabCommentResult>;
+  updateCommitComment: (projectId: number | string, commitSha: string, noteId: number, body: string) => Promise<GitLabCommentResult>;
   compareCommits: (projectId: number | string, fromSha: string, toSha: string) => Promise<{ diffs: GitLabDiff[] }>;
+  getProjectCommits: (projectId: number | string, params?: {
+    since?: string;
+    until?: string;
+    ref_name?: string;
+    author?: string;
+    per_page?: number;
+    max_pages?: number;
+  }) => Promise<Array<{ id: string; short_id: string; title: string; message: string; author_name: string; author_email: string; created_at: string }>>;
 }
 
 /** 仓库配置信息 */
@@ -137,6 +168,28 @@ export const ReviewStateAnnotation = Annotation.Root({
   summary: Annotation<string>({
     reducer: (_, y) => y,
     default: () => "",
+  }),
+
+  // Memory Wiki / Agent Loop 上下文
+  memorySnapshotId: Annotation<string | null>({
+    reducer: (_, y) => y,
+    default: () => null,
+  }),
+  architectureSummary: Annotation<string>({
+    reducer: (_, y) => y,
+    default: () => "",
+  }),
+  agentContextSummary: Annotation<string>({
+    reducer: (_, y) => y,
+    default: () => "",
+  }),
+  agentPlan: Annotation<Record<string, unknown>>({
+    reducer: (_, y) => y,
+    default: () => ({}),
+  }),
+  agentTraceId: Annotation<string | null>({
+    reducer: (_, y) => y,
+    default: () => null,
   }),
 
   // 循环状态：当前文件索引

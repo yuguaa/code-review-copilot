@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
 
     // 构建查询条件
-    const where: any = {}
+    const where: Prisma.ReviewLogWhereInput = {}
     if (repositoryId) {
       where.repositoryId = repositoryId
     }

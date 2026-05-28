@@ -1,2 +1,1 @@
--- AlterTable
-ALTER TABLE "repositories" ADD COLUMN "customPromptMode" TEXT DEFAULT 'extend';
+-- PostgreSQL baseline keeps this historical migration as a no-op.

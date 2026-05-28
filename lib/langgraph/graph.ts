@@ -7,7 +7,9 @@ import { StateGraph } from "@langchain/langgraph";
 import { ReviewStateAnnotation } from "./types";
 import type { ReviewState } from "./types";
 import { fetchDiffNode } from "./nodes/fetch-diff";
+import { refreshMemoryNode } from "./nodes/refresh-memory";
 import { generateSummaryNode } from "./nodes/generate-summary";
+import { runAgentLoopNode } from "./nodes/run-agent-loop";
 import {
   reviewFileNode,
   shouldContinueReview,
@@ -36,7 +38,9 @@ export function createReviewGraph() {
   const workflow = new StateGraph(ReviewStateAnnotation)
     // 添加节点
     .addNode("fetch_diff", fetchDiffNode)
+    .addNode("refresh_memory", refreshMemoryNode)
     .addNode("generate_summary", generateSummaryNode)
+    .addNode("run_agent_loop", runAgentLoopNode)
     .addNode("review_file", reviewFileNode)
     .addNode("next_file", moveToNextFile)
     .addNode("aggregate_results", aggregateResultsNode)
@@ -44,10 +48,12 @@ export function createReviewGraph() {
 
     // 定义边
     .addEdge("__start__", "fetch_diff")
-    .addEdge("fetch_diff", "generate_summary")
+    .addEdge("fetch_diff", "refresh_memory")
+    .addEdge("refresh_memory", "generate_summary")
+    .addEdge("generate_summary", "run_agent_loop")
 
     // 检查是否有文件需要审查
-    .addConditionalEdges("generate_summary", hasFilesToReview, {
+    .addConditionalEdges("run_agent_loop", hasFilesToReview, {
       review: "review_file",
       skip: "aggregate_results",
     })

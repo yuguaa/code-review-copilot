@@ -34,6 +34,8 @@ type AIModel = {
   createdAt: string
 }
 
+type AIProvider = AIModel['provider']
+
 type DingTalkSetting = {
   id: string
   dingtalkWebhookUrl: string | null
@@ -78,7 +80,7 @@ export default function SettingsPage() {
   // AI 模型表单状态
   const [editingModel, setEditingModel] = useState<AIModel | null>(null)
   const [modelForm, setModelForm] = useState({
-    provider: 'openai' as 'openai' | 'claude' | 'custom',
+    provider: 'openai' as AIProvider,
     modelId: '',
     apiKey: '',
     apiEndpoint: '',
@@ -163,7 +165,7 @@ export default function SettingsPage() {
       } else {
         throw new Error('连接失败')
       }
-    } catch (error) {
+    } catch {
       toast.error('请检查 URL 和访问令牌是否正确')
     } finally {
       setGitlabTesting(false)
@@ -195,7 +197,7 @@ export default function SettingsPage() {
       } else {
         throw new Error('连接失败')
       }
-    } catch (error) {
+    } catch {
       toast.error('请检查 URL 和访问令牌是否正确')
     } finally {
       setGitlabFormTesting(false)
@@ -652,7 +654,7 @@ export default function SettingsPage() {
                       <Label>提供商</Label>
                       <Select
                         value={modelForm.provider}
-                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as any })}
+                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as AIProvider })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -761,7 +763,7 @@ export default function SettingsPage() {
                       <Label>提供商</Label>
                       <Select
                         value={modelForm.provider}
-                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as any })}
+                        onValueChange={(value) => setModelForm({ ...modelForm, provider: value as AIProvider })}
                       >
                         <SelectTrigger>
                           <SelectValue />

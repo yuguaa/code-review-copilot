@@ -13,36 +13,120 @@ export const SEVERITY = {
   SUGGESTION: '建议',
 } as const
 
+/** 结构化审查 JSON 输出格式，供模型和解析器共享约束 */
+export const REVIEW_JSON_OUTPUT_FORMAT = `
+【输出格式】
+只允许输出一个合法 JSON 对象，不要输出 Markdown、代码块或额外说明。
+
+JSON Schema 语义如下：
+{
+  "conclusion": "一句话说明本文件/本轮变更的主要风险；无问题时写低风险结论",
+  "comments": [
+    {
+      "filePath": "问题所在文件路径，必须来自输入",
+      "lineNumber": 12,
+      "lineRangeEnd": 15,
+      "severity": "critical | normal | suggestion",
+      "issue": "具体问题，必须可定位到当前 diff",
+      "impact": "真实影响，不要泛泛而谈",
+      "suggestion": "最短修复建议，必须可执行",
+      "confidence": 0.86
+    }
+  ]
+}
+
+字段约束：
+- comments 没有发现问题时返回空数组 []。
+- severity 只能是 "critical"、"normal"、"suggestion"。
+- lineNumber 必须是正整数；lineRangeEnd 无范围时可省略或为 null。
+- confidence 必须是 0 到 1 的数字；低于 0.6 的问题不要输出。
+- issue、impact、suggestion 必须是中文短句，不能为空。
+- 不要为了凑数量输出低置信度、不可定位、不可修复的问题。`
+
 /** 系统提示词：定义 AI 角色和输出格式 */
 export const SYSTEM_PROMPT = `你是一名专业代码审查助手。请仅针对代码变更进行审查。
 【审查条件】
 1. 这是一个公司内部项目，要求快速部署快速迭代
 2. 不对外开放，包括代码内容外界无法访问，因此贡献指南，readme之类的开源项目关注的东西这里不需要。
 
-【输出要求】
-请严格按以下顺序输出，且使用中文：
-1. 结论行："结论: <一句话风险结论>"
-2. 统计行："统计: 严重=<n> 一般=<n> 建议=<n>"
-3. 按以下三个小节分别列出问题（如无则写“无”）：
-   - 严重问题
-   - 一般问题
-   - 建议问题
-4. 每条问题必须是以下格式（单行）：
-   - "- <filePath>:<line>[-<lineEnd>] 问题：...｜影响：...｜建议：..."
-5. 不要省略问题条目，发现几条就输出几条。
-
-约束：
-- 只基于当前 diff，不臆测未改动代码。
-- 严重问题最多 2 条，优先高置信度且可直接修复的问题。
-- 不要输出代码块，不要输出 JSON，不要添加多余前后缀说明。
+【审查重点】
+- 优先发现真实 bug、安全风险、异常路径、空值边界、状态不一致和性能退化。
+- 一般问题必须能说明影响；建议类问题必须有明确收益。
+- 只基于当前 diff 和输入上下文，不臆测未改动代码。
+- 发现几条高置信度问题就输出几条，不限制严重问题数量。
 
 除此之外的审查内容，可遵循仓库自定义提示词（如有）。
+
+${REVIEW_JSON_OUTPUT_FORMAT}
 `
 
 /** 基础输出格式要求（用于替换模式，确保解析器可以正确解析） */
 export const OUTPUT_FORMAT = `
 【输出格式要求】
-必须包含统计行（完全匹配此格式）：统计: 严重=<n> 一般=<n> 建议=<n>`
+${REVIEW_JSON_OUTPUT_FORMAT}`
+
+/** 全局复核提示词：补足逐文件审查难以发现的跨文件问题 */
+export const GLOBAL_REVIEW_SYSTEM_PROMPT = `你是一名资深代码审查负责人。你已经拿到逐文件审查结果和所有文件 diff。
+请只补充“跨文件、跨流程、整体设计或重复模式”层面的高置信度问题。
+
+不要重复逐文件审查已经发现的问题。
+不要输出无法定位到文件和行号的问题。
+如果没有新增问题，返回 comments: []。
+
+${REVIEW_JSON_OUTPUT_FORMAT}`
+
+/** Agent Loop 规划提示词 */
+export const REVIEW_AGENT_PLAN_SYSTEM_PROMPT = `你是一名代码审查 Agent 的规划器。
+请基于 Memory Wiki、调用链上下文和 diff，输出一个合法 JSON 对象：
+{
+  "changeType": "变更类型",
+  "riskLevel": "low | medium | high",
+  "focusAreas": ["需要重点审查的方向"],
+  "contextFiles": ["需要重点关注的文件路径"],
+  "reviewStrategy": "简短审查策略",
+  "needsMoreContext": false,
+  "requestedTools": ["get_call_graph_neighbors"]
+}
+
+约束：
+- 不要输出 Markdown 或代码块。
+- requestedTools 只能从 get_memory_snapshot、search_memory_facts、get_changed_files、get_file_context、get_call_graph_neighbors、get_related_review_history、get_architecture_summary 中选择。
+- 如果已有上下文足够，needsMoreContext 必须为 false。`
+
+/** Agent Loop 结构化审查提示词 */
+export const REVIEW_AGENT_REVIEW_SYSTEM_PROMPT = `你是一名代码审查 Agent。
+请结合 Memory Wiki、调用链上下文、历史审查和本轮计划，只输出高置信度、可定位、可修复的问题。
+
+审查范围：
+- 可以发现跨文件、调用链、架构约束、历史风险相关的问题。
+- 不要重复已有 findings。
+- 不要输出低于 0.6 置信度的问题。
+- 不要输出无法定位到文件和行号的问题。
+
+${REVIEW_JSON_OUTPUT_FORMAT}`
+
+/** Agent Loop Critic 提示词 */
+export const REVIEW_AGENT_CRITIC_SYSTEM_PROMPT = `你是一名代码审查 Critic。
+请基于现有 findings、上下文和预算，输出合法 JSON 对象：
+{
+  "shouldContinue": false,
+  "reason": "停止或继续的原因",
+  "newHighConfidenceFindings": 0,
+  "duplicatesRemoved": 0,
+  "memoryFacts": [
+    {
+      "type": "architecture | convention | risk | module | review_lesson",
+      "content": "可写入 Memory Wiki 的高置信事实",
+      "confidence": 0.9,
+      "evidence": "来自本次审查的证据"
+    }
+  ]
+}
+
+约束：
+- 不要输出 Markdown 或代码块。
+- 只有 confidence >= 0.85 的事实才放入 memoryFacts。
+- 如果无新增高置信问题或预算不足，shouldContinue 为 false。`
 
 /** 生成变更摘要专用系统提示词（不要求统计行） */
 export const SUMMARY_SYSTEM_PROMPT = `你是一名专业的代码变更总结助手。
@@ -81,6 +165,113 @@ export function buildReviewPrompt(params: {
     '```',
   ]
   return parts.filter(Boolean).join('\n')
+}
+
+/**
+ * 构建全局复核提示词
+ * @param params - 全局复核参数
+ */
+export function buildGlobalReviewPrompt(params: {
+  title: string
+  description?: string
+  summary?: string
+  files: Array<{ path: string; diff: string }>
+  existingFindings: Array<{
+    filePath: string
+    lineNumber: number
+    lineRangeEnd?: number | null
+    severity: string
+    content: string
+  }>
+}): string {
+  const existingFindings = params.existingFindings.length > 0
+    ? params.existingFindings
+      .map((item) => {
+        const location = item.lineRangeEnd
+          ? `${item.filePath}:${item.lineNumber}-${item.lineRangeEnd}`
+          : `${item.filePath}:${item.lineNumber}`
+        return `- [${item.severity}] ${location} ${item.content}`
+      })
+      .join('\n')
+    : '无'
+
+  return [
+    params.title ? `【变更主题】${params.title}` : '',
+    params.summary ? `【概要】${params.summary}` : '',
+    params.description ? `【描述】${params.description}` : '',
+    `【变更文件】\n${params.files.map((file) => `- ${file.path}`).join('\n')}`,
+    `【逐文件已发现问题】\n${existingFindings}`,
+    `【全部 Diff】\n${params.files.map((file) => `### ${file.path}\n\`\`\`diff\n${file.diff}\n\`\`\``).join('\n\n')}`,
+  ].filter(Boolean).join('\n\n')
+}
+
+/** 构建 Agent 规划提示词 */
+export function buildReviewAgentPlanPrompt(params: {
+  title: string
+  description?: string | null
+  changedFiles: string[]
+  architectureSummary?: string
+  memoryFacts: string[]
+  contextSummary: string
+  existingFindingsCount: number
+  remainingIterations: number
+}): string {
+  return [
+    params.title ? `【变更主题】${params.title}` : '',
+    params.description ? `【描述】${params.description}` : '',
+    `【变更文件】\n${params.changedFiles.map((file) => `- ${file}`).join('\n')}`,
+    `【项目架构摘要】\n${params.architectureSummary || '暂无'}`,
+    `【Memory Facts】\n${params.memoryFacts.length ? params.memoryFacts.map((fact) => `- ${fact}`).join('\n') : '无'}`,
+    `【当前上下文摘要】\n${params.contextSummary || '暂无'}`,
+    `【已有问题数】${params.existingFindingsCount}`,
+    `【剩余轮数】${params.remainingIterations}`,
+  ].filter(Boolean).join('\n\n')
+}
+
+/** 构建 Agent Loop 审查提示词 */
+export function buildReviewAgentReviewPrompt(params: {
+  title: string
+  description?: string | null
+  changedFiles: string[]
+  diffs: Array<{ filePath: string; diff: string }>
+  plan: Record<string, unknown>
+  contextSummary: string
+  existingFindings: Array<{ filePath: string; lineNumber: number; severity: string; content: string; confidence?: number }>
+  maxFindings: number
+}): string {
+  const existingFindings = params.existingFindings.length > 0
+    ? params.existingFindings.map((item) => `- [${item.severity}] ${item.filePath}:${item.lineNumber} ${item.content} confidence=${item.confidence ?? 'unknown'}`).join('\n')
+    : '无'
+
+  return [
+    params.title ? `【变更主题】${params.title}` : '',
+    params.description ? `【描述】${params.description}` : '',
+    `【变更文件】\n${params.changedFiles.map((file) => `- ${file}`).join('\n')}`,
+    `【Agent 审查计划】\n${JSON.stringify(params.plan, null, 2)}`,
+    `【检索上下文】\n${params.contextSummary || '暂无'}`,
+    `【已有 findings】\n${existingFindings}`,
+    `【最大新增问题数】${params.maxFindings}`,
+    `【Diff】\n${params.diffs.map((file) => `### ${file.filePath}\n\`\`\`diff\n${file.diff}\n\`\`\``).join('\n\n')}`,
+  ].filter(Boolean).join('\n\n')
+}
+
+/** 构建 Agent Critic 提示词 */
+export function buildReviewAgentCriticPrompt(params: {
+  findings: Array<{ filePath: string; lineNumber: number; severity: string; content: string; confidence?: number }>
+  contextSummary: string
+  remainingIterations: number
+  maxFindings: number
+}): string {
+  const findings = params.findings.length > 0
+    ? params.findings.map((item) => `- [${item.severity}] ${item.filePath}:${item.lineNumber} ${item.content} confidence=${item.confidence ?? 'unknown'}`).join('\n')
+    : '无'
+
+  return [
+    `【当前 findings】\n${findings}`,
+    `【上下文摘要】\n${params.contextSummary || '暂无'}`,
+    `【剩余轮数】${params.remainingIterations}`,
+    `【最大问题数】${params.maxFindings}`,
+  ].join('\n\n')
 }
 
 /**

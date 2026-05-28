@@ -1,0 +1,16 @@
+.git
+.next
+.vercel
+node_modules
+coverage
+out
+build
+logs
+*.log
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+.env.*.local
+dev.db
+prisma/dev.db

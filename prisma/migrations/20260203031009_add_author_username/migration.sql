@@ -1,2 +1,1 @@
--- AlterTable
-ALTER TABLE "review_logs" ADD COLUMN "authorUsername" TEXT;
+-- PostgreSQL baseline keeps this historical migration as a no-op.

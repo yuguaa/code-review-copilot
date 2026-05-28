@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { createGitLabService } from '@/lib/services/gitlab'
 
@@ -38,7 +39,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, url, accessToken, webhookSecret } = body
+    const { url, accessToken, webhookSecret } = body
 
     // 验证是否已存在账号
     const existingAccount = await prisma.gitLabAccount.count()
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, url, accessToken, webhookSecret, isActive } = body
+    const { id, url, accessToken, webhookSecret, isActive } = body
 
     if (!id) {
       return NextResponse.json(
@@ -99,8 +100,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const updateData: any = {}
-    if (name !== undefined) updateData.name = name
+    const updateData: Prisma.GitLabAccountUpdateInput = {}
     if (url !== undefined) updateData.url = url
     if (accessToken !== undefined) updateData.accessToken = accessToken
     if (webhookSecret !== undefined) updateData.webhookSecret = webhookSecret

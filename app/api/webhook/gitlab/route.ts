@@ -5,10 +5,10 @@
  * 支持 Merge Request Hook 和 Push Hook 事件，自动触发代码审查。
  */
 
+import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { reviewService } from '@/lib/services/review'
-import { createGitLabService } from '@/lib/services/gitlab'
+import { reviewTriggerService } from '@/lib/services/review-trigger'
 
 /**
  * 检查分支是否匹配监听规则
@@ -27,6 +27,17 @@ function checkBranchMatch(sourceBranch: string, watchBranches: string | null): b
     const regex = new RegExp(`^${regexPattern}$`)
     return regex.test(sourceBranch)
   })
+}
+
+function isValidWebhookSecret(configuredSecret: string | null | undefined, receivedSecret: string | null): boolean {
+  const normalizedConfigured = configuredSecret?.trim()
+  if (!normalizedConfigured) return true
+  if (!receivedSecret) return false
+
+  const configuredBuffer = Buffer.from(normalizedConfigured)
+  const receivedBuffer = Buffer.from(receivedSecret.trim())
+  if (configuredBuffer.length !== receivedBuffer.length) return false
+  return crypto.timingSafeEqual(configuredBuffer, receivedBuffer)
 }
 
 /** POST /api/webhook/gitlab - 处理 GitLab Webhook */
@@ -52,7 +63,6 @@ export async function POST(request: NextRequest) {
 
     // 处理不同类型的事件
     const body = await request.json()
-    console.log(`🚀 ~ body:`, body)
     const { object_kind, project, object_attributes, ref, checkout_sha, user_username, user } = body
 
     const projectId = project?.id
@@ -79,6 +89,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
+    if (!isValidWebhookSecret(repository.gitLabAccount.webhookSecret, request.headers.get('x-gitlab-token'))) {
+      console.error('❌ Invalid GitLab webhook secret')
+      return NextResponse.json({ error: 'Invalid webhook secret' }, { status: 401 })
+    }
+
     console.log(`✅ Found repository: ${repository.name} (${repository.id})`)
     console.log(`🔧 Auto-review enabled: ${repository.autoReview}`)
     console.log(`👀 Watch branches: ${repository.watchBranches || 'all branches'}`)
@@ -95,7 +110,6 @@ export async function POST(request: NextRequest) {
       const mrIid = mr.iid
       const action = mr.action
 
-      // 获取作者工号和姓名（从 user 字段获取）
       const mrAuthorUsername = user?.username || user_username || 'unknown'
       const mrAuthorName = user?.name || ''
       const mrAuthor = mrAuthorName ? `${mrAuthorName}(${mrAuthorUsername})` : mrAuthorUsername
@@ -127,114 +141,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Missing commit SHA' }, { status: 400 })
       }
 
-      // 同一个 MR 的同一个 head commit 只审查一次
-      const existingReviewedSameHead = await prisma.reviewLog.findFirst({
-        where: {
-          repositoryId: repository.id,
-          mergeRequestIid: mrIid,
-          commitSha,
-          status: 'completed',
-        },
-      })
-
-      if (existingReviewedSameHead) {
-        console.log(`⏭️ MR !${mrIid} commit ${commitSha} already reviewed (${existingReviewedSameHead.id})`)
-        return NextResponse.json({
-          received: true,
-          alreadyReviewed: true,
-          reviewLogId: existingReviewedSameHead.id,
-        })
-      }
-
-      // 检查是否有正在进行的审查（避免重复触发）
-      // 只检查最近 10 分钟内的 pending 审查
-      const recentPendingReview = await prisma.reviewLog.findFirst({
-        where: {
-          repositoryId: repository.id,
-          mergeRequestIid: mrIid,
-          status: 'pending',
-          startedAt: {
-            gte: new Date(Date.now() - 10 * 60 * 1000), // 最近 10 分钟
-          },
-        },
-      })
-
-      if (recentPendingReview) {
-        console.log(`⏭️ MR !${mrIid} has a recent pending review (${recentPendingReview.id}), updating and returning existing review`)
-
-        // 更新已有 reviewLog 的信息（可能 MR 标题/描述有变化）
-        await prisma.reviewLog.update({
-          where: { id: recentPendingReview.id },
-          data: {
-            title: mr.title,
-            description: mr.description,
-          },
-        })
-
-        // 返回已有的审查 ID，让前端可以跟踪状态
-        return NextResponse.json({
-          success: true,
-          message: 'Review already in progress',
-          reviewLogId: recentPendingReview.id,
-          existingReview: true,
-        })
-      }
-
-      // 创建审查日志
-      const reviewLog = await prisma.reviewLog.create({
-        data: {
-          repositoryId: repository.id,
-          mergeRequestId: mr.id,
-          mergeRequestIid: mr.iid,
-          sourceBranch: mr.source_branch,
-          targetBranch: mr.target_branch,
-          author: mrAuthorName || mrAuthorUsername, // 姓名，如果没有则用工号
-          authorUsername: mrAuthorUsername, // 工号
-          title: mr.title,
-          description: mr.description,
-          commitSha: commitSha,
-          commitShortId: commitSha.substring(0, 8),
-          status: 'pending',
-          totalFiles: 0,
-        },
-      })
-
-      console.log(`✅ Created review log: ${reviewLog.id}`)
-      console.log(`🚀 Starting review process...`)
-
-      // 在 GitLab MR 中创建占位评论（后续会被总评更新）
-      try {
-        const gitlabService = createGitLabService(
-          repository.gitLabAccount.url,
-          repository.gitLabAccount.accessToken
-        )
-        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
-
-        const placeholderResult = await gitlabService.createMergeRequestComment(
-          repository.gitLabProjectId,
-          mr.iid,
-          placeholderBody
-        )
-
-        const discussionId = String(placeholderResult.id)
-        const noteId = Number.isInteger(placeholderResult?.notes?.[0]?.id)
-          ? placeholderResult.notes[0].id
-          : null
-
-        await prisma.reviewLog.update({
-          where: { id: reviewLog.id },
-          data: {
-            gitlabDiscussionId: discussionId,
-            gitlabNoteId: noteId,
-          }
-        })
-      } catch (error) {
-        console.error('⚠️ Failed to create placeholder MR comment:', error)
-      }
-
-      // 异步执行审查
-      reviewService.performReview(reviewLog.id).catch((error) => {
-        console.error('❌ Review failed:', error)
+      const reviewLog = await reviewTriggerService.startWebhookMergeRequestReview({
+        repository,
+        mergeRequest: mr,
+        commitSha,
+        authorName: mrAuthorName,
+        authorUsername: mrAuthorUsername,
       })
 
       return NextResponse.json({
@@ -273,85 +185,12 @@ export async function POST(request: NextRequest) {
 
       console.log(`✅ Branch ${branchName} matches watch rules`)
 
-      // 检查是否已经审查过这个提交或正在审查中
-      const existingReview = await prisma.reviewLog.findFirst({
-        where: {
-          repositoryId: repository.id,
-          commitSha: commitSha,
-        },
-      })
-
-      if (existingReview) {
-        if (existingReview.status === 'pending') {
-          console.log(`⏭️ Commit ${commitSha} has a pending review (${existingReview.id}), returning existing review`)
-          return NextResponse.json({
-            success: true,
-            message: 'Review already in progress',
-            reviewLogId: existingReview.id,
-            existingReview: true,
-          })
-        }
-        console.log(`⏭️ Commit ${commitSha} already reviewed`)
-        return NextResponse.json({ received: true, alreadyReviewed: true })
-      }
-
-      // 创建审查日志（Push 事件没有 mergeRequestId 等信息）
-      const reviewLog = await prisma.reviewLog.create({
-        data: {
-          repositoryId: repository.id,
-          mergeRequestId: 0,
-          mergeRequestIid: 0,
-          sourceBranch: branchName,
-          targetBranch: '',
-          author: authorName || authorUsername, // 姓名，如果没有则用工号
-          authorUsername: authorUsername, // 工号
-          title: `Push to ${branchName}`,
-          description: null,
-          commitSha: commitSha,
-          commitShortId: commitSha.substring(0, 8),
-          status: 'pending',
-          totalFiles: 0,
-        },
-      })
-
-      console.log(`✅ Created review log: ${reviewLog.id}`)
-      console.log(`🚀 Starting review process...`)
-
-      // Push 事件：创建占位评论，并写入唯一 marker 用于后续回查更新
-      try {
-        const gitlabService = createGitLabService(
-          repository.gitLabAccount.url,
-          repository.gitLabAccount.accessToken
-        )
-        const pushMarker = `CRC_PUSH_PLACEHOLDER:${reviewLog.id}`
-        const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<!-- ${pushMarker} -->\n<sub>⏱️ 开始时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`
-
-        const placeholderResult = await gitlabService.createCommitComment(
-          repository.gitLabProjectId,
-          commitSha,
-          placeholderBody
-        )
-
-        // Commit comment 返回结构在不同 GitLab 版本存在差异，优先使用 note_id
-        const noteId = Number.isInteger(placeholderResult?.note_id)
-          ? placeholderResult.note_id
-          : (Number.isInteger(placeholderResult?.id) ? placeholderResult.id : null)
-
-        // 复用 gitlabDiscussionId 字段保存 push marker，供发布阶段回查使用
-        await prisma.reviewLog.update({
-          where: { id: reviewLog.id },
-          data: {
-            gitlabDiscussionId: pushMarker,
-            gitlabNoteId: noteId,
-          }
-        })
-      } catch (error) {
-        console.error('⚠️ Failed to create placeholder commit comment:', error)
-      }
-
-      // 异步执行审查
-      reviewService.performReview(reviewLog.id).catch((error) => {
-        console.error('❌ Review failed:', error)
+      const reviewLog = await reviewTriggerService.startWebhookPushReview({
+        repository,
+        branchName,
+        commitSha,
+        authorName,
+        authorUsername,
       })
 
       return NextResponse.json({

@@ -23,8 +23,29 @@ import {
   Lightbulb,
   TrendingUp
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
+
+type TopRepositoryGroup = {
+  repositoryId: string
+  _count: { id: number }
+  _sum: {
+    criticalIssues: number | null
+    normalIssues: number | null
+    suggestions: number | null
+  }
+}
+
+type TopUserGroup = {
+  authorUsername: string | null
+  _count: { id: number }
+  _sum: {
+    criticalIssues: number | null
+    normalIssues: number | null
+    suggestions: number | null
+  }
+}
 
 async function getDashboardStats() {
   const now = Date.now()
@@ -121,7 +142,9 @@ async function getDashboardStats() {
   }
 
   // 获取仓库名称
-  const repositoryIds = topRepositories.map((r: any) => r.repositoryId)
+  const typedTopRepositories = topRepositories as TopRepositoryGroup[]
+  const typedTopUsers = topUsers as TopUserGroup[]
+  const repositoryIds = typedTopRepositories.map((r) => r.repositoryId)
   const repositories = await prisma.repository.findMany({
     where: {
       id: { in: repositoryIds },
@@ -132,10 +155,10 @@ async function getDashboardStats() {
     },
   })
 
-  const repoMap = new Map(repositories.map((r: any) => [r.id, r.name]))
+  const repoMap = new Map(repositories.map((r) => [r.id, r.name]))
 
   // 获取用户姓名映射
-  const usernames = topUsers.map((u: any) => u.authorUsername).filter((id: string | null) => id !== null)
+  const usernames = typedTopUsers.map((u) => u.authorUsername).filter((id): id is string => id !== null)
   const reviewLogsForUsers = await prisma.reviewLog.findMany({
     where: {
       authorUsername: { in: usernames as string[] },
@@ -148,10 +171,12 @@ async function getDashboardStats() {
   })
 
   const userMap = new Map(
-    reviewLogsForUsers.map((log: any) => [log.authorUsername as string, log.author])
+    reviewLogsForUsers
+      .filter((log) => log.authorUsername !== null)
+      .map((log) => [log.authorUsername as string, log.author])
   )
 
-  const topReposWithNames = topRepositories.map((r: any) => ({
+  const topReposWithNames = typedTopRepositories.map((r) => ({
     repositoryId: r.repositoryId,
     repositoryName: repoMap.get(r.repositoryId) || 'Unknown',
     reviewCount: r._count.id,
@@ -170,9 +195,9 @@ async function getDashboardStats() {
       suggestion: issueStats._sum.suggestions || 0,
     },
     topRepositories: topReposWithNames,
-    topUsers: topUsers.map((u: any) => ({
+    topUsers: typedTopUsers.map((u) => ({
       employeeId: u.authorUsername,
-      name: userMap.get(u.authorUsername) || 'Unknown',
+      name: u.authorUsername ? userMap.get(u.authorUsername) || 'Unknown' : 'Unknown',
       reviewCount: u._count.id,
       issueCount: (u._sum.criticalIssues || 0) + (u._sum.normalIssues || 0) + (u._sum.suggestions || 0),
     })),
@@ -189,7 +214,7 @@ function StatCard({
   title: string
   value: string | number
   description?: string | React.ReactNode
-  icon: any
+  icon: LucideIcon
   trend?: string | null
 }) {
   return (
@@ -328,7 +353,7 @@ async function DashboardContent() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  stats.topRepositories.map((repo: any) => (
+                  stats.topRepositories.map((repo) => (
                     <TableRow key={repo.repositoryId} className="hover:bg-sidebar/50">
                       <TableCell className="px-4 py-3 font-medium text-foreground">{repo.repositoryName}</TableCell>
                       <TableCell className="px-4 py-3 text-right text-muted-foreground">{repo.reviewCount}</TableCell>
@@ -363,7 +388,7 @@ async function DashboardContent() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  stats.topUsers.map((user: any, index: number) => (
+                  stats.topUsers.map((user, index) => (
                     <TableRow key={index} className="hover:bg-sidebar/50">
                       <TableCell className="px-4 py-3 font-medium text-foreground">{user.employeeId}</TableCell>
                       <TableCell className="px-4 py-3 font-medium text-foreground">{user.name}</TableCell>

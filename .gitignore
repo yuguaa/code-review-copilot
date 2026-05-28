@@ -45,3 +45,8 @@ next-env.d.ts
 # local db
 /dev.db
 /prisma/dev.db
+
+# local env
+.env
+.env.local
+.env.*.local

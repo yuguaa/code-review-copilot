@@ -37,7 +37,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, url, accessToken, webhookSecret } = body
+    const { url, accessToken, webhookSecret } = body
 
     // 测试连接
     const gitlabService = createGitLabService(url, accessToken)
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, name, url, accessToken, webhookSecret, isActive } = body
+    const { id, url, accessToken, webhookSecret, isActive } = body
 
     const account = await prisma.gitLabAccount.update({
       where: { id },

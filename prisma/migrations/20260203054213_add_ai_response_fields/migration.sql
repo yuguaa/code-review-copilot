@@ -1,3 +1,1 @@
--- AlterTable
-ALTER TABLE "review_logs" ADD COLUMN "aiResponse" TEXT;
-ALTER TABLE "review_logs" ADD COLUMN "aiSummary" TEXT;
+-- PostgreSQL baseline keeps this historical migration as a no-op.

@@ -14,11 +14,12 @@ import { prisma } from "@/lib/prisma";
 import { aiService } from "@/lib/services/ai";
 import { buildReviewPrompt, SYSTEM_PROMPT, OUTPUT_FORMAT } from "@/lib/prompts";
 import type { ReviewState, FileReviewResult } from "../types";
+import type { GitLabDiff } from "@/lib/types";
 
 /**
  * 生成 patch 格式
  */
-function generatePatch(diff: any): string {
+function generatePatch(diff: GitLabDiff): string {
   return `--- a/${diff.old_path}
 +++ b/${diff.new_path}
 ${diff.diff}`;
@@ -69,7 +70,12 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
     description: state.mrInfo?.description || state.reviewLog?.description || "",
     filename: filePath,
     diff: patch,
-    summary: state.summary,
+    summary: [
+      state.summary,
+      state.architectureSummary ? `【项目架构 Memory】\n${state.architectureSummary}` : "",
+      state.agentContextSummary ? `【Agent 检索上下文】\n${state.agentContextSummary}` : "",
+      Object.keys(state.agentPlan || {}).length > 0 ? `【Agent 审查计划】\n${JSON.stringify(state.agentPlan, null, 2)}` : "",
+    ].filter(Boolean).join("\n\n"),
   });
 
   // 记录完整的 prompt（包含系统提示词）
@@ -88,10 +94,10 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
   console.log("└─────────────────────────────────────────────┘");
 
   // 解析结果
-  const parsed = aiService.parseReviewSummary(aiResponse, {
+  const parsed = aiService.parseStructuredReview(aiResponse, {
     defaultFilePath: filePath,
-    maxCriticalItems: 200,
-    maxItems: 200,
+    minConfidence: 0.6,
+    maxItems: 50,
   });
 
   // 构建文件审查结果
@@ -116,6 +122,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
       lineRangeEnd: item.lineRangeEnd,
       severity: item.severity,
       content: item.content,
+      confidence: item.confidence,
     })),
   };
 
@@ -132,6 +139,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
     lineRangeEnd: item.lineRangeEnd,
     severity: item.severity,
     content: item.content,
+    confidence: item.confidence,
   }));
   const criticalComments = reviewComments.filter((item) => item.severity === "critical");
 

@@ -1,0 +1,363 @@
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { aiService } from "@/lib/services/ai";
+import { contextRetrieverService, type RetrievedAgentContext } from "@/lib/services/context-retriever";
+import {
+  buildReviewAgentCriticPrompt,
+  buildReviewAgentPlanPrompt,
+  buildReviewAgentReviewPrompt,
+  REVIEW_AGENT_CRITIC_SYSTEM_PROMPT,
+  REVIEW_AGENT_PLAN_SYSTEM_PROMPT,
+  REVIEW_AGENT_REVIEW_SYSTEM_PROMPT,
+} from "@/lib/prompts";
+import type { AIModelConfig, ReviewComment } from "@/lib/types";
+
+const MAX_ITERATIONS = 5;
+const MAX_CONTEXT_FILES = 12;
+const MAX_FINDINGS = 50;
+const MIN_CONFIDENCE = 0.6;
+const MEMORY_WRITE_CONFIDENCE = 0.85;
+
+function toJsonInput(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+}
+
+export interface AgentLoopInput {
+  reviewLogId: string;
+  repositoryId: string;
+  branch: string;
+  commitSha: string;
+  title: string;
+  description?: string | null;
+  changedFiles: string[];
+  diffs: Array<{ filePath: string; diff: string }>;
+  modelConfig: AIModelConfig;
+  memorySnapshotId?: string | null;
+  existingFindings: Array<ReviewComment & { confidence?: number }>;
+}
+
+interface AgentPlan {
+  changeType?: string;
+  riskLevel?: "low" | "medium" | "high";
+  focusAreas?: string[];
+  contextFiles?: string[];
+  reviewStrategy?: string;
+  needsMoreContext?: boolean;
+  requestedTools?: string[];
+}
+
+interface AgentCriticResult {
+  shouldContinue?: boolean;
+  reason?: string;
+  newHighConfidenceFindings?: number;
+  duplicatesRemoved?: number;
+  memoryFacts?: Array<{
+    type: string;
+    content: string;
+    confidence: number;
+    evidence: string;
+  }>;
+}
+
+export interface AgentLoopResult {
+  traceId: string;
+  finalPlan: AgentPlan;
+  context: RetrievedAgentContext;
+  critic: AgentCriticResult;
+  agentFindings: Array<ReviewComment & { confidence: number }>;
+  memoryUpdates: Array<{
+    type: string;
+    content: string;
+    confidence: number;
+    evidence: string;
+  }>;
+}
+
+function safePlan(value: unknown): AgentPlan {
+  if (!value || typeof value !== "object") return {};
+  const data = value as AgentPlan;
+  return {
+    changeType: typeof data.changeType === "string" ? data.changeType : "unknown_change",
+    riskLevel: data.riskLevel === "high" || data.riskLevel === "medium" || data.riskLevel === "low" ? data.riskLevel : "medium",
+    focusAreas: Array.isArray(data.focusAreas) ? data.focusAreas.filter((item): item is string => typeof item === "string") : [],
+    contextFiles: Array.isArray(data.contextFiles) ? data.contextFiles.filter((item): item is string => typeof item === "string") : [],
+    reviewStrategy: typeof data.reviewStrategy === "string" ? data.reviewStrategy : "file_then_global_critic",
+    needsMoreContext: Boolean(data.needsMoreContext),
+    requestedTools: Array.isArray(data.requestedTools) ? data.requestedTools.filter((item): item is string => typeof item === "string") : [],
+  };
+}
+
+function safeCritic(value: unknown): AgentCriticResult {
+  if (!value || typeof value !== "object") {
+    return { shouldContinue: false, reason: "critic returned invalid shape", memoryFacts: [] };
+  }
+  const data = value as AgentCriticResult;
+  return {
+    shouldContinue: Boolean(data.shouldContinue),
+    reason: typeof data.reason === "string" ? data.reason : "critic completed",
+    newHighConfidenceFindings: typeof data.newHighConfidenceFindings === "number" ? data.newHighConfidenceFindings : 0,
+    duplicatesRemoved: typeof data.duplicatesRemoved === "number" ? data.duplicatesRemoved : 0,
+    memoryFacts: Array.isArray(data.memoryFacts)
+      ? data.memoryFacts
+        .filter((item) => {
+          return Boolean(
+            item &&
+            typeof item.content === "string" &&
+            typeof item.confidence === "number" &&
+            Number.isFinite(item.confidence) &&
+            item.confidence >= MEMORY_WRITE_CONFIDENCE &&
+            item.confidence <= 1,
+          );
+        })
+        .map((item) => ({
+          type: typeof item.type === "string" ? item.type : "review_lesson",
+          content: item.content,
+          confidence: item.confidence,
+          evidence: typeof item.evidence === "string" ? item.evidence : "agent critic",
+        }))
+      : [],
+  };
+}
+
+function dedupeFindings(
+  findings: Array<ReviewComment & { confidence?: number }>,
+): Array<ReviewComment & { confidence: number }> {
+  const seen = new Set<string>();
+  return findings
+    .filter((item) => {
+      const confidence = item.confidence ?? 0;
+      return Number.isFinite(confidence) && confidence >= MIN_CONFIDENCE && confidence <= 1;
+    })
+    .filter((item) => {
+      const key = [
+        item.filePath,
+        item.lineNumber,
+        item.lineRangeEnd || "",
+        item.severity,
+        item.content.replace(/\s+/g, " ").trim(),
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, MAX_FINDINGS)
+    .map((item) => ({
+      ...item,
+      confidence: item.confidence ?? 0.7,
+    }));
+}
+
+function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: string[]) {
+  return [
+    {
+      tool: "get_architecture_summary",
+      args: {},
+      resultCount: context.architectureSummary ? 1 : 0,
+    },
+    {
+      tool: "get_memory_snapshot",
+      args: {},
+      resultCount: context.architectureSummary ? 1 : 0,
+    },
+    {
+      tool: "search_memory_facts",
+      args: {},
+      resultCount: context.memoryFacts.length,
+    },
+    {
+      tool: "get_changed_files",
+      args: {},
+      resultCount: requestedFiles.length,
+    },
+    {
+      tool: "get_file_context",
+      args: { files: requestedFiles },
+      resultCount: context.fileContexts.length,
+    },
+    {
+      tool: "get_call_graph_neighbors",
+      args: { maxDepth: 2 },
+      resultCount: context.graphNeighbors.length,
+    },
+    {
+      tool: "get_related_review_history",
+      args: { files: requestedFiles },
+      resultCount: context.relatedReviews.length,
+    },
+  ];
+}
+
+export class ReviewAgentLoopService {
+  run(input: AgentLoopInput): Promise<AgentLoopResult> {
+    const loopIterations: Array<Record<string, unknown>> = [];
+    let finalPlan: AgentPlan = {};
+    let latestContext: RetrievedAgentContext | null = null;
+    let latestCritic: AgentCriticResult = { shouldContinue: false, reason: "not started", memoryFacts: [] };
+    let findings = dedupeFindings(input.existingFindings);
+
+    const iterate = (iteration: number, requestedFiles: string[]): Promise<void> => {
+      const remainingIterations = MAX_ITERATIONS - iteration;
+      return contextRetrieverService.getContext({
+        repositoryId: input.repositoryId,
+        branch: input.branch,
+        commitSha: input.commitSha,
+        changedFiles: requestedFiles.length ? requestedFiles : input.changedFiles,
+        maxFiles: MAX_CONTEXT_FILES,
+        maxDepth: 2,
+      }).then((context) => {
+        latestContext = context;
+        const toolCalls = summarizeToolCalls(context, requestedFiles);
+        const planPrompt = buildReviewAgentPlanPrompt({
+          title: input.title,
+          description: input.description,
+          changedFiles: input.changedFiles,
+          architectureSummary: context.architectureSummary,
+          memoryFacts: context.memoryFacts.map((fact) => fact.content),
+          contextSummary: context.summary,
+          existingFindingsCount: findings.length,
+          remainingIterations,
+        });
+
+        return aiService.reviewCode(planPrompt, input.modelConfig, REVIEW_AGENT_PLAN_SYSTEM_PROMPT)
+          .then((planResponse) => {
+            finalPlan = safePlan(aiService.parseJsonObject<AgentPlan>(planResponse));
+            const reviewPrompt = buildReviewAgentReviewPrompt({
+              title: input.title,
+              description: input.description,
+              changedFiles: input.changedFiles,
+              diffs: input.diffs,
+              plan: finalPlan as Record<string, unknown>,
+              contextSummary: context.summary,
+              existingFindings: findings,
+              maxFindings: MAX_FINDINGS - findings.length,
+            });
+
+            return aiService.reviewCode(reviewPrompt, input.modelConfig, REVIEW_AGENT_REVIEW_SYSTEM_PROMPT);
+          })
+          .then((reviewResponse) => {
+            const parsedReview = aiService.parseStructuredReview(reviewResponse, {
+              minConfidence: MIN_CONFIDENCE,
+              maxItems: Math.max(MAX_FINDINGS - findings.length, 0),
+            });
+            const previousCount = findings.length;
+            findings = dedupeFindings([
+              ...findings,
+              ...parsedReview.commentItems,
+            ]);
+            const newFindings = findings.length - previousCount;
+            const criticPrompt = buildReviewAgentCriticPrompt({
+              findings: findings.map((item) => ({
+                filePath: item.filePath,
+                lineNumber: item.lineNumber,
+                severity: item.severity,
+                content: item.content,
+                confidence: item.confidence,
+              })),
+              contextSummary: context.summary,
+              remainingIterations,
+              maxFindings: MAX_FINDINGS,
+            });
+
+            return aiService.reviewCode(criticPrompt, input.modelConfig, REVIEW_AGENT_CRITIC_SYSTEM_PROMPT)
+              .then((criticResponse) => ({ criticResponse, reviewResponse, newFindings }));
+          })
+          .then(({ criticResponse, reviewResponse, newFindings }) => {
+            latestCritic = safeCritic(aiService.parseJsonObject<AgentCriticResult>(criticResponse));
+            loopIterations.push({
+              iteration,
+              requestedFiles,
+              toolCalls,
+              plan: finalPlan,
+              review: {
+                newFindings,
+                totalFindings: findings.length,
+                response: reviewResponse,
+              },
+              critic: latestCritic,
+              contextSummary: context.summary,
+            });
+
+            const hasBudget = iteration < MAX_ITERATIONS;
+            const hasFindingBudget = findings.length < MAX_FINDINGS;
+            const requestedTools = finalPlan.requestedTools || [];
+            const nextFiles = finalPlan.contextFiles?.filter((file) => !requestedFiles.includes(file)) || [];
+            const shouldContinue = Boolean(
+              hasBudget &&
+              hasFindingBudget &&
+              latestCritic.shouldContinue &&
+              newFindings > 0 &&
+              finalPlan.needsMoreContext &&
+              requestedTools.length > 0 &&
+              nextFiles.length > 0
+            );
+
+            if (!shouldContinue) return undefined;
+            return iterate(iteration + 1, [...new Set([...requestedFiles, ...nextFiles])]);
+          });
+      });
+    };
+
+    return iterate(1, input.changedFiles)
+      .then(() => {
+        const memoryUpdates = (latestCritic.memoryFacts || [])
+          .filter((fact) => fact.confidence >= MEMORY_WRITE_CONFIDENCE)
+          .slice(0, 10);
+        const agentFindings = findings.filter((finding) => {
+          return !input.existingFindings.some((existing) => (
+            existing.filePath === finding.filePath &&
+            existing.lineNumber === finding.lineNumber &&
+            (existing.lineRangeEnd || null) === (finding.lineRangeEnd || null) &&
+            existing.severity === finding.severity &&
+            existing.content === finding.content
+          ));
+        });
+
+        return prisma.$transaction((tx) => {
+          return tx.reviewAgentTrace.upsert({
+            where: { reviewLogId: input.reviewLogId },
+            update: {
+              memorySnapshotId: input.memorySnapshotId || null,
+              loopIterationsJson: toJsonInput(loopIterations),
+              retrievedContextJson: toJsonInput(latestContext || {}),
+              finalPlanJson: toJsonInput(finalPlan),
+              criticJson: toJsonInput(latestCritic),
+              memoryUpdatesJson: toJsonInput(memoryUpdates),
+            },
+            create: {
+              reviewLogId: input.reviewLogId,
+              memorySnapshotId: input.memorySnapshotId || null,
+              loopIterationsJson: toJsonInput(loopIterations),
+              retrievedContextJson: toJsonInput(latestContext || {}),
+              finalPlanJson: toJsonInput(finalPlan),
+              criticJson: toJsonInput(latestCritic),
+              memoryUpdatesJson: toJsonInput(memoryUpdates),
+            },
+          }).then((trace) => {
+            if (memoryUpdates.length === 0) return trace;
+            return tx.repositoryMemoryFact.createMany({
+              data: memoryUpdates.map((fact) => ({
+                repositoryId: input.repositoryId,
+                branch: input.branch,
+                type: fact.type,
+                content: fact.content,
+                source: `review_agent:${input.reviewLogId}`,
+                confidence: fact.confidence,
+                evidence: fact.evidence,
+                lastVerifiedCommit: input.commitSha,
+              })),
+              skipDuplicates: true,
+            }).then(() => trace);
+          });
+        }).then((trace) => ({
+          traceId: trace.id,
+          finalPlan,
+          context: latestContext!,
+          critic: latestCritic,
+          agentFindings,
+          memoryUpdates,
+        }));
+      });
+  }
+}
+
+export const reviewAgentLoopService = new ReviewAgentLoopService();

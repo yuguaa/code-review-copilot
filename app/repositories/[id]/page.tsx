@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -24,6 +24,8 @@ type AIModel = {
   modelId: string
   isActive: boolean
 }
+
+type AIProvider = 'openai' | 'claude' | 'custom'
 
 type Repository = {
   id: string
@@ -53,6 +55,23 @@ type Repository = {
   }
 }
 
+type MemorySnapshot = {
+  id: string
+  branch: string
+  commitSha: string
+  status: string
+  architectureSummary: string
+  confidence: number
+  lastIndexedAt: string
+}
+
+type MemoryFact = {
+  id: string
+  type: string
+  content: string
+  confidence: number
+}
+
 // 获取模型显示名称
 const getModelDisplayName = (model: AIModel) => {
   if (model.provider === 'custom') {
@@ -72,7 +91,7 @@ const getModelDisplayName = (model: AIModel) => {
 }
 
 // 获取常用模型 ID 建议
-const getModelSuggestions = (provider: 'openai' | 'claude' | 'custom') => {
+const getModelSuggestions = (provider: AIProvider) => {
   switch (provider) {
     case 'openai':
       return [
@@ -101,6 +120,9 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testingModel, setTestingModel] = useState(false)
+  const [memorySnapshots, setMemorySnapshots] = useState<MemorySnapshot[]>([])
+  const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([])
+  const [refreshingMemory, setRefreshingMemory] = useState(false)
 
   // AI 模型选择：'__custom__' | 模型ID
   const [selectedModelId, setSelectedModelId] = useState<string>('')
@@ -114,7 +136,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
 
   // 自定义模型配置状态
   const [customModel, setCustomModel] = useState({
-    provider: 'openai' as 'openai' | 'claude' | 'custom',
+    provider: 'openai' as AIProvider,
     modelId: '',
     apiKey: '',
     apiEndpoint: '',
@@ -123,7 +145,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   })
 
   // 加载仓库数据
-  const loadRepository = async () => { // 加载仓库详情数据
+  const loadRepository = useCallback(async () => { // 加载仓库详情数据
     if (!repositoryId) { // 当缺少仓库 ID
       setLoading(false) // 结束加载态
       toast.error('仓库 ID 无效') // 提示无效 ID
@@ -159,13 +181,13 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         setSelectedModelId(data.defaultAIModelId)
       }
       // 如果仓库没有配置模型，保持空字符串，等待 AI 模型列表加载后自动选择第一个
-    } catch (error) { // 捕获异常
+    } catch { // 捕获异常
       toast.error('加载仓库信息失败') // 提示加载失败
       router.push('/repositories') // 跳回列表页
     } finally { // 无论成功失败
       setLoading(false) // 结束加载态
     } // 结束 finally
-  } // 结束 loadRepository
+  }, [repositoryId, router]) // 结束 loadRepository
 
   // 加载 AI 模型
   const loadAIModels = async () => {
@@ -180,13 +202,27 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
     }
   }
 
+  const loadMemory = useCallback(async () => {
+    if (!repositoryId) return
+    try {
+      const response = await fetch(`/api/repositories/${repositoryId}/memory`)
+      if (!response.ok) return
+      const data = await response.json()
+      setMemorySnapshots(Array.isArray(data.snapshots) ? data.snapshots : [])
+      setMemoryFacts(Array.isArray(data.facts) ? data.facts : [])
+    } catch (error) {
+      console.error('Failed to load memory wiki:', error)
+    }
+  }, [repositoryId])
+
   useEffect(() => { // 监听仓库 ID 变化
     if (!repositoryId) { // 当仓库 ID 不存在
       return // 直接返回避免请求
     } // 结束 ID 校验
     loadRepository() // 加载仓库详情
     loadAIModels() // 加载 AI 模型
-  }, [repositoryId]) // 依赖仓库 ID
+    loadMemory() // 加载 Memory Wiki
+  }, [loadMemory, loadRepository, repositoryId]) // 依赖仓库 ID
 
   // 当 AI 模型列表加载完成，且当前没有选择模型时，自动选择第一个可用的模型
   useEffect(() => {
@@ -324,8 +360,28 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       const updated = await response.json()
       setRepository(updated)
       toast.success(`自动审查已${updated.autoReview ? '启用' : '禁用'}`)
-    } catch (error) {
+    } catch {
       toast.error('更新失败')
+    }
+  }
+
+  const refreshMemory = async () => {
+    if (!repositoryId) return
+    setRefreshingMemory(true)
+    try {
+      const response = await fetch(`/api/repositories/${repositoryId}/memory/refresh`, {
+        method: 'POST',
+      })
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '刷新 Memory Wiki 失败')
+      }
+      await loadMemory()
+      toast.success('Memory Wiki 已刷新')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '刷新 Memory Wiki 失败')
+    } finally {
+      setRefreshingMemory(false)
     }
   }
 
@@ -428,6 +484,62 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       </Card>
 
       {/* 自定义配置 */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle>Memory Wiki</CardTitle>
+              <CardDescription>
+                Agent 审查时会读取这里的项目架构记忆和调用链上下文。
+              </CardDescription>
+            </div>
+            <Button variant="outline" onClick={refreshMemory} disabled={refreshingMemory}>
+              {refreshingMemory ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  刷新中...
+                </>
+              ) : (
+                '刷新 Memory'
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {memorySnapshots[0] ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant="outline">分支：{memorySnapshots[0].branch}</Badge>
+                <Badge variant="outline">状态：{memorySnapshots[0].status}</Badge>
+                <Badge variant="outline">Commit：{memorySnapshots[0].commitSha.slice(0, 8)}</Badge>
+                <Badge variant="outline">置信度：{memorySnapshots[0].confidence.toFixed(2)}</Badge>
+              </div>
+              <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">
+                {memorySnapshots[0].architectureSummary}
+              </div>
+              {memoryFacts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">高置信记忆</p>
+                  <div className="space-y-2">
+                    {memoryFacts.slice(0, 5).map((fact) => (
+                      <div key={fact.id} className="rounded-md border p-2 text-xs">
+                        <Badge variant="secondary" className="mr-2">{fact.type}</Badge>
+                        <span>{fact.content}</span>
+                        <span className="ml-2 text-muted-foreground">({fact.confidence.toFixed(2)})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              暂无 Memory Wiki。点击“刷新 Memory”后，Agent 会基于目标分支最近变更建立项目记忆。
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>仓库配置</CardTitle>
@@ -503,7 +615,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                   <Label>提供商</Label>
                   <Select
                     value={customModel.provider}
-                    onValueChange={(value) => setCustomModel({ ...customModel, provider: value as any })}
+                    onValueChange={(value) => setCustomModel({ ...customModel, provider: value as AIProvider })}
                   >
                     <SelectTrigger>
                       <SelectValue />

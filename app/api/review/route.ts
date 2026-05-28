@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { reviewService } from '@/lib/services/review'
+import { reviewTriggerService } from '@/lib/services/review-trigger'
 
 /** POST /api/review - 手动触发代码审查 */
 export async function POST(request: NextRequest) {
@@ -13,43 +13,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { repositoryId, mergeRequestIid } = body
 
-    const repository = await prisma.repository.findUnique({
-      where: { id: repositoryId },
-      include: { gitLabAccount: true },
-    })
-
-    if (!repository) {
-      return NextResponse.json({ error: 'Repository not found' }, { status: 404 })
+    if (!repositoryId || !mergeRequestIid) {
+      return NextResponse.json(
+        { error: 'Repository ID and merge request IID are required' },
+        { status: 400 }
+      )
     }
 
-    const { createGitLabService } = await import('@/lib/services/gitlab')
-    const gitlabService = createGitLabService(
-      repository.gitLabAccount.url,
-      repository.gitLabAccount.accessToken
-    )
-
-    const mr = await gitlabService.getMergeRequest(repository.gitLabProjectId, mergeRequestIid)
-
-    const reviewLog = await prisma.reviewLog.create({
-      data: {
-        repositoryId: repository.id,
-        mergeRequestId: mr.id,
-        mergeRequestIid: mr.iid,
-        sourceBranch: mr.source_branch,
-        targetBranch: mr.target_branch,
-        author: mr.author?.name || mr.author?.username || 'unknown',
-        authorUsername: mr.author?.username,
-        title: mr.title,
-        description: mr.description,
-        commitSha: mr.diff_refs.head_sha,
-        commitShortId: mr.diff_refs.head_sha.substring(0, 8),
-        status: 'pending',
-        totalFiles: 0,
-      },
-    })
-
-    reviewService.performReview(reviewLog.id).catch((error) => {
-      console.error('Review failed:', error)
+    const reviewLog = await reviewTriggerService.startManualReview({
+      repositoryId,
+      mergeRequestIid: Number(mergeRequestIid),
     })
 
     return NextResponse.json({

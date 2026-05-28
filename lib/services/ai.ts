@@ -28,6 +28,25 @@ export interface ReviewComment {
   content: string
   /** diff 代码块（可选） */
   diffHunk?: string
+  /** AI 置信度（0-1） */
+  confidence?: number
+}
+
+export interface StructuredReviewResult {
+  conclusion: string
+  counts: {
+    critical: number
+    normal: number
+    suggestion: number
+  }
+  commentItems: Array<ReviewComment & { confidence: number }>
+  criticalItems: Array<{
+    filePath: string
+    lineNumber: number
+    lineRangeEnd?: number
+    content: string
+    confidence: number
+  }>
 }
 
 /**
@@ -50,7 +69,7 @@ export class AIService {
     try {
       // 自定义模型使用 OpenAI SDK 直接调用，避免 Vercel AI SDK 兼容性问题
       if (modelConfig.provider === 'custom') {
-        return await this.reviewCodeWithOpenAISDK(prompt, modelConfig)
+        return await this.reviewCodeWithOpenAISDK(prompt, modelConfig, systemPrompt)
       }
 
       let model
@@ -500,6 +519,102 @@ export class AIService {
     }
 
     return { counts, commentItems, criticalItems }
+  }
+
+  /**
+   * 解析结构化 JSON 审查输出。
+   * 解析失败会抛错，避免静默把异常输出当成“无问题”。
+   */
+  parseStructuredReview(
+    aiResponse: string,
+    options?: { defaultFilePath?: string; minConfidence?: number; maxItems?: number }
+  ): StructuredReviewResult {
+    const minConfidence = options?.minConfidence ?? 0.6
+    const maxItems = options?.maxItems ?? 50
+    const rawJson = this.extractJsonObject(aiResponse)
+    const parsed = JSON.parse(rawJson) as {
+      conclusion?: unknown
+      comments?: unknown
+    }
+
+    if (!Array.isArray(parsed.comments)) {
+      throw new Error('Structured review response must include comments array')
+    }
+
+    const commentItems: Array<ReviewComment & { confidence: number }> = []
+
+    for (const item of parsed.comments.slice(0, maxItems)) {
+      if (!item || typeof item !== 'object') continue
+      const data = item as Record<string, unknown>
+      const confidence = typeof data.confidence === 'number' ? data.confidence : 0
+      if (!Number.isFinite(confidence) || confidence < minConfidence || confidence > 1) continue
+
+      const severity = this.normalizeSeverity(data.severity)
+      const filePath = typeof data.filePath === 'string' && data.filePath.trim()
+        ? data.filePath.trim()
+        : options?.defaultFilePath
+      const lineNumber = typeof data.lineNumber === 'number' ? Math.floor(data.lineNumber) : 0
+      const lineRangeEnd = typeof data.lineRangeEnd === 'number' ? Math.floor(data.lineRangeEnd) : undefined
+      const issue = typeof data.issue === 'string' ? data.issue.trim() : ''
+      const impact = typeof data.impact === 'string' ? data.impact.trim() : ''
+      const suggestion = typeof data.suggestion === 'string' ? data.suggestion.trim() : ''
+
+      if (!filePath || lineNumber <= 0 || !severity || !issue || !impact || !suggestion) {
+        continue
+      }
+
+      commentItems.push({
+        filePath,
+        lineNumber,
+        lineRangeEnd,
+        severity,
+        content: `问题：${issue}｜影响：${impact}｜建议：${suggestion}`,
+        confidence,
+      })
+    }
+
+    const counts = {
+      critical: commentItems.filter((item) => item.severity === 'critical').length,
+      normal: commentItems.filter((item) => item.severity === 'normal').length,
+      suggestion: commentItems.filter((item) => item.severity === 'suggestion').length,
+    }
+
+    return {
+      conclusion: typeof parsed.conclusion === 'string' ? parsed.conclusion : '结构化审查完成',
+      counts,
+      commentItems,
+      criticalItems: commentItems
+        .filter((item) => item.severity === 'critical')
+        .map((item) => ({
+          filePath: item.filePath,
+          lineNumber: item.lineNumber,
+          lineRangeEnd: item.lineRangeEnd,
+          content: item.content,
+          confidence: item.confidence,
+        })),
+    }
+  }
+
+  parseJsonObject<T>(aiResponse: string): T {
+    return JSON.parse(this.extractJsonObject(aiResponse)) as T
+  }
+
+  private extractJsonObject(input: string): string {
+    const text = input.trim()
+    if (!text.startsWith('{') || !text.endsWith('}')) {
+      throw new Error('AI response must be a strict JSON object')
+    }
+    return text
+  }
+
+  private normalizeSeverity(value: unknown): ReviewSeverity | null {
+    if (value === 'critical' || value === 'normal' || value === 'suggestion') {
+      return value
+    }
+    if (value === '严重') return 'critical'
+    if (value === '一般') return 'normal'
+    if (value === '建议') return 'suggestion'
+    return null
   }
 
   /**

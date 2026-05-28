@@ -1,0 +1,38 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: code-review-copilot-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://code_review:code_review@postgres:5432/code_review_copilot?schema=public
+      DINGTALK_WEBHOOK_URL: ${DINGTALK_WEBHOOK_URL:-}
+      DINGTALK_SECRET: ${DINGTALK_SECRET:-}
+    ports:
+      - "3000:3000"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: code-review-copilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: code_review
+      POSTGRES_PASSWORD: code_review
+      POSTGRES_DB: code_review_copilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U code_review -d code_review_copilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

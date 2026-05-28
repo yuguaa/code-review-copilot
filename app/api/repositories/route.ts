@@ -153,7 +153,7 @@ export async function PUT(request: NextRequest) {
       customTemperature,
     } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.RepositoryUncheckedUpdateInput = {}
     if (isActive !== undefined) updateData.isActive = isActive
     if (autoReview !== undefined) updateData.autoReview = autoReview
     if (defaultAIModelId !== undefined) updateData.defaultAIModelId = defaultAIModelId

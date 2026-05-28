@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Area,
   AreaChart,
   CartesianGrid,
   Line,
@@ -102,11 +101,13 @@ export function ContributionsChart() {
   const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
   const [range, setRange] = useState<string>("1");
   const [data, setData] = useState<ContributionResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
+    queueMicrotask(() => {
+      if (mounted) setLoading(true);
+    });
     const params = new URLSearchParams();
     if (repositoryId !== "all") params.set("repositoryId", repositoryId);
     const query = params.toString() ? `?${params.toString()}` : "";
