@@ -26,7 +26,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
-RUN apk add --no-cache openssl sqlite
+RUN apk add --no-cache openssl sqlite dos2unix
 
 COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
@@ -37,6 +37,7 @@ COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/scripts ./scripts
 
 RUN npm prune --omit=dev \
+  && dos2unix scripts/docker-entrypoint.sh \
   && chmod +x scripts/docker-entrypoint.sh \
   && addgroup -S nodejs \
   && adduser -S nextjs -G nodejs \
@@ -46,5 +47,5 @@ USER nextjs
 
 EXPOSE 3000
 
-ENTRYPOINT ["./scripts/docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "./scripts/docker-entrypoint.sh"]
 CMD ["npm", "run", "start"]
