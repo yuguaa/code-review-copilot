@@ -2,6 +2,7 @@ import { Prisma, type ReviewLog } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "@/lib/services/gitlab";
 import { reviewService } from "@/lib/services/review";
+import { REVIEW_CANCELLED_STATUS } from "@/lib/services/review-cancellation";
 
 type RepositoryWithGitLab = Prisma.RepositoryGetPayload<{
   include: { gitLabAccount: true };
@@ -203,6 +204,48 @@ export class ReviewTriggerService {
     }).then((reviewLog) => {
       this.runAsync(reviewLog.id);
       return reviewLog;
+    });
+  }
+
+  stopReview(reviewId: string) {
+    const stoppedAt = new Date();
+
+    return prisma.$transaction((tx) => {
+      return tx.reviewLog.updateMany({
+        where: {
+          id: reviewId,
+          status: "pending",
+        },
+        data: {
+          status: REVIEW_CANCELLED_STATUS,
+          error: "手动停止",
+          completedAt: stoppedAt,
+        },
+      }).then((result) => {
+        if (result.count === 0) {
+          return tx.reviewLog.findUnique({ where: { id: reviewId } })
+            .then((reviewLog) => {
+              if (!reviewLog) throw new Error("Review log not found");
+              if (reviewLog.status === REVIEW_CANCELLED_STATUS) return reviewLog;
+              throw new Error("Only pending reviews can be stopped");
+            });
+        }
+
+        return Promise.all([
+          tx.reviewBotRun.updateMany({
+            where: {
+              reviewLogId: reviewId,
+              status: { in: ["pending", "running"] },
+            },
+            data: {
+              status: REVIEW_CANCELLED_STATUS,
+              error: "手动停止",
+              completedAt: stoppedAt,
+            },
+          }),
+          tx.reviewLog.findUniqueOrThrow({ where: { id: reviewId } }),
+        ]).then(([, reviewLog]) => reviewLog);
+      });
     });
   }
 

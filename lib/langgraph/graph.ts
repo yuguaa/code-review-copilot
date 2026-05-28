@@ -10,6 +10,7 @@ import { generateSummaryNode } from "./nodes/generate-summary";
 import { runReviewBotsNode } from "./nodes/run-review-bots";
 import { aggregateResultsNode } from "./nodes/aggregate-results";
 import { publishCommentNode } from "./nodes/publish-comment";
+import { assertStateReviewNotCancelled } from "@/lib/services/review-cancellation";
 
 /**
  * 检查是否有文件需要审查
@@ -46,33 +47,33 @@ export function createReviewWorkflow() {
         .then((patch) => {
           state = mergeState(state, patch);
           if (state.error) return state;
-          return refreshMemoryNode(state).then((memoryPatch) => {
+          return assertStateReviewNotCancelled(state).then(refreshMemoryNode).then((memoryPatch) => {
             state = mergeState(state, memoryPatch);
             return state;
           });
         })
         .then((currentState) => {
           if (currentState.error) return currentState;
-          return generateSummaryNode(currentState).then((summaryPatch) => {
+          return assertStateReviewNotCancelled(currentState).then(generateSummaryNode).then((summaryPatch) => {
             state = mergeState(currentState, summaryPatch);
             return state;
           });
         })
         .then((currentState) => {
           if (currentState.error || !hasFilesToReview(currentState)) return currentState;
-          return runReviewBotsNode(currentState).then((botsPatch) => {
+          return assertStateReviewNotCancelled(currentState).then(runReviewBotsNode).then((botsPatch) => {
             state = mergeState(currentState, botsPatch);
             return state;
           });
         })
         .then((currentState) => {
-          return aggregateResultsNode(currentState).then((aggregatePatch) => {
+          return assertStateReviewNotCancelled(currentState).then(aggregateResultsNode).then((aggregatePatch) => {
             state = mergeState(currentState, aggregatePatch);
             return state;
           });
         })
         .then((currentState) => {
-          return publishCommentNode(currentState).then((publishPatch) => {
+          return assertStateReviewNotCancelled(currentState).then(publishCommentNode).then((publishPatch) => {
             state = mergeState(currentState, publishPatch);
             return state;
           });

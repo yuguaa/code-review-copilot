@@ -12,7 +12,7 @@ export type AIProvider = 'openai' | 'claude' | 'custom'
 export type ReviewSeverity = 'critical' | 'normal' | 'suggestion'
 
 /** 审查状态 */
-export type ReviewStatus = 'pending' | 'completed' | 'failed'
+export type ReviewStatus = 'pending' | 'completed' | 'failed' | 'cancelled'
 
 /** GitLab 项目信息 */
 export interface GitLabProject {

@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "./gitlab";
 import { createReviewWorkflow } from "@/lib/langgraph";
 import type { ReviewState } from "@/lib/langgraph/types";
+import { isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
 
 /**
  * 代码审查服务类
@@ -37,6 +38,17 @@ export class ReviewService {
     if (!reviewLog) {
       console.error(`❌ [ReviewService] Review log not found: ${reviewLogId}`);
       throw new Error("Review log not found");
+    }
+
+    if (isReviewCancelledStatus(reviewLog.status)) {
+      console.log(`🛑 [ReviewService] Review already cancelled: ${reviewLogId}`);
+      return {
+        success: false,
+        totalComments: 0,
+        criticalIssues: 0,
+        normalIssues: 0,
+        suggestions: 0,
+      };
     }
 
     // 2. 初始化 GitLab 服务
@@ -72,9 +84,20 @@ export class ReviewService {
       };
 
     } catch (error) {
+      if (error instanceof ReviewCancelledError) {
+        console.log(`🛑 [ReviewService] Review cancelled: ${reviewLogId}`);
+        return {
+          success: false,
+          totalComments: 0,
+          criticalIssues: 0,
+          normalIssues: 0,
+          suggestions: 0,
+        };
+      }
+
       console.error("Review failed:", error);
-      await prisma.reviewLog.update({
-        where: { id: reviewLogId },
+      await prisma.reviewLog.updateMany({
+        where: { id: reviewLogId, status: { not: "cancelled" } },
         data: {
           status: "failed",
           error: error instanceof Error ? error.message : "Unknown error",

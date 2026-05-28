@@ -34,7 +34,8 @@ import {
   Gitlab,
   RefreshCw,
   Copy,
-  Check
+  Check,
+  Square
 } from 'lucide-react'
 
 // 审查记录类型定义
@@ -87,6 +88,7 @@ export default function ReviewsPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedReview, setSelectedReview] = useState<Review | null>(null)
   const [retryingReviewId, setRetryingReviewId] = useState<string | null>(null)
+  const [stoppingReviewId, setStoppingReviewId] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
@@ -150,6 +152,43 @@ export default function ReviewsPage() {
       alert(err instanceof Error ? err.message : '重新审查失败，请稍后重试')
     } finally {
       setRetryingReviewId(null)
+    }
+  }
+
+  // 手动停止进行中的审查
+  const stopReview = async (reviewId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+
+    if (stoppingReviewId) {
+      return
+    }
+
+    try {
+      setStoppingReviewId(reviewId)
+      const response = await fetch(`/api/review/${reviewId}/stop`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to stop review')
+      }
+
+      await fetchReviews(currentPage)
+
+      if (selectedReview?.id === reviewId) {
+        setSelectedReview((current) => current ? {
+          ...current,
+          status: 'cancelled',
+          error: '手动停止',
+          completedAt: new Date().toISOString(),
+        } : current)
+      }
+    } catch (err) {
+      console.error('Failed to stop review:', err)
+      alert(err instanceof Error ? err.message : '停止审查失败，请稍后重试')
+    } finally {
+      setStoppingReviewId(null)
     }
   }
 
@@ -260,6 +299,8 @@ export default function ReviewsPage() {
         return <Badge className="bg-sidebar text-sidebar-foreground border-border/40">进行中</Badge>
       case 'failed':
         return <Badge className="bg-destructive text-white border-0">失败</Badge>
+      case 'cancelled':
+        return <Badge className="bg-muted text-muted-foreground border-border/40">已停止</Badge>
       default:
         return <Badge className="bg-sidebar text-sidebar-foreground border-border/40">{status}</Badge>
     }
@@ -411,7 +452,19 @@ export default function ReviewsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      {(review.status === 'failed' || review.status === 'completed') && (
+                      {review.status === 'pending' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => stopReview(review.id, e)}
+                          disabled={stoppingReviewId === review.id}
+                          className="h-8 text-xs text-destructive hover:text-destructive"
+                        >
+                          <Square className="h-3 w-3 mr-1" />
+                          {stoppingReviewId === review.id ? '停止中' : '停止审查'}
+                        </Button>
+                      )}
+                      {(review.status === 'failed' || review.status === 'completed' || review.status === 'cancelled') && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -476,7 +529,19 @@ export default function ReviewsPage() {
                       </DialogTitle>
                       <div className="flex items-center gap-2">
                         {getStatusBadge(selectedReview.status)}
-                        {(selectedReview.status === 'failed' || selectedReview.status === 'completed') && (
+                        {selectedReview.status === 'pending' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => stopReview(selectedReview.id, e)}
+                            disabled={stoppingReviewId === selectedReview.id}
+                            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                          >
+                            <Square className="h-3 w-3 mr-1" />
+                            {stoppingReviewId === selectedReview.id ? '停止中...' : '停止审查'}
+                          </Button>
+                        )}
+                        {(selectedReview.status === 'failed' || selectedReview.status === 'completed' || selectedReview.status === 'cancelled') && (
                           <Button
                             variant="outline"
                             size="sm"
