@@ -181,14 +181,37 @@ export class AIService {
     console.log('✅ OpenAI API Response received')
     console.log('📊 Usage:', response.usage)
 
-    const content = this.extractOpenAICompatibleText(response as OpenAICompatibleResponse)
+    const normalizedResponse = this.normalizeOpenAICompatibleResponse(response)
+    const content = typeof normalizedResponse === 'string'
+      ? normalizedResponse
+      : this.extractOpenAICompatibleText(normalizedResponse)
     if (!content) {
-      console.error('Unexpected OpenAI-compatible response keys:', Object.keys(response as object))
-      console.error('Unexpected OpenAI-compatible response:', JSON.stringify(response, null, 2))
+      console.error('Unexpected OpenAI-compatible response keys:', Object.keys(normalizedResponse as object))
+      console.error('Unexpected OpenAI-compatible response:', JSON.stringify(normalizedResponse, null, 2))
       throw new Error('Unexpected OpenAI-compatible response format')
     }
 
     return content
+  }
+
+  private normalizeOpenAICompatibleResponse(response: unknown): OpenAICompatibleResponse | string {
+    if (typeof response !== 'string') {
+      return response as OpenAICompatibleResponse
+    }
+
+    const text = response.trim()
+    if (!text) return ''
+
+    try {
+      const parsed = JSON.parse(text) as unknown
+      if (parsed && typeof parsed === 'object') {
+        return parsed as OpenAICompatibleResponse
+      }
+    } catch {
+      return text
+    }
+
+    return text
   }
 
   private extractOpenAICompatibleText(response: OpenAICompatibleResponse): string | null {
