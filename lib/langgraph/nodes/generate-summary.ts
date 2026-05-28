@@ -1,6 +1,6 @@
 /**
  * @file generate-summary.ts
- * @description LangGraph 节点：生成变更摘要
+ * @description 工作流节点：生成变更摘要
  *
  * 此节点负责：
  * 1. 收集所有 diff 内容

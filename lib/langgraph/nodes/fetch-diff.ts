@@ -1,6 +1,6 @@
 /**
  * @file fetch-diff.ts
- * @description LangGraph 节点：获取 GitLab Diff
+ * @description 工作流节点：获取 GitLab Diff
  *
  * 此节点负责：
  * 1. 从数据库获取 ReviewLog 信息

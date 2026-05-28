@@ -1,6 +1,6 @@
 /**
  * @file review-file.ts
- * @description LangGraph 节点：审查单个文件
+ * @description 工作流节点：审查单个文件
  *
  * 此节点负责：
  * 1. 获取当前待审查的文件

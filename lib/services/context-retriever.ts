@@ -1,4 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+
+type GraphRelation = Prisma.CodeRelationEdgeGetPayload<{
+  include: {
+    fromFileNode: true;
+    toFileNode: true;
+  };
+}>;
 
 export interface RetrievedAgentContext {
   architectureSummary: string;
@@ -43,6 +51,7 @@ export class ContextRetrieverService {
     maxDepth?: number;
   }): Promise<RetrievedAgentContext> {
     const maxFiles = params.maxFiles ?? 12;
+    const maxDepth = Math.max(0, Math.trunc(params.maxDepth ?? 2));
     const selectedFiles = params.changedFiles.slice(0, maxFiles);
 
     return Promise.all([
@@ -85,21 +94,12 @@ export class ContextRetrieverService {
         take: 5,
       }),
     ]).then(([snapshot, facts, fileNodes, relatedReviews]) => {
-      const fileNodeIds = fileNodes.map((node) => node.id);
-      return prisma.codeRelationEdge.findMany({
-        where: {
-          repositoryId: params.repositoryId,
-          branch: params.branch,
-          OR: [
-            { fromFileNodeId: { in: fileNodeIds } },
-            { toFileNodeId: { in: fileNodeIds } },
-          ],
-        },
-        include: {
-          fromFileNode: true,
-          toFileNode: true,
-        },
-        take: 60,
+      return this.getGraphRelations({
+        repositoryId: params.repositoryId,
+        branch: params.branch,
+        seedFileNodeIds: fileNodes.map((node) => node.id),
+        maxDepth,
+        maxEdges: Math.max(60, maxFiles * 8),
       }).then((relations) => {
         const fileContexts = fileNodes.map((node) => ({
           filePath: node.filePath,
@@ -153,6 +153,70 @@ export class ContextRetrieverService {
         };
       });
     });
+  }
+
+  private getGraphRelations(params: {
+    repositoryId: string;
+    branch: string;
+    seedFileNodeIds: string[];
+    maxDepth: number;
+    maxEdges: number;
+  }): Promise<GraphRelation[]> {
+    if (params.maxDepth <= 0 || params.seedFileNodeIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    const collected = new Map<string, GraphRelation>();
+    const visited = new Set<string>();
+    let frontier = [...new Set(params.seedFileNodeIds)];
+    let depth = 0;
+
+    const loadNextDepth = (): Promise<GraphRelation[]> => {
+      if (depth >= params.maxDepth || frontier.length === 0 || collected.size >= params.maxEdges) {
+        return Promise.resolve([...collected.values()]);
+      }
+
+      const currentFrontier = frontier.filter((id) => !visited.has(id));
+      currentFrontier.forEach((id) => visited.add(id));
+
+      if (currentFrontier.length === 0) {
+        return Promise.resolve([...collected.values()]);
+      }
+
+      return prisma.codeRelationEdge.findMany({
+        where: {
+          repositoryId: params.repositoryId,
+          branch: params.branch,
+          OR: [
+            { fromFileNodeId: { in: currentFrontier } },
+            { toFileNodeId: { in: currentFrontier } },
+          ],
+        },
+        include: {
+          fromFileNode: true,
+          toFileNode: true,
+        },
+        take: params.maxEdges - collected.size,
+      }).then((relations) => {
+        const nextFrontier = new Set<string>();
+
+        relations.forEach((edge) => {
+          collected.set(edge.id, edge);
+          if (!visited.has(edge.fromFileNodeId)) {
+            nextFrontier.add(edge.fromFileNodeId);
+          }
+          if (edge.toFileNodeId && !visited.has(edge.toFileNodeId)) {
+            nextFrontier.add(edge.toFileNodeId);
+          }
+        });
+
+        frontier = [...nextFrontier];
+        depth += 1;
+        return loadNextDepth();
+      });
+    };
+
+    return loadNextDepth();
   }
 }
 

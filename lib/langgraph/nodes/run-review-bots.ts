@@ -7,11 +7,10 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { aiService } from "@/lib/services/ai";
 import { reviewAgentLoopService } from "@/lib/services/review-agent-loop";
+import { normalizeAgentLoopBudget, totalFindingsBudget } from "@/lib/services/review-budget";
 import { buildReviewPrompt, OUTPUT_FORMAT, SYSTEM_PROMPT } from "@/lib/prompts";
 import type { AIModelConfig, GitLabDiff, ReviewComment, ReviewCommentSource } from "@/lib/types";
 import type { FileReviewResult, ReviewState } from "../types";
-
-const MAX_FINDINGS = 50;
 
 type ReviewBotWithModel = Prisma.RepositoryReviewBotGetPayload<{
   include: { aiModel: true };
@@ -69,7 +68,7 @@ function commentKey(comment: ReviewComment): string {
   ].join("|");
 }
 
-function mergeComments(comments: ReviewComment[]): ReviewComment[] {
+function mergeComments(comments: ReviewComment[], maxFindings: number): ReviewComment[] {
   const map = new Map<string, ReviewComment>();
 
   for (const comment of comments) {
@@ -104,7 +103,7 @@ function mergeComments(comments: ReviewComment[]): ReviewComment[] {
     });
   }
 
-  return [...map.values()].slice(0, MAX_FINDINGS);
+  return [...map.values()].slice(0, maxFindings);
 }
 
 function countsFrom(comments: ReviewComment[]) {
@@ -128,6 +127,7 @@ function runFileReviews(params: {
   const fileResults: FileReviewResult[] = [];
   const comments: ReviewComment[] = [];
   const botModel = `${params.modelConfig.provider}/${params.modelConfig.modelId}`;
+  const budget = normalizeAgentLoopBudget(params.bot);
 
   const reviewNext = (index: number): Promise<void> => {
     const diff = params.state.relevantDiffs[index];
@@ -153,7 +153,7 @@ function runFileReviews(params: {
       .then((aiResponse) => {
         const parsed = aiService.parseStructuredReview(aiResponse, {
           defaultFilePath: filePath,
-          maxItems: MAX_FINDINGS,
+          maxItems: budget.maxFindings,
         });
         const source = (confidence?: number) => sourceFor(params.botRunId, params.bot.name, botModel, confidence);
         const reviewItems = parsed.commentItems.map((item) => ({
@@ -220,6 +220,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResu
   }));
   const systemPrompt = buildSystemPrompt(bot);
   const botModel = `${modelConfig.provider}/${modelConfig.modelId}`;
+  const budget = normalizeAgentLoopBudget(bot);
 
   return prisma.reviewBotRun.upsert({
     where: {
@@ -264,6 +265,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResu
       modelConfig,
       memorySnapshotId: state.memorySnapshotId,
       existingFindings: [],
+      budget,
     }).then((agentResult) => {
       const agentComments = agentResult.agentFindings.map((item) => ({
         ...item,
@@ -287,7 +289,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResu
         systemPrompt,
         existingFindings: agentComments,
       }).then((fileResult) => {
-        const comments = mergeComments([...agentComments, ...fileResult.comments]);
+        const comments = mergeComments([...agentComments, ...fileResult.comments], budget.maxFindings);
         const counts = countsFrom(comments);
         return prisma.reviewBotRun.update({
           where: { id: botRun.id },
@@ -342,8 +344,9 @@ export function runReviewBotsNode(state: ReviewState): Promise<Partial<ReviewSta
       throw new Error("No active review bots configured");
     }
 
-    return Promise.allSettled(bots.map((bot) => runBot(state, bot)));
-  }).then((results) => {
+    return Promise.allSettled(bots.map((bot) => runBot(state, bot)))
+      .then((results) => ({ bots, results }));
+  }).then(({ bots, results }) => {
     const successful = results
       .filter((result): result is PromiseFulfilledResult<BotRunResult> => result.status === "fulfilled")
       .map((result) => result.value);
@@ -355,7 +358,8 @@ export function runReviewBotsNode(state: ReviewState): Promise<Partial<ReviewSta
       throw new Error(`All review bots failed: ${errors.join("; ")}`);
     }
 
-    const mergedComments = mergeComments(successful.flatMap((result) => result.comments));
+    const maxFindings = totalFindingsBudget(bots);
+    const mergedComments = mergeComments(successful.flatMap((result) => result.comments), maxFindings);
     return {
       fileResults: successful.flatMap((result) => result.fileResults),
       reviewComments: mergedComments,

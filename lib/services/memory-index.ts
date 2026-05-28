@@ -27,8 +27,8 @@ function detectLanguage(filePath: string): string {
 function detectRole(filePath: string): string {
   if (filePath.includes("/api/") && filePath.endsWith("route.ts")) return "api_route";
   if (filePath.startsWith("app/") && filePath.endsWith("page.tsx")) return "page";
-  if (filePath.includes("lib/langgraph/nodes/")) return "graph_node";
-  if (filePath.includes("lib/langgraph/")) return "agent_graph";
+  if (filePath.includes("lib/langgraph/nodes/")) return "workflow_node";
+  if (filePath.includes("lib/langgraph/")) return "review_workflow";
   if (filePath.includes("lib/services/")) return "service";
   if (filePath.includes("components/")) return "component";
   if (filePath.includes("prisma/")) return "data_model";

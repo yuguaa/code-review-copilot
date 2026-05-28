@@ -1,6 +1,6 @@
 /**
  * @file aggregate-results.ts
- * @description LangGraph 节点：汇总审查结果
+ * @description 工作流节点：汇总审查结果
  *
  * 此节点负责：
  * 1. 统计所有文件的审查结果

@@ -1,9 +1,8 @@
 /**
  * @file types.ts
- * @description LangGraph 代码审查状态图类型定义
+ * @description 代码审查工作流类型定义
  */
 
-import { Annotation } from "@langchain/langgraph";
 import type { ReviewLog } from "@prisma/client";
 import type { GitLabDiff, AIModelConfig, ReviewComment, ReviewCommentSource, GitLabMergeRequest } from "@/lib/types";
 
@@ -102,164 +101,73 @@ export interface RepositoryConfig {
   customPromptMode?: "extend" | "replace";
 }
 
-/**
- * LangGraph 状态定义
- * 使用 LangGraph 的 Annotation API 定义状态
- */
-export const ReviewStateAnnotation = Annotation.Root({
-  // 输入参数
-  reviewLogId: Annotation<string>({
-    reducer: (_, y) => y,
-    default: () => "",
-  }),
-  reviewBotRunId: Annotation<string | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
+/** 代码审查工作流状态 */
+export interface ReviewState {
+  reviewLogId: string;
+  reviewBotRunId: string | null;
+  gitlabService: GitLabServiceInstance | null;
+  repositoryConfig: RepositoryConfig;
+  modelConfig: AIModelConfig;
+  mrInfo: GitLabMergeRequest | null;
+  reviewLog: ReviewLog | null;
+  diffs: GitLabDiff[];
+  relevantDiffs: GitLabDiff[];
+  reviewScope: "full" | "incremental";
+  incrementalBaseSha: string | null;
+  summary: string;
+  memorySnapshotId: string | null;
+  architectureSummary: string;
+  agentContextSummary: string;
+  agentPlan: Record<string, unknown>;
+  agentTraceId: string | null;
+  currentFileIndex: number;
+  currentFile: FileReviewInput | null;
+  fileResults: FileReviewResult[];
+  statistics: ReviewStatistics;
+  criticalComments: ReviewComment[];
+  reviewComments: ReviewComment[];
+  aiResponsesByFile: Record<string, string>;
+  reviewPromptsByFile: Record<string, string>;
+  completed: boolean;
+  error: string | null;
+}
 
-  // GitLab 服务实例（运行时传入，不序列化）
-  gitlabService: Annotation<GitLabServiceInstance | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-
-  // 仓库配置
-  repositoryConfig: Annotation<RepositoryConfig>({
-    reducer: (_, y) => y,
-    default: () => ({}),
-  }),
-
-  // AI 模型配置
-  modelConfig: Annotation<AIModelConfig>({
-    reducer: (_, y) => y,
-    default: () => ({
+export function createInitialReviewState(input: Partial<ReviewState>): ReviewState {
+  return {
+    reviewLogId: "",
+    reviewBotRunId: null,
+    gitlabService: null,
+    repositoryConfig: {},
+    modelConfig: {
       id: "default",
       name: "Default",
       provider: "openai",
       modelId: "gpt-4o",
       apiKey: "",
       isActive: true,
-    }),
-  }),
-
-  // MR/Commit 信息
-  mrInfo: Annotation<GitLabMergeRequest | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-  reviewLog: Annotation<ReviewLog | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-
-  // 获取的 diff 数据
-  diffs: Annotation<GitLabDiff[]>({
-    reducer: (_, y) => y,
-    default: () => [],
-  }),
-  relevantDiffs: Annotation<GitLabDiff[]>({
-    reducer: (_, y) => y,
-    default: () => [],
-  }),
-
-  // 审查范围信息
-  reviewScope: Annotation<"full" | "incremental">({
-    reducer: (_, y) => y,
-    default: () => "full",
-  }),
-  incrementalBaseSha: Annotation<string | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-
-  // 变更摘要
-  summary: Annotation<string>({
-    reducer: (_, y) => y,
-    default: () => "",
-  }),
-
-  // Memory Wiki / Agent Loop 上下文
-  memorySnapshotId: Annotation<string | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-  architectureSummary: Annotation<string>({
-    reducer: (_, y) => y,
-    default: () => "",
-  }),
-  agentContextSummary: Annotation<string>({
-    reducer: (_, y) => y,
-    default: () => "",
-  }),
-  agentPlan: Annotation<Record<string, unknown>>({
-    reducer: (_, y) => y,
-    default: () => ({}),
-  }),
-  agentTraceId: Annotation<string | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-
-  // 循环状态：当前文件索引
-  currentFileIndex: Annotation<number>({
-    reducer: (x, y) => y ?? x,  // 如果新值是 undefined，保持旧值
-    default: () => 0,
-  }),
-
-  // 当前正在处理的文件
-  currentFile: Annotation<FileReviewInput | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-
-  // 单文件审查结果
-  fileResults: Annotation<FileReviewResult[]>({
-    reducer: (x, y) => [...x, ...y],
-    default: () => [],
-  }),
-
-  // 汇总统计
-  statistics: Annotation<ReviewStatistics>({
-    reducer: (_, y) => y,
-    default: () => ({ critical: 0, normal: 0, suggestion: 0, total: 0 }),
-  }),
-
-  // 严重问题列表
-  criticalComments:Annotation<ReviewComment[]>({
-    reducer: (x, y) => [...x, ...y],
-    default: () => [],
-  }),
-
-  // 全量问题列表（严重/一般/建议）
-  reviewComments:Annotation<ReviewComment[]>({
-    reducer: (x, y) => [...x, ...y],
-    default: () => [],
-  }),
-
-  // AI 响应记录（按文件）
-  aiResponsesByFile: Annotation<Record<string, string>>({
-    reducer: (x, y) => ({ ...x, ...y }),
-    default: () => ({}),
-  }),
-
-  // Prompt 记录（按文件）
-  reviewPromptsByFile: Annotation<Record<string, string>>({
-    reducer: (x, y) => ({ ...x, ...y }),
-    default: () => ({}),
-  }),
-
-  // 是否完成
-  completed: Annotation<boolean>({
-    reducer: (_, y) => y,
-    default: () => false,
-  }),
-
-  // 错误信息
-  error: Annotation<string | null>({
-    reducer: (_, y) => y,
-    default: () => null,
-  }),
-});
-
-/** 状态类型导出 */
-export type ReviewState = typeof ReviewStateAnnotation.State;
+    },
+    mrInfo: null,
+    reviewLog: null,
+    diffs: [],
+    relevantDiffs: [],
+    reviewScope: "full",
+    incrementalBaseSha: null,
+    summary: "",
+    memorySnapshotId: null,
+    architectureSummary: "",
+    agentContextSummary: "",
+    agentPlan: {},
+    agentTraceId: null,
+    currentFileIndex: 0,
+    currentFile: null,
+    fileResults: [],
+    statistics: { critical: 0, normal: 0, suggestion: 0, total: 0 },
+    criticalComments: [],
+    reviewComments: [],
+    aiResponsesByFile: {},
+    reviewPromptsByFile: {},
+    completed: false,
+    error: null,
+    ...input,
+  };
+}

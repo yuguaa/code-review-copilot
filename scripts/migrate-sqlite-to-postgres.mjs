@@ -569,6 +569,10 @@ async function createDefaultReviewBots(prisma, sqlitePath) {
         promptMode: repository.customPromptMode || "extend",
         isActive: true,
         sortOrder: 0,
+        maxIterations: 5,
+        maxContextFiles: 12,
+        maxCallGraphDepth: 2,
+        maxFindings: 50,
       },
     });
     inserted += 1;

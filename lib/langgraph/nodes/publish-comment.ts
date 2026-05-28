@@ -1,6 +1,6 @@
 /**
  * @file publish-comment.ts
- * @description LangGraph 节点：发布评论
+ * @description 工作流节点：发布评论
  *
  * 此节点负责：
  * 1. 遍历收集到的严重问题

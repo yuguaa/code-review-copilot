@@ -9,7 +9,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "./gitlab";
-import { createReviewGraph } from "@/lib/langgraph";
+import { createReviewWorkflow } from "@/lib/langgraph";
 import type { ReviewState } from "@/lib/langgraph/types";
 
 /**
@@ -45,7 +45,7 @@ export class ReviewService {
       reviewLog.repository.gitLabAccount.accessToken,
     );
 
-    // 3. 初始化 LangGraph 状态
+    // 3. 初始化审查工作流状态
     const initialState: Partial<ReviewState> = {
       reviewLogId,
       gitlabService,
@@ -53,12 +53,10 @@ export class ReviewService {
 
     // 4. 运行工作流
     try {
-      const graph = createReviewGraph();
+      const workflow = createReviewWorkflow();
 
-      console.log(`🚀 [ReviewService] Invoking LangGraph workflow`);
-      const result = await graph.invoke(initialState, {
-        recursionLimit: 100,
-      });
+      console.log(`🚀 [ReviewService] Invoking review workflow`);
+      const result = await workflow.invoke(initialState);
       
       if (result.error) {
         throw new Error(result.error);

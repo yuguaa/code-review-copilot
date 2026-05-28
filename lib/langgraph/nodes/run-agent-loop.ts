@@ -1,6 +1,6 @@
 /**
  * @file run-agent-loop.ts
- * @description LangGraph 节点：执行单 Agent 有界循环
+ * @description 工作流节点：执行单 Agent 有界循环
  */
 
 import { reviewAgentLoopService } from "@/lib/services/review-agent-loop";

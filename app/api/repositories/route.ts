@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { createGitLabService } from '@/lib/services/gitlab'
+import { DEFAULT_AGENT_LOOP_BUDGET } from '@/lib/services/review-budget'
 
 /** GET /api/repositories - 获取所有仓库 */
 export async function GET() {
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
             promptMode: 'extend',
             isActive: true,
             sortOrder: 0,
+            ...DEFAULT_AGENT_LOOP_BUDGET,
           },
         } : undefined,
       },

@@ -1,6 +1,6 @@
 /**
  * @file refresh-memory.ts
- * @description LangGraph 节点：刷新仓库 Memory Wiki 和轻量 Code Graph
+ * @description 工作流节点：刷新仓库 Memory Wiki 和轻量 Code Graph
  */
 
 import { memoryIndexService } from "@/lib/services/memory-index";

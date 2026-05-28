@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_AGENT_LOOP_BUDGET } from "@/lib/services/review-budget";
 
 export const DEFAULT_REVIEW_BOT_NAME = "默认审查机器人";
 
@@ -35,6 +36,7 @@ export function ensureDefaultReviewBot(repositoryId: string) {
           promptMode: repository.customPromptMode === "replace" ? "replace" : "extend",
           isActive: true,
           sortOrder: 0,
+          ...DEFAULT_AGENT_LOOP_BUDGET,
         },
       });
     });

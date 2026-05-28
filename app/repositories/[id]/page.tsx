@@ -79,6 +79,10 @@ type ReviewBot = {
   promptMode: PromptMode
   isActive: boolean
   sortOrder: number
+  maxIterations: number
+  maxContextFiles: number
+  maxCallGraphDepth: number
+  maxFindings: number
 }
 
 type BotFormState = {
@@ -90,6 +94,10 @@ type BotFormState = {
   promptMode: PromptMode
   isActive: boolean
   sortOrder: number
+  maxIterations: number
+  maxContextFiles: number
+  maxCallGraphDepth: number
+  maxFindings: number
 }
 
 const emptyBotForm: BotFormState = {
@@ -101,6 +109,10 @@ const emptyBotForm: BotFormState = {
   promptMode: 'extend',
   isActive: true,
   sortOrder: 0,
+  maxIterations: 5,
+  maxContextFiles: 12,
+  maxCallGraphDepth: 2,
+  maxFindings: 50,
 }
 
 // 获取模型显示名称
@@ -127,6 +139,16 @@ const sortBots = (bots: ReviewBot[]) => {
 
 const toErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback
+}
+
+const toPositiveInteger = (value: unknown, fallback: number) => {
+  const numberValue = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numberValue) ? Math.max(1, Math.trunc(numberValue)) : fallback
+}
+
+const toNonNegativeInteger = (value: unknown, fallback: number) => {
+  const numberValue = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numberValue) ? Math.max(0, Math.trunc(numberValue)) : fallback
 }
 
 export default function RepositoryDetailPage() { // 仓库详情页组件
@@ -298,6 +320,10 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       promptMode: bot.promptMode || 'extend',
       isActive: bot.isActive,
       sortOrder: bot.sortOrder,
+      maxIterations: toPositiveInteger(bot.maxIterations, 5),
+      maxContextFiles: toPositiveInteger(bot.maxContextFiles, 12),
+      maxCallGraphDepth: toNonNegativeInteger(bot.maxCallGraphDepth, 2),
+      maxFindings: toPositiveInteger(bot.maxFindings, 50),
     })
     setBotDialogOpen(true)
   }
@@ -329,6 +355,10 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         promptMode: botForm.promptMode,
         isActive: botForm.isActive,
         sortOrder: botForm.sortOrder,
+        maxIterations: botForm.maxIterations,
+        maxContextFiles: botForm.maxContextFiles,
+        maxCallGraphDepth: botForm.maxCallGraphDepth,
+        maxFindings: botForm.maxFindings,
       }),
     })
       .then((response) => {
@@ -759,6 +789,12 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                           {bot.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}
                         </Badge>
                       </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <Badge variant="secondary">轮次 {bot.maxIterations}</Badge>
+                        <Badge variant="secondary">上下文文件 {bot.maxContextFiles}</Badge>
+                        <Badge variant="secondary">调用深度 {bot.maxCallGraphDepth}</Badge>
+                        <Badge variant="secondary">Findings {bot.maxFindings}</Badge>
+                      </div>
                       {bot.description && (
                         <p className="mt-2 text-sm text-muted-foreground">{bot.description}</p>
                       )}
@@ -899,6 +935,77 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                 <p className="text-xs text-muted-foreground">
                   只有启用机器人会参与下一次并发审查。
                 </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="mb-4">
+                <p className="text-sm font-medium">Agent Loop 预算</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  控制单次审查读取多少上下文。大仓库建议只给少数深扫机器人调高预算。
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bot-max-iterations">最大轮次</Label>
+                  <Input
+                    id="bot-max-iterations"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={botForm.maxIterations}
+                    onChange={(event) => setBotForm({
+                      ...botForm,
+                      maxIterations: toPositiveInteger(event.target.value, 5),
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground">1-10，默认 5。</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bot-max-context-files">上下文文件</Label>
+                  <Input
+                    id="bot-max-context-files"
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={botForm.maxContextFiles}
+                    onChange={(event) => setBotForm({
+                      ...botForm,
+                      maxContextFiles: toPositiveInteger(event.target.value, 12),
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground">1-200，默认 12。</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bot-max-call-graph-depth">调用深度</Label>
+                  <Input
+                    id="bot-max-call-graph-depth"
+                    type="number"
+                    min={0}
+                    max={4}
+                    value={botForm.maxCallGraphDepth}
+                    onChange={(event) => setBotForm({
+                      ...botForm,
+                      maxCallGraphDepth: toNonNegativeInteger(event.target.value, 2),
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground">0-4，默认 2。</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bot-max-findings">最大 Findings</Label>
+                  <Input
+                    id="bot-max-findings"
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={botForm.maxFindings}
+                    onChange={(event) => setBotForm({
+                      ...botForm,
+                      maxFindings: toPositiveInteger(event.target.value, 50),
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground">1-200，默认 50。</p>
+                </div>
               </div>
             </div>
 

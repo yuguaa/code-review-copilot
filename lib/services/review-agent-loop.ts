@@ -11,10 +11,8 @@ import {
   REVIEW_AGENT_REVIEW_SYSTEM_PROMPT,
 } from "@/lib/prompts";
 import type { AIModelConfig, ReviewComment } from "@/lib/types";
+import { normalizeAgentLoopBudget, type AgentLoopBudget } from "@/lib/services/review-budget";
 
-const MAX_ITERATIONS = 5;
-const MAX_CONTEXT_FILES = 12;
-const MAX_FINDINGS = 50;
 const MEMORY_WRITE_CONFIDENCE = 0.85;
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
@@ -34,6 +32,7 @@ export interface AgentLoopInput {
   modelConfig: AIModelConfig;
   memorySnapshotId?: string | null;
   existingFindings: Array<ReviewComment & { confidence?: number }>;
+  budget?: Partial<AgentLoopBudget>;
 }
 
 interface AgentPlan {
@@ -121,6 +120,7 @@ function safeCritic(value: unknown): AgentCriticResult {
 
 function dedupeFindings(
   findings: Array<ReviewComment & { confidence?: number }>,
+  maxFindings: number,
 ): Array<ReviewComment & { confidence: number }> {
   const seen = new Set<string>();
   return findings
@@ -140,14 +140,14 @@ function dedupeFindings(
       seen.add(key);
       return true;
     })
-    .slice(0, MAX_FINDINGS)
+    .slice(0, maxFindings)
     .map((item) => ({
       ...item,
       confidence: Math.min(1, Math.max(0, item.confidence ?? 0.5)),
     }));
 }
 
-function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: string[]) {
+function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: string[], maxDepth: number) {
   return [
     {
       tool: "get_architecture_summary",
@@ -176,7 +176,7 @@ function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: stri
     },
     {
       tool: "get_call_graph_neighbors",
-      args: { maxDepth: 2 },
+      args: { maxDepth },
       resultCount: context.graphNeighbors.length,
     },
     {
@@ -188,177 +188,171 @@ function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: stri
 }
 
 export class ReviewAgentLoopService {
-  run(input: AgentLoopInput): Promise<AgentLoopResult> {
+  async run(input: AgentLoopInput): Promise<AgentLoopResult> {
+    const budget = normalizeAgentLoopBudget(input.budget);
     const loopIterations: Array<Record<string, unknown>> = [];
     let finalPlan: AgentPlan = {};
     let latestContext: RetrievedAgentContext | null = null;
     let latestCritic: AgentCriticResult = { shouldContinue: false, reason: "not started", memoryFacts: [] };
-    let findings = dedupeFindings(input.existingFindings);
+    let findings = dedupeFindings(input.existingFindings, budget.maxFindings);
+    let requestedFiles = [...input.changedFiles];
+    let iteration = 1;
 
-    const iterate = (iteration: number, requestedFiles: string[]): Promise<void> => {
-      const remainingIterations = MAX_ITERATIONS - iteration;
-      return contextRetrieverService.getContext({
+    while (true) {
+      const remainingIterations = budget.maxIterations - iteration;
+      const context = await contextRetrieverService.getContext({
         repositoryId: input.repositoryId,
         branch: input.branch,
         commitSha: input.commitSha,
         changedFiles: requestedFiles.length ? requestedFiles : input.changedFiles,
-        maxFiles: MAX_CONTEXT_FILES,
-        maxDepth: 2,
-      }).then((context) => {
-        latestContext = context;
-        const toolCalls = summarizeToolCalls(context, requestedFiles);
-        const planPrompt = buildReviewAgentPlanPrompt({
-          title: input.title,
-          description: input.description,
-          changedFiles: input.changedFiles,
-          architectureSummary: context.architectureSummary,
-          memoryFacts: context.memoryFacts.map((fact) => fact.content),
-          contextSummary: context.summary,
-          existingFindingsCount: findings.length,
-          remainingIterations,
-        });
-
-        return aiService.reviewCode(planPrompt, input.modelConfig, REVIEW_AGENT_PLAN_SYSTEM_PROMPT)
-          .then((planResponse) => {
-            finalPlan = safePlan(aiService.parseJsonObject<AgentPlan>(planResponse));
-            const reviewPrompt = buildReviewAgentReviewPrompt({
-              title: input.title,
-              description: input.description,
-              changedFiles: input.changedFiles,
-              diffs: input.diffs,
-              plan: finalPlan as Record<string, unknown>,
-              contextSummary: context.summary,
-              existingFindings: findings,
-              maxFindings: MAX_FINDINGS - findings.length,
-            });
-
-            return aiService.reviewCode(reviewPrompt, input.modelConfig, REVIEW_AGENT_REVIEW_SYSTEM_PROMPT);
-          })
-          .then((reviewResponse) => {
-            const parsedReview = aiService.parseStructuredReview(reviewResponse, {
-              maxItems: Math.max(MAX_FINDINGS - findings.length, 0),
-            });
-            const previousCount = findings.length;
-            findings = dedupeFindings([
-              ...findings,
-              ...parsedReview.commentItems,
-            ]);
-            const newFindings = findings.length - previousCount;
-            const criticPrompt = buildReviewAgentCriticPrompt({
-              findings: findings.map((item) => ({
-                filePath: item.filePath,
-                lineNumber: item.lineNumber,
-                severity: item.severity,
-                content: item.content,
-                confidence: item.confidence,
-              })),
-              contextSummary: context.summary,
-              remainingIterations,
-              maxFindings: MAX_FINDINGS,
-            });
-
-            return aiService.reviewCode(criticPrompt, input.modelConfig, REVIEW_AGENT_CRITIC_SYSTEM_PROMPT)
-              .then((criticResponse) => ({ criticResponse, reviewResponse, newFindings }));
-          })
-          .then(({ criticResponse, reviewResponse, newFindings }) => {
-            latestCritic = safeCritic(aiService.parseJsonObject<AgentCriticResult>(criticResponse));
-            loopIterations.push({
-              iteration,
-              requestedFiles,
-              toolCalls,
-              plan: finalPlan,
-              review: {
-                newFindings,
-                totalFindings: findings.length,
-                response: reviewResponse,
-              },
-              critic: latestCritic,
-              contextSummary: context.summary,
-            });
-
-            const hasBudget = iteration < MAX_ITERATIONS;
-            const hasFindingBudget = findings.length < MAX_FINDINGS;
-            const requestedTools = finalPlan.requestedTools || [];
-            const nextFiles = finalPlan.contextFiles?.filter((file) => !requestedFiles.includes(file)) || [];
-            const shouldContinue = Boolean(
-              hasBudget &&
-              hasFindingBudget &&
-              latestCritic.shouldContinue &&
-              newFindings > 0 &&
-              finalPlan.needsMoreContext &&
-              requestedTools.length > 0 &&
-              nextFiles.length > 0
-            );
-
-            if (!shouldContinue) return undefined;
-            return iterate(iteration + 1, [...new Set([...requestedFiles, ...nextFiles])]);
-          });
+        maxFiles: budget.maxContextFiles,
+        maxDepth: budget.maxCallGraphDepth,
       });
-    };
-
-    return iterate(1, input.changedFiles)
-      .then(() => {
-        const memoryUpdates = (latestCritic.memoryFacts || [])
-          .filter((fact) => fact.confidence >= MEMORY_WRITE_CONFIDENCE)
-          .slice(0, 10);
-        const agentFindings = findings.filter((finding) => {
-          return !input.existingFindings.some((existing) => (
-            existing.filePath === finding.filePath &&
-            existing.lineNumber === finding.lineNumber &&
-            (existing.lineRangeEnd || null) === (finding.lineRangeEnd || null) &&
-            existing.severity === finding.severity &&
-            existing.content === finding.content
-          ));
-        });
-
-        return prisma.$transaction((tx) => {
-          return tx.reviewAgentTrace.upsert({
-            where: { reviewBotRunId: input.reviewBotRunId },
-            update: {
-              reviewLogId: input.reviewLogId,
-              reviewBotRunId: input.reviewBotRunId,
-              memorySnapshotId: input.memorySnapshotId || null,
-              loopIterationsJson: toJsonInput(loopIterations),
-              retrievedContextJson: toJsonInput(latestContext || {}),
-              finalPlanJson: toJsonInput(finalPlan),
-              criticJson: toJsonInput(latestCritic),
-              memoryUpdatesJson: toJsonInput(memoryUpdates),
-            },
-            create: {
-              reviewLogId: input.reviewLogId,
-              reviewBotRunId: input.reviewBotRunId,
-              memorySnapshotId: input.memorySnapshotId || null,
-              loopIterationsJson: toJsonInput(loopIterations),
-              retrievedContextJson: toJsonInput(latestContext || {}),
-              finalPlanJson: toJsonInput(finalPlan),
-              criticJson: toJsonInput(latestCritic),
-              memoryUpdatesJson: toJsonInput(memoryUpdates),
-            },
-          }).then((trace) => {
-            if (memoryUpdates.length === 0) return trace;
-            return tx.repositoryMemoryFact.createMany({
-              data: memoryUpdates.map((fact) => ({
-                repositoryId: input.repositoryId,
-                branch: input.branch,
-                type: fact.type,
-                content: fact.content,
-                source: `review_agent:${input.reviewLogId}`,
-                confidence: fact.confidence,
-                evidence: fact.evidence,
-                lastVerifiedCommit: input.commitSha,
-              })),
-              skipDuplicates: true,
-            }).then(() => trace);
-          });
-        }).then((trace) => ({
-          traceId: trace.id,
-          finalPlan,
-          context: latestContext!,
-          critic: latestCritic,
-          agentFindings,
-          memoryUpdates,
-        }));
+      latestContext = context;
+      const toolCalls = summarizeToolCalls(context, requestedFiles, budget.maxCallGraphDepth);
+      const planPrompt = buildReviewAgentPlanPrompt({
+        title: input.title,
+        description: input.description,
+        changedFiles: input.changedFiles,
+        architectureSummary: context.architectureSummary,
+        memoryFacts: context.memoryFacts.map((fact) => fact.content),
+        contextSummary: context.summary,
+        existingFindingsCount: findings.length,
+        remainingIterations,
       });
+
+      const planResponse = await aiService.reviewCode(planPrompt, input.modelConfig, REVIEW_AGENT_PLAN_SYSTEM_PROMPT);
+      finalPlan = safePlan(aiService.parseJsonObject<AgentPlan>(planResponse));
+      const reviewPrompt = buildReviewAgentReviewPrompt({
+        title: input.title,
+        description: input.description,
+        changedFiles: input.changedFiles,
+        diffs: input.diffs,
+        plan: finalPlan as Record<string, unknown>,
+        contextSummary: context.summary,
+        existingFindings: findings,
+        maxFindings: budget.maxFindings - findings.length,
+      });
+
+      const reviewResponse = await aiService.reviewCode(reviewPrompt, input.modelConfig, REVIEW_AGENT_REVIEW_SYSTEM_PROMPT);
+      const parsedReview = aiService.parseStructuredReview(reviewResponse, {
+        maxItems: Math.max(budget.maxFindings - findings.length, 0),
+      });
+      const previousCount = findings.length;
+      findings = dedupeFindings([
+        ...findings,
+        ...parsedReview.commentItems,
+      ], budget.maxFindings);
+      const newFindings = findings.length - previousCount;
+      const criticPrompt = buildReviewAgentCriticPrompt({
+        findings: findings.map((item) => ({
+          filePath: item.filePath,
+          lineNumber: item.lineNumber,
+          severity: item.severity,
+          content: item.content,
+          confidence: item.confidence,
+        })),
+        contextSummary: context.summary,
+        remainingIterations,
+        maxFindings: budget.maxFindings,
+      });
+
+      const criticResponse = await aiService.reviewCode(criticPrompt, input.modelConfig, REVIEW_AGENT_CRITIC_SYSTEM_PROMPT);
+      latestCritic = safeCritic(aiService.parseJsonObject<AgentCriticResult>(criticResponse));
+      loopIterations.push({
+        iteration,
+        budget,
+        requestedFiles,
+        toolCalls,
+        plan: finalPlan,
+        review: {
+          newFindings,
+          totalFindings: findings.length,
+          response: reviewResponse,
+        },
+        critic: latestCritic,
+        contextSummary: context.summary,
+      });
+
+      const hasBudget = iteration < budget.maxIterations;
+      const hasFindingBudget = findings.length < budget.maxFindings;
+      const requestedTools = finalPlan.requestedTools || [];
+      const nextFiles = finalPlan.contextFiles?.filter((file) => !requestedFiles.includes(file)) || [];
+      const shouldContinue = Boolean(
+        hasBudget &&
+        hasFindingBudget &&
+        latestCritic.shouldContinue &&
+        newFindings > 0 &&
+        finalPlan.needsMoreContext &&
+        requestedTools.length > 0 &&
+        nextFiles.length > 0
+      );
+
+      if (!shouldContinue) break;
+      requestedFiles = [...new Set([...requestedFiles, ...nextFiles])];
+      iteration += 1;
+    }
+
+    const memoryUpdates = (latestCritic.memoryFacts || [])
+      .filter((fact) => fact.confidence >= MEMORY_WRITE_CONFIDENCE)
+      .slice(0, 10);
+    const agentFindings = findings.filter((finding) => {
+      return !input.existingFindings.some((existing) => (
+        existing.filePath === finding.filePath &&
+        existing.lineNumber === finding.lineNumber &&
+        (existing.lineRangeEnd || null) === (finding.lineRangeEnd || null) &&
+        existing.severity === finding.severity &&
+        existing.content === finding.content
+      ));
+    });
+
+    return prisma.$transaction((tx) => {
+      return tx.reviewAgentTrace.upsert({
+        where: { reviewBotRunId: input.reviewBotRunId },
+        update: {
+          reviewLogId: input.reviewLogId,
+          reviewBotRunId: input.reviewBotRunId,
+          memorySnapshotId: input.memorySnapshotId || null,
+          loopIterationsJson: toJsonInput(loopIterations),
+          retrievedContextJson: toJsonInput(latestContext || {}),
+          finalPlanJson: toJsonInput(finalPlan),
+          criticJson: toJsonInput(latestCritic),
+          memoryUpdatesJson: toJsonInput(memoryUpdates),
+        },
+        create: {
+          reviewLogId: input.reviewLogId,
+          reviewBotRunId: input.reviewBotRunId,
+          memorySnapshotId: input.memorySnapshotId || null,
+          loopIterationsJson: toJsonInput(loopIterations),
+          retrievedContextJson: toJsonInput(latestContext || {}),
+          finalPlanJson: toJsonInput(finalPlan),
+          criticJson: toJsonInput(latestCritic),
+          memoryUpdatesJson: toJsonInput(memoryUpdates),
+        },
+      }).then((trace) => {
+        if (memoryUpdates.length === 0) return trace;
+        return tx.repositoryMemoryFact.createMany({
+          data: memoryUpdates.map((fact) => ({
+            repositoryId: input.repositoryId,
+            branch: input.branch,
+            type: fact.type,
+            content: fact.content,
+            source: `review_agent:${input.reviewLogId}`,
+            confidence: fact.confidence,
+            evidence: fact.evidence,
+            lastVerifiedCommit: input.commitSha,
+          })),
+          skipDuplicates: true,
+        }).then(() => trace);
+      });
+    }).then((trace) => ({
+      traceId: trace.id,
+      finalPlan,
+      context: latestContext!,
+      critic: latestCritic,
+      agentFindings,
+      memoryUpdates,
+    }));
   }
 }
 

@@ -130,6 +130,10 @@ model RepositoryReviewBot {
   promptMode        String        @default("extend")
   isActive          Boolean       @default(true)
   sortOrder         Int           @default(0)
+  maxIterations     Int           @default(5)
+  maxContextFiles   Int           @default(12)
+  maxCallGraphDepth Int           @default(2)
+  maxFindings       Int           @default(50)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   botRuns           ReviewBotRun[]

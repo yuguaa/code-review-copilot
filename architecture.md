@@ -1,0 +1,340 @@
+# Code Review Copilot 架构说明
+
+本文档记录当前项目的实现架构，作为后续开发和审查策略调整的工程基准。系统目标是把 GitLab 代码审查从一次性 diff 审查，升级为带长期记忆、代码图谱和多机器人并发审查的 Agent 系统。
+
+## 设计目标
+
+- 一个仓库可以配置多个审查机器人，每个机器人有独立模型、Prompt、启停状态、排序和审查预算。
+- 一次触发只创建一个 `ReviewLog`，所有启用机器人并发执行，最终只发布一条 GitLab 总评。
+- 审查结果要可追溯到机器人、模型、Prompt 快照、Memory Snapshot、检索上下文和 Agent Loop 轨迹。
+- Memory Wiki 保存项目架构摘要、代码图谱和高置信事实，减少每次审查重复读取全仓库的成本。
+- PostgreSQL 是运行数据库，Prisma 是唯一 ORM。
+- Docker 可以直接启动完整应用，容器入口只自动执行 PostgreSQL migration，不自动导入历史 SQLite 数据。
+
+## 非目标
+
+- 第一版不自动修改代码，不生成补丁，不执行自动修复。
+- Agent Loop 只使用只读工具，不允许写代码仓库。
+- 审查评论第一版合并成一条 GitLab 总评，不做行内评论。
+- Memory 刷新失败时审查快速失败，不降级成裸 diff 审查。
+- 多机器人第一版全量并发，不做队列限流。成本和限流由启用机器人数量和预算控制。
+
+## 总体链路
+
+```text
+GitLab Webhook / 手动触发 / Retry
+        │
+        ▼
+ReviewTriggerService
+        │
+        ▼
+ReviewService
+        │
+        ▼
+Review Workflow
+        │
+        ├── fetch_diff
+        ├── refresh_memory
+        ├── generate_summary
+        ├── run_review_bots
+        ├── aggregate_results
+        └── publish_comment
+        │
+        ▼
+PostgreSQL + GitLab 评论
+```
+
+`ReviewTriggerService` 是统一入口。手动触发、Webhook 和 Retry 都走这里，避免重复创建审查日志和重复实现触发逻辑。
+
+当前工作流代码位于 `lib/langgraph/`，目录名保留了历史命名，但运行时已经不再依赖 LangGraph 或 LangChain。审查工作流是普通顺序执行器，Agent Loop 内部使用 `while (true)` 加预算条件控制。
+
+## 审查工作流
+
+### fetch_diff
+
+读取 MR 或 Commit diff，只获取一次并写入工作流状态。Webhook、手动审查和 Retry 共用同一条 diff 获取链路。
+
+### refresh_memory
+
+审查前刷新目标分支的 Memory Wiki。命中相同 `repositoryId + branch + commitSha` 的 ready snapshot 时复用；否则基于当前 diff 和仓库信息生成新的 Memory Snapshot、Code File Node、Symbol Node 和 Relation Edge。
+
+刷新失败时，`ReviewLog` 标记为 failed。这里不做裸 diff 降级，因为裸 diff 审查会改变用户对 Agent 审查能力的预期，也会让结果不可追溯。
+
+### generate_summary
+
+使用排序第一的启用机器人生成公共变更摘要。这个摘要会被后续所有机器人复用，避免每个机器人重复总结同一份 diff。
+
+### run_review_bots
+
+加载当前仓库所有启用机器人，为每个机器人创建或更新一个 `ReviewBotRun`，并通过 `Promise.allSettled` 并发运行。
+
+单个机器人失败只会把自己的 `ReviewBotRun` 标记为 failed。只要至少一个机器人成功，系统继续汇总成功结果并发布评论。所有机器人都失败时，`ReviewLog` 标记为 failed，不发布空评论。
+
+### aggregate_results
+
+汇总所有成功机器人的 findings。重复问题按以下 key 去重：
+
+```text
+filePath + lineNumber + lineRangeEnd + severity + normalized content
+```
+
+去重后保留来源机器人列表和各自 confidence。低置信问题不会被过滤，confidence 只用于展示、排序和辅助判断。长期 Memory 写回仍使用高置信阈值，避免污染项目记忆。
+
+### publish_comment
+
+发布一条 GitLab 总评。评论中标注来源机器人，例如：
+
+```text
+来源：安全审查机器人 / anthropic/claude-sonnet-4.5 confidence=0.78
+```
+
+## 多机器人模型
+
+```text
+Repository
+  └── RepositoryReviewBot[]
+        ├── name
+        ├── aiModelId
+        ├── prompt / promptMode
+        ├── isActive / sortOrder
+        └── Agent Loop budget
+
+ReviewLog
+  └── ReviewBotRun[]
+        ├── status
+        ├── model snapshot
+        ├── prompt snapshot
+        ├── summary / error
+        └── ReviewAgentTrace
+```
+
+机器人只引用 `AIModel`，不重复保存 API Key。运行时会把模型、Prompt 和 Prompt 模式写入 `ReviewBotRun` 快照，保证历史审查可追溯。
+
+每个机器人有独立审查预算：
+
+- `maxIterations`：Agent Loop 最大轮次，默认 5，运行时限制 1 到 10。
+- `maxContextFiles`：单次上下文检索最多文件数，默认 12，运行时限制 1 到 200。
+- `maxCallGraphDepth`：调用图上下游检索深度，默认 2，运行时限制 0 到 4。
+- `maxFindings`：单机器人最多 findings，默认 50，运行时限制 1 到 200。
+
+最终合并 findings 的上限按成功机器人预算求和，并有全局硬上限 500。
+
+## Agent Loop
+
+每个机器人独立运行一个有界 Agent Loop。
+
+```text
+while (true)
+  observe
+  plan_next
+  tool_call
+  review
+  critic
+
+  if budget exhausted
+    break
+
+  if critic says stop
+    break
+
+  if no new context requested
+    break
+```
+
+每轮包含五个步骤：
+
+1. `observe` 读取 diff、已有 findings、预算和 Memory 摘要。
+2. `plan_next` 判断还缺什么上下文，决定是否继续检索。
+3. `tool_call` 只读检索 Memory、Code Graph、文件上下文和历史审查。
+4. `review` 基于新增上下文输出结构化 findings。
+5. `critic` 去重、判断是否继续，并提取可写回 Memory 的高置信事实。
+
+Agent Loop 的工具权限第一版只读：
+
+- `get_memory_snapshot`
+- `search_memory_facts`
+- `get_changed_files`
+- `get_file_context`
+- `get_call_graph_neighbors`
+- `get_related_review_history`
+- `get_architecture_summary`
+
+不允许修改代码、生成补丁、执行写操作或自动修复。
+
+## 大仓库如何处理
+
+`maxContextFiles` 不是仓库索引文件数，也不是说大仓库只能看 12 个文件。系统分成两层：
+
+```text
+仓库长期层：Memory Wiki + Code Graph
+        │
+        ├── 存项目架构
+        ├── 存文件摘要
+        ├── 存符号和调用边
+        └── 存高置信事实
+
+单次审查层：Agent Loop 检索预算
+        │
+        ├── 从 diff 出发
+        ├── 查相关文件
+        ├── 沿调用图上下游扩展
+        └── 把有限上下文交给模型
+```
+
+大仓库不应该在每次审查时把所有文件塞进模型上下文。正确做法是先把仓库结构沉淀到 Memory Wiki 和 Code Graph，再在审查时按预算精准检索。普通机器人保持轻量预算，安全或架构类机器人可以调高 `maxContextFiles` 和 `maxCallGraphDepth`。
+
+## Memory Wiki
+
+Memory Wiki 是仓库级长期记忆，核心数据包括：
+
+- `RepositoryMemorySnapshot`：某个分支和 commit 的架构快照。
+- `CodeFileNode`：文件节点，保存文件路径、语言、角色、摘要、imports 和 exports。
+- `CodeSymbolNode`：符号节点，保存函数、组件、API route 等结构。
+- `CodeRelationEdge`：文件或符号之间的关系边。
+- `RepositoryMemoryFact`：可持续更新的高置信事实。
+
+Memory Snapshot 以 `repositoryId + branch + commitSha` 唯一定位。审查时优先复用 ready snapshot，避免重复索引。
+
+Memory Fact 只允许高置信写回，当前阈值是 `confidence >= 0.85`。写回只追加或跳过重复事实，不覆盖旧事实。每条事实必须带 evidence、来源 reviewLogId 和最后验证 commit。
+
+## Code Graph
+
+Code Graph 第一版重点支持 TypeScript 和 TSX，主要识别：
+
+- import / export
+- 函数和组件
+- API route
+- 工作流节点
+- service、page、component、data model 等文件角色
+
+上下文检索从变更文件对应的 `CodeFileNode` 出发，按 `maxCallGraphDepth` 逐跳查找上下游关系。`maxCallGraphDepth = 0` 时不查调用图，只返回 Memory、文件摘要和历史审查。
+
+## 数据模型
+
+核心实体关系如下：
+
+```text
+GitLabAccount
+  └── Repository
+        ├── RepositoryReviewBot
+        │     └── AIModel
+        ├── ReviewLog
+        │     ├── ReviewBotRun
+        │     │     ├── ReviewComment
+        │     │     └── ReviewAgentTrace
+        │     └── ReviewComment
+        ├── RepositoryMemorySnapshot
+        ├── CodeFileNode
+        │     └── CodeSymbolNode
+        ├── CodeRelationEdge
+        └── RepositoryMemoryFact
+```
+
+关键约束：
+
+- `ReviewLog(repositoryId, mergeRequestIid, commitSha)` 保证同一 commit 审查幂等。
+- `ReviewBotRun(reviewLogId, reviewBotId)` 保证一次审查中一个机器人只运行一次。
+- `RepositoryMemorySnapshot(repositoryId, branch, commitSha)` 保证快照可复用。
+- `CodeFileNode(repositoryId, branch, commitSha, filePath)` 保证文件节点唯一。
+- `RepositoryMemoryFact(repositoryId, branch, type, content)` 防止重复写入同一事实。
+
+## API 和页面
+
+### 审查入口
+
+- `POST /api/review`
+- `POST /api/webhook/gitlab`
+- `POST /api/review/[id]/retry`
+
+三类入口统一进入 `ReviewTriggerService`。
+
+### Memory Wiki
+
+- `POST /api/repositories/[id]/memory/refresh`
+- `GET /api/repositories/[id]/memory`
+- `GET /api/repositories/[id]/memory/graph`
+
+仓库详情页展示当前分支、commit、刷新时间、架构摘要和高置信事实。
+
+### 审查机器人
+
+- `GET /api/repositories/[id]/bots`
+- `POST /api/repositories/[id]/bots`
+- `PUT /api/repositories/[id]/bots`
+- `DELETE /api/repositories/[id]/bots?id=xxx`
+
+仓库详情页支持新增、编辑、启用、禁用、排序、选择模型、配置 Prompt 和配置 Agent Loop 预算。
+
+### Agent Trace
+
+- `GET /api/reviews/[id]/agent-trace`
+
+审查详情页可以查看每个机器人的 loop 轮次、工具调用、检索上下文、Critic 停止原因、最终 findings 和 Memory 写回。
+
+## Docker 和数据库迁移
+
+项目支持 Docker 直接启动完整应用：
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
+
+`docker-entrypoint.sh` 只做两件事：
+
+```text
+prisma migrate deploy
+npm run start
+```
+
+这里不使用 PM2。Docker 自身负责进程生命周期和重启策略，`docker-compose.yml` 中的 app 和 postgres 都配置了 `restart: unless-stopped`。
+
+SQLite 历史数据迁移必须显式执行：
+
+```bash
+npm run db:migrate:sqlite -- --source prisma/dev.db --force
+```
+
+Docker 中执行迁移时需要挂载旧 SQLite 文件：
+
+```bash
+docker compose run --rm \
+  -v "$PWD/prisma/dev.db:/app/prisma/dev.db:ro" \
+  app npm run db:migrate:sqlite -- --source prisma/dev.db --force
+```
+
+跨机器迁移 PostgreSQL 数据建议使用 `pg_dump` 和 `pg_restore`，不要直接拷贝 Docker volume：
+
+```bash
+pg_dump -Fc "$DATABASE_URL" > code-review-copilot.dump
+pg_restore --clean --if-exists --no-owner --dbname "$TARGET_DATABASE_URL" code-review-copilot.dump
+```
+
+## 失败策略
+
+- Memory 刷新失败：`ReviewLog` failed，不发布评论。
+- 仓库没有启用机器人：`ReviewLog` failed，错误为 `No active review bots configured`。
+- 单个机器人失败：对应 `ReviewBotRun` failed，不阻塞其他机器人。
+- 所有机器人失败：`ReviewLog` failed，不发布空评论。
+- AI JSON 解析失败：当前机器人失败，错误写入 `ReviewBotRun.error`。
+- Retry：清理旧 comments、bot runs、agent traces，再按当前启用机器人重新运行。
+
+## 质量门禁
+
+当前工程质量门禁：
+
+```bash
+npx tsc --noEmit --pretty false
+npm run lint
+npm run build
+```
+
+项目暂时没有 `npm test` 脚本。后续补测试时，应优先覆盖：
+
+- Memory Snapshot 命中和刷新。
+- Code Graph TS / TSX 解析。
+- Agent Loop 预算停止。
+- 多机器人并发和单机器人失败隔离。
+- findings 去重和来源合并。
+- Memory Fact 高置信写回和重复跳过。
+- SQLite 到 PostgreSQL 历史数据迁移。

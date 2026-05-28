@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeAgentLoopBudget } from "@/lib/services/review-budget";
 
 function normalizePromptMode(value: unknown) {
   return value === "replace" ? "replace" : "extend";
@@ -92,6 +93,7 @@ export function POST(
             promptMode: normalizePromptMode(body.promptMode),
             isActive: body.isActive !== false,
             sortOrder: normalizeSortOrder(body.sortOrder),
+            ...normalizeAgentLoopBudget(body),
           },
           include: selectBotInclude(),
         }).then((bot) => NextResponse.json(bot));
@@ -160,6 +162,10 @@ export function PUT(
             promptMode: body.promptMode === undefined ? undefined : normalizePromptMode(body.promptMode),
             isActive: body.isActive,
             sortOrder: body.sortOrder === undefined ? undefined : normalizeSortOrder(body.sortOrder),
+            ...(body.maxIterations === undefined ? {} : { maxIterations: normalizeAgentLoopBudget(body).maxIterations }),
+            ...(body.maxContextFiles === undefined ? {} : { maxContextFiles: normalizeAgentLoopBudget(body).maxContextFiles }),
+            ...(body.maxCallGraphDepth === undefined ? {} : { maxCallGraphDepth: normalizeAgentLoopBudget(body).maxCallGraphDepth }),
+            ...(body.maxFindings === undefined ? {} : { maxFindings: normalizeAgentLoopBudget(body).maxFindings }),
           },
           include: selectBotInclude(),
         }).then((updatedBot) => NextResponse.json(updatedBot));
