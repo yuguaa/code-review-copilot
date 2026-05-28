@@ -5,6 +5,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+FROM node:24-alpine AS prod-deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
 FROM node:24-alpine AS builder
 
 WORKDIR /app
@@ -29,15 +36,14 @@ ENV PORT=3000
 RUN apk add --no-cache openssl sqlite dos2unix
 
 COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/scripts ./scripts
 
-RUN npm prune --omit=dev \
-  && dos2unix scripts/docker-entrypoint.sh \
+RUN dos2unix scripts/docker-entrypoint.sh \
   && chmod +x scripts/docker-entrypoint.sh \
   && addgroup -S nodejs \
   && adduser -S nextjs -G nodejs \
