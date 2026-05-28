@@ -33,6 +33,9 @@ export interface AgentLoopInput {
   memorySnapshotId?: string | null;
   existingFindings: Array<ReviewComment & { confidence?: number }>;
   budget?: Partial<AgentLoopBudget>;
+  botName?: string;
+  botPrompt?: string | null;
+  botPromptMode?: string | null;
 }
 
 interface AgentPlan {
@@ -219,6 +222,9 @@ export class ReviewAgentLoopService {
         contextSummary: context.summary,
         existingFindingsCount: findings.length,
         remainingIterations,
+        botName: input.botName,
+        botPrompt: input.botPrompt,
+        botPromptMode: input.botPromptMode,
       });
 
       const planResponse = await aiService.reviewCode(planPrompt, input.modelConfig, REVIEW_AGENT_PLAN_SYSTEM_PROMPT);
@@ -232,6 +238,9 @@ export class ReviewAgentLoopService {
         contextSummary: context.summary,
         existingFindings: findings,
         maxFindings: budget.maxFindings - findings.length,
+        botName: input.botName,
+        botPrompt: input.botPrompt,
+        botPromptMode: input.botPromptMode,
       });
 
       const reviewResponse = await aiService.reviewCode(reviewPrompt, input.modelConfig, REVIEW_AGENT_REVIEW_SYSTEM_PROMPT);

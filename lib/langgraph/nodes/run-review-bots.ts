@@ -5,10 +5,8 @@
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { aiService } from "@/lib/services/ai";
 import { reviewAgentLoopService } from "@/lib/services/review-agent-loop";
 import { normalizeAgentLoopBudget, totalFindingsBudget } from "@/lib/services/review-budget";
-import { buildReviewPrompt, OUTPUT_FORMAT, SYSTEM_PROMPT } from "@/lib/prompts";
 import type { AIModelConfig, GitLabDiff, ReviewComment, ReviewCommentSource } from "@/lib/types";
 import type { FileReviewResult, ReviewState } from "../types";
 
@@ -31,13 +29,6 @@ function generatePatch(diff: GitLabDiff): string {
   return `--- a/${diff.old_path}
 +++ b/${diff.new_path}
 ${diff.diff}`;
-}
-
-function buildSystemPrompt(bot: ReviewBotWithModel): string {
-  if (!bot.prompt) return SYSTEM_PROMPT;
-  return bot.promptMode === "replace"
-    ? `${bot.prompt}\n${OUTPUT_FORMAT}`
-    : `${SYSTEM_PROMPT}\n\n【机器人 ${bot.name} 的审查要求】\n${bot.prompt}`;
 }
 
 function toModelConfig(bot: ReviewBotWithModel): AIModelConfig {
@@ -114,95 +105,6 @@ function countsFrom(comments: ReviewComment[]) {
   };
 }
 
-function runFileReviews(params: {
-  state: ReviewState;
-  bot: ReviewBotWithModel;
-  botRunId: string;
-  modelConfig: AIModelConfig;
-  systemPrompt: string;
-  existingFindings: ReviewComment[];
-}): Promise<BotRunResult> {
-  const aiResponsesByFile: Record<string, string> = {};
-  const reviewPromptsByFile: Record<string, string> = {};
-  const fileResults: FileReviewResult[] = [];
-  const comments: ReviewComment[] = [];
-  const botModel = `${params.modelConfig.provider}/${params.modelConfig.modelId}`;
-  const budget = normalizeAgentLoopBudget(params.bot);
-
-  const reviewNext = (index: number): Promise<void> => {
-    const diff = params.state.relevantDiffs[index];
-    if (!diff) return Promise.resolve();
-
-    const filePath = diff.new_path;
-    const patch = generatePatch(diff);
-    const reviewPrompt = buildReviewPrompt({
-      title: params.state.mrInfo?.title || params.state.reviewLog?.title || "",
-      description: params.state.mrInfo?.description || params.state.reviewLog?.description || "",
-      filename: filePath,
-      diff: patch,
-      summary: [
-        params.state.summary,
-        params.state.architectureSummary ? `【项目架构 Memory】\n${params.state.architectureSummary}` : "",
-        params.state.agentContextSummary ? `【Agent 检索上下文】\n${params.state.agentContextSummary}` : "",
-        Object.keys(params.state.agentPlan || {}).length > 0 ? `【Agent 审查计划】\n${JSON.stringify(params.state.agentPlan, null, 2)}` : "",
-      ].filter(Boolean).join("\n\n"),
-    });
-    const fullPrompt = `=== Bot ===\n${params.bot.name}\n\n=== System Prompt ===\n${params.systemPrompt}\n\n=== User Prompt ===\n${reviewPrompt}`;
-
-    return aiService.reviewCode(reviewPrompt, params.modelConfig, params.systemPrompt)
-      .then((aiResponse) => {
-        const parsed = aiService.parseStructuredReview(aiResponse, {
-          defaultFilePath: filePath,
-          maxItems: budget.maxFindings,
-        });
-        const source = (confidence?: number) => sourceFor(params.botRunId, params.bot.name, botModel, confidence);
-        const reviewItems = parsed.commentItems.map((item) => ({
-          filePath: item.filePath || filePath,
-          lineNumber: item.lineNumber,
-          lineRangeEnd: item.lineRangeEnd,
-          severity: item.severity,
-          content: item.content,
-          confidence: item.confidence,
-          reviewBotRunId: params.botRunId,
-          sourceBotName: params.bot.name,
-          sourceBotModel: botModel,
-          sourceBots: [source(item.confidence)],
-        }));
-        const counts = countsFrom(reviewItems);
-
-        aiResponsesByFile[`${params.bot.name}:${filePath}`] = aiResponse;
-        reviewPromptsByFile[`${params.bot.name}:${filePath}`] = fullPrompt;
-        comments.push(...reviewItems);
-        fileResults.push({
-          filePath,
-          aiResponse,
-          prompt: fullPrompt,
-          counts,
-          criticalItems: reviewItems
-            .filter((item) => item.severity === "critical")
-            .map((item) => ({
-              filePath: item.filePath,
-              lineNumber: item.lineNumber,
-              lineRangeEnd: item.lineRangeEnd,
-              content: item.content,
-            })),
-          reviewItems,
-        });
-      })
-      .then(() => reviewNext(index + 1));
-  };
-
-  return reviewNext(0).then(() => ({
-    botRunId: params.botRunId,
-    botName: params.bot.name,
-    botModel,
-    fileResults,
-    comments,
-    aiResponsesByFile,
-    reviewPromptsByFile,
-  }));
-}
-
 function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResult> {
   const reviewLog = state.reviewLog;
   if (!reviewLog) return Promise.reject(new Error("Review log is required"));
@@ -218,7 +120,6 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResu
     filePath: diff.new_path,
     diff: generatePatch(diff),
   }));
-  const systemPrompt = buildSystemPrompt(bot);
   const botModel = `${modelConfig.provider}/${modelConfig.modelId}`;
   const budget = normalizeAgentLoopBudget(bot);
 
@@ -266,52 +167,72 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResu
       memorySnapshotId: state.memorySnapshotId,
       existingFindings: [],
       budget,
+      botName: bot.name,
+      botPrompt: bot.prompt,
+      botPromptMode: bot.promptMode,
     }).then((agentResult) => {
-      const agentComments = agentResult.agentFindings.map((item) => ({
+      const comments = mergeComments(agentResult.agentFindings.map((item) => ({
         ...item,
         reviewBotRunId: botRun.id,
         sourceBotName: bot.name,
         sourceBotModel: botModel,
         sourceBots: [sourceFor(botRun.id, bot.name, botModel, item.confidence)],
-      }));
+      })), budget.maxFindings);
+      const counts = countsFrom(comments);
+      const traceKey = `${bot.name}:agent-loop`;
+      const fileResults: FileReviewResult[] = comments.length > 0
+        ? [{
+          filePath: "Agent Loop",
+          aiResponse: JSON.stringify({
+            traceId: agentResult.traceId,
+            critic: agentResult.critic,
+            memoryUpdates: agentResult.memoryUpdates,
+          }),
+          prompt: JSON.stringify(agentResult.finalPlan),
+          counts,
+          criticalItems: comments
+            .filter((item) => item.severity === "critical")
+            .map((item) => ({
+              filePath: item.filePath,
+              lineNumber: item.lineNumber,
+              lineRangeEnd: item.lineRangeEnd,
+              content: item.content,
+            })),
+          reviewItems: comments,
+        }]
+        : [];
 
-      return runFileReviews({
-        state: {
-          ...state,
-          agentTraceId: agentResult.traceId,
-          agentPlan: agentResult.finalPlan as Record<string, unknown>,
-          agentContextSummary: agentResult.context.summary,
-          architectureSummary: agentResult.context.architectureSummary,
+      return prisma.reviewBotRun.update({
+        where: { id: botRun.id },
+        data: {
+          status: "completed",
+          summary: [
+            agentResult.critic.reason || agentResult.finalPlan.reviewStrategy || "completed",
+            `findings=${comments.length}`,
+            `critical=${counts.critical}`,
+            `normal=${counts.normal}`,
+            `suggestion=${counts.suggestion}`,
+          ].join("; "),
+          completedAt: new Date(),
         },
-        bot,
+      }).then(() => ({
         botRunId: botRun.id,
-        modelConfig,
-        systemPrompt,
-        existingFindings: agentComments,
-      }).then((fileResult) => {
-        const comments = mergeComments([...agentComments, ...fileResult.comments], budget.maxFindings);
-        const counts = countsFrom(comments);
-        return prisma.reviewBotRun.update({
-          where: { id: botRun.id },
-          data: {
-            status: "completed",
-            summary: [
-              agentResult.critic.reason || agentResult.finalPlan.reviewStrategy || "completed",
-              `findings=${comments.length}`,
-              `critical=${counts.critical}`,
-              `normal=${counts.normal}`,
-              `suggestion=${counts.suggestion}`,
-            ].join("; "),
-            completedAt: new Date(),
-          },
-        }).then(() => ({
-          ...fileResult,
-          comments,
-          aiResponsesByFile: fileResult.aiResponsesByFile,
-          reviewPromptsByFile: fileResult.reviewPromptsByFile,
-          summary: agentResult.critic.reason,
-        }));
-      });
+        botName: bot.name,
+        botModel,
+        fileResults,
+        comments,
+        aiResponsesByFile: {
+          [traceKey]: JSON.stringify({
+            traceId: agentResult.traceId,
+            critic: agentResult.critic,
+            contextSummary: agentResult.context.summary,
+          }),
+        },
+        reviewPromptsByFile: {
+          [traceKey]: JSON.stringify(agentResult.finalPlan),
+        },
+        summary: agentResult.critic.reason,
+      }));
     }).catch((error) => {
       return prisma.reviewBotRun.update({
         where: { id: botRun.id },

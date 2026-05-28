@@ -27,7 +27,6 @@ function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
       seen.add(key);
       return true;
     })
-    .slice(0, 50)
     .map((comment) => ({
       ...comment,
       confidence: Math.min(1, Math.max(0, comment.confidence ?? 0.5)),

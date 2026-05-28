@@ -46,6 +46,25 @@ export async function GET() {
             isActive: true,
           },
         },
+        reviewBots: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            aiModel: {
+              select: {
+                id: true,
+                provider: true,
+                modelId: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [
+            { sortOrder: 'asc' },
+            { createdAt: 'asc' },
+          ],
+        },
         _count: {
           select: {
             reviewLogs: true,
@@ -214,6 +233,25 @@ export async function PUT(request: NextRequest) {
             modelId: true,
             isActive: true,
           },
+        },
+        reviewBots: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            aiModel: {
+              select: {
+                id: true,
+                provider: true,
+                modelId: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [
+            { sortOrder: 'asc' },
+            { createdAt: 'asc' },
+          ],
         },
         _count: {
           select: {

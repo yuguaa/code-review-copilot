@@ -214,8 +214,14 @@ export function buildReviewAgentPlanPrompt(params: {
   contextSummary: string
   existingFindingsCount: number
   remainingIterations: number
+  botName?: string
+  botPrompt?: string | null
+  botPromptMode?: string | null
 }): string {
   return [
+    params.botName ? `【当前审查机器人】${params.botName}` : '',
+    params.botPrompt ? `【机器人专属要求】\n${params.botPrompt}` : '',
+    params.botPromptMode === 'replace' ? '【Prompt 模式】替换模式，请以机器人专属要求为最高审查准则。' : '',
     params.title ? `【变更主题】${params.title}` : '',
     params.description ? `【描述】${params.description}` : '',
     `【变更文件】\n${params.changedFiles.map((file) => `- ${file}`).join('\n')}`,
@@ -237,12 +243,18 @@ export function buildReviewAgentReviewPrompt(params: {
   contextSummary: string
   existingFindings: Array<{ filePath: string; lineNumber: number; severity: string; content: string; confidence?: number }>
   maxFindings: number
+  botName?: string
+  botPrompt?: string | null
+  botPromptMode?: string | null
 }): string {
   const existingFindings = params.existingFindings.length > 0
     ? params.existingFindings.map((item) => `- [${item.severity}] ${item.filePath}:${item.lineNumber} ${item.content} confidence=${item.confidence ?? 'unknown'}`).join('\n')
     : '无'
 
   return [
+    params.botName ? `【当前审查机器人】${params.botName}` : '',
+    params.botPrompt ? `【机器人专属要求】\n${params.botPrompt}` : '',
+    params.botPromptMode === 'replace' ? '【Prompt 模式】替换模式，请以机器人专属要求为最高审查准则。' : '',
     params.title ? `【变更主题】${params.title}` : '',
     params.description ? `【描述】${params.description}` : '',
     `【变更文件】\n${params.changedFiles.map((file) => `- ${file}`).join('\n')}`,

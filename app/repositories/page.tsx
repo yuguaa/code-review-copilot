@@ -63,6 +63,11 @@ type Repository = {
   autoReview: boolean
   defaultAIModelId: string | null
   defaultAIModel: AIModel | null
+  reviewBots: Array<{
+    id: string
+    name: string
+    aiModel: AIModel | null
+  }>
   watchBranches: string | null
   customPrompt: string | null
   // 自定义 AI 模型配置
@@ -79,6 +84,31 @@ type Repository = {
   _count: {
     reviewLogs: number
   }
+}
+
+function renderReviewBotModels(repo: Repository) {
+  const bots = repo.reviewBots.filter((bot) => bot.aiModel)
+
+  if (bots.length === 0) {
+    return <span className="text-xs text-muted-foreground">未配置机器人</span>
+  }
+
+  const visibleBots = bots.slice(0, 2)
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visibleBots.map((bot) => (
+        <Badge key={bot.id} variant="default" className="font-normal">
+          {bot.name} / {getModelDisplayName(bot.aiModel!)}
+        </Badge>
+      ))}
+      {bots.length > visibleBots.length && (
+        <Badge variant="secondary" className="font-normal">
+          +{bots.length - visibleBots.length}
+        </Badge>
+      )}
+    </div>
+  )
 }
 
 export default function RepositoriesPage() {
@@ -306,17 +336,7 @@ export default function RepositoriesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      {repo.defaultAIModel ? (
-                        <Badge variant="default" className="font-normal">
-                          {getModelDisplayName(repo.defaultAIModel)}
-                        </Badge>
-                      ) : repo.customProvider ? (
-                        <Badge variant="secondary" className="font-normal">
-                          {repo.customModelId} ({repo.customProvider})
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">未配置</span>
-                      )}
+                      {renderReviewBotModels(repo)}
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       {repo.watchBranches ? (
