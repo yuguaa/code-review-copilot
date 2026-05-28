@@ -44,12 +44,50 @@ export async function GET(request: NextRequest) {
         comments: {
           select: {
             id: true,
+            reviewBotRunId: true,
             filePath: true,
             lineNumber: true,
             lineRangeEnd: true,
             severity: true,
             content: true,
+            confidence: true,
+            sourceBotName: true,
+            sourceBotModel: true,
+            sourceBotsJson: true,
             isPosted: true,
+          },
+        },
+        botRuns: {
+          orderBy: { startedAt: 'asc' },
+          include: {
+            reviewBot: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              },
+            },
+            agentTrace: {
+              select: {
+                id: true,
+                loopIterationsJson: true,
+                finalPlanJson: true,
+                criticJson: true,
+                memoryUpdatesJson: true,
+                createdAt: true,
+              },
+            },
+            comments: {
+              select: {
+                id: true,
+                filePath: true,
+                lineNumber: true,
+                lineRangeEnd: true,
+                severity: true,
+                content: true,
+                confidence: true,
+              },
+            },
           },
         },
       },
@@ -108,6 +146,23 @@ export async function GET(request: NextRequest) {
         reviewPrompts: review.reviewPrompts, // 发送给 AI 的完整 Prompt（用于追溯）
         aiModelProvider: review.aiModelProvider, // AI 模型提供商
         aiModelId: review.aiModelId, // AI 模型 ID
+        botRuns: review.botRuns.map((botRun) => ({
+          id: botRun.id,
+          botName: botRun.reviewBot?.name || '未知机器人',
+          botDescription: botRun.reviewBot?.description || null,
+          status: botRun.status,
+          error: botRun.error,
+          summary: botRun.summary,
+          aiModelProvider: botRun.aiModelProvider,
+          aiModelId: botRun.aiModelId,
+          aiModelName: botRun.aiModelName,
+          promptSnapshot: botRun.promptSnapshot,
+          promptMode: botRun.promptMode,
+          startedAt: botRun.startedAt,
+          completedAt: botRun.completedAt,
+          comments: botRun.comments,
+          trace: botRun.agentTrace,
+        })),
         startedAt: review.startedAt,
         completedAt: review.completedAt,
         comments: review.comments.map((c) => {

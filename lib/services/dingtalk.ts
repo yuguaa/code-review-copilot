@@ -83,7 +83,6 @@ export async function sendReviewToDingTalk(params: {
   repositoryName: string;
   repositoryPath: string;
   gitlabUrl: string;
-  messageOverride?: string;
 }): Promise<void> {
   const setting = await prisma.notificationSetting.findUnique({
     where: { scope: "global" },
@@ -121,33 +120,25 @@ export async function sendReviewToDingTalk(params: {
   lines.push(`- 分支：${reviewLog.sourceBranch}${reviewLog.targetBranch ? ` → ${reviewLog.targetBranch}` : ""}`);
   lines.push("");
 
-  if (params.messageOverride) {
-    lines.push(params.messageOverride);
-    if (link) {
-      lines.push("");
-      lines.push(`[查看 GitLab 详情](${link})`);
-    }
-  } else {
-    const critical = reviewLog.criticalIssues ?? 0;
-    const normal = reviewLog.normalIssues ?? 0;
-    const suggestion = reviewLog.suggestions ?? 0;
-    const conclusion = getReviewConclusion(critical, normal, suggestion);
+  const critical = reviewLog.criticalIssues ?? 0;
+  const normal = reviewLog.normalIssues ?? 0;
+  const suggestion = reviewLog.suggestions ?? 0;
+  const conclusion = getReviewConclusion(critical, normal, suggestion);
 
-    const summary = reviewLog.aiSummary ? compactText(reviewLog.aiSummary, 240) : "";
-    lines.push(`- 结论：${conclusion}`);
-    lines.push(`- 问题统计：🔴 ${critical} / ⚠️ ${normal} / 💡 ${suggestion}`);
-    lines.push(`- 审查文件：${reviewLog.reviewedFiles}/${reviewLog.totalFiles}`);
-    if (summary) {
-      lines.push("");
-      lines.push(`**变更摘要**：${summary}`);
-    }
-    if (link) {
-      lines.push("");
-      lines.push(`[查看 GitLab 详情](${link})`);
-    }
+  const summary = reviewLog.aiSummary ? compactText(reviewLog.aiSummary, 360) : "";
+  lines.push(`- 结论：${conclusion}`);
+  lines.push(`- 问题统计：🔴 ${critical} / ⚠️ ${normal} / 💡 ${suggestion}`);
+  lines.push(`- 审查文件：${reviewLog.reviewedFiles}/${reviewLog.totalFiles}`);
+  if (summary) {
     lines.push("");
-    lines.push(`<sub>完成时间：${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`);
+    lines.push(`**变更摘要**：${summary}`);
   }
+  if (link) {
+    lines.push("");
+    lines.push(`[查看 GitLab 详情](${link})`);
+  }
+  lines.push("");
+  lines.push(`<sub>完成时间：${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`);
 
   const payload: DingTalkMarkdownMessage = {
     msgtype: "markdown",

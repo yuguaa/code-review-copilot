@@ -70,13 +70,50 @@ interface Review {
   startedAt: string
   completedAt: string | null
   eventType: 'push' | 'merge_request'
+  botRuns: Array<{
+    id: string
+    botName: string
+    botDescription: string | null
+    status: string
+    error: string | null
+    summary: string | null
+    aiModelProvider: string
+    aiModelId: string
+    aiModelName: string
+    promptSnapshot: string | null
+    promptMode: string
+    startedAt: string
+    completedAt: string | null
+    comments: Array<{
+      id: string
+      filePath: string
+      lineNumber: number
+      lineRangeEnd?: number | null
+      severity: string
+      content: string
+      confidence: number | null
+    }>
+    trace: {
+      id: string
+      loopIterationsJson: unknown
+      finalPlanJson: unknown
+      criticJson: unknown
+      memoryUpdatesJson: unknown
+      createdAt: string
+    } | null
+  }>
   comments: Array<{
     id: string
+    reviewBotRunId?: string | null
     filePath: string
     lineNumber: number
     lineRangeEnd?: number | null
     severity: string
     content: string
+    confidence?: number | null
+    sourceBotName?: string | null
+    sourceBotModel?: string | null
+    sourceBotsJson?: unknown
     isPosted: boolean
     gitlabDiffUrl?: string | null
   }>
@@ -285,6 +322,47 @@ export default function ReviewsPage() {
     } catch (err) {
       console.error('Failed to copy:', err)
     }
+  }
+
+  const formatJson = (value: unknown) => {
+    if (!value) return '无'
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch {
+      return String(value)
+    }
+  }
+
+  const extractLastReviewResponse = (botRun: Review['botRuns'][number]) => {
+    const iterations = Array.isArray(botRun.trace?.loopIterationsJson)
+      ? botRun.trace?.loopIterationsJson as Array<Record<string, unknown>>
+      : []
+    const last = [...iterations].reverse().find((item) => {
+      const review = item.review as { response?: unknown } | undefined
+      return typeof review?.response === 'string' && review.response.trim()
+    })
+    const review = last?.review as { response?: string } | undefined
+    return review?.response || ''
+  }
+
+  const formatCommentSource = (comment: Review['comments'][number]) => {
+    if (Array.isArray(comment.sourceBotsJson) && comment.sourceBotsJson.length > 0) {
+      return comment.sourceBotsJson
+        .map((source) => {
+          if (!source || typeof source !== 'object') return '未知来源'
+          const data = source as { botName?: string; model?: string; confidence?: number }
+          const confidence = typeof data.confidence === 'number'
+            ? `，confidence=${data.confidence.toFixed(2)}`
+            : ''
+          return `${data.botName || '未知机器人'} / ${data.model || 'unknown'}${confidence}`
+        })
+        .join('；')
+    }
+
+    const confidence = typeof comment.confidence === 'number'
+      ? `，confidence=${comment.confidence.toFixed(2)}`
+      : ''
+    return `${comment.sourceBotName || '默认审查机器人'} / ${comment.sourceBotModel || 'unknown'}${confidence}`
   }
 
   useEffect(() => {
@@ -625,6 +703,7 @@ export default function ReviewsPage() {
                   <TabsList className="mb-4 flex h-10 w-full flex-nowrap gap-2 overflow-x-auto whitespace-nowrap border border-border/40 bg-background/80 p-1 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 no-scrollbar">
                     <TabsTrigger value="summary" className="h-full">AI 总结</TabsTrigger>
                     <TabsTrigger value="comments" className="h-full">审查意见 {selectedReview.comments?.length ? `(${selectedReview.comments.length})` : ''}</TabsTrigger>
+                    <TabsTrigger value="bots" className="h-full">机器人结果 {selectedReview.botRuns?.length ? `(${selectedReview.botRuns.length})` : ''}</TabsTrigger>
                     <TabsTrigger value="ai" className="h-full">AI 原始回复</TabsTrigger>
                     <TabsTrigger value="prompts" className="h-full">Prompt 追溯</TabsTrigger>
                     <TabsTrigger value="model" className="h-full">模型信息</TabsTrigger>
@@ -689,6 +768,9 @@ export default function ReviewsPage() {
                               <p className="text-sm text-foreground whitespace-pre-wrap">
                                 {comment.content}
                               </p>
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                来源：{formatCommentSource(comment)}
+                              </p>
                             </div>
                           ))}
                         </div>
@@ -702,6 +784,99 @@ export default function ReviewsPage() {
                           </div>
                         )}
                       </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="bots" className="flex-1 min-h-0 overflow-y-auto min-w-0">
+                    {selectedReview.botRuns && selectedReview.botRuns.length > 0 ? (
+                      <div className="space-y-4">
+                        {selectedReview.botRuns.map((botRun) => {
+                          const rawReview = extractLastReviewResponse(botRun)
+                          return (
+                            <div key={botRun.id} className="rounded-lg border border-border/40 bg-background p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-foreground">{botRun.botName}</p>
+                                    {getStatusBadge(botRun.status)}
+                                  </div>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {botRun.aiModelName} · {botRun.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Badge variant="outline">问题 {botRun.comments.length}</Badge>
+                                  <Badge variant="outline">
+                                    轮次 {Array.isArray(botRun.trace?.loopIterationsJson) ? botRun.trace?.loopIterationsJson.length : 0}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {botRun.summary && (
+                                <p className="mt-3 rounded-md bg-muted p-3 text-sm text-foreground whitespace-pre-wrap">
+                                  {botRun.summary}
+                                </p>
+                              )}
+
+                              {botRun.error && (
+                                <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                                  {botRun.error}
+                                </p>
+                              )}
+
+                              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                                <div className="min-w-0">
+                                  <div className="mb-2 flex items-center justify-between">
+                                    <p className="text-xs font-medium text-muted-foreground">Agent 原始评价</p>
+                                    {rawReview && (
+                                      <Button variant="ghost" size="xs" onClick={() => handleCopy(rawReview, `bot-review-${botRun.id}`)}>
+                                        {copiedKey === `bot-review-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
+                                      </Button>
+                                    )}
+                                  </div>
+                                  <pre className="max-h-80 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                                    {rawReview || '暂无原始评价'}
+                                  </pre>
+                                </div>
+
+                                <div className="min-w-0">
+                                  <div className="mb-2 flex items-center justify-between">
+                                    <p className="text-xs font-medium text-muted-foreground">Trace / Critic</p>
+                                    <Button variant="ghost" size="xs" onClick={() => handleCopy(formatJson(botRun.trace), `bot-trace-${botRun.id}`)}>
+                                      {copiedKey === `bot-trace-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
+                                    </Button>
+                                  </div>
+                                  <pre className="max-h-80 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                                    {formatJson({
+                                      finalPlan: botRun.trace?.finalPlanJson,
+                                      critic: botRun.trace?.criticJson,
+                                      memoryUpdates: botRun.trace?.memoryUpdatesJson,
+                                    })}
+                                  </pre>
+                                </div>
+                              </div>
+
+                              {botRun.comments.length > 0 && (
+                                <div className="mt-4 space-y-2">
+                                  <p className="text-xs font-medium text-muted-foreground">该机器人发现的问题</p>
+                                  {botRun.comments.map((comment) => (
+                                    <div key={comment.id} className={`rounded-md border-l-4 p-3 ${getSeverityStyle(comment.severity)}`}>
+                                      <p className="text-xs font-mono text-muted-foreground">
+                                        {comment.filePath}:{comment.lineNumber}
+                                        {comment.lineRangeEnd && comment.lineRangeEnd !== comment.lineNumber ? `-${comment.lineRangeEnd}` : ''}
+                                        {typeof comment.confidence === 'number' ? ` · confidence=${comment.confidence.toFixed(2)}` : ''}
+                                      </p>
+                                      <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{comment.content}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground text-sm">暂无机器人运行记录</div>
                     )}
                   </TabsContent>
 

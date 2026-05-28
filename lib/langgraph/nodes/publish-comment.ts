@@ -13,6 +13,18 @@ import { sendReviewToDingTalk } from "@/lib/services/dingtalk";
 import type { ReviewComment, ReviewLog } from "@prisma/client";
 import type { ReviewState } from "../types";
 
+type BotRunForSummary = {
+  status: string;
+  summary: string | null;
+  aiModelName: string;
+  reviewBot: { name: string } | null;
+  agentTrace: {
+    loopIterationsJson: unknown;
+    finalPlanJson: unknown;
+    criticJson: unknown;
+  } | null;
+};
+
 /**
  * 发布评论节点
  */
@@ -37,6 +49,19 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
         where: { isPosted: false },
         orderBy: { createdAt: "asc" },
       },
+      botRuns: {
+        orderBy: { startedAt: "asc" },
+        include: {
+          reviewBot: { select: { name: true } },
+          agentTrace: {
+            select: {
+              loopIterationsJson: true,
+              finalPlanJson: true,
+              criticJson: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -55,6 +80,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
     state.summary || "",
     state.fileResults,
     reviewLog.comments,
+    reviewLog.botRuns,
     state.reviewScope,
     state.incrementalBaseSha
   );
@@ -181,7 +207,6 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
     repositoryName: reviewLog.repository.name,
     repositoryPath: reviewLog.repository.path,
     gitlabUrl: reviewLog.repository.gitLabAccount.url,
-    messageOverride: summaryContent,
   });
 
   return {
@@ -195,6 +220,7 @@ function formatSummaryComment(
   summary: string,
   fileResults: Array<{ filePath: string; counts: { critical: number; normal: number; suggestion: number } }>,
   postedComments: ReviewComment[],
+  botRuns: BotRunForSummary[],
   reviewScope: "full" | "incremental",
   incrementalBaseSha: string | null
 ): string {
@@ -215,14 +241,7 @@ function formatSummaryComment(
   ).length;
 
   const reviewResult = getReviewConclusion(critical, normal, suggestion);
-  const topFiles = [...fileResults]
-    .filter((file) => file.counts.critical > 0 || file.counts.normal > 0 || file.counts.suggestion > 0)
-    .sort((a, b) => {
-      const scoreA = a.counts.critical * 5 + a.counts.normal * 2 + a.counts.suggestion;
-      const scoreB = b.counts.critical * 5 + b.counts.normal * 2 + b.counts.suggestion;
-      return scoreB - scoreA;
-    })
-    .slice(0, 5);
+  const topFiles = buildFileRiskRank(sortedComments);
 
   lines.push("## 🤖 Code Review Copilot");
   lines.push("");
@@ -237,6 +256,18 @@ function formatSummaryComment(
   }
   lines.push(`- 审查文件：${reviewedFiles}/${totalFiles}（其中 ${filesWithIssues} 个文件存在问题）`);
   lines.push(`- 问题统计：🔴 严重 ${critical} / ⚠️ 一般 ${normal} / 💡 建议 ${suggestion}`);
+  lines.push(`- 审查机器人：${botRuns.length} 个`);
+
+  lines.push("");
+  lines.push("### 审查机器人结果");
+  if (botRuns.length === 0) {
+    lines.push("- 未记录机器人执行结果。");
+  } else {
+    botRuns.forEach((botRun) => {
+      const botName = botRun.reviewBot?.name || "未知机器人";
+      lines.push(`- **${botName}** / \`${botRun.aiModelName}\`：${formatBotRunStatus(botRun.status)}${botRun.summary ? `，${botRun.summary}` : ""}`);
+    });
+  }
 
   if (summary) {
     lines.push("");
@@ -300,8 +331,33 @@ function formatSummaryComment(
     lines.push("- 未发现问题文件。");
   } else {
     for (const file of topFiles) {
-      lines.push(`- \`${file.filePath}\`：🔴 ${file.counts.critical} / ⚠️ ${file.counts.normal} / 💡 ${file.counts.suggestion}`);
+      lines.push(`- \`${file.filePath}\`：🔴 ${file.critical} / ⚠️ ${file.normal} / 💡 ${file.suggestion}`);
     }
+  }
+
+  lines.push("");
+  lines.push("### 各机器人原始评价");
+  if (botRuns.length === 0) {
+    lines.push("- 暂无机器人原始评价。");
+  } else {
+    botRuns.forEach((botRun) => {
+      const botName = botRun.reviewBot?.name || "未知机器人";
+      const rawReview = extractBotRawReview(botRun);
+      const criticReason = extractCriticReason(botRun.agentTrace?.criticJson);
+
+      lines.push(`<details>`);
+      lines.push(`<summary>${botName} / ${botRun.aiModelName}</summary>`);
+      lines.push("");
+      lines.push(`- 状态：${formatBotRunStatus(botRun.status)}`);
+      if (botRun.summary) lines.push(`- 摘要：${botRun.summary}`);
+      if (criticReason) lines.push(`- Critic：${criticReason}`);
+      lines.push("");
+      lines.push("```text");
+      lines.push(rawReview || "无原始评价内容");
+      lines.push("```");
+      lines.push("");
+      lines.push(`</details>`);
+    });
   }
 
   lines.push("");
@@ -322,6 +378,64 @@ function formatSummaryComment(
   lines.push(`<sub>完成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`);
 
   return lines.join("\n");
+}
+
+function buildFileRiskRank(comments: ReviewComment[]): Array<{ filePath: string; critical: number; normal: number; suggestion: number }> {
+  const map = new Map<string, { filePath: string; critical: number; normal: number; suggestion: number }>();
+
+  comments.forEach((comment) => {
+    const current = map.get(comment.filePath) || {
+      filePath: comment.filePath,
+      critical: 0,
+      normal: 0,
+      suggestion: 0,
+    };
+
+    if (comment.severity === "critical") current.critical += 1;
+    if (comment.severity === "normal") current.normal += 1;
+    if (comment.severity === "suggestion") current.suggestion += 1;
+    map.set(comment.filePath, current);
+  });
+
+  return [...map.values()]
+    .sort((a, b) => {
+      const scoreA = a.critical * 5 + a.normal * 2 + a.suggestion;
+      const scoreB = b.critical * 5 + b.normal * 2 + b.suggestion;
+      return scoreB - scoreA;
+    })
+    .slice(0, 5);
+}
+
+function formatBotRunStatus(status: string): string {
+  if (status === "completed") return "已完成";
+  if (status === "running") return "运行中";
+  if (status === "failed") return "失败";
+  if (status === "cancelled") return "已停止";
+  return status;
+}
+
+function compactText(input: string, maxLen: number): string {
+  const text = input.replace(/\s+/g, " ").trim();
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1)}…`;
+}
+
+function extractBotRawReview(botRun: BotRunForSummary): string {
+  const iterations = Array.isArray(botRun.agentTrace?.loopIterationsJson)
+    ? botRun.agentTrace?.loopIterationsJson as Array<Record<string, unknown>>
+    : [];
+  const lastIteration = [...iterations].reverse().find((item) => {
+    const review = item.review as { response?: unknown } | undefined;
+    return typeof review?.response === "string" && review.response.trim();
+  });
+  const review = lastIteration?.review as { response?: string } | undefined;
+  return review?.response ? compactText(review.response, 3500) : "";
+}
+
+function extractCriticReason(criticJson: unknown): string {
+  if (!criticJson || typeof criticJson !== "object") return "";
+  const reason = (criticJson as { reason?: unknown }).reason;
+  return typeof reason === "string" ? reason : "";
 }
 
 function formatCommentSources(comment: ReviewComment): string {
