@@ -44,12 +44,7 @@ COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/scripts ./scripts
 
 RUN dos2unix scripts/docker-entrypoint.sh \
-  && chmod +x scripts/docker-entrypoint.sh \
-  && addgroup -S nodejs \
-  && adduser -S nextjs -G nodejs \
-  && chown -R nextjs:nodejs /app
-
-USER nextjs
+  && chmod +x scripts/docker-entrypoint.sh
 
 EXPOSE 3000
 
