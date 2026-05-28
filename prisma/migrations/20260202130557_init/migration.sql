@@ -91,14 +91,56 @@ CREATE TABLE "review_logs" (
 );
 
 -- CreateTable
+CREATE TABLE "repository_review_bots" (
+    "id" TEXT NOT NULL,
+    "repositoryId" TEXT NOT NULL,
+    "aiModelId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "prompt" TEXT,
+    "promptMode" TEXT NOT NULL DEFAULT 'extend',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "repository_review_bots_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "review_bot_runs" (
+    "id" TEXT NOT NULL,
+    "reviewLogId" TEXT NOT NULL,
+    "reviewBotId" TEXT,
+    "status" TEXT NOT NULL,
+    "error" TEXT,
+    "summary" TEXT,
+    "aiModelProvider" TEXT NOT NULL,
+    "aiModelId" TEXT NOT NULL,
+    "aiModelName" TEXT NOT NULL,
+    "promptSnapshot" TEXT,
+    "promptMode" TEXT NOT NULL,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "completedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "review_bot_runs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "review_comments" (
     "id" TEXT NOT NULL,
     "reviewLogId" TEXT NOT NULL,
+    "reviewBotRunId" TEXT,
     "filePath" TEXT NOT NULL,
     "lineNumber" INTEGER NOT NULL,
     "lineRangeEnd" INTEGER,
     "severity" TEXT NOT NULL,
     "content" TEXT NOT NULL,
+    "sourceBotName" TEXT,
+    "sourceBotModel" TEXT,
+    "sourceBotsJson" JSONB,
     "diffHunk" TEXT,
     "confidence" DOUBLE PRECISION,
     "gitlabCommentId" TEXT,
@@ -219,6 +261,7 @@ CREATE TABLE "repository_memory_facts" (
 CREATE TABLE "review_agent_traces" (
     "id" TEXT NOT NULL,
     "reviewLogId" TEXT NOT NULL,
+    "reviewBotRunId" TEXT,
     "memorySnapshotId" TEXT,
     "loopIterationsJson" JSONB,
     "retrievedContextJson" JSONB,
@@ -236,6 +279,27 @@ CREATE UNIQUE INDEX "repositories_gitLabProjectId_gitLabAccountId_key" ON "repos
 
 -- CreateIndex
 CREATE UNIQUE INDEX "review_logs_repositoryId_mergeRequestIid_commitSha_key" ON "review_logs"("repositoryId", "mergeRequestIid", "commitSha");
+
+-- CreateIndex
+CREATE INDEX "repository_review_bots_repositoryId_isActive_sortOrder_idx" ON "repository_review_bots"("repositoryId", "isActive", "sortOrder");
+
+-- CreateIndex
+CREATE INDEX "repository_review_bots_aiModelId_idx" ON "repository_review_bots"("aiModelId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "review_bot_runs_reviewLogId_reviewBotId_key" ON "review_bot_runs"("reviewLogId", "reviewBotId");
+
+-- CreateIndex
+CREATE INDEX "review_bot_runs_reviewLogId_status_idx" ON "review_bot_runs"("reviewLogId", "status");
+
+-- CreateIndex
+CREATE INDEX "review_bot_runs_reviewBotId_idx" ON "review_bot_runs"("reviewBotId");
+
+-- CreateIndex
+CREATE INDEX "review_comments_reviewLogId_reviewBotRunId_severity_idx" ON "review_comments"("reviewLogId", "reviewBotRunId", "severity");
+
+-- CreateIndex
+CREATE INDEX "review_comments_reviewBotRunId_isPosted_idx" ON "review_comments"("reviewBotRunId", "isPosted");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "notification_settings_scope_key" ON "notification_settings"("scope");
@@ -277,7 +341,10 @@ CREATE INDEX "repository_memory_facts_repositoryId_branch_type_idx" ON "reposito
 CREATE UNIQUE INDEX "repository_memory_facts_repositoryId_branch_type_content_key" ON "repository_memory_facts"("repositoryId", "branch", "type", "content");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "review_agent_traces_reviewLogId_key" ON "review_agent_traces"("reviewLogId");
+CREATE UNIQUE INDEX "review_agent_traces_reviewBotRunId_key" ON "review_agent_traces"("reviewBotRunId");
+
+-- CreateIndex
+CREATE INDEX "review_agent_traces_reviewLogId_idx" ON "review_agent_traces"("reviewLogId");
 
 -- CreateIndex
 CREATE INDEX "review_agent_traces_memorySnapshotId_idx" ON "review_agent_traces"("memorySnapshotId");
@@ -292,7 +359,22 @@ ALTER TABLE "repositories" ADD CONSTRAINT "repositories_defaultAIModelId_fkey" F
 ALTER TABLE "review_logs" ADD CONSTRAINT "review_logs_repositoryId_fkey" FOREIGN KEY ("repositoryId") REFERENCES "repositories"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "repository_review_bots" ADD CONSTRAINT "repository_review_bots_repositoryId_fkey" FOREIGN KEY ("repositoryId") REFERENCES "repositories"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "repository_review_bots" ADD CONSTRAINT "repository_review_bots_aiModelId_fkey" FOREIGN KEY ("aiModelId") REFERENCES "ai_models"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "review_bot_runs" ADD CONSTRAINT "review_bot_runs_reviewLogId_fkey" FOREIGN KEY ("reviewLogId") REFERENCES "review_logs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "review_bot_runs" ADD CONSTRAINT "review_bot_runs_reviewBotId_fkey" FOREIGN KEY ("reviewBotId") REFERENCES "repository_review_bots"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "review_comments" ADD CONSTRAINT "review_comments_reviewLogId_fkey" FOREIGN KEY ("reviewLogId") REFERENCES "review_logs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "review_comments" ADD CONSTRAINT "review_comments_reviewBotRunId_fkey" FOREIGN KEY ("reviewBotRunId") REFERENCES "review_bot_runs"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "repository_memory_snapshots" ADD CONSTRAINT "repository_memory_snapshots_repositoryId_fkey" FOREIGN KEY ("repositoryId") REFERENCES "repositories"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -323,6 +405,9 @@ ALTER TABLE "repository_memory_facts" ADD CONSTRAINT "repository_memory_facts_re
 
 -- AddForeignKey
 ALTER TABLE "review_agent_traces" ADD CONSTRAINT "review_agent_traces_reviewLogId_fkey" FOREIGN KEY ("reviewLogId") REFERENCES "review_logs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "review_agent_traces" ADD CONSTRAINT "review_agent_traces_reviewBotRunId_fkey" FOREIGN KEY ("reviewBotRunId") REFERENCES "review_bot_runs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "review_agent_traces" ADD CONSTRAINT "review_agent_traces_memorySnapshotId_fkey" FOREIGN KEY ("memorySnapshotId") REFERENCES "repository_memory_snapshots"("id") ON DELETE SET NULL ON UPDATE CASCADE;

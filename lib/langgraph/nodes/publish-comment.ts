@@ -290,6 +290,7 @@ function formatSummaryComment(
       lines.push(`   - 问题：${finding.issue}`);
       lines.push(`   - 影响：${finding.impact}`);
       lines.push(`   - 建议：${finding.suggestion}`);
+      lines.push(`   - 来源：${formatCommentSources(comment)}`);
     });
   }
 
@@ -321,6 +322,28 @@ function formatSummaryComment(
   lines.push(`<sub>完成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`);
 
   return lines.join("\n");
+}
+
+function formatCommentSources(comment: ReviewComment): string {
+  const sourceBots = Array.isArray(comment.sourceBotsJson)
+    ? comment.sourceBotsJson as Array<{ botName?: string; model?: string; confidence?: number }>
+    : [];
+
+  if (sourceBots.length > 0) {
+    return sourceBots
+      .map((source) => {
+        const confidence = typeof source.confidence === "number"
+          ? `，confidence=${source.confidence.toFixed(2)}`
+          : "";
+        return `${source.botName || "未知机器人"} / ${source.model || "unknown"}${confidence}`;
+      })
+      .join("；");
+  }
+
+  const confidence = typeof comment.confidence === "number"
+    ? `，confidence=${comment.confidence.toFixed(2)}`
+    : "";
+  return `${comment.sourceBotName || "默认审查机器人"} / ${comment.sourceBotModel || "unknown"}${confidence}`;
 }
 
 function getReviewConclusion(critical: number, normal: number, suggestion: number): string {

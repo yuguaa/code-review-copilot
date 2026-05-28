@@ -15,7 +15,6 @@ import type { AIModelConfig, ReviewComment } from "@/lib/types";
 const MAX_ITERATIONS = 5;
 const MAX_CONTEXT_FILES = 12;
 const MAX_FINDINGS = 50;
-const MIN_CONFIDENCE = 0.6;
 const MEMORY_WRITE_CONFIDENCE = 0.85;
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
@@ -24,6 +23,7 @@ function toJsonInput(value: unknown): Prisma.InputJsonValue {
 
 export interface AgentLoopInput {
   reviewLogId: string;
+  reviewBotRunId: string;
   repositoryId: string;
   branch: string;
   commitSha: string;
@@ -125,8 +125,8 @@ function dedupeFindings(
   const seen = new Set<string>();
   return findings
     .filter((item) => {
-      const confidence = item.confidence ?? 0;
-      return Number.isFinite(confidence) && confidence >= MIN_CONFIDENCE && confidence <= 1;
+      const confidence = item.confidence ?? 0.5;
+      return Number.isFinite(confidence);
     })
     .filter((item) => {
       const key = [
@@ -143,7 +143,7 @@ function dedupeFindings(
     .slice(0, MAX_FINDINGS)
     .map((item) => ({
       ...item,
-      confidence: item.confidence ?? 0.7,
+      confidence: Math.min(1, Math.max(0, item.confidence ?? 0.5)),
     }));
 }
 
@@ -236,7 +236,6 @@ export class ReviewAgentLoopService {
           })
           .then((reviewResponse) => {
             const parsedReview = aiService.parseStructuredReview(reviewResponse, {
-              minConfidence: MIN_CONFIDENCE,
               maxItems: Math.max(MAX_FINDINGS - findings.length, 0),
             });
             const previousCount = findings.length;
@@ -314,8 +313,10 @@ export class ReviewAgentLoopService {
 
         return prisma.$transaction((tx) => {
           return tx.reviewAgentTrace.upsert({
-            where: { reviewLogId: input.reviewLogId },
+            where: { reviewBotRunId: input.reviewBotRunId },
             update: {
+              reviewLogId: input.reviewLogId,
+              reviewBotRunId: input.reviewBotRunId,
               memorySnapshotId: input.memorySnapshotId || null,
               loopIterationsJson: toJsonInput(loopIterations),
               retrievedContextJson: toJsonInput(latestContext || {}),
@@ -325,6 +326,7 @@ export class ReviewAgentLoopService {
             },
             create: {
               reviewLogId: input.reviewLogId,
+              reviewBotRunId: input.reviewBotRunId,
               memorySnapshotId: input.memorySnapshotId || null,
               loopIterationsJson: toJsonInput(loopIterations),
               retrievedContextJson: toJsonInput(latestContext || {}),

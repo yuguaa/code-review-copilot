@@ -5,7 +5,7 @@
 
 import { Annotation } from "@langchain/langgraph";
 import type { ReviewLog } from "@prisma/client";
-import type { GitLabDiff, AIModelConfig, ReviewComment, GitLabMergeRequest } from "@/lib/types";
+import type { GitLabDiff, AIModelConfig, ReviewComment, ReviewCommentSource, GitLabMergeRequest } from "@/lib/types";
 
 /** 单个文件审查输入 */
 export interface FileReviewInput {
@@ -37,6 +37,10 @@ export interface FileReviewResult {
     severity: "critical" | "normal" | "suggestion";
     content: string;
     confidence?: number;
+    reviewBotRunId?: string;
+    sourceBotName?: string;
+    sourceBotModel?: string;
+    sourceBots?: ReviewCommentSource[];
   }>;
 }
 
@@ -107,6 +111,10 @@ export const ReviewStateAnnotation = Annotation.Root({
   reviewLogId: Annotation<string>({
     reducer: (_, y) => y,
     default: () => "",
+  }),
+  reviewBotRunId: Annotation<string | null>({
+    reducer: (_, y) => y,
+    default: () => null,
   }),
 
   // GitLab 服务实例（运行时传入，不序列化）

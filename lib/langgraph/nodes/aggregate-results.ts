@@ -12,15 +12,9 @@ import { prisma } from "@/lib/prisma";
 import type { ReviewState, ReviewStatistics } from "../types";
 import type { ReviewComment } from "@/lib/types";
 
-const MIN_CONFIDENCE = 0.6;
-
 function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
   const seen = new Set<string>();
   return comments
-    .filter((comment) => {
-      const confidence = comment.confidence ?? 0.7;
-      return Number.isFinite(confidence) && confidence >= MIN_CONFIDENCE && confidence <= 1;
-    })
     .filter((comment) => {
       const key = [
         comment.filePath,
@@ -33,7 +27,11 @@ function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
       seen.add(key);
       return true;
     })
-    .slice(0, 50);
+    .slice(0, 50)
+    .map((comment) => ({
+      ...comment,
+      confidence: Math.min(1, Math.max(0, comment.confidence ?? 0.5)),
+    }));
 }
 
 /**
@@ -42,7 +40,7 @@ function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
 export async function aggregateResultsNode(state: ReviewState): Promise<Partial<ReviewState>> {
   console.log(`📊 [AggregateResultsNode] Aggregating review results`);
 
-  // 最终发布口径以过滤、去重后的评论为准。
+  // 最终发布口径以去重后的评论为准，低置信问题保留并展示 confidence。
   const commentsToSave = normalizeComments(
     state.reviewComments.length > 0
       ? state.reviewComments
@@ -69,11 +67,15 @@ export async function aggregateResultsNode(state: ReviewState): Promise<Partial<
       await tx.reviewComment.createMany({
         data: commentsToSave.map((comment) => ({
           reviewLogId: state.reviewLogId,
+          reviewBotRunId: comment.reviewBotRunId,
           filePath: comment.filePath,
           lineNumber: comment.lineNumber,
           lineRangeEnd: comment.lineRangeEnd,
           severity: comment.severity,
           content: comment.content,
+          sourceBotName: comment.sourceBotName,
+          sourceBotModel: comment.sourceBotModel,
+          sourceBotsJson: comment.sourceBots ? JSON.parse(JSON.stringify(comment.sourceBots)) : undefined,
           diffHunk: comment.diffHunk,
           confidence: comment.confidence,
         })),
@@ -85,13 +87,14 @@ export async function aggregateResultsNode(state: ReviewState): Promise<Partial<
       data: {
         status: "completed",
         completedAt: new Date(),
+        reviewedFiles: state.relevantDiffs.length,
         criticalIssues: statistics.critical,
         normalIssues: statistics.normal,
         suggestions: statistics.suggestion,
         aiResponse: JSON.stringify(state.aiResponsesByFile),
         reviewPrompts: JSON.stringify(state.reviewPromptsByFile),
-        aiModelProvider: state.modelConfig.provider,
-        aiModelId: state.modelConfig.modelId,
+        aiModelProvider: null,
+        aiModelId: null,
       },
     });
   });

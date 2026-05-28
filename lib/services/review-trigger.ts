@@ -54,7 +54,8 @@ export class ReviewTriggerService {
           });
         });
     }).then(({ reviewLog, created }) => {
-      if (created) this.runAsync(reviewLog.id);
+      if (!created) return reviewLog;
+      this.runAsync(reviewLog.id);
       return reviewLog;
     }).catch((error) => {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -195,8 +196,9 @@ export class ReviewTriggerService {
         return Promise.all([
           tx.reviewComment.deleteMany({ where: { reviewLogId: reviewId } }),
           tx.reviewAgentTrace.deleteMany({ where: { reviewLogId: reviewId } }),
+          tx.reviewBotRun.deleteMany({ where: { reviewLogId: reviewId } }),
           tx.reviewLog.findUniqueOrThrow({ where: { id: reviewId } }),
-        ]).then(([, , updated]) => updated);
+        ]).then(([, , , updated]) => updated);
       });
     }).then((reviewLog) => {
       this.runAsync(reviewLog.id);

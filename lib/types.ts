@@ -117,6 +117,18 @@ export interface ReviewComment {
   content: string
   diffHunk?: string
   confidence?: number
+  reviewBotRunId?: string
+  sourceBotName?: string
+  sourceBotModel?: string
+  sourceBots?: ReviewCommentSource[]
+}
+
+/** 审查评论来源机器人 */
+export interface ReviewCommentSource {
+  reviewBotRunId: string
+  botName: string
+  model: string
+  confidence?: number
 }
 
 /** 代码审查输入参数 */

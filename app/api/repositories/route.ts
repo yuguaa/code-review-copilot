@@ -101,6 +101,11 @@ export async function POST(request: NextRequest) {
 
     const project = await gitlabService.getProject(gitLabProjectId)
 
+    const defaultAIModel = await prisma.aIModel.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
     // 创建仓库配置
     const repository = await prisma.repository.create({
       data: {
@@ -109,9 +114,32 @@ export async function POST(request: NextRequest) {
         path: project.path_with_namespace,
         description: project.description,
         gitLabAccountId: gitLabAccount.id,
+        defaultAIModelId: defaultAIModel?.id,
+        reviewBots: defaultAIModel ? {
+          create: {
+            aiModelId: defaultAIModel.id,
+            name: '默认审查机器人',
+            description: '仓库创建时自动生成，可按需编辑或禁用',
+            promptMode: 'extend',
+            isActive: true,
+            sortOrder: 0,
+          },
+        } : undefined,
       },
       include: {
         gitLabAccount: true,
+        reviewBots: {
+          include: {
+            aiModel: {
+              select: {
+                id: true,
+                provider: true,
+                modelId: true,
+                isActive: true,
+              },
+            },
+          },
+        },
       },
     })
 

@@ -37,6 +37,7 @@ model AIModel {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   repositories      Repository[]  // 使用此模型作为默认的仓库
+  reviewBots        RepositoryReviewBot[]
 
   @@map("ai_models")
 }
@@ -67,6 +68,7 @@ model Repository {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   reviewLogs        ReviewLog[]   // 关联的审查日志
+  reviewBots        RepositoryReviewBot[]
   memorySnapshots   RepositoryMemorySnapshot[]
   codeFileNodes     CodeFileNode[]
   codeRelationEdges CodeRelationEdge[]
@@ -107,11 +109,62 @@ model ReviewLog {
   gitlabNoteId      Int?            // GitLab Note ID（用于更新占位评论）
   startedAt         DateTime        @default(now())
   completedAt       DateTime?       // 完成时间
+  botRuns           ReviewBotRun[]
   comments          ReviewComment[] // 关联的审查评论
-  agentTrace        ReviewAgentTrace?
+  agentTraces       ReviewAgentTrace[]
 
   @@unique([repositoryId, mergeRequestIid, commitSha])
   @@map("review_logs")
+}
+
+// 仓库审查机器人配置
+model RepositoryReviewBot {
+  id                String        @id @default(cuid())
+  repositoryId      String
+  repository        Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  aiModelId         String
+  aiModel           AIModel       @relation(fields: [aiModelId], references: [id], onDelete: Restrict)
+  name              String
+  description       String?
+  prompt            String?
+  promptMode        String        @default("extend")
+  isActive          Boolean       @default(true)
+  sortOrder         Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  botRuns           ReviewBotRun[]
+
+  @@index([repositoryId, isActive, sortOrder])
+  @@index([aiModelId])
+  @@map("repository_review_bots")
+}
+
+// 单次审查中的机器人执行记录
+model ReviewBotRun {
+  id                String          @id @default(cuid())
+  reviewLogId       String
+  reviewLog         ReviewLog       @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
+  reviewBotId       String?
+  reviewBot         RepositoryReviewBot? @relation(fields: [reviewBotId], references: [id], onDelete: SetNull)
+  status            String
+  error             String?
+  summary           String?
+  aiModelProvider   String
+  aiModelId         String
+  aiModelName       String
+  promptSnapshot    String?
+  promptMode        String
+  startedAt         DateTime        @default(now())
+  completedAt       DateTime?
+  comments          ReviewComment[]
+  agentTrace        ReviewAgentTrace?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([reviewLogId, reviewBotId])
+  @@index([reviewLogId, status])
+  @@index([reviewBotId])
+  @@map("review_bot_runs")
 }
 
 // 审查评论
@@ -119,11 +172,16 @@ model ReviewComment {
   id                String        @id @default(cuid())
   reviewLogId       String
   reviewLog         ReviewLog     @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
+  reviewBotRunId    String?
+  reviewBotRun      ReviewBotRun? @relation(fields: [reviewBotRunId], references: [id], onDelete: SetNull)
   filePath          String        // 文件路径
   lineNumber        Int           // 行号
   lineRangeEnd      Int?          // 行范围结束（可选，用于多行评论）
   severity          String        // 严重级别: critical, normal, suggestion
   content           String        // 评论内容
+  sourceBotName     String?
+  sourceBotModel    String?
+  sourceBotsJson    Json?
   diffHunk          String?       // diff 片段（可选）
   confidence        Float?        // AI 置信度（0-1）
   gitlabCommentId   String?       // GitLab 评论 ID（已创建后）
@@ -131,6 +189,8 @@ model ReviewComment {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
+  @@index([reviewLogId, reviewBotRunId, severity])
+  @@index([reviewBotRunId, isPosted])
   @@map("review_comments")
 }
 
@@ -270,8 +330,10 @@ model RepositoryMemoryFact {
 // Agent 审查轨迹
 model ReviewAgentTrace {
   id                   String                    @id @default(cuid())
-  reviewLogId          String                    @unique
+  reviewLogId          String
   reviewLog            ReviewLog                 @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
+  reviewBotRunId       String?                   @unique
+  reviewBotRun         ReviewBotRun?             @relation(fields: [reviewBotRunId], references: [id], onDelete: Cascade)
   memorySnapshotId     String?
   memorySnapshot       RepositoryMemorySnapshot? @relation(fields: [memorySnapshotId], references: [id], onDelete: SetNull)
   loopIterationsJson   Json?
@@ -282,6 +344,7 @@ model ReviewAgentTrace {
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
 
+  @@index([reviewLogId])
   @@index([memorySnapshotId])
   @@map("review_agent_traces")
 }

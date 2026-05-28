@@ -8,6 +8,8 @@
 - **多仓库管理**: 支持连接多个 GitLab 实例和仓库
 - **AI 模型集成**: 支持 OpenAI、Claude 和自定义 AI 模型
 - **智能代码审查**: 自动分析 GitLab Merge Request 的 Staged Diff
+- **多机器人并发审查**: 每个仓库可配置多个审查机器人，独立模型和 Prompt 并发运行
+- **Memory Wiki**: 保存项目架构摘要、代码图谱和高置信审查事实，减少重复全量读取
 - **三级问题分类**: 严重 / 一般 / 建议
 - **分支配置**: 为不同分支配置不同的审查策略
 - **审查历史**: 完整的审查日志和历史记录
@@ -99,8 +101,11 @@ npm run dev
 3. 从列表中选择要添加的仓库
 4. 配置分支审查规则：
    - 分支模式：如 "main", "develop", "feature/*"
-   - AI 模型：选择要使用的模型
-   - 系统 Prompt：自定义审查指令
+5. 配置审查机器人：
+   - 机器人名称：例如“安全审查机器人”“架构审查机器人”
+   - AI 模型：选择已有 `AIModel`
+   - Prompt 模式：扩展内置 Prompt 或完全替换
+   - 启用状态和排序：启用的机器人会在同一次审查中并发执行
 
 ### 第四步：配置 Webhook（可选）
 
@@ -184,8 +189,14 @@ AI 模型配置（OpenAI/Claude/自定义）
 ### ReviewLog
 审查日志，记录每次审查的统计信息
 
+### RepositoryReviewBot
+仓库审查机器人配置，保存机器人名称、描述、绑定模型、Prompt、启停状态和排序
+
+### ReviewBotRun
+单次审查中每个机器人的执行记录，保存状态、模型快照、Prompt 快照、摘要和错误
+
 ### ReviewComment
-审查评论，存储具体的代码问题
+审查评论，存储具体的代码问题，并记录来源机器人和合并后的来源列表
 
 ### RepositoryMemorySnapshot
 仓库 Memory Wiki 快照，保存架构摘要和索引状态
@@ -197,7 +208,7 @@ AI 模型配置（OpenAI/Claude/自定义）
 可持续更新的仓库记忆事实
 
 ### ReviewAgentTrace
-Agent Loop 的每轮工具调用、上下文和 Critic 轨迹
+每个机器人独立的 Agent Loop 轨迹，包括每轮工具调用、上下文和 Critic 结果
 
 ## 环境变量
 
@@ -222,11 +233,15 @@ DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
 4. 审查日志
 5. 审查评论
 6. 通知配置
+7. 默认审查机器人
 
 迁移规则：
 
 - 保留旧数据的 `id`、创建时间、更新时间和外键关系。
 - 目标库已存在相同 `id` 时跳过，不覆盖已有记录。
+- 每个旧仓库会创建一个“默认审查机器人”，继承旧仓库级模型、Prompt 和 Prompt 模式。
+- 旧仓库自定义模型会迁移为专用 `AIModel`，再绑定到默认机器人。
+- 如果旧仓库没有可迁移模型配置，dry-run 和正式迁移都会快速失败。
 - 旧 SQLite schema 不匹配当前可迁移结构时快速失败。
 - 迁移不会自动生成 Memory Wiki 或 Code Graph 数据，这些数据会在后续审查或手动刷新 Memory 时创建。
 
@@ -278,6 +293,10 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 - `POST /api/repositories` - 添加仓库
 - `PUT /api/repositories` - 更新仓库
 - `DELETE /api/repositories` - 删除仓库
+- `GET /api/repositories/[id]/bots` - 获取仓库审查机器人
+- `POST /api/repositories/[id]/bots` - 新增审查机器人
+- `PUT /api/repositories/[id]/bots` - 更新审查机器人
+- `DELETE /api/repositories/[id]/bots?id=xxx` - 删除审查机器人
 
 ### 配置管理
 - `GET /api/settings/gitlab` - 获取 GitLab 账号
@@ -288,6 +307,8 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 ### 代码审查
 - `POST /api/review` - 手动触发审查
 - `GET /api/review?logId=xxx` - 获取审查状态
+- `POST /api/review/[id]/retry` - 清理旧评论、机器人运行和 Trace 后重试审查
+- `GET /api/reviews/[id]/agent-trace` - 获取所有机器人 Agent Trace
 
 ### Webhook
 - `POST /api/webhook/gitlab` - GitLab Webhook
@@ -296,14 +317,16 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 
 1. **触发方式**：
    - 手动触发：在界面点击"开始审查"
-   - 自动触发：GitLab Webhook 检测到 MR 事件
+   - 自动触发：GitLab Webhook 检测到 MR 或 Push 事件
 
 2. **审查步骤**：
-   - 获取 MR 最新提交的 Staged Diff
-   - 调用 AI 模型进行代码分析
-   - 生成问题评论（按严重级别分类）
-   - 保存到数据库
-   - 自动发布到 GitLab MR
+   - 只获取一次 MR/Commit Diff
+   - 刷新或复用 Memory Wiki
+   - 使用排序第一的启用机器人生成公共变更摘要
+   - 为每个启用机器人创建 `ReviewBotRun`
+   - 通过 `Promise.allSettled` 并发执行机器人 Agent Loop
+   - 合并重复问题，保留来源机器人和各自 confidence
+   - 保存评论和 Trace，只发布一条 GitLab 总评
 
 3. **问题级别**：
    - **严重**: 安全漏洞、重大 bug、性能问题
@@ -317,7 +340,7 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 - [ ] 创建帮助中心页面
 - [ ] 支持更多 GitLab 事件
 - [ ] 添加审查报告导出功能
-- [ ] 支持自定义 Prompt 模板
+- [ ] 支持机器人模板市场
 
 ## License
 

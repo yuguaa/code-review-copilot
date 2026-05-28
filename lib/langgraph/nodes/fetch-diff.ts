@@ -10,7 +10,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { ReviewState } from "../types";
-import type { GitLabDiff, GitLabMergeRequest, AIProvider } from "@/lib/types";
+import type { GitLabDiff, GitLabMergeRequest } from "@/lib/types";
 
 /**
  * 获取 GitLab Diff 节点
@@ -24,7 +24,6 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
       repository: {
         include: {
           gitLabAccount: true,
-          defaultAIModel: true,
         },
       },
     },
@@ -142,30 +141,6 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
     },
   });
 
-  // 准备 AI 模型配置
-  const repository = reviewLog.repository;
-  const modelConfig = {
-    id: repository.customProvider ? "custom" : (repository.defaultAIModel?.id || "default"),
-    name: repository.customModelId || repository.defaultAIModel?.modelId || "default",
-    provider: (repository.customProvider || repository.defaultAIModel?.provider || "openai") as AIProvider,
-    modelId: repository.customModelId || repository.defaultAIModel?.modelId || "gpt-4o",
-    apiKey: repository.customApiKey || repository.defaultAIModel?.apiKey || "",
-    apiEndpoint: repository.customApiEndpoint || repository.defaultAIModel?.apiEndpoint || undefined,
-    maxTokens: repository.customMaxTokens || repository.defaultAIModel?.maxTokens || undefined,
-    temperature: repository.customTemperature || repository.defaultAIModel?.temperature || undefined,
-    isActive: true,
-  };
-
-  console.log(
-    `🤖 [FetchDiffNode] Using AI model: ${modelConfig.provider}/${modelConfig.modelId}`,
-  );
-
-  // 仓库配置
-  const repositoryConfig = {
-    customPrompt: repository.customPrompt,
-    customPromptMode: (repository.customPromptMode || "extend") as "extend" | "replace",
-  };
-
   return {
     reviewLog,
     mrInfo: mr,
@@ -173,7 +148,5 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
     relevantDiffs,
     reviewScope,
     incrementalBaseSha,
-    modelConfig,
-    repositoryConfig,
   };
 }

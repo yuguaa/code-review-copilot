@@ -11,17 +11,23 @@ export function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   return params.then(({ id }) => {
-    return prisma.reviewAgentTrace.findUnique({
+    return prisma.reviewAgentTrace.findMany({
       where: { reviewLogId: id },
+      orderBy: { createdAt: "asc" },
       include: {
+        reviewBotRun: {
+          include: {
+            reviewBot: true,
+          },
+        },
         memorySnapshot: true,
       },
     });
-  }).then((trace) => {
-    if (!trace) {
+  }).then((traces) => {
+    if (traces.length === 0) {
       return NextResponse.json({ error: "Agent trace not found" }, { status: 404 });
     }
-    return NextResponse.json(trace);
+    return NextResponse.json({ traces });
   }).catch((error) => {
     console.error("Failed to fetch review agent trace:", error);
     return NextResponse.json(

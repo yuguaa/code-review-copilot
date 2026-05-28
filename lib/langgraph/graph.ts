@@ -9,12 +9,7 @@ import type { ReviewState } from "./types";
 import { fetchDiffNode } from "./nodes/fetch-diff";
 import { refreshMemoryNode } from "./nodes/refresh-memory";
 import { generateSummaryNode } from "./nodes/generate-summary";
-import { runAgentLoopNode } from "./nodes/run-agent-loop";
-import {
-  reviewFileNode,
-  shouldContinueReview,
-  moveToNextFile,
-} from "./nodes/review-file";
+import { runReviewBotsNode } from "./nodes/run-review-bots";
 import { aggregateResultsNode } from "./nodes/aggregate-results";
 import { publishCommentNode } from "./nodes/publish-comment";
 
@@ -40,9 +35,7 @@ export function createReviewGraph() {
     .addNode("fetch_diff", fetchDiffNode)
     .addNode("refresh_memory", refreshMemoryNode)
     .addNode("generate_summary", generateSummaryNode)
-    .addNode("run_agent_loop", runAgentLoopNode)
-    .addNode("review_file", reviewFileNode)
-    .addNode("next_file", moveToNextFile)
+    .addNode("run_review_bots", runReviewBotsNode)
     .addNode("aggregate_results", aggregateResultsNode)
     .addNode("publish_comment", publishCommentNode)
 
@@ -50,20 +43,13 @@ export function createReviewGraph() {
     .addEdge("__start__", "fetch_diff")
     .addEdge("fetch_diff", "refresh_memory")
     .addEdge("refresh_memory", "generate_summary")
-    .addEdge("generate_summary", "run_agent_loop")
 
     // 检查是否有文件需要审查
-    .addConditionalEdges("run_agent_loop", hasFilesToReview, {
-      review: "review_file",
+    .addConditionalEdges("generate_summary", hasFilesToReview, {
+      review: "run_review_bots",
       skip: "aggregate_results",
     })
-
-    // 循环逻辑
-    .addConditionalEdges("review_file", shouldContinueReview, {
-      continue: "next_file",
-      aggregate: "aggregate_results",
-    })
-    .addEdge("next_file", "review_file")
+    .addEdge("run_review_bots", "aggregate_results")
 
     .addEdge("aggregate_results", "publish_comment")
     .addEdge("publish_comment", "__end__");

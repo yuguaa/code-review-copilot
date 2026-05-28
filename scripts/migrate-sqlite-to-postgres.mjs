@@ -20,6 +20,10 @@ const REQUIRED_TABLES = [
   "notification_settings",
 ];
 
+const ADDITIONAL_TARGET_MODELS = [
+  "repositoryReviewBot",
+];
+
 const MIGRATION_TABLES = [
   {
     name: "GitLabAccount",
@@ -279,7 +283,14 @@ const sourceSchema = await loadSourceSchema(sourcePath);
 validateSourceSchema(sourceSchema);
 
 const sourceCounts = await loadSourceCounts(sourcePath);
+sourceCounts.MigratedCustomAIModel = await countCustomAIModelsToCreate(sourcePath);
+sourceCounts.RepositoryReviewBot = await countDefaultBotsToCreate(sourcePath);
+sourceCounts.RepositoryWithoutBotModel = await countRepositoriesWithoutBotModel(sourcePath);
 printCounts("源库记录数", sourceCounts);
+
+if (sourceCounts.RepositoryWithoutBotModel > 0) {
+  fail(`有 ${sourceCounts.RepositoryWithoutBotModel} 个仓库缺少可迁移的 AI 模型配置，无法创建默认审查机器人。`);
+}
 
 if (dryRun) {
   console.log("dry-run 校验通过，没有写入 PostgreSQL。");
@@ -435,7 +446,14 @@ async function assertTargetSchema(prisma) {
     }
   }
 
+  for (const model of ADDITIONAL_TARGET_MODELS) {
+    if (!prisma[model]) {
+      fail(`Prisma Client 缺少模型：${model}。请先运行 npx prisma generate。`);
+    }
+  }
+
   await prisma.$queryRaw`SELECT 1`;
+  await prisma.repositoryReviewBot.count();
 }
 
 async function migrate(prisma, sqlitePath) {
@@ -467,6 +485,8 @@ async function migrate(prisma, sqlitePath) {
 
     console.log(`${table.name}: inserted=${inserted}, skipped=${skipped}`);
   }
+
+  await createDefaultReviewBots(prisma, sqlitePath);
 }
 
 async function loadTargetCounts(prisma) {
@@ -476,7 +496,143 @@ async function loadTargetCounts(prisma) {
     counts[table.name] = await prisma[table.targetModel].count();
   }
 
+  counts.RepositoryReviewBot = await prisma.repositoryReviewBot.count();
+
   return counts;
+}
+
+async function countDefaultBotsToCreate(sqlitePath) {
+  const rows = await sqliteJson(
+    sqlitePath,
+    `SELECT COUNT(*) AS count FROM repositories
+      WHERE (defaultAIModelId IS NOT NULL AND defaultAIModelId != '')
+        OR (
+          customProvider IS NOT NULL AND customProvider != ''
+          AND customModelId IS NOT NULL AND customModelId != ''
+          AND customApiKey IS NOT NULL AND customApiKey != ''
+        )`,
+  );
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function countCustomAIModelsToCreate(sqlitePath) {
+  const rows = await sqliteJson(
+    sqlitePath,
+    `SELECT COUNT(*) AS count FROM repositories
+      WHERE (defaultAIModelId IS NULL OR defaultAIModelId = '')
+        AND customProvider IS NOT NULL AND customProvider != ''
+        AND customModelId IS NOT NULL AND customModelId != ''
+        AND customApiKey IS NOT NULL AND customApiKey != ''`,
+  );
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function countRepositoriesWithoutBotModel(sqlitePath) {
+  const rows = await sqliteJson(
+    sqlitePath,
+    `SELECT COUNT(*) AS count FROM repositories
+      WHERE (defaultAIModelId IS NULL OR defaultAIModelId = '')
+        AND (
+          customProvider IS NULL OR customProvider = ''
+          OR customModelId IS NULL OR customModelId = ''
+          OR customApiKey IS NULL OR customApiKey = ''
+        )`,
+  );
+  return Number(rows[0]?.count ?? 0);
+}
+
+async function createDefaultReviewBots(prisma, sqlitePath) {
+  const repositories = await sqliteJson(sqlitePath, "SELECT * FROM repositories ORDER BY id");
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const repository of repositories) {
+    const exists = await prisma.repositoryReviewBot.findFirst({
+      where: { repositoryId: repository.id },
+      select: { id: true },
+    });
+
+    if (exists) {
+      skipped += 1;
+      continue;
+    }
+
+    const aiModelId = await resolveDefaultBotAIModelId(prisma, repository);
+
+    await prisma.repositoryReviewBot.create({
+      data: {
+        repositoryId: repository.id,
+        aiModelId,
+        name: "默认审查机器人",
+        description: "由 SQLite 历史仓库配置迁移生成",
+        prompt: repository.customPrompt || null,
+        promptMode: repository.customPromptMode || "extend",
+        isActive: true,
+        sortOrder: 0,
+      },
+    });
+    inserted += 1;
+  }
+
+  console.log(`RepositoryReviewBot: inserted=${inserted}, skipped=${skipped}`);
+}
+
+async function resolveDefaultBotAIModelId(prisma, repository) {
+  if (hasText(repository.defaultAIModelId)) {
+    return repository.defaultAIModelId;
+  }
+
+  if (hasCompleteCustomAIModelConfig(repository)) {
+    return ensureMigratedCustomAIModel(prisma, repository);
+  }
+
+  fail(`仓库 ${repository.path || repository.id} 缺少可迁移的 AI 模型配置，无法创建默认审查机器人。`);
+}
+
+function hasCompleteCustomAIModelConfig(repository) {
+  return hasText(repository.customProvider)
+    && hasText(repository.customModelId)
+    && hasText(repository.customApiKey);
+}
+
+function hasText(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+async function ensureMigratedCustomAIModel(prisma, repository) {
+  const aiModelId = buildMigratedCustomAIModelId(repository.id);
+
+  await prisma.aIModel.upsert({
+    where: { id: aiModelId },
+    update: {
+      provider: repository.customProvider.trim(),
+      modelId: repository.customModelId.trim(),
+      apiKey: repository.customApiKey,
+      apiEndpoint: repository.customApiEndpoint || null,
+      maxTokens: toNullableNumber(repository.customMaxTokens),
+      temperature: toNullableNumber(repository.customTemperature),
+      isActive: true,
+      updatedAt: toDate(repository.updatedAt),
+    },
+    create: {
+      id: aiModelId,
+      provider: repository.customProvider.trim(),
+      modelId: repository.customModelId.trim(),
+      apiKey: repository.customApiKey,
+      apiEndpoint: repository.customApiEndpoint || null,
+      maxTokens: toNullableNumber(repository.customMaxTokens),
+      temperature: toNullableNumber(repository.customTemperature),
+      isActive: true,
+      createdAt: toDate(repository.createdAt),
+      updatedAt: toDate(repository.updatedAt),
+    },
+  });
+
+  return aiModelId;
+}
+
+function buildMigratedCustomAIModelId(repositoryId) {
+  return `migrated-custom-ai-model-${repositoryId}`;
 }
 
 async function sqliteJson(sqlitePath, sql) {

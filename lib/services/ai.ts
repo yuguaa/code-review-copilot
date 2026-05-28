@@ -529,7 +529,6 @@ export class AIService {
     aiResponse: string,
     options?: { defaultFilePath?: string; minConfidence?: number; maxItems?: number }
   ): StructuredReviewResult {
-    const minConfidence = options?.minConfidence ?? 0.6
     const maxItems = options?.maxItems ?? 50
     const rawJson = this.extractJsonObject(aiResponse)
     const parsed = JSON.parse(rawJson) as {
@@ -546,8 +545,10 @@ export class AIService {
     for (const item of parsed.comments.slice(0, maxItems)) {
       if (!item || typeof item !== 'object') continue
       const data = item as Record<string, unknown>
-      const confidence = typeof data.confidence === 'number' ? data.confidence : 0
-      if (!Number.isFinite(confidence) || confidence < minConfidence || confidence > 1) continue
+      const rawConfidence = typeof data.confidence === 'number' ? data.confidence : 0.5
+      const confidence = Number.isFinite(rawConfidence)
+        ? Math.min(1, Math.max(0, rawConfidence))
+        : 0.5
 
       const severity = this.normalizeSeverity(data.severity)
       const filePath = typeof data.filePath === 'string' && data.filePath.trim()
