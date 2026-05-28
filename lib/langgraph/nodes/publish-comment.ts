@@ -346,8 +346,7 @@ function formatSummaryComment(
       const rawReview = extractBotRawReview(botRun);
       const criticReason = extractCriticReason(botRun.agentTrace?.criticJson);
 
-      lines.push(`<details>`);
-      lines.push(`<summary>${botName} / ${botRun.aiModelName}</summary>`);
+      lines.push(`#### ${botName} / ${botRun.aiModelName}`);
       lines.push("");
       lines.push(`- 状态：${formatBotRunStatus(botRun.status)}`);
       if (botRun.summary) lines.push(`- 摘要：${botRun.summary}`);
@@ -356,8 +355,6 @@ function formatSummaryComment(
       lines.push("```text");
       lines.push(rawReview || "无原始评价内容");
       lines.push("```");
-      lines.push("");
-      lines.push(`</details>`);
     });
   }
 
