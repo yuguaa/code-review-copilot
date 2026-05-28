@@ -13,11 +13,24 @@ export function refreshMemoryNode(state: ReviewState): Promise<Partial<ReviewSta
   if (!reviewLog) {
     return Promise.reject(new Error("Review log is required before refreshing memory"));
   }
+  if (!state.gitlabService) {
+    return Promise.reject(new Error("GitLab service is required before refreshing memory"));
+  }
+
+  const reviewLogWithRepository = reviewLog as typeof reviewLog & {
+    repository?: { gitLabProjectId?: number | string };
+  };
+  const gitLabProjectId = reviewLogWithRepository.repository?.gitLabProjectId;
+  if (!gitLabProjectId) {
+    return Promise.reject(new Error("GitLab project id is required before refreshing memory"));
+  }
 
   const branch = reviewLog.targetBranch || reviewLog.sourceBranch || "default";
 
   return memoryIndexService.refreshRepositoryMemory({
     repositoryId: reviewLog.repositoryId,
+    gitLabProjectId,
+    gitlabService: state.gitlabService,
     branch,
     commitSha: reviewLog.commitSha,
     diffs: state.relevantDiffs,

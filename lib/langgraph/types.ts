@@ -4,7 +4,7 @@
  */
 
 import type { ReviewLog } from "@prisma/client";
-import type { GitLabDiff, AIModelConfig, ReviewComment, ReviewCommentSource, GitLabMergeRequest } from "@/lib/types";
+import type { GitLabDiff, AIModelConfig, ReviewComment, ReviewCommentSource, GitLabMergeRequest, GitLabRepositoryTreeItem } from "@/lib/types";
 
 /** 单个文件审查输入 */
 export interface FileReviewInput {
@@ -85,6 +85,14 @@ export interface GitLabServiceInstance {
   createCommitComment: (projectId: number | string, commitSha: string, note: string, options?: { path?: string; line?: number; line_type?: 'new' | 'old' }) => Promise<GitLabCommentResult>;
   updateCommitComment: (projectId: number | string, commitSha: string, noteId: number, body: string) => Promise<GitLabCommentResult>;
   compareCommits: (projectId: number | string, fromSha: string, toSha: string) => Promise<{ diffs: GitLabDiff[] }>;
+  getRepositoryTree: (projectId: number | string, params: {
+    ref: string;
+    path?: string;
+    recursive?: boolean;
+    per_page?: number;
+    max_pages?: number;
+  }) => Promise<GitLabRepositoryTreeItem[]>;
+  getRepositoryFileRaw: (projectId: number | string, filePath: string, ref: string) => Promise<string>;
   getProjectCommits: (projectId: number | string, params?: {
     since?: string;
     until?: string;

@@ -95,6 +95,15 @@ export interface GitLabCommit {
   created_at: string
 }
 
+/** GitLab 仓库树节点 */
+export interface GitLabRepositoryTreeItem {
+  id: string
+  name: string
+  type: 'tree' | 'blob'
+  path: string
+  mode: string
+}
+
 /** AI 模型配置 */
 export interface AIModelConfig {
   id: string

@@ -9,7 +9,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment } from '@/lib/types'
+import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabRepositoryTreeItem } from '@/lib/types'
 
 type GitLabApiError = AxiosError<{ message?: string; error?: string }>
 
@@ -265,6 +265,64 @@ export class GitLabService {
       console.error('Failed to fetch commit diff:', error)
       throw new Error('Failed to fetch commit diff from GitLab')
     }
+  }
+
+  /**
+   * 获取仓库文件树（支持分页聚合）
+   */
+  getRepositoryTree(
+    projectId: number | string,
+    params: {
+      ref: string
+      path?: string
+      recursive?: boolean
+      per_page?: number
+      max_pages?: number
+    }
+  ): Promise<GitLabRepositoryTreeItem[]> {
+    const perPage = params.per_page ?? 100
+    const maxPages = params.max_pages ?? 20
+    const treeItems: GitLabRepositoryTreeItem[] = []
+    let page = 1
+
+    const loadPage = (): Promise<GitLabRepositoryTreeItem[]> => {
+      if (page > maxPages) return Promise.resolve(treeItems)
+      return this.client.get(`/projects/${projectId}/repository/tree`, {
+        params: {
+          ref: params.ref,
+          path: params.path,
+          recursive: params.recursive ?? true,
+          per_page: perPage,
+          page,
+        },
+      }).then((response) => {
+        const batch = Array.isArray(response.data) ? response.data : []
+        treeItems.push(...batch)
+        page += 1
+        if (batch.length < perPage) return treeItems
+        return loadPage()
+      }).catch((error) => {
+        console.error('Failed to fetch repository tree:', error)
+        throw new Error('Failed to fetch repository tree from GitLab')
+      })
+    }
+
+    return loadPage()
+  }
+
+  /**
+   * 获取指定 ref 下的原始文件内容
+   */
+  getRepositoryFileRaw(projectId: number | string, filePath: string, ref: string): Promise<string> {
+    const encodedPath = encodeURIComponent(filePath)
+    return this.client.get(`/projects/${projectId}/repository/files/${encodedPath}/raw`, {
+      params: { ref },
+      responseType: 'text',
+      transformResponse: [(data) => data],
+    }).then((response) => String(response.data || '')).catch((error) => {
+      console.error(`Failed to fetch repository file raw: ${filePath}`, error)
+      throw new Error(`Failed to fetch repository file ${filePath} from GitLab`)
+    })
   }
 
   /**

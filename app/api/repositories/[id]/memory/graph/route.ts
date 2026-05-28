@@ -13,22 +13,34 @@ export function GET(
   return params.then(({ id }) => {
     const url = new URL(request.url);
     const branch = url.searchParams.get("branch") || undefined;
-    return Promise.all([
+    return prisma.repositoryMemorySnapshot.findFirst({
+      where: { repositoryId: id, ...(branch ? { branch } : {}), status: "ready" },
+      orderBy: { lastIndexedAt: "desc" },
+    }).then((snapshot) => Promise.all([
       prisma.codeFileNode.findMany({
-        where: { repositoryId: id, ...(branch ? { branch } : {}) },
+        where: {
+          repositoryId: id,
+          ...(branch ? { branch } : {}),
+          ...(snapshot?.commitSha ? { commitSha: snapshot.commitSha } : {}),
+        },
         orderBy: { filePath: "asc" },
         take: 200,
       }),
       prisma.codeRelationEdge.findMany({
-        where: { repositoryId: id, ...(branch ? { branch } : {}) },
+        where: {
+          repositoryId: id,
+          ...(branch ? { branch } : {}),
+          ...(snapshot?.commitSha ? { fromFileNode: { commitSha: snapshot.commitSha } } : {}),
+        },
         include: {
           fromFileNode: { select: { filePath: true } },
           toFileNode: { select: { filePath: true } },
         },
         take: 500,
       }),
-    ]);
-  }).then(([files, relations]) => NextResponse.json({
+    ]).then(([files, relations]) => ({ snapshot, files, relations })));
+  }).then(({ snapshot, files, relations }) => NextResponse.json({
+    snapshot,
     files,
     relations: relations.map((relation) => ({
       id: relation.id,

@@ -41,6 +41,8 @@ export async function POST(
     const diffs = await gitlabService.getCommitDiff(repository.gitLabProjectId, commitSha);
     const snapshot = await memoryIndexService.refreshRepositoryMemory({
       repositoryId: repository.id,
+      gitLabProjectId: repository.gitLabProjectId,
+      gitlabService,
       branch,
       commitSha,
       diffs,
