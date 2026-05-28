@@ -65,13 +65,6 @@ function buildGitlabLink(reviewLog: ReviewLog, baseUrl: string, repositoryPath: 
   return `${base}/${repositoryPath}`;
 }
 
-function getReviewConclusion(critical: number, normal: number, suggestion: number): string {
-  if (critical > 0) return `高风险：发现 ${critical} 个严重问题，建议修复后再合并`;
-  if (normal > 0) return `中风险：无严重问题，但有 ${normal} 个一般问题需要关注`;
-  if (suggestion > 0) return `低风险：仅有 ${suggestion} 条优化建议`;
-  return "通过：未发现明显问题";
-}
-
 function compactText(input: string, maxLen: number): string {
   const text = input.replace(/\s+/g, " ").trim();
   if (text.length <= maxLen) return text;
@@ -83,6 +76,7 @@ export async function sendReviewToDingTalk(params: {
   repositoryName: string;
   repositoryPath: string;
   gitlabUrl: string;
+  messageOverride: string;
 }): Promise<void> {
   const setting = await prisma.notificationSetting.findUnique({
     where: { scope: "global" },
@@ -120,25 +114,12 @@ export async function sendReviewToDingTalk(params: {
   lines.push(`- 分支：${reviewLog.sourceBranch}${reviewLog.targetBranch ? ` → ${reviewLog.targetBranch}` : ""}`);
   lines.push("");
 
-  const critical = reviewLog.criticalIssues ?? 0;
-  const normal = reviewLog.normalIssues ?? 0;
-  const suggestion = reviewLog.suggestions ?? 0;
-  const conclusion = getReviewConclusion(critical, normal, suggestion);
+  lines.push(params.messageOverride);
 
-  const summary = reviewLog.aiSummary ? compactText(reviewLog.aiSummary, 360) : "";
-  lines.push(`- 结论：${conclusion}`);
-  lines.push(`- 问题统计：🔴 ${critical} / ⚠️ ${normal} / 💡 ${suggestion}`);
-  lines.push(`- 审查文件：${reviewLog.reviewedFiles}/${reviewLog.totalFiles}`);
-  if (summary) {
-    lines.push("");
-    lines.push(`**变更摘要**：${summary}`);
-  }
   if (link) {
     lines.push("");
     lines.push(`[查看 GitLab 详情](${link})`);
   }
-  lines.push("");
-  lines.push(`<sub>完成时间：${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`);
 
   const payload: DingTalkMarkdownMessage = {
     msgtype: "markdown",
