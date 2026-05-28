@@ -309,7 +309,7 @@ export default function ReviewsPage() {
   const selectedGitlabLink = selectedReview ? getGitlabLink(selectedReview) : null
 
   return (
-    <div className="p-8">
+    <div className="min-w-0 p-8">
       {/* 页面标题 */}
       <div className="mb-8 flex items-center justify-between">
         <div>
@@ -332,8 +332,8 @@ export default function ReviewsPage() {
       </div>
 
       {/* 审查历史列表 */}
-      <Card className="border-border/40">
-        <div className="p-6">
+      <Card className="min-w-0 overflow-hidden border-border/40">
+        <div className="min-w-0 p-6">
           {loading ? (
             <div className="py-12 text-center text-muted-foreground">
               <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin opacity-50" />

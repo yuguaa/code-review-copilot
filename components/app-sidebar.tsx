@@ -123,8 +123,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset>
-        <div className="flex-1 overflow-auto">
+      <SidebarInset className="min-w-0 overflow-hidden">
+        <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           {children}
         </div>
       </SidebarInset>
