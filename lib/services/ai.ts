@@ -49,6 +49,30 @@ export interface StructuredReviewResult {
   }>
 }
 
+type OpenAICompatibleResponse = {
+  choices?: Array<{
+    message?: {
+      content?: unknown
+    }
+    text?: unknown
+    delta?: {
+      content?: unknown
+    }
+  }>
+  output_text?: unknown
+  output?: Array<{
+    content?: Array<{
+      type?: unknown
+      text?: unknown
+    }>
+  }>
+  content?: unknown
+  text?: unknown
+  message?: {
+    content?: unknown
+  }
+}
+
 /**
  * AI 服务类
  * 
@@ -157,13 +181,70 @@ export class AIService {
     console.log('✅ OpenAI API Response received')
     console.log('📊 Usage:', response.usage)
 
-    const content = response.choices[0]?.message?.content
+    const content = this.extractOpenAICompatibleText(response as OpenAICompatibleResponse)
     if (!content) {
-      console.error('Empty response from OpenAI API:', response)
-      throw new Error('Empty response from OpenAI API')
+      console.error('Unexpected OpenAI-compatible response keys:', Object.keys(response as object))
+      console.error('Unexpected OpenAI-compatible response:', JSON.stringify(response, null, 2))
+      throw new Error('Unexpected OpenAI-compatible response format')
     }
 
     return content
+  }
+
+  private extractOpenAICompatibleText(response: OpenAICompatibleResponse): string | null {
+    const choice = Array.isArray(response.choices) ? response.choices[0] : null
+    const choiceContent = choice?.message?.content
+
+    if (typeof choiceContent === 'string' && choiceContent.trim()) {
+      return choiceContent
+    }
+
+    if (Array.isArray(choiceContent)) {
+      const text = choiceContent
+        .map((item) => {
+          if (!item || typeof item !== 'object') return ''
+          const data = item as { text?: unknown; type?: unknown }
+          return typeof data.text === 'string' ? data.text : ''
+        })
+        .join('')
+        .trim()
+      if (text) return text
+    }
+
+    if (typeof choice?.text === 'string' && choice.text.trim()) {
+      return choice.text
+    }
+
+    if (typeof choice?.delta?.content === 'string' && choice.delta.content.trim()) {
+      return choice.delta.content
+    }
+
+    if (typeof response.output_text === 'string' && response.output_text.trim()) {
+      return response.output_text
+    }
+
+    if (Array.isArray(response.output)) {
+      const outputText = response.output
+        .flatMap((item) => item.content || [])
+        .map((item) => typeof item.text === 'string' ? item.text : '')
+        .join('')
+        .trim()
+      if (outputText) return outputText
+    }
+
+    if (typeof response.message?.content === 'string' && response.message.content.trim()) {
+      return response.message.content
+    }
+
+    if (typeof response.content === 'string' && response.content.trim()) {
+      return response.content
+    }
+
+    if (typeof response.text === 'string' && response.text.trim()) {
+      return response.text
+    }
+
+    return null
   }
 
   /**
