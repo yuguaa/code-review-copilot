@@ -29,6 +29,8 @@ type GraphSnapshot = {
 
 type GraphBranch = {
   name: string
+  headCommitSha: string | null
+  committedDate: string | null
   snapshots: GraphSnapshot[]
 }
 
@@ -72,6 +74,7 @@ export default function CodeGraphPage() {
   const [query, setQuery] = useState('')
   const [loadingTree, setLoadingTree] = useState(true)
   const [loadingGraph, setLoadingGraph] = useState(false)
+  const [generatingKey, setGeneratingKey] = useState<string | null>(null)
   const [treeError, setTreeError] = useState<string | null>(null)
   const [graphError, setGraphError] = useState<string | null>(null)
 
@@ -191,6 +194,32 @@ export default function CodeGraphPage() {
       .finally(() => setLoadingTree(false))
   }, [findSelection])
 
+  const generateBranchGraph = useCallback((repositoryId: string, branchName: string) => {
+    const key = `${repositoryId}:${branchName}`
+    setGeneratingKey(key)
+    setTreeError(null)
+
+    return fetch(`/api/repositories/${repositoryId}/memory/refresh?branch=${encodeURIComponent(branchName)}&force=true`, {
+      method: 'POST',
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('生成分支 Code Graph 失败')
+        return response.json()
+      })
+      .then((data) => {
+        const commitSha = typeof data.snapshot?.commitSha === 'string' ? data.snapshot.commitSha : null
+        if (commitSha) {
+          selectSnapshot({ repositoryId, branch: branchName, commitSha })
+        }
+        return loadTree()
+      })
+      .catch((error) => {
+        console.error('Failed to generate branch Code Graph:', error)
+        setTreeError(error instanceof Error ? error.message : '生成分支 Code Graph 失败')
+      })
+      .finally(() => setGeneratingKey(null))
+  }, [loadTree, selectSnapshot])
+
   const loadGraph = useCallback((nextSelection: GraphSelection | null) => {
     if (!nextSelection) {
       setGraphData(null)
@@ -298,20 +327,50 @@ export default function CodeGraphPage() {
                         {repository.branches.length > 0 ? repository.branches.map((branch) => {
                           const branchKey = `branch:${repository.id}:${branch.name}`
                           const branchExpanded = query.trim() || expandedKeys.has(branchKey)
+                          const latestSnapshot = branch.snapshots[0]
+                          const hasHeadGraph = Boolean(
+                            latestSnapshot &&
+                            branch.headCommitSha &&
+                            latestSnapshot.commitSha === branch.headCommitSha
+                          )
+                          const generating = generatingKey === `${repository.id}:${branch.name}`
                           return (
                             <div key={branch.name} className="border-l pl-3">
-                              <button
-                                type="button"
-                                onClick={() => toggleExpanded(branchKey)}
-                                className="mb-2 flex w-full items-center gap-2 rounded-md text-left text-xs font-medium text-muted-foreground"
-                              >
-                                {branchExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                <GitBranch className="h-3.5 w-3.5" />
-                                <span className="min-w-0 flex-1 truncate">{branch.name}</span>
-                                <Badge variant="outline" className="ml-auto">{branch.snapshots.length}</Badge>
-                              </button>
+                              <div className="mb-2 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpanded(branchKey)}
+                                  className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left text-xs font-medium text-muted-foreground"
+                                >
+                                  {branchExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                  <GitBranch className="h-3.5 w-3.5" />
+                                  <span className="min-w-0 flex-1 truncate">{branch.name}</span>
+                                  <Badge variant={hasHeadGraph ? 'outline' : 'secondary'} className="ml-auto">
+                                    {hasHeadGraph ? `${branch.snapshots.length}` : '未生成'}
+                                  </Badge>
+                                </button>
+                                <Button
+                                  type="button"
+                                  variant={hasHeadGraph ? 'ghost' : 'outline'}
+                                  size="xs"
+                                  disabled={generating}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void generateBranchGraph(repository.id, branch.name)
+                                  }}
+                                >
+                                  {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                  {hasHeadGraph ? '更新' : '生成'}
+                                </Button>
+                              </div>
                               {branchExpanded && (
                                 <div className="space-y-1">
+                                  {branch.headCommitSha && (
+                                    <div className="rounded-lg bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
+                                      HEAD <span className="font-mono">{shortSha(branch.headCommitSha)}</span>
+                                      {branch.committedDate ? ` · ${new Date(branch.committedDate).toLocaleString('zh-CN')}` : ''}
+                                    </div>
+                                  )}
                                   {branch.snapshots.map((snapshot, index) => {
                                     const selected = selection?.repositoryId === repository.id
                                       && selection.branch === branch.name
@@ -346,6 +405,11 @@ export default function CodeGraphPage() {
                                       </button>
                                     )
                                   })}
+                                  {branch.snapshots.length === 0 && (
+                                    <p className="rounded-lg bg-muted p-2 text-xs text-muted-foreground">
+                                      这个分支还没有 Code Graph，点击“生成”后会基于当前 HEAD 建图。
+                                    </p>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createGitLabService } from "@/lib/services/gitlab";
 
 function readMemoryString(memoryJson: unknown, key: string): string | null {
   if (!memoryJson || typeof memoryJson !== "object" || Array.isArray(memoryJson)) return null;
@@ -20,11 +21,8 @@ function readMemoryNumber(memoryJson: unknown, key: string): number | null {
 
 export function GET() {
   return prisma.repository.findMany({
-    select: {
-      id: true,
-      name: true,
-      path: true,
-      isActive: true,
+    include: {
+      gitLabAccount: true,
       memorySnapshots: {
         where: { status: "ready" },
         orderBy: [
@@ -32,16 +30,6 @@ export function GET() {
           { lastIndexedAt: "desc" },
         ],
         take: 300,
-        select: {
-          id: true,
-          branch: true,
-          commitSha: true,
-          status: true,
-          architectureSummary: true,
-          confidence: true,
-          lastIndexedAt: true,
-          memoryJson: true,
-        },
       },
     },
     orderBy: [
@@ -49,10 +37,23 @@ export function GET() {
       { name: "asc" },
     ],
   }).then((repositories) => {
-    return NextResponse.json({
-      repositories: repositories.map((repository) => {
+    return Promise.all(repositories.map((repository) => {
+      const gitlabService = createGitLabService(
+        repository.gitLabAccount.url,
+        repository.gitLabAccount.accessToken,
+      );
+
+      return gitlabService.getBranches(repository.gitLabProjectId, {
+        per_page: 100,
+        max_pages: 5,
+      }).catch((error) => {
+        console.error(`Failed to fetch branches for ${repository.name}:`, error);
+        return [];
+      }).then((remoteBranches) => {
         const branches = new Map<string, {
           name: string;
+          headCommitSha: string | null;
+          committedDate: string | null;
           snapshots: Array<{
             id: string;
             commitSha: string;
@@ -70,6 +71,8 @@ export function GET() {
         repository.memorySnapshots.forEach((snapshot) => {
           const branch = branches.get(snapshot.branch) || {
             name: snapshot.branch,
+            headCommitSha: null,
+            committedDate: null,
             snapshots: [],
           };
           branch.snapshots.push({
@@ -87,15 +90,36 @@ export function GET() {
           branches.set(snapshot.branch, branch);
         });
 
+        remoteBranches.forEach((remoteBranch) => {
+          const branch = branches.get(remoteBranch.name) || {
+            name: remoteBranch.name,
+            headCommitSha: null,
+            committedDate: null,
+            snapshots: [],
+          };
+          branch.headCommitSha = remoteBranch.commit.id;
+          branch.committedDate = remoteBranch.commit.created_at;
+          branches.set(remoteBranch.name, branch);
+        });
+
         return {
           id: repository.id,
           name: repository.name,
           path: repository.path,
           isActive: repository.isActive,
-          branches: [...branches.values()],
+          branches: [...branches.values()].sort((a, b) => {
+            const aTime = a.committedDate ? new Date(a.committedDate).getTime() : 0;
+            const bTime = b.committedDate ? new Date(b.committedDate).getTime() : 0;
+            if (aTime !== bTime) return bTime - aTime;
+            return a.name.localeCompare(b.name);
+          }),
         };
-      }),
-    });
+      });
+    })).then((repositories) => NextResponse.json({
+      repositories,
+    }));
+  }).then((response) => {
+    return response;
   }).catch((error) => {
     console.error("Failed to fetch Code Graph tree:", error);
     return NextResponse.json(
