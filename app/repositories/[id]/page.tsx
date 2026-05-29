@@ -68,13 +68,6 @@ type CodeGraphBranch = {
   lastIndexedAt?: string | null
 }
 
-type MemoryFact = {
-  id: string
-  type: string
-  content: string
-  confidence: number
-}
-
 type CodeGraphMemory = {
   fileCount: number
   relationCount: number
@@ -234,7 +227,6 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const [codeGraphBranches, setCodeGraphBranches] = useState<CodeGraphBranch[]>([])
   const [selectedGraphBranch, setSelectedGraphBranch] = useState<string>('')
   const [selectedGraphCommitSha, setSelectedGraphCommitSha] = useState<string>('')
-  const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([])
   const [codeGraphMemory, setCodeGraphMemory] = useState<CodeGraphMemory | null>(null)
   const [codeGraphData, setCodeGraphData] = useState<CodeGraphData | null>(null)
   const [loadingCodeGraph, setLoadingCodeGraph] = useState(false)
@@ -348,7 +340,6 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
           setSelectedGraphBranch((current) => current || data.selectedSnapshot.branch)
           setSelectedGraphCommitSha((current) => current || data.selectedSnapshot.commitSha)
         }
-        setMemoryFacts(Array.isArray(data.facts) ? data.facts : [])
         setCodeGraphMemory(data.codeGraph || null)
       })
       .catch((error) => {
@@ -953,20 +944,6 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">
                 {selectedSnapshot.architectureSummary}
               </div>
-              {memoryFacts.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">高置信风险</p>
-                  <div className="space-y-2">
-                    {memoryFacts.slice(0, 5).map((fact) => (
-                      <div key={fact.id} className="rounded-md border p-2 text-xs">
-                        <Badge variant="secondary" className="mr-2">{fact.type}</Badge>
-                        <span>{fact.content}</span>
-                        <span className="ml-2 text-muted-foreground">({fact.confidence.toFixed(2)})</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -1170,7 +1147,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                         <Badge variant="secondary">轮次 {bot.maxIterations}</Badge>
                         <Badge variant="secondary">上下文文件 {bot.maxContextFiles}</Badge>
                         <Badge variant="secondary">调用深度 {bot.maxCallGraphDepth}</Badge>
-                        <Badge variant="secondary">Findings {bot.maxFindings}</Badge>
+                        <Badge variant="secondary">输出限制 {bot.maxFindings}</Badge>
                       </div>
                       {bot.description && (
                         <p className="mt-2 text-sm text-muted-foreground">{bot.description}</p>
@@ -1369,7 +1346,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                   <p className="text-xs text-muted-foreground">0-4，默认 2。</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="bot-max-findings">最大 Findings</Label>
+                  <Label htmlFor="bot-max-findings">输出条数限制</Label>
                   <Input
                     id="bot-max-findings"
                     type="number"

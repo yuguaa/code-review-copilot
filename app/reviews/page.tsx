@@ -170,13 +170,21 @@ export default function ReviewsPage() {
         const error = await response.json()
         throw new Error(error.error || 'Failed to retry review')
       }
+
+      const result = await response.json() as { reviewLogId?: string }
       
       // 刷新审查记录列表
-      await fetchReviews(currentPage)
+      await fetchReviews(1)
       
-      // 如果当前打开的详情就是这个审查，关闭详情窗口
-      if (selectedReview?.id === reviewId) {
-        setSelectedReview(null)
+      const nextReviewId = result.reviewLogId
+      setSelectedReview((current) => current?.id === reviewId ? null : current)
+      if (nextReviewId) {
+        fetch(`/api/review?logId=${nextReviewId}`)
+          .then((detailResponse) => detailResponse.ok ? detailResponse.json() : null)
+          .then((review) => {
+            if (review) setSelectedReview(review as Review)
+          })
+          .catch((error) => console.error('Failed to load retried review:', error))
       }
     } catch (err) {
       console.error('Failed to retry review:', err)
@@ -399,18 +407,12 @@ export default function ReviewsPage() {
         .map((source) => {
           if (!source || typeof source !== 'object') return '未知来源'
           const data = source as { botName?: string; model?: string; confidence?: number }
-          const confidence = typeof data.confidence === 'number'
-            ? `，confidence=${data.confidence.toFixed(2)}`
-            : ''
-          return `${data.botName || '未知机器人'} / ${data.model || 'unknown'}${confidence}`
+          return `${data.botName || '未知机器人'} / ${data.model || 'unknown'}`
         })
         .join('；')
     }
 
-    const confidence = typeof comment.confidence === 'number'
-      ? `，confidence=${comment.confidence.toFixed(2)}`
-      : ''
-    return `${comment.sourceBotName || '默认审查机器人'} / ${comment.sourceBotModel || 'unknown'}${confidence}`
+    return `${comment.sourceBotName || '默认审查机器人'} / ${comment.sourceBotModel || 'unknown'}`
   }
 
   useEffect(() => {
@@ -806,7 +808,7 @@ export default function ReviewsPage() {
                     <section id="review-issues" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Findings First</p>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">问题优先</p>
                           <h2 className="mt-1 text-xl font-semibold">全部问题清单</h2>
                         </div>
                         <div className="flex flex-wrap gap-2">

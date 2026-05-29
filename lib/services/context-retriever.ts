@@ -29,13 +29,6 @@ export interface RetrievedAgentContext {
     observation: string;
   }>;
   architectureSummary: string;
-  memoryFacts: Array<{
-    id: string;
-    type: string;
-    content: string;
-    confidence: number;
-    evidence: string;
-  }>;
   fileContexts: Array<{
     filePath: string;
     role: string;
@@ -82,14 +75,6 @@ export class ContextRetrieverService {
           status: "ready",
         },
       }),
-      prisma.repositoryMemoryFact.findMany({
-        where: {
-          repositoryId: params.repositoryId,
-          branch: params.branch,
-        },
-        orderBy: { confidence: "desc" },
-        take: 20,
-      }),
       prisma.codeFileNode.findMany({
         where: {
           repositoryId: params.repositoryId,
@@ -111,7 +96,7 @@ export class ContextRetrieverService {
         orderBy: { completedAt: "desc" },
         take: 5,
       }),
-    ]).then(([snapshot, facts, fileNodes, relatedReviews]) => {
+    ]).then(([snapshot, fileNodes, relatedReviews]) => {
       return this.getGraphRelations({
         repositoryId: params.repositoryId,
         branch: params.branch,
@@ -156,7 +141,6 @@ export class ContextRetrieverService {
         };
         const tools = this.buildToolCatalog({
           codeGraphAvailable: codeGraph.available,
-          memoryFactsCount: facts.length,
           fileContextCount: fileContexts.length,
           graphNeighborCount: graphNeighbors.length,
           relatedReviewCount: relatedReviews.length,
@@ -172,22 +156,12 @@ export class ContextRetrieverService {
           graphNeighbors.length
             ? `调用关系：${graphNeighbors.slice(0, 10).map((item) => `${item.from} -> ${item.to || "external"}`).join("；")}`
             : "调用关系：暂无",
-          facts.length
-            ? `记忆事实：${facts.slice(0, 6).map((item) => item.content).join("；")}`
-            : "记忆事实：暂无",
         ].join("\n");
 
         return {
           codeGraph,
           tools,
           architectureSummary,
-          memoryFacts: facts.map((fact) => ({
-            id: fact.id,
-            type: fact.type,
-            content: fact.content,
-            confidence: fact.confidence,
-            evidence: fact.evidence,
-          })),
           fileContexts,
           graphNeighbors,
           relatedReviews: relatedReviews.map((review) => ({
@@ -205,7 +179,6 @@ export class ContextRetrieverService {
 
   private buildToolCatalog(params: {
     codeGraphAvailable: boolean;
-    memoryFactsCount: number;
     fileContextCount: number;
     graphNeighborCount: number;
     relatedReviewCount: number;
@@ -234,12 +207,6 @@ export class ContextRetrieverService {
         status: params.graphNeighborCount > 0 ? "available" : "unavailable",
         description: "读取变更文件的图邻居关系，用于跨文件影响分析。",
         observation: params.graphNeighborCount > 0 ? `命中 ${params.graphNeighborCount} 条关系。` : "暂无可用图邻居。",
-      },
-      {
-        name: "search_memory_facts",
-        status: params.memoryFactsCount > 0 ? "available" : "unavailable",
-        description: "检索历史审查写入的高置信 Code Graph 事实。",
-        observation: params.memoryFactsCount > 0 ? `命中 ${params.memoryFactsCount} 条图谱事实。` : "暂无高置信图谱事实。",
       },
       {
         name: "get_related_review_history",

@@ -113,7 +113,7 @@ model ReviewLog {
   comments          ReviewComment[] // 关联的审查评论
   agentTraces       ReviewAgentTrace[]
 
-  @@unique([repositoryId, mergeRequestIid, commitSha])
+  @@index([repositoryId, mergeRequestIid, commitSha])
   @@map("review_logs")
 }
 

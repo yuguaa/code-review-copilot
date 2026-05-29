@@ -17,12 +17,13 @@ export async function POST(
     const { id: reviewId } = await params
 
     console.log(`🔄 [RetryAPI] Retrying review: ${reviewId}`)
-    await reviewTriggerService.retryReview(reviewId)
+    const reviewLog = await reviewTriggerService.retryReview(reviewId)
 
     return NextResponse.json({
       success: true,
       message: 'Review restarted',
-      reviewLogId: reviewId,
+      reviewLogId: reviewLog.id,
+      sourceReviewLogId: reviewId,
     })
   } catch (error) {
     console.error('❌ [RetryAPI] Failed to retry review:', error)

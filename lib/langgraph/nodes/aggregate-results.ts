@@ -39,7 +39,7 @@ function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
 export async function aggregateResultsNode(state: ReviewState): Promise<Partial<ReviewState>> {
   console.log(`📊 [AggregateResultsNode] Aggregating review results`);
 
-  // 最终发布口径以去重后的评论为准，低置信问题保留并展示 confidence。
+  // 最终发布口径以去重后的评论为准，confidence 只用于内部排序和去重。
   const commentsToSave = normalizeComments(
     state.reviewComments.length > 0
       ? state.reviewComments

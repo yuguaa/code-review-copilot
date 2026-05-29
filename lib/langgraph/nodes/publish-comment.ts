@@ -454,18 +454,12 @@ function formatCommentSources(comment: ReviewComment): string {
   if (sourceBots.length > 0) {
     return sourceBots
       .map((source) => {
-        const confidence = typeof source.confidence === "number"
-          ? `，confidence=${source.confidence.toFixed(2)}`
-          : "";
-        return `${source.botName || "未知机器人"} / ${source.model || "unknown"}${confidence}`;
+        return `${source.botName || "未知机器人"} / ${source.model || "unknown"}`;
       })
       .join("；");
   }
 
-  const confidence = typeof comment.confidence === "number"
-    ? `，confidence=${comment.confidence.toFixed(2)}`
-    : "";
-  return `${comment.sourceBotName || "默认审查机器人"} / ${comment.sourceBotModel || "unknown"}${confidence}`;
+  return `${comment.sourceBotName || "默认审查机器人"} / ${comment.sourceBotModel || "unknown"}`;
 }
 
 function getReviewConclusion(critical: number, normal: number, suggestion: number): string {

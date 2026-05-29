@@ -8,11 +8,6 @@ type RepositoryWithGitLab = Prisma.RepositoryGetPayload<{
   include: { gitLabAccount: true };
 }>;
 
-type ReviewLogCreateResult = {
-  reviewLog: ReviewLog;
-  created: boolean;
-};
-
 export class ReviewTriggerService {
   startManualReview(params: { repositoryId: string; mergeRequestIid: number }) {
     return prisma.repository.findUnique({
@@ -31,12 +26,7 @@ export class ReviewTriggerService {
       return gitlabService.getMergeRequest(repository.gitLabProjectId, params.mergeRequestIid)
         .then((mr) => {
           const commitSha = mr.diff_refs.head_sha;
-          return this.createReviewLogOnce({
-            unique: {
-              repositoryId: repository.id,
-              mergeRequestIid: mr.iid,
-              commitSha,
-            },
+          return prisma.reviewLog.create({
             data: {
               repositoryId: repository.id,
               mergeRequestId: mr.id,
@@ -54,15 +44,9 @@ export class ReviewTriggerService {
             },
           });
         });
-    }).then(({ reviewLog, created }) => {
-      if (!created) return reviewLog;
+    }).then((reviewLog) => {
       this.runAsync(reviewLog.id);
       return reviewLog;
-    }).catch((error) => {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new Error("Review already exists");
-      }
-      throw error;
     });
   }
 
@@ -83,12 +67,7 @@ export class ReviewTriggerService {
     const authorUsername = params.authorUsername || "unknown";
     const author = params.authorName || authorUsername;
 
-    return this.createReviewLogOnce({
-      unique: {
-        repositoryId: params.repository.id,
-        mergeRequestIid: params.mergeRequest.iid,
-        commitSha: params.commitSha,
-      },
+    return prisma.reviewLog.create({
       data: {
         repositoryId: params.repository.id,
         mergeRequestId: params.mergeRequest.id,
@@ -104,13 +83,12 @@ export class ReviewTriggerService {
         status: "pending",
         totalFiles: 0,
       },
-    }).then((result) => {
-      if (!result.created) return result.reviewLog;
-      return this.createMergeRequestPlaceholder(params.repository, result.reviewLog)
-        .then(() => result.reviewLog)
+    }).then((reviewLog) => {
+      return this.createMergeRequestPlaceholder(params.repository, reviewLog)
+        .then(() => reviewLog)
         .catch((error) => {
           console.error("⚠️ [ReviewTriggerService] Failed to create MR placeholder:", error);
-          return result.reviewLog;
+          return reviewLog;
         })
         .then((reviewLog) => {
           this.runAsync(reviewLog.id);
@@ -129,12 +107,7 @@ export class ReviewTriggerService {
     const authorUsername = params.authorUsername || "unknown";
     const author = params.authorName || authorUsername;
 
-    return this.createReviewLogOnce({
-      unique: {
-        repositoryId: params.repository.id,
-        mergeRequestIid: 0,
-        commitSha: params.commitSha,
-      },
+    return prisma.reviewLog.create({
       data: {
         repositoryId: params.repository.id,
         mergeRequestId: 0,
@@ -150,13 +123,12 @@ export class ReviewTriggerService {
         status: "pending",
         totalFiles: 0,
       },
-    }).then((result) => {
-      if (!result.created) return result.reviewLog;
-      return this.createPushPlaceholder(params.repository, result.reviewLog)
-        .then(() => result.reviewLog)
+    }).then((reviewLog) => {
+      return this.createPushPlaceholder(params.repository, reviewLog)
+        .then(() => reviewLog)
         .catch((error) => {
           console.error("⚠️ [ReviewTriggerService] Failed to create push placeholder:", error);
-          return result.reviewLog;
+          return reviewLog;
         })
         .then((reviewLog) => {
           this.runAsync(reviewLog.id);
@@ -166,40 +138,47 @@ export class ReviewTriggerService {
   }
 
   retryReview(reviewId: string) {
-    return prisma.$transaction((tx) => {
-      return tx.reviewLog.updateMany({
-        where: {
-          id: reviewId,
-          status: { not: "pending" },
+    return prisma.reviewLog.findUnique({
+      where: { id: reviewId },
+      include: {
+        repository: {
+          include: {
+            gitLabAccount: true,
+          },
         },
-        data: {
-          status: "pending",
-          error: null,
-          reviewedFiles: 0,
-          criticalIssues: 0,
-          normalIssues: 0,
-          suggestions: 0,
-          aiResponse: null,
-          reviewPrompts: null,
-          completedAt: null,
-          gitlabDiscussionId: null,
-          gitlabNoteId: null,
-        },
-      }).then((result) => {
-        if (result.count === 0) {
-          return tx.reviewLog.findUnique({ where: { id: reviewId } })
-            .then((reviewLog) => {
-              if (!reviewLog) throw new Error("Review log not found");
-              throw new Error("Review is already in progress");
-            });
-        }
+      },
+    }).then((sourceReview) => {
+      if (!sourceReview) throw new Error("Review log not found");
+      if (sourceReview.status === "pending") {
+        throw new Error("Review is already in progress");
+      }
 
-        return Promise.all([
-          tx.reviewComment.deleteMany({ where: { reviewLogId: reviewId } }),
-          tx.reviewAgentTrace.deleteMany({ where: { reviewLogId: reviewId } }),
-          tx.reviewBotRun.deleteMany({ where: { reviewLogId: reviewId } }),
-          tx.reviewLog.findUniqueOrThrow({ where: { id: reviewId } }),
-        ]).then(([, , , updated]) => updated);
+      return prisma.reviewLog.create({
+        data: {
+          repositoryId: sourceReview.repositoryId,
+          mergeRequestId: sourceReview.mergeRequestId,
+          mergeRequestIid: sourceReview.mergeRequestIid,
+          sourceBranch: sourceReview.sourceBranch,
+          targetBranch: sourceReview.targetBranch,
+          author: sourceReview.author,
+          authorUsername: sourceReview.authorUsername,
+          title: sourceReview.title,
+          description: sourceReview.description,
+          commitSha: sourceReview.commitSha,
+          commitShortId: sourceReview.commitShortId,
+          status: "pending",
+          totalFiles: 0,
+        },
+      }).then((reviewLog) => {
+        const placeholderPromise = reviewLog.mergeRequestIid === 0
+          ? this.createPushPlaceholder(sourceReview.repository, reviewLog)
+          : this.createMergeRequestPlaceholder(sourceReview.repository, reviewLog);
+
+        return placeholderPromise
+          .catch((error) => {
+            console.error("⚠️ [ReviewTriggerService] Failed to create retry placeholder:", error);
+            return reviewLog;
+          });
       });
     }).then((reviewLog) => {
       this.runAsync(reviewLog.id);
@@ -247,32 +226,6 @@ export class ReviewTriggerService {
         ]).then(([, reviewLog]) => reviewLog);
       });
     });
-  }
-
-  private createReviewLogOnce(params: {
-    unique: {
-      repositoryId: string;
-      mergeRequestIid: number;
-      commitSha: string;
-    };
-    data: Prisma.ReviewLogUncheckedCreateInput;
-  }): Promise<ReviewLogCreateResult> {
-    return prisma.reviewLog.create({ data: params.data })
-      .then((reviewLog) => ({ reviewLog, created: true }))
-      .catch((error) => {
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
-          throw error;
-        }
-
-        return prisma.reviewLog.findUnique({
-          where: {
-            repositoryId_mergeRequestIid_commitSha: params.unique,
-          },
-        }).then((reviewLog) => {
-          if (!reviewLog) throw error;
-          return { reviewLog, created: false };
-        });
-      });
   }
 
   private createMergeRequestPlaceholder(repository: RepositoryWithGitLab, reviewLog: ReviewLog) {

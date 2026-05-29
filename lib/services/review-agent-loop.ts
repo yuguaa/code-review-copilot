@@ -178,7 +178,6 @@ function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: stri
     get_code_graph_status: context.codeGraph.available ? 1 : 0,
     get_architecture_summary: context.architectureSummary ? 1 : 0,
     get_memory_snapshot: context.architectureSummary ? 1 : 0,
-    search_memory_facts: context.memoryFacts.length,
     get_changed_files: requestedFiles.length,
     get_file_context: context.fileContexts.length,
     get_call_graph_neighbors: context.graphNeighbors.length,
@@ -269,7 +268,6 @@ export class ReviewAgentLoopService {
         description: input.description,
         changedFiles: input.changedFiles,
         architectureSummary: context.architectureSummary,
-        memoryFacts: context.memoryFacts.map((fact) => fact.content),
         toolCatalog: context.tools,
         codeGraph: context.codeGraph,
         contextSummary: context.summary,
@@ -320,7 +318,6 @@ export class ReviewAgentLoopService {
         plan: finalPlan as Record<string, unknown>,
         contextSummary,
         existingFindings: findings,
-        maxFindings: budget.maxFindings - findings.length,
         botName: input.botName,
         botPrompt: input.botPrompt,
         botPromptMode: input.botPromptMode,
@@ -346,7 +343,6 @@ export class ReviewAgentLoopService {
         })),
         contextSummary,
         remainingIterations,
-        maxFindings: budget.maxFindings,
       });
 
       const criticResponse = await aiService.reviewCode(criticPrompt, input.modelConfig, REVIEW_AGENT_CRITIC_SYSTEM_PROMPT);
