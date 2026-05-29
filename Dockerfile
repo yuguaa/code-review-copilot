@@ -1,16 +1,14 @@
+# syntax=docker/dockerfile:1
+
 FROM node:24-alpine AS deps
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
-
-FROM node:24-alpine AS prod-deps
-
-WORKDIR /app
+ARG NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci --registry=${NPM_CONFIG_REGISTRY} --replace-registry-host=always
 
 FROM node:24-alpine AS builder
 
@@ -23,6 +21,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 RUN npm run build
+RUN npm prune --omit=dev
 
 FROM node:24-alpine AS runner
 
@@ -36,7 +35,7 @@ ENV PORT=3000
 RUN apk add --no-cache openssl sqlite dos2unix
 
 COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
