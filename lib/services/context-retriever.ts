@@ -16,6 +16,8 @@ export interface RetrievedAgentContext {
     lastIndexedCommitSha: string | null;
     previousIndexedCommitSha: string | null;
     sourceCommitSha: string | null;
+    baseBranch: string | null;
+    baseCommitSha: string | null;
     lastIndexedAt: string | null;
     updateMode: string | null;
     indexedFiles: number;
@@ -131,6 +133,8 @@ export class ContextRetrieverService {
           lastIndexedCommitSha: typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null,
           previousIndexedCommitSha: typeof memoryJson.previousIndexedCommitSha === "string" ? memoryJson.previousIndexedCommitSha : null,
           sourceCommitSha: typeof memoryJson.sourceCommitSha === "string" ? memoryJson.sourceCommitSha : null,
+          baseBranch: typeof memoryJson.baseBranch === "string" ? memoryJson.baseBranch : null,
+          baseCommitSha: typeof memoryJson.baseCommitSha === "string" ? memoryJson.baseCommitSha : null,
           lastIndexedAt: snapshot?.lastIndexedAt?.toISOString() || null,
           updateMode: typeof memoryJson.updateMode === "string" ? memoryJson.updateMode : null,
           indexedFiles: typeof memoryJson.indexedFiles === "number" ? memoryJson.indexedFiles : 0,

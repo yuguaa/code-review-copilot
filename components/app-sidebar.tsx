@@ -12,6 +12,7 @@ import {
   Clock,
   PanelLeftClose,
   PanelLeftOpen,
+  Network,
 } from 'lucide-react'
 
 import {
@@ -47,6 +48,11 @@ const navItems = [
     icon: Clock,
   },
   {
+    title: 'Code Graph',
+    href: '/code-graph',
+    icon: Network,
+  },
+  {
     title: '配置',
     href: '/settings',
     icon: Settings,
@@ -71,6 +77,10 @@ function SidebarToggle() {
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const isActive = (href: string) => {
+    if (href === '/') return pathname === '/'
+    return pathname === href || pathname.startsWith(`${href}/`)
+  }
 
   return (
     <SidebarProvider>
@@ -100,7 +110,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       asChild
-                      isActive={pathname === item.href}
+                      isActive={isActive(item.href)}
                       tooltip={item.title}
                     >
                       <Link href={item.href}>

@@ -61,6 +61,8 @@ interface Review {
   reviewPrompts: string | null // 发送给 AI 的完整 Prompt
   aiModelProvider: string | null // AI 模型提供商
   aiModelId: string | null // AI 模型 ID
+  attemptNumber: number
+  totalAttempts: number
   startedAt: string
   completedAt: string | null
   eventType: 'push' | 'merge_request'
@@ -391,6 +393,11 @@ export default function ReviewsPage() {
       : []
   }
 
+  const formatReviewAttempt = (review: Pick<Review, 'attemptNumber' | 'totalAttempts'>) => {
+    if (review.totalAttempts <= 1) return '首次审查'
+    return `第 ${review.attemptNumber} / ${review.totalAttempts} 次`
+  }
+
   const getIterationToolSummary = (iteration: Record<string, unknown>) => {
     const tools = Array.isArray(iteration.toolCalls)
       ? iteration.toolCalls as Array<{ tool?: unknown; status?: unknown; resultCount?: unknown }>
@@ -524,7 +531,10 @@ export default function ReviewsPage() {
                       <p className="text-xs text-muted-foreground font-mono">
                         {review.eventType === 'push' 
                           ? review.commitShortId 
-                          : `!${review.mergeRequestIid}`}
+                          : `!${review.mergeRequestIid} · ${review.commitShortId}`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatReviewAttempt(review)} · {review.id.slice(0, 8)}
                       </p>
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -671,7 +681,8 @@ export default function ReviewsPage() {
                         <div className="flex flex-wrap gap-x-5 gap-y-1">
                           <span>仓库：{selectedReview.repositoryName}</span>
                           <span>作者：{selectedReview.author}{selectedReview.authorUsername ? `（${selectedReview.authorUsername}）` : ''}</span>
-                          <span>{selectedReview.eventType === 'push' ? `Commit ${selectedReview.commitShortId}` : `MR !${selectedReview.mergeRequestIid}`}</span>
+                          <span>{selectedReview.eventType === 'push' ? `Commit ${selectedReview.commitShortId}` : `MR !${selectedReview.mergeRequestIid} · Commit ${selectedReview.commitShortId}`}</span>
+                          <span>{formatReviewAttempt(selectedReview)} · Log {selectedReview.id.slice(0, 8)}</span>
                           <span>分支：{selectedReview.sourceBranch}{selectedReview.targetBranch ? ` → ${selectedReview.targetBranch}` : ''}</span>
                         </div>
                       </div>

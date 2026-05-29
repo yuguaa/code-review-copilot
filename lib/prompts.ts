@@ -225,6 +225,8 @@ export function buildReviewAgentPlanPrompt(params: {
     lastIndexedCommitSha: string | null
     previousIndexedCommitSha: string | null
     sourceCommitSha: string | null
+    baseBranch: string | null
+    baseCommitSha: string | null
     recommendation: string
   }
   contextSummary: string
@@ -242,7 +244,7 @@ export function buildReviewAgentPlanPrompt(params: {
     params.title ? `【变更主题】${params.title}` : '',
     params.description ? `【描述】${params.description}` : '',
     `【变更文件】\n${params.changedFiles.map((file) => `- ${file}`).join('\n')}`,
-    params.codeGraph ? `【Code Graph 状态】\n可用：${params.codeGraph.available ? '是' : '否'}\n状态：${params.codeGraph.status}\n模式：${params.codeGraph.updateMode || 'unknown'}\n索引文件：${params.codeGraph.indexedFiles}\n上次 HEAD：${params.codeGraph.previousIndexedCommitSha || 'none'}\n索引 HEAD：${params.codeGraph.lastIndexedCommitSha || 'unknown'}\n审查事件提交：${params.codeGraph.sourceCommitSha || 'unknown'}\n建议：${params.codeGraph.recommendation}` : '',
+    params.codeGraph ? `【Code Graph 状态】\n可用：${params.codeGraph.available ? '是' : '否'}\n状态：${params.codeGraph.status}\n模式：${params.codeGraph.updateMode || 'unknown'}\n索引文件：${params.codeGraph.indexedFiles}\n基础分支：${params.codeGraph.baseBranch || 'none'}\n基础快照：${params.codeGraph.baseCommitSha || params.codeGraph.previousIndexedCommitSha || 'none'}\n当前快照：${params.codeGraph.lastIndexedCommitSha || 'unknown'}\n审查事件提交：${params.codeGraph.sourceCommitSha || 'unknown'}\n建议：${params.codeGraph.recommendation}` : '',
     params.toolCatalog?.length ? `【Agent Tools】\n${params.toolCatalog.map((tool) => `- ${tool.name} [${tool.status}]：${tool.description}；观测：${tool.observation}`).join('\n')}` : '',
     params.availableAdditionalAgents?.length ? `【可调用辅助 Agent】\n${params.availableAdditionalAgents.map((agent) => `- ${agent.name}${agent.description ? `：${agent.description}` : ''}；Prompt 模式：${agent.promptMode || 'extend'}`).join('\n')}` : '',
     `【项目架构摘要】\n${params.architectureSummary || '暂无'}`,

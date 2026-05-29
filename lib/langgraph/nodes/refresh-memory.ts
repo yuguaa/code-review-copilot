@@ -27,53 +27,71 @@ export function refreshMemoryNode(state: ReviewState): Promise<Partial<ReviewSta
   }
 
   const branch = reviewLog.targetBranch || reviewLog.sourceBranch || "default";
+  const isPushEvent = reviewLog.mergeRequestIid === 0;
 
   return state.gitlabService.getBranch(gitLabProjectId, branch)
     .then((remoteBranch) => {
-      const targetBranchHeadSha = remoteBranch.commit.id;
-      const targetSnapshotPromise = prisma.repositoryMemorySnapshot.findUnique({
-        where: {
-          repositoryId_branch_commitSha: {
+      const branchHeadSha = remoteBranch.commit.id;
+      const graphCommitSha = reviewLog.commitSha || branchHeadSha;
+      const loadBaseSnapshot = isPushEvent
+        ? prisma.repositoryMemorySnapshot.findFirst({
+          where: {
             repositoryId: reviewLog.repositoryId,
             branch,
-            commitSha: targetBranchHeadSha,
+            status: "ready",
+            commitSha: { not: graphCommitSha },
           },
-        },
-      });
-
-      return targetSnapshotPromise.then((targetSnapshot) => {
-        const targetGraphPromise = targetSnapshot
-          ? Promise.resolve(targetSnapshot)
-          : memoryIndexService.refreshRepositoryMemory({
+          orderBy: { lastIndexedAt: "desc" },
+        })
+        : prisma.repositoryMemorySnapshot.findUnique({
+          where: {
+            repositoryId_branch_commitSha: {
+              repositoryId: reviewLog.repositoryId,
+              branch,
+              commitSha: branchHeadSha,
+            },
+          },
+        }).then((snapshot) => {
+          if (snapshot) return snapshot;
+          return memoryIndexService.refreshRepositoryMemory({
             repositoryId: reviewLog.repositoryId,
             gitLabProjectId,
             gitlabService: state.gitlabService!,
             branch,
-            commitSha: targetBranchHeadSha,
+            commitSha: branchHeadSha,
             diffs: [],
-            sourceCommitSha: targetBranchHeadSha,
+            sourceCommitSha: branchHeadSha,
             previousIndexedCommitSha: null,
             forceRebuild: true,
           });
+        });
 
-        return targetGraphPromise.then(() => {
-          const graphCommitSha = reviewLog.commitSha || targetBranchHeadSha;
-          const loadGraphDiffs = graphCommitSha === targetBranchHeadSha
-            ? Promise.resolve(state.relevantDiffs)
-            : Promise.resolve(state.relevantDiffs.length > 0 ? state.relevantDiffs : [])
-
-          return loadGraphDiffs.then((graphDiffs) => memoryIndexService.refreshRepositoryMemory({
+      return loadBaseSnapshot.then((baseSnapshot) => {
+        if (!baseSnapshot) {
+          return memoryIndexService.refreshRepositoryMemory({
             repositoryId: reviewLog.repositoryId,
             gitLabProjectId,
             gitlabService: state.gitlabService!,
             branch,
             commitSha: graphCommitSha,
-            diffs: graphDiffs,
+            diffs: state.relevantDiffs,
             sourceCommitSha: reviewLog.commitSha,
-            previousIndexedCommitSha: targetBranchHeadSha,
-            baseBranch: branch,
-            baseCommitSha: targetBranchHeadSha,
-          }));
+            previousIndexedCommitSha: null,
+            forceRebuild: true,
+          });
+        }
+
+        return memoryIndexService.refreshRepositoryMemory({
+          repositoryId: reviewLog.repositoryId,
+          gitLabProjectId,
+          gitlabService: state.gitlabService!,
+          branch,
+          commitSha: graphCommitSha,
+          diffs: state.relevantDiffs,
+          sourceCommitSha: reviewLog.commitSha,
+          previousIndexedCommitSha: baseSnapshot.commitSha,
+          baseBranch: branch,
+          baseCommitSha: baseSnapshot.commitSha,
         });
       });
     })

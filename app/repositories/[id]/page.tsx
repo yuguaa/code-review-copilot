@@ -77,6 +77,8 @@ type CodeGraphMemory = {
   lastIndexedCommitSha: string | null
   previousIndexedCommitSha: string | null
   sourceCommitSha: string | null
+  baseBranch?: string | null
+  baseCommitSha?: string | null
   changedFiles: string[]
   changedFileRoles: Array<{ filePath?: string; role?: string }>
   topLevelStructure: Array<{ path?: string; files?: number; directories?: number }>
@@ -896,7 +898,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">分支：{selectedSnapshot.branch}</Badge>
                 <Badge variant="outline">状态：{selectedSnapshot.status}</Badge>
-                <Badge variant="outline">图提交：{selectedSnapshot.commitSha.slice(0, 8)}</Badge>
+                <Badge variant="outline">当前快照：{selectedSnapshot.commitSha.slice(0, 8)}</Badge>
                 <Badge variant="outline">置信度：{selectedSnapshot.confidence.toFixed(2)}</Badge>
                 {codeGraphMemory?.updateMode && (
                   <Badge variant="outline">更新模式：{codeGraphMemory.updateMode}</Badge>
@@ -911,13 +913,13 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                     </p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">索引 HEAD</p>
+                    <p className="text-muted-foreground">当前快照</p>
                     <p className="font-medium">{codeGraphMemory.lastIndexedCommitSha?.slice(0, 8) || '未知'}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">上次 HEAD / 触发提交</p>
+                    <p className="text-muted-foreground">基础快照 / 触发提交</p>
                     <p className="font-medium">
-                      {codeGraphMemory.previousIndexedCommitSha?.slice(0, 8) || '无'} / {codeGraphMemory.sourceCommitSha?.slice(0, 8) || '未知'}
+                      {codeGraphMemory.baseCommitSha?.slice(0, 8) || codeGraphMemory.previousIndexedCommitSha?.slice(0, 8) || '无'} / {codeGraphMemory.sourceCommitSha?.slice(0, 8) || '未知'}
                     </p>
                   </div>
                   {codeGraphMemory.reuseReason && (

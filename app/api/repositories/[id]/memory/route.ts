@@ -115,6 +115,8 @@ export function GET(
         lastIndexedCommitSha: typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null,
         previousIndexedCommitSha: typeof memoryJson.previousIndexedCommitSha === "string" ? memoryJson.previousIndexedCommitSha : null,
         sourceCommitSha: typeof memoryJson.sourceCommitSha === "string" ? memoryJson.sourceCommitSha : null,
+        baseBranch: typeof memoryJson.baseBranch === "string" ? memoryJson.baseBranch : null,
+        baseCommitSha: typeof memoryJson.baseCommitSha === "string" ? memoryJson.baseCommitSha : null,
         changedFiles: Array.isArray(memoryJson.changedFiles) ? memoryJson.changedFiles : [],
         changedFileRoles: Array.isArray(memoryJson.changedFileRoles) ? memoryJson.changedFileRoles : [],
         topLevelStructure: Array.isArray(memoryJson.topLevelStructure) ? memoryJson.topLevelStructure : [],

@@ -904,7 +904,7 @@ export class MemoryIndexService {
             updateMode: "incremental",
             changedFiles,
             changedFileRoles: changedIndexedFiles.map((file) => ({ filePath: file.filePath, role: file.role })),
-            indexedFiles: existingNodes.length,
+            indexedFiles: candidatePaths.size,
           },
           baseSnapshotBranch: snapshot.branch,
           baseSnapshotCommitSha: snapshot.commitSha,
@@ -923,7 +923,7 @@ export class MemoryIndexService {
       files: [],
       importEdges: [],
       architectureSummary: reason === "branch_head_unchanged"
-        ? "远端分支 HEAD 未变化，Code Graph 复用已有分支图。"
+        ? "当前快照已存在，Code Graph 复用已有分支图。"
         : "当前变更不包含可索引源码文件，Code Graph 复用已有分支图。",
       entrypoints: this.mergeEntrypoints(snapshot.entrypointsJson, []),
       layers: this.mergeLayers(this.parseJsonRecord(snapshot.layersJson), []),

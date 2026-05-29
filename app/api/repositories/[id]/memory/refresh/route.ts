@@ -51,10 +51,7 @@ export async function POST(
       where: { repositoryId: repository.id, branch, status: "ready" },
       orderBy: { lastIndexedAt: "desc" },
     });
-    const memoryJson = existingSnapshot?.memoryJson && typeof existingSnapshot.memoryJson === "object" && !Array.isArray(existingSnapshot.memoryJson)
-      ? existingSnapshot.memoryJson as Record<string, unknown>
-      : {};
-    const previousIndexedCommitSha = typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null;
+    const previousIndexedCommitSha = existingSnapshot?.commitSha || null;
     const diffs = forceRebuild
       ? []
       : previousIndexedCommitSha && previousIndexedCommitSha !== commitSha
@@ -69,6 +66,8 @@ export async function POST(
       diffs,
       forceRebuild,
       previousIndexedCommitSha,
+      baseBranch: existingSnapshot && !forceRebuild ? branch : null,
+      baseCommitSha: existingSnapshot && !forceRebuild ? existingSnapshot.commitSha : null,
     });
     return NextResponse.json({ success: true, snapshot });
   } catch (error) {

@@ -98,6 +98,37 @@ export async function GET(request: NextRequest) {
       take: limit,
     })
 
+    const reviewAttemptGroups = await Promise.all(
+      Array.from(
+        new Map(
+          reviews.map((review) => [
+            `${review.repositoryId}:${review.mergeRequestIid}:${review.commitSha}`,
+            {
+              repositoryId: review.repositoryId,
+              mergeRequestIid: review.mergeRequestIid,
+              commitSha: review.commitSha,
+            },
+          ]),
+        ).values(),
+      ).map((key) => (
+        prisma.reviewLog.findMany({
+          where: key,
+          select: { id: true },
+          orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+        })
+      )),
+    )
+
+    const attemptLookup = new Map<string, { attemptNumber: number; totalAttempts: number }>()
+    reviewAttemptGroups.forEach((group) => {
+      group.forEach((item, index) => {
+        attemptLookup.set(item.id, {
+          attemptNumber: index + 1,
+          totalAttempts: group.length,
+        })
+      })
+    })
+
     // 获取总数用于分页
     const total = await prisma.reviewLog.count({ where })
 
@@ -117,6 +148,8 @@ export async function GET(request: NextRequest) {
         const end = lineRangeEnd && lineRangeEnd !== lineNumber ? lineRangeEnd : lineNumber
         return `${hash}_${lineNumber}_${end}`
       }
+
+      const attempt = attemptLookup.get(review.id) || { attemptNumber: 1, totalAttempts: 1 }
 
       return {
         id: review.id,
@@ -146,6 +179,8 @@ export async function GET(request: NextRequest) {
         reviewPrompts: review.reviewPrompts, // 发送给 AI 的完整 Prompt（用于追溯）
         aiModelProvider: review.aiModelProvider, // AI 模型提供商
         aiModelId: review.aiModelId, // AI 模型 ID
+        attemptNumber: attempt.attemptNumber,
+        totalAttempts: attempt.totalAttempts,
         botRuns: review.botRuns.map((botRun) => ({
           id: botRun.id,
           botName: botRun.reviewBot?.name || '未知机器人',
