@@ -94,13 +94,27 @@ type CodeGraphRelation = {
   id: string
   from: string
   to: string | null
+  fromSymbol: { name: string; kind: string } | null
+  toSymbol: { name: string; kind: string } | null
   relationType: string
   confidence: number
   evidence: string
 }
 
+type CodeGraphSymbol = {
+  id: string
+  filePath: string
+  name: string
+  kind: string
+  signature: string | null
+  startLine: number
+  endLine: number
+  summary: string
+}
+
 type CodeGraphData = {
   files: CodeGraphFile[]
+  symbols: CodeGraphSymbol[]
   relations: CodeGraphRelation[]
 }
 
@@ -288,7 +302,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         setCodeGraphMemory(data.codeGraph || null)
       })
       .catch((error) => {
-        console.error('Failed to load memory wiki:', error)
+        console.error('Failed to load code graph memory:', error)
       })
   }, [repositoryId])
 
@@ -300,8 +314,9 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       .then((data) => {
         if (!data) return
         const files = Array.isArray(data.files) ? data.files as CodeGraphFile[] : []
+        const symbols = Array.isArray(data.symbols) ? data.symbols as CodeGraphSymbol[] : []
         const relations = Array.isArray(data.relations) ? data.relations as CodeGraphRelation[] : []
-        setCodeGraphData({ files, relations })
+        setCodeGraphData({ files, symbols, relations })
         setSelectedGraphFilePath((current) => current && files.some((file) => file.filePath === current) ? current : files[0]?.filePath || null)
       })
       .catch((error) => {
@@ -318,7 +333,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       loadRepository() // 加载仓库详情
       loadAIModels() // 加载 AI 模型
       loadReviewBots() // 加载审查机器人
-      loadMemory() // 加载 Memory Wiki
+      loadMemory() // 加载 Code Graph Memory
       loadCodeGraph() // 加载 Code Graph 图谱
     })
   }, [loadAIModels, loadCodeGraph, loadMemory, loadRepository, loadReviewBots, repositoryId]) // 依赖仓库 ID
@@ -561,16 +576,16 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       .then((response) => {
         if (!response.ok) {
           return response.json().then((error) => {
-            throw new Error(error.error || '刷新 Memory Wiki 失败')
+            throw new Error(error.error || '刷新 Code Graph 失败')
           })
         }
         return Promise.all([loadMemory(), loadCodeGraph()])
       })
       .then(() => {
-        toast.success('Memory Wiki 已刷新')
+        toast.success('Code Graph 已增量刷新')
       })
       .catch((error) => {
-        toast.error(toErrorMessage(error, '刷新 Memory Wiki 失败'))
+        toast.error(toErrorMessage(error, '刷新 Code Graph 失败'))
       })
       .finally(() => setRefreshingMemory(false))
   }
@@ -614,7 +629,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
     },
     {
       name: '架构守护',
-      prompt: '请重点关注跨文件调用链、模块边界、职责泄漏、抽象倒置和与 Memory Wiki 中项目架构约定冲突的问题。',
+      prompt: '请重点关注跨文件调用链、模块边界、职责泄漏、抽象倒置和与 Code Graph 中项目架构约定冲突的问题。',
     },
   ]
 
@@ -647,6 +662,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const orderedReviewBots = sortBots(reviewBots)
   const activeReviewBotCount = orderedReviewBots.filter((bot) => bot.isActive).length
   const graphFiles = codeGraphData?.files || []
+  const graphSymbols = codeGraphData?.symbols || []
   const graphRelations = codeGraphData?.relations || []
   const graphFileByPath = new Map(graphFiles.map((file) => [file.filePath, file]))
   const visibleGraphRelationCount = graphRelations
@@ -714,9 +730,9 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle>Memory Wiki</CardTitle>
+              <CardTitle>Code Graph Memory</CardTitle>
               <CardDescription>
-                Agent 审查时会读取这里的项目架构记忆和调用链上下文。
+                Agent 审查时直接读取 Code Graph、符号节点、调用关系和历史高置信风险。
               </CardDescription>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
@@ -731,7 +747,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                     刷新中...
                   </>
                 ) : (
-                  '增量刷新 Memory'
+                  '增量刷新 Code Graph'
                 )}
               </Button>
               <Button
@@ -757,7 +773,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">分支：{memorySnapshots[0].branch}</Badge>
                 <Badge variant="outline">状态：{memorySnapshots[0].status}</Badge>
-                <Badge variant="outline">图缓存：{memorySnapshots[0].commitSha === '__branch_code_graph__' ? '分支级' : memorySnapshots[0].commitSha.slice(0, 8)}</Badge>
+                  <Badge variant="outline">图缓存：{memorySnapshots[0].commitSha === '__branch_code_graph__' ? '分支级' : memorySnapshots[0].commitSha.slice(0, 8)}</Badge>
                 <Badge variant="outline">置信度：{memorySnapshots[0].confidence.toFixed(2)}</Badge>
                 {codeGraphMemory?.updateMode && (
                   <Badge variant="outline">更新模式：{codeGraphMemory.updateMode}</Badge>
@@ -807,7 +823,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               </div>
               {memoryFacts.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">高置信记忆</p>
+                  <p className="text-sm font-medium">高置信风险</p>
                   <div className="space-y-2">
                     {memoryFacts.slice(0, 5).map((fact) => (
                       <div key={fact.id} className="rounded-md border p-2 text-xs">
@@ -822,7 +838,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              暂无 Memory Wiki。点击“重建 Code Graph”后，Agent 会先建立目标分支的项目级结构图。
+              暂无 Code Graph。点击“重建 Code Graph”后，Agent 会先建立目标分支的项目级结构图。
             </p>
           )}
         </CardContent>
@@ -854,11 +870,13 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             <>
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">节点：{codeGraphData?.files.length || 0}</Badge>
+                <Badge variant="outline">符号：{codeGraphData?.symbols.length || 0}</Badge>
                 <Badge variant="outline">关系：{codeGraphData?.relations.length || 0}</Badge>
                 <Badge variant="outline">当前展示：{Math.min(graphFiles.length, 120)} 节点 / {visibleGraphRelationCount} 边</Badge>
               </div>
               <CodeGraphView
                 files={graphFiles}
+                symbols={graphSymbols}
                 relations={graphRelations}
                 selectedFilePath={selectedGraphNode?.filePath || null}
                 onSelectFile={setSelectedGraphFilePath}

@@ -240,7 +240,7 @@ export class ContextRetrieverService {
       {
         name: "search_memory_facts",
         status: params.memoryFactsCount > 0 ? "available" : "unavailable",
-        description: "检索历史审查写入的高置信 Memory Facts。",
+        description: "检索历史审查写入的高置信 Code Graph Memory Facts。",
         observation: params.memoryFactsCount > 0 ? `命中 ${params.memoryFactsCount} 条记忆事实。` : "暂无高置信记忆事实。",
       },
       {

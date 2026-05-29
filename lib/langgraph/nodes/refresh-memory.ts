@@ -1,6 +1,6 @@
 /**
  * @file refresh-memory.ts
- * @description 工作流节点：刷新仓库 Memory Wiki 和轻量 Code Graph
+ * @description 工作流节点：刷新仓库 Code Graph
  */
 
 import { getCodeGraphCacheCommitSha, memoryIndexService } from "@/lib/services/memory-index";

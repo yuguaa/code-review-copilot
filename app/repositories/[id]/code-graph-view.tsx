@@ -20,10 +20,23 @@ export type CodeGraphViewFile = {
   summary: string
 }
 
+export type CodeGraphViewSymbol = {
+  id: string
+  filePath: string
+  name: string
+  kind: string
+  signature: string | null
+  startLine: number
+  endLine: number
+  summary: string
+}
+
 export type CodeGraphViewRelation = {
   id: string
   from: string
   to: string | null
+  fromSymbol: { name: string; kind: string } | null
+  toSymbol: { name: string; kind: string } | null
   relationType: string
   confidence: number
   evidence: string
@@ -31,15 +44,16 @@ export type CodeGraphViewRelation = {
 
 type CodeGraphViewProps = {
   files: CodeGraphViewFile[]
+  symbols: CodeGraphViewSymbol[]
   relations: CodeGraphViewRelation[]
   selectedFilePath: string | null
   onSelectFile: (filePath: string) => void
 }
 
 const roleColors: Record<string, string> = {
-  api_route: '#ef4444',
-  page: '#f97316',
-  component: '#06b6d4',
+  api_route: '#dc2626',
+  page: '#ea580c',
+  component: '#0891b2',
   service: '#2563eb',
   workflow_node: '#7c3aed',
   review_workflow: '#9333ea',
@@ -48,6 +62,7 @@ const roleColors: Record<string, string> = {
   script: '#64748b',
   project_config: '#ca8a04',
   module: '#475569',
+  symbol: '#f8fafc',
 }
 
 const shortFileName = (filePath: string) => {
@@ -57,12 +72,32 @@ const shortFileName = (filePath: string) => {
 
 const buildGraphData = (
   files: CodeGraphViewFile[],
+  symbols: CodeGraphViewSymbol[],
   relations: CodeGraphViewRelation[],
   selectedFilePath: string | null,
 ): RGJsonData => {
-  const visibleFiles = files.slice(0, 120)
+  const relationFilePaths = new Set<string>()
+  relations.forEach((relation) => {
+    relationFilePaths.add(relation.from)
+    if (relation.to) relationFilePaths.add(relation.to)
+  })
+  const selectedFile = selectedFilePath ? files.find((file) => file.filePath === selectedFilePath) : null
+  const relatedFilePaths = selectedFilePath
+    ? new Set(relations
+      .filter((relation) => relation.from === selectedFilePath || relation.to === selectedFilePath)
+      .flatMap((relation) => [relation.from, relation.to].filter((item): item is string => Boolean(item))))
+    : new Set<string>()
+  const visibleFiles = [
+    ...(selectedFile ? [selectedFile] : []),
+    ...files.filter((file) => relatedFilePaths.has(file.filePath)),
+    ...files.filter((file) => relationFilePaths.has(file.filePath)),
+    ...files,
+  ].filter((file, index, allFiles) => allFiles.findIndex((item) => item.filePath === file.filePath) === index).slice(0, 120)
   const visibleFilePaths = new Set(visibleFiles.map((file) => file.filePath))
-  const nodes: JsonNode[] = visibleFiles.map((file) => {
+  const visibleSymbols = symbols
+    .filter((symbol) => visibleFilePaths.has(symbol.filePath))
+    .slice(0, 180)
+  const fileNodes: JsonNode[] = visibleFiles.map((file) => {
     const selected = selectedFilePath === file.filePath
     return {
       id: file.filePath,
@@ -78,7 +113,21 @@ const buildGraphData = (
       data: file,
     }
   })
-  const lines: JsonLine[] = relations
+  const symbolNodes: JsonNode[] = visibleSymbols.map((symbol) => ({
+    id: `symbol:${symbol.id}`,
+    text: `${symbol.kind === 'class' ? 'C' : 'ƒ'} ${symbol.name}`,
+    color: symbol.kind === 'class' ? '#1d4ed8' : '#334155',
+    borderColor: '#94a3b8',
+    borderWidth: 1,
+    fontColor: '#f8fafc',
+    width: 88,
+    height: 24,
+    nodeShape: RGNodeShape.rect,
+    borderRadius: 999,
+    data: symbol,
+  }))
+  const nodes: JsonNode[] = [...fileNodes, ...symbolNodes]
+  const relationLines: JsonLine[] = relations
     .filter((relation) => relation.to && visibleFilePaths.has(relation.from) && visibleFilePaths.has(relation.to))
     .slice(0, 240)
     .map((relation) => {
@@ -98,6 +147,21 @@ const buildGraphData = (
         data: relation,
       }
     })
+  const symbolLines: JsonLine[] = visibleSymbols.map((symbol) => ({
+      id: `contains:${symbol.id}`,
+      from: symbol.filePath,
+      to: `symbol:${symbol.id}`,
+      text: symbol.kind,
+      color: '#475569',
+      fontColor: '#64748b',
+      lineWidth: 1,
+      opacity: selectedFilePath === symbol.filePath ? 0.6 : 0.24,
+      lineShape: RGLineShape.StandardCurve,
+      showEndArrow: false,
+      useTextOnPath: false,
+      data: symbol,
+    }))
+  const lines: JsonLine[] = [...relationLines, ...symbolLines]
 
   return {
     rootId: selectedFilePath && visibleFilePaths.has(selectedFilePath) ? selectedFilePath : visibleFiles[0]?.filePath,
@@ -107,14 +171,14 @@ const buildGraphData = (
 }
 
 const graphOptions: RGOptions = {
-  backgroundColor: '#020617',
+  backgroundColor: '#0b1120',
   defaultNodeShape: RGNodeShape.rect,
   defaultLineShape: RGLineShape.StandardCurve,
   defaultLineTextOnPath: true,
   defaultNodeBorderRadius: 10,
   defaultNodeWidth: 84,
   defaultNodeHeight: 36,
-  defaultLineColor: '#64748b',
+  defaultLineColor: '#94a3b8',
   defaultLineWidth: 1,
   lineTextMaxLength: 18,
   showToolBar: true,
@@ -122,20 +186,25 @@ const graphOptions: RGOptions = {
   toolBarPositionH: 'right',
   toolBarPositionV: 'top',
   wheelEventAction: 'zoom',
+  defaultExpandHolderPosition: 'hide',
+  performanceMode: true,
+  checkedNodeId: '',
+  minCanvasZoom: 8,
+  maxCanvasZoom: 240,
   layout: {
-    layoutName: 'force',
-    fastStart: true,
-    maxLayoutTimes: 180,
-    force_node_repulsion: 1.4,
-    force_line_elastic: 0.6,
+    layoutName: 'center',
+    distanceCoefficient: 1.8,
+    maxLayoutTimes: 320,
+    force_node_repulsion: 2,
+    force_line_elastic: 0.4,
   },
 }
 
-function CodeGraphCanvas({ files, relations, selectedFilePath, onSelectFile }: CodeGraphViewProps) {
+function CodeGraphCanvas({ files, symbols, relations, selectedFilePath, onSelectFile }: CodeGraphViewProps) {
   const graphInstance = RGHooks.useGraphInstance()
   const graphData = useMemo(
-    () => buildGraphData(files, relations, selectedFilePath),
-    [files, relations, selectedFilePath],
+    () => buildGraphData(files, symbols, relations, selectedFilePath),
+    [files, relations, selectedFilePath, symbols],
   )
 
   useEffect(() => {
@@ -143,12 +212,13 @@ function CodeGraphCanvas({ files, relations, selectedFilePath, onSelectFile }: C
       .setJsonData(graphData)
       .then(() => {
         graphInstance.moveToCenter()
-        graphInstance.zoomToFit()
+        graphInstance.setZoom(60)
       })
   }, [graphData, graphInstance])
 
   const handleNodeClick = (node: RGNode) => {
-    onSelectFile(node.id)
+    const symbolFilePath = typeof node.data?.filePath === 'string' ? node.data.filePath : null
+    onSelectFile(node.id.startsWith('symbol:') && symbolFilePath ? symbolFilePath : node.id)
     return true
   }
 
@@ -163,7 +233,7 @@ function CodeGraphCanvas({ files, relations, selectedFilePath, onSelectFile }: C
 
 export function CodeGraphView(props: CodeGraphViewProps) {
   return (
-    <div className="h-[420px] overflow-hidden rounded-lg border bg-slate-950">
+    <div className="h-[520px] overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm">
       <RGProvider>
         <CodeGraphCanvas {...props} />
       </RGProvider>

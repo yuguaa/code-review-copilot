@@ -24,6 +24,7 @@ const INDEXABLE_EXTENSIONS = new Set([
   ".scss",
   ".md",
   ".json",
+  ".py",
 ]);
 
 const IGNORED_PATH_PARTS = new Set([
@@ -112,19 +113,23 @@ function detectLanguage(filePath: string): string {
   if (filePath.endsWith(".css") || filePath.endsWith(".scss")) return "style";
   if (filePath.endsWith(".md")) return "markdown";
   if (filePath.endsWith(".json")) return "json";
+  if (filePath.endsWith(".py")) return "python";
   return "unknown";
 }
 
 function detectRole(filePath: string): string {
   if (filePath.includes("/api/") && filePath.endsWith("route.ts")) return "api_route";
+  if (filePath.includes("/api/") && filePath.endsWith(".py")) return "api_route";
   if (filePath.startsWith("app/") && filePath.endsWith("page.tsx")) return "page";
+  if (filePath.includes("/agents/") && filePath.endsWith(".py")) return "workflow_node";
   if (filePath.includes("lib/langgraph/nodes/")) return "workflow_node";
   if (filePath.includes("lib/langgraph/")) return "review_workflow";
   if (filePath.includes("lib/services/")) return "service";
+  if ((filePath.includes("/services/") || filePath.endsWith("/service.py")) && filePath.endsWith(".py")) return "service";
   if (filePath.includes("components/")) return "component";
   if (filePath.includes("prisma/")) return "data_model";
   if (filePath.includes("hooks/")) return "hook";
-  if (filePath.includes("scripts/")) return "script";
+  if (filePath.includes("scripts/") || filePath.startsWith("scripts/")) return "script";
   if (filePath.endsWith("package.json") || filePath.endsWith("tsconfig.json")) return "project_config";
   return "module";
 }
@@ -146,6 +151,7 @@ function shouldPrioritize(filePath: string): boolean {
     filePath.startsWith("components/") ||
     filePath.startsWith("prisma/") ||
     filePath.startsWith("src/") ||
+    filePath.endsWith(".py") ||
     filePath === "package.json" ||
     filePath === "tsconfig.json"
   );
@@ -180,6 +186,22 @@ function extractImports(content: string): ImportRecord[] {
   for (const match of content.matchAll(/require\(["']([^"']+)["']\)/g)) {
     if (match[1]) addImport(match[1]);
   }
+  for (const match of content.matchAll(/^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+([A-Za-z0-9_,\s*()]+)$/gm)) {
+    if (!match[1]) continue;
+    const names = (match[2] || "")
+      .replace(/[()]/g, "")
+      .split(",")
+      .map((item) => item.trim().split(/\s+as\s+/)[0]?.trim())
+      .filter((item): item is string => Boolean(item) && item !== "*");
+    addImport(match[1], names);
+  }
+  for (const match of content.matchAll(/^\s*import\s+([A-Za-z0-9_\.,\s]+)$/gm)) {
+    if (!match[1]) continue;
+    match[1].split(",")
+      .map((item) => item.trim().split(/\s+as\s+/)[0]?.trim())
+      .filter((item): item is string => Boolean(item))
+      .forEach((source) => addImport(source));
+  }
 
   return [...imports.entries()].map(([source, names]) => ({
     source,
@@ -193,6 +215,12 @@ function extractExports(content: string): string[] {
 
   lines.forEach((line) => {
     const clean = line.trim();
+    const pythonDeclaration = clean.match(/^(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (pythonDeclaration?.[1] && !pythonDeclaration[1].startsWith("_")) {
+      exports.add(pythonDeclaration[1]);
+      return;
+    }
+
     const declaration = clean.match(/^export\s+(?:async\s+)?(?:function|class|const|let|var|interface|type|enum)\s+([A-Za-z0-9_]+)/);
     if (declaration?.[1]) {
       exports.add(declaration[1]);
@@ -214,18 +242,21 @@ function extractSymbols(content: string): Array<{ name: string; kind: string; st
   const symbols: Array<{ name: string; kind: string; startLine: number; endLine: number; signature: string }> = [];
   content.split("\n").forEach((line, index) => {
     const clean = line.trim();
+    const pythonAsyncFn = clean.match(/^async\s+def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    const pythonFn = clean.match(/^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    const pythonCls = clean.match(/^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*[\(:]/);
     const fn = clean.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/);
     const cls = clean.match(/^(?:export\s+)?class\s+([A-Za-z0-9_]+)/);
     const iface = clean.match(/^(?:export\s+)?interface\s+([A-Za-z0-9_]+)/);
     const typeDef = clean.match(/^(?:export\s+)?type\s+([A-Za-z0-9_]+)/);
     const comp = clean.match(/^(?:export\s+)?const\s+([A-Z][A-Za-z0-9_]*)\s*=/);
     const value = clean.match(/^(?:export\s+)?const\s+([a-z][A-Za-z0-9_]*)\s*=/);
-    const match = fn || cls || iface || typeDef || comp || value;
+    const match = pythonAsyncFn || pythonFn || pythonCls || fn || cls || iface || typeDef || comp || value;
     if (!match?.[1]) return;
 
     symbols.push({
       name: match[1],
-      kind: fn ? "function" : cls ? "class" : iface ? "interface" : typeDef ? "type" : comp ? "component" : "constant",
+      kind: pythonAsyncFn || pythonFn || fn ? "function" : pythonCls || cls ? "class" : iface ? "interface" : typeDef ? "type" : comp ? "component" : "constant",
       startLine: index + 1,
       endLine: index + 1,
       signature: clean.slice(0, 240),
@@ -235,15 +266,22 @@ function extractSymbols(content: string): Array<{ name: string; kind: string; st
 }
 
 function resolveImportPath(importPath: string, fromPath: string, candidatePaths: Set<string>): string | null {
-  if (!importPath.startsWith(".") && !importPath.startsWith("@/") && !importPath.startsWith("~/")) {
+  const fromExt = path.posix.extname(fromPath);
+  const isPythonFile = fromExt === ".py";
+  const isPythonModuleImport = isPythonFile && /^[A-Za-z_][A-Za-z0-9_\.]*$/.test(importPath);
+
+  if (!importPath.startsWith(".") && !importPath.startsWith("@/") && !importPath.startsWith("~/") && !isPythonModuleImport) {
     return null;
   }
 
-  const basePath = importPath.startsWith("@/")
-    ? importPath.slice(2)
-    : importPath.startsWith("~/")
-      ? importPath.slice(2)
-      : path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), importPath));
+  const normalizedPythonModulePath = isPythonModuleImport ? importPath.replace(/\./g, "/") : importPath;
+  const basePath = normalizedPythonModulePath.startsWith("@/")
+    ? normalizedPythonModulePath.slice(2)
+    : normalizedPythonModulePath.startsWith("~/")
+      ? normalizedPythonModulePath.slice(2)
+      : normalizedPythonModulePath.startsWith(".")
+        ? path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), normalizedPythonModulePath))
+        : normalizedPythonModulePath;
 
   const candidates = [
     basePath,
@@ -253,11 +291,21 @@ function resolveImportPath(importPath: string, fromPath: string, candidatePaths:
     `${basePath}.jsx`,
     `${basePath}.vue`,
     `${basePath}.json`,
+    `${basePath}.py`,
     `${basePath}/index.ts`,
     `${basePath}/index.tsx`,
     `${basePath}/index.js`,
     `${basePath}/index.jsx`,
+    `${basePath}/__init__.py`,
   ];
+
+  if (isPythonModuleImport) {
+    const fromParts = fromPath.split("/");
+    for (let index = 0; index < fromParts.length - 1; index += 1) {
+      const prefix = fromParts.slice(0, index + 1).join("/");
+      candidates.push(`${prefix}/${basePath}.py`, `${prefix}/${basePath}/__init__.py`);
+    }
+  }
 
   return candidates.find((candidate) => candidatePaths.has(candidate)) || null;
 }

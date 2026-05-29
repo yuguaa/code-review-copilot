@@ -72,7 +72,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
     diff: patch,
     summary: [
       state.summary,
-      state.architectureSummary ? `【项目架构 Memory】\n${state.architectureSummary}` : "",
+      state.architectureSummary ? `【Code Graph】\n${state.architectureSummary}` : "",
       state.agentContextSummary ? `【Agent 检索上下文】\n${state.agentContextSummary}` : "",
       Object.keys(state.agentPlan || {}).length > 0 ? `【Agent 审查计划】\n${JSON.stringify(state.agentPlan, null, 2)}` : "",
     ].filter(Boolean).join("\n\n"),

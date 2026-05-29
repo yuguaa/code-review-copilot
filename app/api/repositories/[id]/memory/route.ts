@@ -1,6 +1,6 @@
 /**
  * @file /api/repositories/[id]/memory
- * @description 获取仓库 Memory Wiki
+ * @description 获取仓库 Code Graph Memory
  */
 
 import { NextResponse } from "next/server";

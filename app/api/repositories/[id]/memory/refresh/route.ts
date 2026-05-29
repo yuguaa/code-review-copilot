@@ -1,6 +1,6 @@
 /**
  * @file /api/repositories/[id]/memory/refresh
- * @description 手动刷新仓库 Memory Wiki
+ * @description 手动刷新仓库 Code Graph
  */
 
 import { NextRequest, NextResponse } from "next/server";
