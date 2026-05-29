@@ -665,7 +665,7 @@ export default function ReviewsPage() {
       </Card>
 
       <Dialog open={!!selectedReviewGroup} onOpenChange={() => setSelectedReviewGroup(null)}>
-        <DialogContent className="w-full max-w-5xl max-h-[88vh] overflow-hidden">
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-none sm:max-w-[1180px] max-h-[88vh] overflow-hidden">
           {selectedReviewGroup && selectedReviewGroup.latestReview && (
             <div className="flex max-h-[82vh] min-h-0 flex-col">
               <DialogHeader>
@@ -728,7 +728,7 @@ export default function ReviewsPage() {
 
       {/* 审查详情弹窗 */}
       <Dialog open={!!selectedReview} onOpenChange={() => setSelectedReview(null)}>
-        <DialogContent className="w-full max-w-[98vw] max-h-[92vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={true}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[1500px] max-h-[92vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={true}>
           {selectedReview && (
             <div className="flex h-[90vh] min-w-0 flex-col bg-background">
               <DialogHeader className="border-b border-border/50 bg-[linear-gradient(135deg,var(--sidebar)_0%,var(--background)_55%,color-mix(in_srgb,var(--primary)_10%,var(--background))_100%)] px-6 py-5">
@@ -816,7 +816,7 @@ export default function ReviewsPage() {
                 </div>
               </DialogHeader>
 
-              <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
                 <aside className="min-h-0 overflow-y-auto border-b border-border/50 bg-sidebar/25 p-4 lg:border-b-0 lg:border-r">
                   <div className="space-y-4">
                     <section className="rounded-xl border border-border/60 bg-background/80 p-4">
