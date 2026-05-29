@@ -115,10 +115,22 @@ interface Review {
   }>
 }
 
+interface ReviewGroup {
+  id: string
+  repositoryId: string
+  mergeRequestIid: number
+  commitSha: string
+  totalAttempts: number
+  latestStartedAt: string | null
+  latestReview: Review | null
+  attempts: Review[]
+}
+
 export default function ReviewsPage() {
-  const [reviews, setReviews] = useState<Review[]>([])
+  const [reviewGroups, setReviewGroups] = useState<ReviewGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedReviewGroup, setSelectedReviewGroup] = useState<ReviewGroup | null>(null)
   const [selectedReview, setSelectedReview] = useState<Review | null>(null)
   const [retryingReviewId, setRetryingReviewId] = useState<string | null>(null)
   const [stoppingReviewId, setStoppingReviewId] = useState<string | null>(null)
@@ -139,7 +151,7 @@ export default function ReviewsPage() {
         throw new Error('Failed to fetch reviews')
       }
       const data = await response.json()
-      setReviews(data.reviews || [])
+      setReviewGroups(data.reviewGroups || [])
       // 更新分页信息
       if (data.pagination) {
         setCurrentPage(data.pagination.page)
@@ -173,21 +185,13 @@ export default function ReviewsPage() {
         throw new Error(error.error || 'Failed to retry review')
       }
 
-      const result = await response.json() as { reviewLogId?: string }
+      await response.json()
       
       // 刷新审查记录列表
       await fetchReviews(1)
       
-      const nextReviewId = result.reviewLogId
       setSelectedReview((current) => current?.id === reviewId ? null : current)
-      if (nextReviewId) {
-        fetch(`/api/review?logId=${nextReviewId}`)
-          .then((detailResponse) => detailResponse.ok ? detailResponse.json() : null)
-          .then((review) => {
-            if (review) setSelectedReview(review as Review)
-          })
-          .catch((error) => console.error('Failed to load retried review:', error))
-      }
+      setSelectedReviewGroup(null)
     } catch (err) {
       console.error('Failed to retry review:', err)
       alert(err instanceof Error ? err.message : '重新审查失败，请稍后重试')
@@ -233,7 +237,10 @@ export default function ReviewsPage() {
     }
   }
 
-  // 切换展开/折叠审查详情
+  const openReviewGroup = (group: ReviewGroup) => {
+    setSelectedReviewGroup(group)
+  }
+
   const openReviewDialog = (review: Review) => {
     setSelectedReview(review)
   }
@@ -482,7 +489,7 @@ export default function ReviewsPage() {
                 重试
               </Button>
             </div>
-          ) : reviews.length === 0 ? (
+          ) : reviewGroups.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>还没有审查记录</p>
@@ -504,11 +511,14 @@ export default function ReviewsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {reviews.map((review: Review) => (
+                {reviewGroups.map((group: ReviewGroup) => {
+                  const review = group.latestReview
+                  if (!review) return null
+                  return (
                   <TableRow 
-                    key={review.id}
+                    key={group.id}
                     className="hover:bg-sidebar/50 cursor-pointer"
-                    onClick={() => openReviewDialog(review)}
+                    onClick={() => openReviewGroup(group)}
                   >
                     <TableCell className="px-4 py-3">
                       {review.eventType === 'push' ? (
@@ -534,7 +544,7 @@ export default function ReviewsPage() {
                           : `!${review.mergeRequestIid} · ${review.commitShortId}`}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {formatReviewAttempt(review)} · {review.id.slice(0, 8)}
+                        共 {group.totalAttempts} 次审查 · 最新 {formatReviewAttempt(review)}
                       </p>
                     </TableCell>
                     <TableCell className="px-4 py-3">
@@ -616,13 +626,14 @@ export default function ReviewsPage() {
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           )}
 
           {/* 分页控件 */}
-          {!loading && !error && reviews && reviews.length > 0 && totalPages > 1 && (
+          {!loading && !error && reviewGroups && reviewGroups.length > 0 && totalPages > 1 && (
             <div className="flex items-center justify-between pt-4 border-t mt-4">
               <div className="text-sm text-muted-foreground">
                 共 {total} 条记录，第 {currentPage} / {totalPages} 页
@@ -652,6 +663,68 @@ export default function ReviewsPage() {
           )}
         </div>
       </Card>
+
+      <Dialog open={!!selectedReviewGroup} onOpenChange={() => setSelectedReviewGroup(null)}>
+        <DialogContent className="w-full max-w-5xl max-h-[88vh] overflow-hidden">
+          {selectedReviewGroup && selectedReviewGroup.latestReview && (
+            <div className="flex max-h-[82vh] min-h-0 flex-col">
+              <DialogHeader>
+                <DialogTitle>审查记录列表</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">{selectedReviewGroup.latestReview.title}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      <span>仓库：{selectedReviewGroup.latestReview.repositoryName}</span>
+                      <span>{selectedReviewGroup.latestReview.eventType === 'push' ? `Commit ${selectedReviewGroup.latestReview.commitShortId}` : `MR !${selectedReviewGroup.latestReview.mergeRequestIid} · Commit ${selectedReviewGroup.latestReview.commitShortId}`}</span>
+                      <span>分支：{selectedReviewGroup.latestReview.sourceBranch}{selectedReviewGroup.latestReview.targetBranch ? ` → ${selectedReviewGroup.latestReview.targetBranch}` : ''}</span>
+                      <span>共 {selectedReviewGroup.totalAttempts} 次审查</span>
+                    </div>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="mt-4 min-h-0 overflow-y-auto">
+                <div className="space-y-3">
+                  {selectedReviewGroup.attempts.map((review) => (
+                    <button
+                      key={review.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedReviewGroup(null)
+                        openReviewDialog(review)
+                      }}
+                      className="w-full rounded-xl border border-border/60 bg-card/70 p-4 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-foreground">{formatReviewAttempt(review)}</span>
+                            {getStatusBadge(review.status)}
+                            <Badge variant="outline">Log {review.id.slice(0, 8)}</Badge>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            开始：{new Date(review.startedAt).toLocaleString('zh-CN')}
+                            {review.completedAt ? ` · 用时：${formatDuration(review.startedAt, review.completedAt)}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="bg-destructive/10 text-destructive border-destructive/20">严重 {review.criticalIssues}</Badge>
+                          <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/20">一般 {review.normalIssues}</Badge>
+                          <Badge className="bg-blue-500/10 text-blue-700 border-blue-500/20">建议 {review.suggestions}</Badge>
+                          <Badge variant="outline">文件 {review.reviewedFiles}/{review.totalFiles}</Badge>
+                        </div>
+                      </div>
+                      {review.error && (
+                        <p className="mt-3 rounded-lg bg-destructive/5 p-2 text-xs text-destructive">{review.error}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* 审查详情弹窗 */}
       <Dialog open={!!selectedReview} onOpenChange={() => setSelectedReview(null)}>
