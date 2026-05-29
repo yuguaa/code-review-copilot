@@ -215,11 +215,25 @@ function selectAdditionalAgents(
   if (!(plan.requestedTools || []).includes("run_additional_review_agents")) return [];
 
   const requestedNames = plan.requestedAgentNames || [];
-  const candidates = requestedNames.length > 0
-    ? agents.filter((agent) => requestedNames.includes(agent.id) || requestedNames.includes(agent.name))
-    : agents;
+  if (requestedNames.length === 0) {
+    throw new Error("主 Agent 请求 run_additional_review_agents 时必须指定 requestedAgentNames");
+  }
+  if (!plan.additionalAgentTask?.trim()) {
+    throw new Error("主 Agent 请求 run_additional_review_agents 时必须指定 additionalAgentTask");
+  }
 
-  return candidates.filter((agent) => !executedAgentIds.has(agent.id));
+  const candidates = agents.filter((agent) => (
+    requestedNames.includes(agent.id) || requestedNames.includes(agent.name)
+  ));
+  const selected = candidates.filter((agent) => !executedAgentIds.has(agent.id));
+  const selectedKeys = new Set(selected.flatMap((agent) => [agent.id, agent.name]));
+  const missingNames = requestedNames.filter((name) => !selectedKeys.has(name));
+
+  if (missingNames.length > 0) {
+    throw new Error(`主 Agent 请求了不可用或已执行的辅助 Agent：${missingNames.join("、")}`);
+  }
+
+  return selected;
 }
 
 function buildAdditionalAgentPrompt(agent: AdditionalReviewAgent, task?: string): string | null {
@@ -290,7 +304,12 @@ export class ReviewAgentLoopService {
 
       if ((finalPlan.requestedTools || []).includes("run_additional_review_agents")) {
         additionalAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
-        const additionalAgentResults = await this.runAdditionalReviewAgents(input, additionalAgents, findings);
+        const additionalAgentResults = await this.runAdditionalReviewAgents(
+          input,
+          additionalAgents,
+          findings,
+          finalPlan.additionalAgentTask || "",
+        );
         const additionalFindings = additionalAgentResults.flatMap((result) => result.findings);
         findings = dedupeFindings([...findings, ...additionalFindings], budget.maxFindings);
         additionalAgentObservation = summarizeAdditionalAgentResults(additionalAgentResults);
@@ -447,6 +466,7 @@ export class ReviewAgentLoopService {
     input: AgentLoopInput,
     agents: AdditionalReviewAgent[],
     existingFindings: Array<ReviewComment & { confidence: number }>,
+    task: string,
   ): Promise<AdditionalAgentToolResult[]> {
     if (agents.length === 0) return Promise.resolve([]);
 
@@ -490,7 +510,7 @@ export class ReviewAgentLoopService {
           modelConfig: agent.modelConfig,
           budget: agentBudget,
           botName: agent.name,
-          botPrompt: buildAdditionalAgentPrompt(agent, input.title),
+          botPrompt: buildAdditionalAgentPrompt(agent, task),
           botPromptMode: agent.promptMode,
           existingFindings,
           availableAdditionalAgents: [],
