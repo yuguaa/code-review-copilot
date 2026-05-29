@@ -1040,21 +1040,21 @@ export default function ReviewsPage() {
                                   </details>
                                 </div>
 
-                                <details className="mt-3 rounded-lg border border-border/50 bg-background/70 p-3">
-                                  <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
-                                    Agent 原始评价
-                                  </summary>
-                                  <div className="mt-3 flex justify-end">
-                                    {rawReview && (
+                                {rawReview && (
+                                  <details className="mt-3 rounded-lg border border-border/50 bg-background/70 p-3">
+                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
+                                      Agent 原始评价
+                                    </summary>
+                                    <div className="mt-3 flex justify-end">
                                       <Button variant="ghost" size="xs" onClick={() => handleCopy(rawReview, `bot-review-${botRun.id}`)}>
                                         {copiedKey === `bot-review-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
                                       </Button>
-                                    )}
-                                  </div>
-                                  <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-                                    {rawReview || '暂无原始评价'}
-                                  </pre>
-                                </details>
+                                    </div>
+                                    <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                                      {rawReview}
+                                    </pre>
+                                  </details>
+                                )}
                               </article>
                             )
                           })}

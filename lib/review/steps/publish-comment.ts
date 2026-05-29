@@ -350,15 +350,19 @@ function formatSummaryComment(
     lines.push("2. 建议关注可维护性优化项。");
   }
 
-  lines.push("");
-  lines.push("### 各机器人原始评价");
-  if (botRuns.length === 0) {
-    lines.push("- 暂无机器人原始评价。");
-  } else {
-    botRuns.forEach((botRun) => {
+  const botRunsWithRawReview = botRuns
+    .map((botRun) => ({
+      botRun,
+      rawReview: extractBotRawReview(botRun),
+      criticReason: extractCriticReason(botRun.agentTrace?.criticJson),
+    }))
+    .filter((item) => item.rawReview);
+
+  if (botRunsWithRawReview.length > 0) {
+    lines.push("");
+    lines.push("### 各机器人原始评价");
+    botRunsWithRawReview.forEach(({ botRun, rawReview, criticReason }) => {
       const botName = botRun.reviewBot?.name || "未知机器人";
-      const rawReview = extractBotRawReview(botRun);
-      const criticReason = extractCriticReason(botRun.agentTrace?.criticJson);
 
       lines.push(`<details>`);
       lines.push(`<summary>${botName} / ${botRun.aiModelName}：${formatBotRunStatus(botRun.status)}</summary>`);
@@ -368,7 +372,7 @@ function formatSummaryComment(
       if (criticReason) lines.push(`- Critic：${criticReason}`);
       lines.push("");
       lines.push("```text");
-      lines.push(rawReview || "无原始评价内容");
+      lines.push(rawReview);
       lines.push("```");
       lines.push("");
       lines.push(`</details>`);
