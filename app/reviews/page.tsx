@@ -20,12 +20,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
-import {
   Clock,
   AlertCircle,
   CheckCircle,
@@ -345,6 +339,60 @@ export default function ReviewsPage() {
     return review?.response || ''
   }
 
+  const issueCount = (review: Review) => review.criticalIssues + review.normalIssues + review.suggestions
+
+  const getReviewVerdict = (review: Review) => {
+    if (review.status === 'failed') return '审查失败'
+    if (review.status === 'cancelled') return '审查已停止'
+    if (review.status === 'pending') return '审查进行中'
+    if (review.criticalIssues > 0) return '高风险：存在严重问题'
+    if (review.normalIssues > 0) return '中风险：需要关注一般问题'
+    if (review.suggestions > 0) return '低风险：仅有优化建议'
+    return 'LGTM：未发现可定位问题'
+  }
+
+  const getSeverityLabel = (severity: string) => {
+    switch (severity) {
+      case 'critical':
+        return '严重'
+      case 'normal':
+        return '一般'
+      case 'suggestion':
+        return '建议'
+      default:
+        return severity || '未知'
+    }
+  }
+
+  const getSeverityPillClass = (severity: string) => {
+    switch (severity) {
+      case 'critical':
+        return 'border-destructive/30 bg-destructive/10 text-destructive'
+      case 'normal':
+        return 'border-amber-500/30 bg-amber-500/10 text-amber-700'
+      case 'suggestion':
+        return 'border-blue-500/30 bg-blue-500/10 text-blue-700'
+      default:
+        return 'border-border bg-muted text-muted-foreground'
+    }
+  }
+
+  const getBotIterations = (botRun: Review['botRuns'][number]) => {
+    return Array.isArray(botRun.trace?.loopIterationsJson)
+      ? botRun.trace?.loopIterationsJson as Array<Record<string, unknown>>
+      : []
+  }
+
+  const getIterationToolSummary = (iteration: Record<string, unknown>) => {
+    const tools = Array.isArray(iteration.toolCalls)
+      ? iteration.toolCalls as Array<{ tool?: unknown; status?: unknown; resultCount?: unknown }>
+      : []
+    if (tools.length === 0) return '无工具调用'
+    return tools
+      .map((tool) => `${String(tool.tool || 'unknown')}(${String(tool.status || 'unknown')}, ${String(tool.resultCount ?? 0)})`)
+      .join('、')
+  }
+
   const formatCommentSource = (comment: Review['comments'][number]) => {
     if (Array.isArray(comment.sourceBotsJson) && comment.sourceBotsJson.length > 0) {
       return comment.sourceBotsJson
@@ -595,376 +643,397 @@ export default function ReviewsPage() {
 
       {/* 审查详情弹窗 */}
       <Dialog open={!!selectedReview} onOpenChange={() => setSelectedReview(null)}>
-        <DialogContent className="w-full max-w-[96vw] max-h-[90vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={true}>
+        <DialogContent className="w-full max-w-[98vw] max-h-[92vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={true}>
           {selectedReview && (
-            <div className="flex flex-col h-[88vh] min-w-0">
-              <DialogHeader className="px-6 py-4 border-b border-border/40 bg-sidebar/30">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3">
-                      <DialogTitle className="text-xl font-semibold">
-                        审查详情
+            <div className="flex h-[90vh] min-w-0 flex-col bg-background">
+              <DialogHeader className="border-b border-border/50 bg-[linear-gradient(135deg,var(--sidebar)_0%,var(--background)_55%,color-mix(in_srgb,var(--primary)_10%,var(--background))_100%)] px-6 py-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <DialogTitle className="text-2xl font-semibold tracking-tight">
+                        {getReviewVerdict(selectedReview)}
                       </DialogTitle>
-                      <div className="flex items-center gap-2">
-                        {getStatusBadge(selectedReview.status)}
-                        {selectedReview.status === 'pending' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => stopReview(selectedReview.id, e)}
-                            disabled={stoppingReviewId === selectedReview.id}
-                            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                          >
-                            <Square className="h-3 w-3 mr-1" />
-                            {stoppingReviewId === selectedReview.id ? '停止中...' : '停止审查'}
-                          </Button>
-                        )}
-                        {(selectedReview.status === 'failed' || selectedReview.status === 'completed' || selectedReview.status === 'cancelled') && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => retryReview(selectedReview.id, e)}
-                            disabled={retryingReviewId === selectedReview.id}
-                            className="h-7 px-2 text-xs"
-                          >
-                            <RefreshCw className={`h-3 w-3 mr-1 ${retryingReviewId === selectedReview.id ? 'animate-spin' : ''}`} />
-                            {retryingReviewId === selectedReview.id ? '重审中...' : '重新审查'}
-                          </Button>
-                        )}
-                      </div>
+                      {getStatusBadge(selectedReview.status)}
+                      {selectedGitlabLink && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={selectedGitlabLink} target="_blank" rel="noreferrer">
+                            <Gitlab className="h-4 w-4" />
+                            GitLab
+                          </a>
+                        </Button>
+                      )}
                     </div>
                     <DialogDescription asChild>
-                      <div className="mt-2 space-y-3 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-foreground">{selectedReview.title}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                      <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                        <p className="max-w-5xl truncate font-medium text-foreground">{selectedReview.title}</p>
+                        <div className="flex flex-wrap gap-x-5 gap-y-1">
                           <span>仓库：{selectedReview.repositoryName}</span>
-                          <span>作者：{selectedReview.author}</span>
-                          <span className="flex items-center gap-2">
-                            {selectedReview.eventType === 'push'
-                              ? `提交：${selectedReview.commitShortId}`
-                              : `MR：!${selectedReview.mergeRequestIid}`}
-                            {selectedGitlabLink && (
-                              <a
-                                href={selectedGitlabLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-sidebar-primary hover:text-sidebar-primary/80"
-                                aria-label={`在 GitLab 中打开${selectedReview.eventType === 'merge_request' ? ' MR' : '提交'}`}
-                                title={`在 GitLab 中打开${selectedReview.eventType === 'merge_request' ? ' MR' : '提交'}`}
-                              >
-                                <Gitlab className="h-4 w-4" />
-                              </a>
-                            )}
-                          </span>
-                          <span>
-                            分支：{selectedReview.sourceBranch}
-                            {selectedReview.targetBranch && ` → ${selectedReview.targetBranch}`}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 text-xs">
-                          <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1">
-                            开始：{new Date(selectedReview.startedAt).toLocaleString('zh-CN')}
-                          </div>
-                          <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1">
-                            用时：{formatDuration(selectedReview.startedAt, selectedReview.completedAt) || '进行中'}
-                          </div>
-                          <div className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1">
-                            变更文件：{selectedReview.reviewedFiles}/{selectedReview.totalFiles}
-                          </div>
-                          {selectedReview.status === 'completed' && selectedReview.criticalIssues === 0 && selectedReview.normalIssues === 0 && selectedReview.suggestions === 0 && (
-                            <div className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-2.5 py-1 text-emerald-700">
-                              LGTM
-                            </div>
-                          )}
+                          <span>作者：{selectedReview.author}{selectedReview.authorUsername ? `（${selectedReview.authorUsername}）` : ''}</span>
+                          <span>{selectedReview.eventType === 'push' ? `Commit ${selectedReview.commitShortId}` : `MR !${selectedReview.mergeRequestIid}`}</span>
+                          <span>分支：{selectedReview.sourceBranch}{selectedReview.targetBranch ? ` → ${selectedReview.targetBranch}` : ''}</span>
                         </div>
                       </div>
                     </DialogDescription>
                   </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedReview.status === 'pending' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => stopReview(selectedReview.id, e)}
+                        disabled={stoppingReviewId === selectedReview.id}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Square className="h-3 w-3" />
+                        {stoppingReviewId === selectedReview.id ? '停止中...' : '停止审查'}
+                      </Button>
+                    )}
+                    {(selectedReview.status === 'failed' || selectedReview.status === 'completed' || selectedReview.status === 'cancelled') && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => retryReview(selectedReview.id, e)}
+                        disabled={retryingReviewId === selectedReview.id}
+                      >
+                        <RefreshCw className={`h-3 w-3 ${retryingReviewId === selectedReview.id ? 'animate-spin' : ''}`} />
+                        {retryingReviewId === selectedReview.id ? '重审中...' : '重新审查'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+                    <p className="text-xs text-muted-foreground">问题总数</p>
+                    <p className="mt-1 text-2xl font-semibold">{issueCount(selectedReview)}</p>
+                  </div>
+                  <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3">
+                    <p className="text-xs text-muted-foreground">严重</p>
+                    <p className="mt-1 text-2xl font-semibold text-destructive">{selectedReview.criticalIssues}</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                    <p className="text-xs text-muted-foreground">一般</p>
+                    <p className="mt-1 text-2xl font-semibold text-amber-700">{selectedReview.normalIssues}</p>
+                  </div>
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+                    <p className="text-xs text-muted-foreground">建议</p>
+                    <p className="mt-1 text-2xl font-semibold text-blue-700">{selectedReview.suggestions}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+                    <p className="text-xs text-muted-foreground">用时 / 文件</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">
+                      {formatDuration(selectedReview.startedAt, selectedReview.completedAt) || '进行中'} · {selectedReview.reviewedFiles}/{selectedReview.totalFiles}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{new Date(selectedReview.startedAt).toLocaleString('zh-CN')}</p>
+                  </div>
                 </div>
               </DialogHeader>
 
-              <div className="px-2 py-4 flex-1 min-h-0 overflow-hidden min-w-0">
-                <Tabs
-                  defaultValue={
-                    selectedReview.aiSummary
-                      ? 'summary'
-                      : selectedReview.comments?.length
-                        ? 'comments'
-                        : selectedReview.aiResponse
-                          ? 'ai'
-                          : selectedReview.reviewPrompts
-                            ? 'prompts'
-                            : 'model'
-                  }
-                  className="w-full h-full flex flex-col min-w-0"
-                >
-                  <TabsList className="mb-4 flex h-10 w-full flex-nowrap gap-2 overflow-x-auto whitespace-nowrap border border-border/40 bg-background/80 p-1 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 no-scrollbar">
-                    <TabsTrigger value="summary" className="h-full">AI 总结</TabsTrigger>
-                    <TabsTrigger value="comments" className="h-full">审查意见 {selectedReview.comments?.length ? `(${selectedReview.comments.length})` : ''}</TabsTrigger>
-                    <TabsTrigger value="bots" className="h-full">机器人结果 {selectedReview.botRuns?.length ? `(${selectedReview.botRuns.length})` : ''}</TabsTrigger>
-                    <TabsTrigger value="ai" className="h-full">AI 原始回复</TabsTrigger>
-                    <TabsTrigger value="prompts" className="h-full">Prompt 追溯</TabsTrigger>
-                    <TabsTrigger value="model" className="h-full">模型信息</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="summary" className="flex-1 min-h-0 overflow-y-auto min-w-0">
-                    {selectedReview.aiSummary ? (
-                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
-                        <pre className="text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
-                          {selectedReview.aiSummary}
-                        </pre>
+              <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
+                <aside className="min-h-0 overflow-y-auto border-b border-border/50 bg-sidebar/25 p-4 lg:border-b-0 lg:border-r">
+                  <div className="space-y-4">
+                    <section className="rounded-xl border border-border/60 bg-background/80 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Review Index</p>
+                      <div className="mt-3 space-y-2 text-sm">
+                        <a href="#review-issues" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
+                          <span>问题详情</span>
+                          <Badge variant="outline">{selectedReview.comments?.length || 0}</Badge>
+                        </a>
+                        <a href="#review-summary" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
+                          <span>技术走查</span>
+                          <Badge variant="outline">{selectedReview.aiSummary ? '有' : '无'}</Badge>
+                        </a>
+                        <a href="#review-agents" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
+                          <span>Agent Loop</span>
+                          <Badge variant="outline">{selectedReview.botRuns?.length || 0}</Badge>
+                        </a>
+                        <a href="#review-raw" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
+                          <span>原始材料</span>
+                          <Badge variant="outline">Trace</Badge>
+                        </a>
                       </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm">暂无 AI 总结</div>
-                    )}
-                  </TabsContent>
+                    </section>
 
-                  <TabsContent value="comments" className="flex-1 min-h-0 overflow-y-auto min-w-0">
-                    {selectedReview.comments && selectedReview.comments.length > 0 ? (
-                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
-                        <div className="space-y-3">
-                          {selectedReview.comments.map((comment) => (
-                            <div 
+                    <section className="rounded-xl border border-border/60 bg-background/80 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">问题索引</p>
+                      {selectedReview.comments && selectedReview.comments.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {selectedReview.comments.map((comment, index) => (
+                            <a
                               key={comment.id}
-                              className={`p-3 rounded-md border-l-4 ${getSeverityStyle(comment.severity)}`}
+                              href={`#comment-${comment.id}`}
+                              className="block rounded-lg border border-border/50 bg-card/60 p-2 text-xs hover:border-primary/40 hover:bg-primary/5"
                             >
-                              <div className="flex items-center gap-2 mb-2">
+                              <div className="flex items-center gap-2">
                                 <span>{getSeverityIcon(comment.severity)}</span>
-                                <span className="text-xs font-mono text-muted-foreground inline-flex items-center gap-1">
-                                  {comment.filePath}:{comment.lineNumber}
-                                  {(() => {
-                                    const href =
-                                      comment.gitlabDiffUrl ||
-                                      getGitlabFileLink(
-                                        selectedReview,
-                                        comment.filePath,
-                                        comment.lineNumber,
-                                        comment.lineRangeEnd
-                                      )
-                                    if (!href) return null
-                                    return (
-                                      <a
-                                        href={href}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sidebar-primary hover:text-sidebar-primary/80"
-                                        aria-label="在 GitLab 中打开该行"
-                                        title="在 GitLab 中打开该行"
-                                      >
-                                        <Gitlab className="h-3.5 w-3.5" />
-                                      </a>
-                                    )
-                                  })()}
-                                </span>
-                                {comment.isPosted && (
-                                  <Badge variant="outline" className="text-xs h-5">
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    已发布
-                                  </Badge>
-                                )}
+                                <span className="font-medium text-foreground">#{index + 1} {getSeverityLabel(comment.severity)}</span>
                               </div>
-                              <p className="text-sm text-foreground whitespace-pre-wrap">
-                                {comment.content}
-                              </p>
-                              <p className="mt-2 text-xs text-muted-foreground">
-                                来源：{formatCommentSource(comment)}
-                              </p>
-                            </div>
+                              <p className="mt-1 truncate font-mono text-muted-foreground">{comment.filePath}:{comment.lineNumber}</p>
+                            </a>
                           ))}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm space-y-2">
-                        <div>暂无可定位的审查意见</div>
-                        {(selectedReview.criticalIssues + selectedReview.normalIssues + selectedReview.suggestions) > 0 && (
-                          <div className="text-xs">
-                            统计：严重 {selectedReview.criticalIssues} / 一般 {selectedReview.normalIssues} / 建议 {selectedReview.suggestions}（可在「AI 原始回复」查看详情）
+                      ) : (
+                        <p className="mt-3 rounded-lg bg-muted p-3 text-sm text-muted-foreground">暂无可定位问题。</p>
+                      )}
+                    </section>
+
+                    <section className="rounded-xl border border-border/60 bg-background/80 p-4">
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Agent 时间线</p>
+                      <div className="mt-3 space-y-3">
+                        {selectedReview.botRuns?.length ? selectedReview.botRuns.map((botRun) => (
+                          <div key={botRun.id} className="rounded-lg border border-border/50 bg-card/60 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-foreground">{botRun.botName}</p>
+                              {getStatusBadge(botRun.status)}
+                            </div>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">{botRun.aiModelName}</p>
+                            <div className="mt-2 flex gap-2">
+                              <Badge variant="outline">问题 {botRun.comments.length}</Badge>
+                              <Badge variant="outline">轮次 {getBotIterations(botRun).length}</Badge>
+                            </div>
                           </div>
+                        )) : (
+                          <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">暂无 Agent 运行记录。</p>
                         )}
                       </div>
-                    )}
-                  </TabsContent>
+                    </section>
+                  </div>
+                </aside>
 
-                  <TabsContent value="bots" className="flex-1 min-h-0 overflow-y-auto min-w-0">
-                    {selectedReview.botRuns && selectedReview.botRuns.length > 0 ? (
-                      <div className="space-y-4">
-                        {selectedReview.botRuns.map((botRun) => {
-                          const rawReview = extractLastReviewResponse(botRun)
-                          return (
-                            <div key={botRun.id} className="rounded-lg border border-border/40 bg-background p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-medium text-foreground">{botRun.botName}</p>
-                                    {getStatusBadge(botRun.status)}
+                <main className="min-h-0 overflow-y-auto p-5">
+                  <div className="mx-auto max-w-6xl space-y-5">
+                    <section id="review-issues" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Findings First</p>
+                          <h2 className="mt-1 text-xl font-semibold">全部问题清单</h2>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="bg-destructive/10 text-destructive border-destructive/20">严重 {selectedReview.criticalIssues}</Badge>
+                          <Badge className="bg-amber-500/10 text-amber-700 border-amber-500/20">一般 {selectedReview.normalIssues}</Badge>
+                          <Badge className="bg-blue-500/10 text-blue-700 border-blue-500/20">建议 {selectedReview.suggestions}</Badge>
+                        </div>
+                      </div>
+
+                      {selectedReview.comments && selectedReview.comments.length > 0 ? (
+                        <div className="mt-4 space-y-3">
+                          {selectedReview.comments.map((comment, index) => {
+                            const href = comment.gitlabDiffUrl || getGitlabFileLink(selectedReview, comment.filePath, comment.lineNumber, comment.lineRangeEnd)
+                            return (
+                              <article
+                                id={`comment-${comment.id}`}
+                                key={comment.id}
+                                className={`scroll-mt-4 rounded-xl border border-border/60 p-4 ${getSeverityStyle(comment.severity)}`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge className={getSeverityPillClass(comment.severity)}>
+                                        {getSeverityIcon(comment.severity)} #{index + 1} {getSeverityLabel(comment.severity)}
+                                      </Badge>
+                                      {comment.isPosted && (
+                                        <Badge variant="outline">
+                                          <CheckCircle className="h-3 w-3" />
+                                          已发布 GitLab
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
+                                      {comment.filePath}:{comment.lineNumber}
+                                      {comment.lineRangeEnd && comment.lineRangeEnd !== comment.lineNumber ? `-${comment.lineRangeEnd}` : ''}
+                                    </p>
                                   </div>
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    {botRun.aiModelName} · {botRun.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}
-                                  </p>
+                                  {href && (
+                                    <Button variant="ghost" size="xs" asChild>
+                                      <a href={href} target="_blank" rel="noreferrer">
+                                        <Gitlab className="h-3 w-3" />
+                                        打开行
+                                      </a>
+                                    </Button>
+                                  )}
                                 </div>
-                                <div className="flex gap-2">
-                                  <Badge variant="outline">问题 {botRun.comments.length}</Badge>
-                                  <Badge variant="outline">
-                                    轮次 {Array.isArray(botRun.trace?.loopIterationsJson) ? botRun.trace?.loopIterationsJson.length : 0}
-                                  </Badge>
+                                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">{comment.content}</p>
+                                <p className="mt-3 text-xs text-muted-foreground">来源：{formatCommentSource(comment)}</p>
+                              </article>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-xl border border-emerald-600/20 bg-emerald-500/10 p-5 text-sm text-emerald-800">
+                          未发现可定位、可行动的问题。若统计不为 0，可在下方原始材料中查看模型返回内容。
+                        </div>
+                      )}
+                    </section>
+
+                    <section id="review-summary" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Walkthrough</p>
+                          <h2 className="mt-1 text-xl font-semibold">变更摘要与技术走查</h2>
+                        </div>
+                        {selectedReview.aiSummary && (
+                          <Button variant="ghost" size="xs" onClick={() => handleCopy(selectedReview.aiSummary || '', 'summary')}>
+                            {copiedKey === 'summary' ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
+                          </Button>
+                        )}
+                      </div>
+                      <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-sidebar/40 p-4 text-sm leading-6 text-foreground/90">
+                        {selectedReview.aiSummary || '暂无 AI 总结。'}
+                      </pre>
+                    </section>
+
+                    <section id="review-agents" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Agent Evidence</p>
+                        <h2 className="mt-1 text-xl font-semibold">Agent Loop 追溯</h2>
+                      </div>
+
+                      {selectedReview.botRuns && selectedReview.botRuns.length > 0 ? (
+                        <div className="mt-4 space-y-4">
+                          {selectedReview.botRuns.map((botRun) => {
+                            const rawReview = extractLastReviewResponse(botRun)
+                            const iterations = getBotIterations(botRun)
+                            return (
+                              <article key={botRun.id} className="rounded-xl border border-border/60 bg-card/60 p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h3 className="font-semibold text-foreground">{botRun.botName}</h3>
+                                      {getStatusBadge(botRun.status)}
+                                      <Badge variant="outline">{botRun.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}</Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">{botRun.aiModelName}</p>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Badge variant="outline">问题 {botRun.comments.length}</Badge>
+                                    <Badge variant="outline">Loop {iterations.length}</Badge>
+                                  </div>
                                 </div>
-                              </div>
 
-                              {botRun.summary && (
-                                <p className="mt-3 rounded-md bg-muted p-3 text-sm text-foreground whitespace-pre-wrap">
-                                  {botRun.summary}
-                                </p>
-                              )}
+                                {botRun.summary && (
+                                  <p className="mt-3 rounded-lg bg-background/70 p-3 text-sm leading-6 text-foreground">{botRun.summary}</p>
+                                )}
+                                {botRun.error && (
+                                  <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{botRun.error}</p>
+                                )}
 
-                              {botRun.error && (
-                                <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                                  {botRun.error}
-                                </p>
-                              )}
+                                <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                                  <details className="group rounded-lg border border-border/50 bg-background/70 p-3" open>
+                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
+                                      Loop 轮次与工具调用
+                                    </summary>
+                                    <div className="mt-3 space-y-2">
+                                      {iterations.length > 0 ? iterations.map((iteration, index) => (
+                                        <div key={`${botRun.id}-iteration-${index}`} className="rounded-md bg-sidebar/40 p-3 text-xs">
+                                          <p className="font-medium text-foreground">第 {String(iteration.iteration || index + 1)} 轮</p>
+                                          <p className="mt-1 text-muted-foreground">{getIterationToolSummary(iteration)}</p>
+                                        </div>
+                                      )) : (
+                                        <p className="text-sm text-muted-foreground">暂无 Loop Trace。</p>
+                                      )}
+                                    </div>
+                                  </details>
 
-                              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                                <div className="min-w-0">
-                                  <div className="mb-2 flex items-center justify-between">
-                                    <p className="text-xs font-medium text-muted-foreground">Agent 原始评价</p>
+                                  <details className="group rounded-lg border border-border/50 bg-background/70 p-3">
+                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
+                                      Final Plan / Critic
+                                    </summary>
+                                    <div className="mt-3 flex justify-end">
+                                      <Button variant="ghost" size="xs" onClick={() => handleCopy(formatJson(botRun.trace), `trace-${botRun.id}`)}>
+                                        {copiedKey === `trace-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
+                                      </Button>
+                                    </div>
+                                    <pre className="mt-2 max-h-80 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                                      {formatJson({
+                                        finalPlan: botRun.trace?.finalPlanJson,
+                                        critic: botRun.trace?.criticJson,
+                                        memoryUpdates: botRun.trace?.memoryUpdatesJson,
+                                      })}
+                                    </pre>
+                                  </details>
+                                </div>
+
+                                <details className="mt-3 rounded-lg border border-border/50 bg-background/70 p-3">
+                                  <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
+                                    Agent 原始评价
+                                  </summary>
+                                  <div className="mt-3 flex justify-end">
                                     {rawReview && (
                                       <Button variant="ghost" size="xs" onClick={() => handleCopy(rawReview, `bot-review-${botRun.id}`)}>
                                         {copiedKey === `bot-review-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
                                       </Button>
                                     )}
                                   </div>
-                                  <pre className="max-h-80 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                                  <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
                                     {rawReview || '暂无原始评价'}
                                   </pre>
-                                </div>
+                                </details>
+                              </article>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="mt-4 rounded-xl bg-muted p-5 text-sm text-muted-foreground">暂无机器人运行记录。</p>
+                      )}
+                    </section>
 
-                                <div className="min-w-0">
-                                  <div className="mb-2 flex items-center justify-between">
-                                    <p className="text-xs font-medium text-muted-foreground">Trace / Critic</p>
-                                    <Button variant="ghost" size="xs" onClick={() => handleCopy(formatJson(botRun.trace), `bot-trace-${botRun.id}`)}>
-                                      {copiedKey === `bot-trace-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
-                                    </Button>
-                                  </div>
-                                  <pre className="max-h-80 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-                                    {formatJson({
-                                      finalPlan: botRun.trace?.finalPlanJson,
-                                      critic: botRun.trace?.criticJson,
-                                      memoryUpdates: botRun.trace?.memoryUpdatesJson,
-                                    })}
-                                  </pre>
-                                </div>
-                              </div>
-
-                              {botRun.comments.length > 0 && (
-                                <div className="mt-4 space-y-2">
-                                  <p className="text-xs font-medium text-muted-foreground">该机器人发现的问题</p>
-                                  {botRun.comments.map((comment) => (
-                                    <div key={comment.id} className={`rounded-md border-l-4 p-3 ${getSeverityStyle(comment.severity)}`}>
-                                      <p className="text-xs font-mono text-muted-foreground">
-                                        {comment.filePath}:{comment.lineNumber}
-                                        {comment.lineRangeEnd && comment.lineRangeEnd !== comment.lineNumber ? `-${comment.lineRangeEnd}` : ''}
-                                        {typeof comment.confidence === 'number' ? ` · confidence=${comment.confidence.toFixed(2)}` : ''}
-                                      </p>
-                                      <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{comment.content}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
+                    <section id="review-raw" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Raw Materials</p>
+                        <h2 className="mt-1 text-xl font-semibold">原始回复、Prompt 与模型</h2>
                       </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm">暂无机器人运行记录</div>
-                    )}
-                  </TabsContent>
 
-                  <TabsContent value="ai" className="flex-1 min-h-0 overflow-auto min-w-0">
-                    {selectedReview.aiResponse ? (
-                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
-                        <div className="space-y-4">
-                          {Object.entries(parseAiResponse(selectedReview.aiResponse)).map(([filePath, response]) => (
-                            <div key={filePath}>
-                              <div className="flex items-center justify-between gap-2 mb-2">
-                                <p className="text-xs font-mono text-muted-foreground">{filePath}</p>
-                                <Button
-                                  variant="ghost"
-                                  size="xs"
-                                  onClick={() => handleCopy(response, `ai-${filePath}`)}
-                                >
-                                  {copiedKey === `ai-${filePath}` ? (
-                                    <>
-                                      <Check className="h-3 w-3" /> 已复制
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="h-3 w-3" /> 复制
-                                    </>
-                                  )}
-                                </Button>
+                      <div className="mt-4 space-y-3">
+                        <details className="rounded-xl border border-border/50 bg-card/60 p-4">
+                          <summary className="cursor-pointer list-none text-sm font-medium text-foreground">AI 原始回复</summary>
+                          <div className="mt-3 space-y-4">
+                            {selectedReview.aiResponse ? Object.entries(parseAiResponse(selectedReview.aiResponse)).map(([filePath, response]) => (
+                              <div key={filePath}>
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <p className="break-all font-mono text-xs text-muted-foreground">{filePath}</p>
+                                  <Button variant="ghost" size="xs" onClick={() => handleCopy(response, `ai-${filePath}`)}>
+                                    {copiedKey === `ai-${filePath}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
+                                  </Button>
+                                </div>
+                                <pre className="max-h-96 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">{response}</pre>
                               </div>
-                              <pre className="p-3 bg-sidebar/50 rounded-md text-xs text-muted-foreground whitespace-pre min-w-max">
-                                {response}
-                              </pre>
-                            </div>
-                          ))}
+                            )) : (
+                              <p className="text-sm text-muted-foreground">暂无原始回复。</p>
+                            )}
+                          </div>
+                        </details>
+
+                        <details className="rounded-xl border border-border/50 bg-card/60 p-4">
+                          <summary className="cursor-pointer list-none text-sm font-medium text-foreground">Prompt 追溯</summary>
+                          <div className="mt-3 space-y-4">
+                            {selectedReview.reviewPrompts ? Object.entries(parseAiResponse(selectedReview.reviewPrompts)).map(([filePath, prompt]) => (
+                              <div key={filePath}>
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <p className="break-all font-mono text-xs text-muted-foreground">{filePath}</p>
+                                  <Button variant="ghost" size="xs" onClick={() => handleCopy(prompt, `prompt-${filePath}`)}>
+                                    {copiedKey === `prompt-${filePath}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
+                                  </Button>
+                                </div>
+                                <pre className="max-h-96 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">{prompt}</pre>
+                              </div>
+                            )) : (
+                              <p className="text-sm text-muted-foreground">暂无 Prompt 记录。</p>
+                            )}
+                          </div>
+                        </details>
+
+                        <div className="rounded-xl border border-border/50 bg-card/60 p-4">
+                          <p className="text-sm font-medium text-foreground">模型信息</p>
+                          <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                            <p>提供商：<span className="font-mono text-foreground">{selectedReview.aiModelProvider || 'N/A'}</span></p>
+                            <p>模型：<span className="font-mono text-foreground">{selectedReview.aiModelId || 'N/A'}</span></p>
+                          </div>
                         </div>
                       </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm">暂无原始回复</div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="prompts" className="flex-1 min-h-0 overflow-auto min-w-0">
-                    {selectedReview.reviewPrompts ? (
-                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
-                        <div className="space-y-4">
-                          {Object.entries(parseAiResponse(selectedReview.reviewPrompts)).map(([filePath, prompt]) => (
-                            <div key={filePath}>
-                              <div className="flex items-center justify-between gap-2 mb-2">
-                                <p className="text-xs font-mono text-muted-foreground">{filePath}</p>
-                                <Button
-                                  variant="ghost"
-                                  size="xs"
-                                  onClick={() => handleCopy(prompt, `prompt-${filePath}`)}
-                                >
-                                  {copiedKey === `prompt-${filePath}` ? (
-                                    <>
-                                      <Check className="h-3 w-3" /> 已复制
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="h-3 w-3" /> 复制
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                              <pre className="p-3 bg-sidebar/50 rounded-md text-xs text-muted-foreground whitespace-pre min-w-max">
-                                {prompt}
-                              </pre>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm">暂无 Prompt 记录</div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="model" className="flex-1 min-h-0 overflow-y-auto min-w-0">
-                    {(selectedReview.aiModelProvider || selectedReview.aiModelId) ? (
-                      <div className="bg-background rounded-lg p-4 border border-border/40 overflow-x-auto">
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <p>提供商: <span className="text-foreground font-mono">{selectedReview.aiModelProvider || 'N/A'}</span></p>
-                          <p>模型: <span className="text-foreground font-mono">{selectedReview.aiModelId || 'N/A'}</span></p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground text-sm">暂无模型信息</div>
-                    )}
-                  </TabsContent>
-                </Tabs>
+                    </section>
+                  </div>
+                </main>
               </div>
             </div>
           )}
