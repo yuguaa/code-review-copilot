@@ -6,6 +6,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const GRAPH_CACHE_COMMIT_SHA = "__branch_code_graph__";
+
 export function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -21,7 +23,7 @@ export function GET(
         where: {
           repositoryId: id,
           ...(branch ? { branch } : {}),
-          ...(snapshot?.commitSha ? { commitSha: snapshot.commitSha } : {}),
+          commitSha: snapshot?.commitSha || GRAPH_CACHE_COMMIT_SHA,
         },
         orderBy: { filePath: "asc" },
         take: 200,
@@ -30,7 +32,7 @@ export function GET(
         where: {
           repositoryId: id,
           ...(branch ? { branch } : {}),
-          ...(snapshot?.commitSha ? { fromFileNode: { commitSha: snapshot.commitSha } } : {}),
+          fromFileNode: { commitSha: snapshot?.commitSha || GRAPH_CACHE_COMMIT_SHA },
         },
         include: {
           fromFileNode: { select: { filePath: true } },

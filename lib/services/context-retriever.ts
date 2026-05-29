@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
+const GRAPH_CACHE_COMMIT_SHA = "__branch_code_graph__";
+
 type GraphRelation = Prisma.CodeRelationEdgeGetPayload<{
   include: {
     fromFileNode: true;
@@ -59,7 +61,7 @@ export class ContextRetrieverService {
         where: {
           repositoryId: params.repositoryId,
           branch: params.branch,
-          commitSha: params.commitSha,
+          commitSha: GRAPH_CACHE_COMMIT_SHA,
           status: "ready",
         },
         orderBy: { lastIndexedAt: "desc" },
@@ -76,7 +78,7 @@ export class ContextRetrieverService {
         where: {
           repositoryId: params.repositoryId,
           branch: params.branch,
-          commitSha: params.commitSha,
+          commitSha: GRAPH_CACHE_COMMIT_SHA,
           filePath: { in: selectedFiles },
         },
       }),

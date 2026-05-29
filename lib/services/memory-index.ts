@@ -9,6 +9,7 @@ const MAX_INDEXED_FILES = 260;
 const MAX_FILE_BYTES = 180_000;
 const MAX_RELATION_EDGES = 2_000;
 const FILE_FETCH_CONCURRENCY = 8;
+const GRAPH_CACHE_COMMIT_SHA = "__branch_code_graph__";
 
 const INDEXABLE_EXTENSIONS = new Set([
   ".ts",
@@ -263,6 +264,7 @@ function summarizeArchitecture(index: {
   importEdges: ImportEdge[];
   skippedByLimit: number;
   changedFiles: string[];
+  mode: "full" | "incremental";
 }): string {
   const roles = index.files.reduce<Record<string, number>>((acc, file) => {
     acc[file.role] = (acc[file.role] || 0) + 1;
@@ -283,7 +285,9 @@ function summarizeArchitecture(index: {
     .join("；");
 
   return [
-    `当前 Code Graph 基于目标 commit 的仓库文件树构建，索引 ${index.files.length} 个关键文件。`,
+    index.mode === "full"
+      ? `当前 Code Graph 首次基于仓库文件树构建，索引 ${index.files.length} 个关键文件。`
+      : `当前 Code Graph 基于已有分支图增量更新，刷新 ${index.files.length} 个变更文件。`,
     index.skippedByLimit > 0 ? `因索引上限跳过 ${index.skippedByLimit} 个低优先级文件。` : "",
     roleSummary ? `模块角色分布：${roleSummary}。` : "",
     entrypoints ? `关键入口/流程节点：${entrypoints}。` : "",
@@ -329,14 +333,14 @@ function mapWithConcurrency<T, R>(
 
 export class MemoryIndexService {
   refreshRepositoryMemory(input: MemoryIndexInput) {
-    return this.buildProjectIndex(input).then((projectIndex) => {
+    return this.resolveProjectIndex(input).then((projectIndex) => {
       return prisma.$transaction((tx) => {
         return tx.repositoryMemorySnapshot.upsert({
           where: {
             repositoryId_branch_commitSha: {
               repositoryId: input.repositoryId,
               branch: input.branch,
-              commitSha: input.commitSha,
+              commitSha: GRAPH_CACHE_COMMIT_SHA,
             },
           },
           update: {
@@ -360,7 +364,7 @@ export class MemoryIndexService {
           create: {
             repositoryId: input.repositoryId,
             branch: input.branch,
-            commitSha: input.commitSha,
+            commitSha: GRAPH_CACHE_COMMIT_SHA,
             status: "ready",
             architectureSummary: projectIndex.architectureSummary,
             memoryJson: toJsonInput(projectIndex.memory),
@@ -382,7 +386,7 @@ export class MemoryIndexService {
                 repositoryId_branch_commitSha_filePath: {
                   repositoryId: input.repositoryId,
                   branch: input.branch,
-                  commitSha: input.commitSha,
+                  commitSha: GRAPH_CACHE_COMMIT_SHA,
                   filePath: file.filePath,
                 },
               },
@@ -398,7 +402,7 @@ export class MemoryIndexService {
               create: {
                 repositoryId: input.repositoryId,
                 branch: input.branch,
-                commitSha: input.commitSha,
+                commitSha: GRAPH_CACHE_COMMIT_SHA,
                 filePath: file.filePath,
                 contentHash: file.contentHash,
                 language: file.language,
@@ -539,6 +543,7 @@ export class MemoryIndexService {
           importEdges,
           skippedByLimit: Math.max(0, indexableFiles.length - selectedItems.length),
           changedFiles,
+          mode: "full",
         });
 
         return {
@@ -551,7 +556,9 @@ export class MemoryIndexService {
           memory: {
             source: "gitlab_repository_tree",
             branch: input.branch,
-            commitSha: input.commitSha,
+            graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
+            lastIndexedCommitSha: input.commitSha,
+            updateMode: "full",
             indexedFiles: files.length,
             totalIndexableFiles: indexableFiles.length,
             changedFiles,
@@ -563,6 +570,132 @@ export class MemoryIndexService {
         };
       });
     });
+  }
+
+  private resolveProjectIndex(input: MemoryIndexInput): Promise<ProjectIndex> {
+    return prisma.repositoryMemorySnapshot.findUnique({
+      where: {
+        repositoryId_branch_commitSha: {
+          repositoryId: input.repositoryId,
+          branch: input.branch,
+          commitSha: GRAPH_CACHE_COMMIT_SHA,
+        },
+      },
+    }).then((snapshot) => {
+      if (!snapshot || snapshot.status !== "ready") {
+        return this.buildProjectIndex(input);
+      }
+      return this.buildIncrementalProjectIndex(input, snapshot);
+    });
+  }
+
+  private buildIncrementalProjectIndex(
+    input: MemoryIndexInput,
+    snapshot: { memoryJson: Prisma.JsonValue; layersJson: Prisma.JsonValue; entrypointsJson: Prisma.JsonValue },
+  ): Promise<ProjectIndex> {
+    const changedFiles = input.diffs
+      .filter((diff) => !diff.deleted_file && isIndexableFile(diff.new_path))
+      .map((diff) => diff.new_path);
+    const changedFileSet = new Set(changedFiles);
+    if (changedFiles.length === 0) {
+      return Promise.resolve(this.buildNoopProjectIndex(input, snapshot));
+    }
+
+    const treeItems = changedFiles.map((filePath) => ({
+      id: `${input.commitSha}:${filePath}`,
+      name: path.posix.basename(filePath),
+      type: "blob" as const,
+      path: filePath,
+      mode: "100644",
+    }));
+
+    return mapWithConcurrency(treeItems, FILE_FETCH_CONCURRENCY, (item) => {
+      return input.gitlabService.getRepositoryFileRaw(input.gitLabProjectId, item.path, input.commitSha)
+        .then((content) => this.indexFile(item, content, changedFileSet));
+    }).then((changedIndexedFiles) => {
+      return prisma.codeFileNode.findMany({
+        where: {
+          repositoryId: input.repositoryId,
+          branch: input.branch,
+          commitSha: GRAPH_CACHE_COMMIT_SHA,
+        },
+        select: { filePath: true },
+      }).then((existingNodes) => {
+        const candidatePaths = new Set([
+          ...existingNodes.map((node) => node.filePath),
+          ...changedIndexedFiles.map((file) => file.filePath),
+        ]);
+        const importEdges = changedIndexedFiles.flatMap((file) => {
+          return file.imports.map((importRecord) => ({
+            fromPath: file.filePath,
+            toPath: resolveImportPath(importRecord.source, file.filePath, candidatePaths),
+            importPath: importRecord.source,
+            importedNames: importRecord.importedNames,
+          }));
+        });
+        const existingLayers = this.parseJsonRecord(snapshot.layersJson);
+        const layers = this.mergeLayers(existingLayers, changedIndexedFiles);
+        const risks = changedIndexedFiles
+          .filter((file) => ["api_route", "service", "review_workflow", "workflow_node", "data_model"].includes(file.role))
+          .map((file) => ({
+            filePath: file.filePath,
+            risk: `${file.role} 变更可能影响审查主链路、数据一致性或外部接口契约`,
+          }));
+        const architectureSummary = summarizeArchitecture({
+          files: changedIndexedFiles,
+          importEdges,
+          skippedByLimit: 0,
+          changedFiles,
+          mode: "incremental",
+        });
+        const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
+
+        return {
+          files: changedIndexedFiles,
+          importEdges,
+          architectureSummary,
+          entrypoints: this.mergeEntrypoints(snapshot.entrypointsJson, changedIndexedFiles),
+          layers,
+          risks,
+          memory: {
+            ...previousMemory,
+            source: "gitlab_repository_tree",
+            branch: input.branch,
+            graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
+            lastIndexedCommitSha: input.commitSha,
+            updateMode: "incremental",
+            changedFiles,
+            changedFileRoles: changedIndexedFiles.map((file) => ({ filePath: file.filePath, role: file.role })),
+            indexedFiles: existingNodes.length,
+          },
+        };
+      });
+    });
+  }
+
+  private buildNoopProjectIndex(
+    input: MemoryIndexInput,
+    snapshot: { memoryJson: Prisma.JsonValue; layersJson: Prisma.JsonValue; entrypointsJson: Prisma.JsonValue },
+  ): ProjectIndex {
+    const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
+    return {
+      files: [],
+      importEdges: [],
+      architectureSummary: "当前变更不包含可索引源码文件，Code Graph 复用已有分支图。",
+      entrypoints: this.mergeEntrypoints(snapshot.entrypointsJson, []),
+      layers: this.mergeLayers(this.parseJsonRecord(snapshot.layersJson), []),
+      risks: [],
+      memory: {
+        ...previousMemory,
+        source: "gitlab_repository_tree",
+        branch: input.branch,
+        graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
+        lastIndexedCommitSha: input.commitSha,
+        updateMode: "reuse",
+        changedFiles: [],
+        changedFileRoles: [],
+      },
+    };
   }
 
   private indexFile(item: GitLabRepositoryTreeItem, content: string, changedFileSet: Set<string>): IndexedFile {
@@ -609,6 +742,45 @@ export class MemoryIndexService {
     return [...buckets.values()]
       .sort((a, b) => (b.files + b.directories) - (a.files + a.directories))
       .slice(0, 30);
+  }
+
+  private parseJsonRecord(value: Prisma.JsonValue): Record<string, unknown> {
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+  }
+
+  private mergeLayers(existingLayers: Record<string, unknown>, changedFiles: IndexedFile[]): Record<string, string[]> {
+    const nextLayers = Object.entries(existingLayers).reduce<Record<string, string[]>>((acc, [role, files]) => {
+      acc[role] = Array.isArray(files) ? files.filter((item): item is string => typeof item === "string") : [];
+      return acc;
+    }, {});
+
+    changedFiles.forEach((file) => {
+      Object.keys(nextLayers).forEach((role) => {
+        nextLayers[role] = nextLayers[role].filter((filePath) => filePath !== file.filePath);
+      });
+      nextLayers[file.role] = [...new Set([...(nextLayers[file.role] || []), file.filePath])];
+    });
+
+    return nextLayers;
+  }
+
+  private mergeEntrypoints(existingEntrypoints: Prisma.JsonValue, changedFiles: IndexedFile[]): IndexedFile[] {
+    const previous = Array.isArray(existingEntrypoints)
+      ? existingEntrypoints.filter((item): item is IndexedFile => Boolean(
+        item &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        typeof (item as { filePath?: unknown }).filePath === "string",
+      ))
+      : [];
+    const changedEntrypoints = changedFiles.filter(isLikelyEntrypoint);
+    const byPath = new Map<string, IndexedFile>();
+
+    previous.forEach((file) => byPath.set(file.filePath, file));
+    changedEntrypoints.forEach((file) => byPath.set(file.filePath, file));
+    return [...byPath.values()].slice(0, 40);
   }
 }
 
