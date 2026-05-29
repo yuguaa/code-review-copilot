@@ -25,6 +25,7 @@ const INDEXABLE_EXTENSIONS = new Set([
   ".md",
   ".json",
   ".py",
+  ".java",
 ]);
 
 const IGNORED_PATH_PARTS = new Set([
@@ -114,18 +115,26 @@ function detectLanguage(filePath: string): string {
   if (filePath.endsWith(".md")) return "markdown";
   if (filePath.endsWith(".json")) return "json";
   if (filePath.endsWith(".py")) return "python";
+  if (filePath.endsWith(".java")) return "java";
   return "unknown";
 }
 
 function detectRole(filePath: string): string {
   if (filePath.includes("/api/") && filePath.endsWith("route.ts")) return "api_route";
   if (filePath.includes("/api/") && filePath.endsWith(".py")) return "api_route";
+  if (filePath.includes("/controller/") && filePath.endsWith(".java")) return "api_route";
+  if (filePath.includes("/controllers/") && filePath.endsWith(".java")) return "api_route";
   if (filePath.startsWith("app/") && filePath.endsWith("page.tsx")) return "page";
   if (filePath.includes("/agents/") && filePath.endsWith(".py")) return "workflow_node";
   if (filePath.includes("lib/langgraph/nodes/")) return "workflow_node";
   if (filePath.includes("lib/langgraph/")) return "review_workflow";
   if (filePath.includes("lib/services/")) return "service";
   if ((filePath.includes("/services/") || filePath.endsWith("/service.py")) && filePath.endsWith(".py")) return "service";
+  if ((filePath.includes("/service/") || filePath.includes("/services/")) && filePath.endsWith(".java")) return "service";
+  if (filePath.includes("/repository/") && filePath.endsWith(".java")) return "data_model";
+  if (filePath.includes("/repositories/") && filePath.endsWith(".java")) return "data_model";
+  if (filePath.includes("/entity/") && filePath.endsWith(".java")) return "data_model";
+  if (filePath.includes("/entities/") && filePath.endsWith(".java")) return "data_model";
   if (filePath.includes("components/")) return "component";
   if (filePath.includes("prisma/")) return "data_model";
   if (filePath.includes("hooks/")) return "hook";
@@ -152,6 +161,7 @@ function shouldPrioritize(filePath: string): boolean {
     filePath.startsWith("prisma/") ||
     filePath.startsWith("src/") ||
     filePath.endsWith(".py") ||
+    filePath.endsWith(".java") ||
     filePath === "package.json" ||
     filePath === "tsconfig.json"
   );
@@ -202,6 +212,12 @@ function extractImports(content: string): ImportRecord[] {
       .filter((item): item is string => Boolean(item))
       .forEach((source) => addImport(source));
   }
+  for (const match of content.matchAll(/^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.*]*)\s*;/gm)) {
+    if (!match[1]) continue;
+    const importTarget = match[1].replace(/\.\*$/, "");
+    const parts = importTarget.split(".");
+    addImport(importTarget, parts.length > 1 ? [parts[parts.length - 1]] : []);
+  }
 
   return [...imports.entries()].map(([source, names]) => ({
     source,
@@ -218,6 +234,11 @@ function extractExports(content: string): string[] {
     const pythonDeclaration = clean.match(/^(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)/);
     if (pythonDeclaration?.[1] && !pythonDeclaration[1].startsWith("_")) {
       exports.add(pythonDeclaration[1]);
+      return;
+    }
+    const javaTypeDeclaration = clean.match(/^(?:public|protected|private|abstract|final|static|\s)*\s*(?:class|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    if (javaTypeDeclaration?.[1]) {
+      exports.add(javaTypeDeclaration[1]);
       return;
     }
 
@@ -245,18 +266,21 @@ function extractSymbols(content: string): Array<{ name: string; kind: string; st
     const pythonAsyncFn = clean.match(/^async\s+def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
     const pythonFn = clean.match(/^def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
     const pythonCls = clean.match(/^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*[\(:]/);
+    const javaType = clean.match(/^(?:public|protected|private|abstract|final|static|\s)*\s*(class|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+    const javaMethod = clean.match(/^(?!.*\b(?:if|for|while|switch|catch|new)\b)(?:public|protected|private|static|final|abstract|synchronized|native|\s)+[\w<>\[\], ?]+\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:throws\s+[^{]+)?\{/);
     const fn = clean.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)/);
     const cls = clean.match(/^(?:export\s+)?class\s+([A-Za-z0-9_]+)/);
     const iface = clean.match(/^(?:export\s+)?interface\s+([A-Za-z0-9_]+)/);
     const typeDef = clean.match(/^(?:export\s+)?type\s+([A-Za-z0-9_]+)/);
     const comp = clean.match(/^(?:export\s+)?const\s+([A-Z][A-Za-z0-9_]*)\s*=/);
     const value = clean.match(/^(?:export\s+)?const\s+([a-z][A-Za-z0-9_]*)\s*=/);
-    const match = pythonAsyncFn || pythonFn || pythonCls || fn || cls || iface || typeDef || comp || value;
-    if (!match?.[1]) return;
+    const match = pythonAsyncFn || pythonFn || pythonCls || javaType || javaMethod || fn || cls || iface || typeDef || comp || value;
+    const name = javaType?.[2] || match?.[1];
+    if (!name) return;
 
     symbols.push({
-      name: match[1],
-      kind: pythonAsyncFn || pythonFn || fn ? "function" : pythonCls || cls ? "class" : iface ? "interface" : typeDef ? "type" : comp ? "component" : "constant",
+      name,
+      kind: pythonAsyncFn || pythonFn || javaMethod || fn ? "function" : pythonCls || cls ? "class" : javaType?.[1] || iface ? javaType?.[1] || "interface" : typeDef ? "type" : comp ? "component" : "constant",
       startLine: index + 1,
       endLine: index + 1,
       signature: clean.slice(0, 240),
@@ -268,20 +292,22 @@ function extractSymbols(content: string): Array<{ name: string; kind: string; st
 function resolveImportPath(importPath: string, fromPath: string, candidatePaths: Set<string>): string | null {
   const fromExt = path.posix.extname(fromPath);
   const isPythonFile = fromExt === ".py";
+  const isJavaFile = fromExt === ".java";
   const isPythonModuleImport = isPythonFile && /^[A-Za-z_][A-Za-z0-9_\.]*$/.test(importPath);
+  const isJavaPackageImport = isJavaFile && /^[A-Za-z_][A-Za-z0-9_\.]*$/.test(importPath);
 
-  if (!importPath.startsWith(".") && !importPath.startsWith("@/") && !importPath.startsWith("~/") && !isPythonModuleImport) {
+  if (!importPath.startsWith(".") && !importPath.startsWith("@/") && !importPath.startsWith("~/") && !isPythonModuleImport && !isJavaPackageImport) {
     return null;
   }
 
-  const normalizedPythonModulePath = isPythonModuleImport ? importPath.replace(/\./g, "/") : importPath;
-  const basePath = normalizedPythonModulePath.startsWith("@/")
-    ? normalizedPythonModulePath.slice(2)
-    : normalizedPythonModulePath.startsWith("~/")
-      ? normalizedPythonModulePath.slice(2)
-      : normalizedPythonModulePath.startsWith(".")
-        ? path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), normalizedPythonModulePath))
-        : normalizedPythonModulePath;
+  const normalizedModulePath = isPythonModuleImport || isJavaPackageImport ? importPath.replace(/\./g, "/") : importPath;
+  const basePath = normalizedModulePath.startsWith("@/")
+    ? normalizedModulePath.slice(2)
+    : normalizedModulePath.startsWith("~/")
+      ? normalizedModulePath.slice(2)
+      : normalizedModulePath.startsWith(".")
+        ? path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), normalizedModulePath))
+        : normalizedModulePath;
 
   const candidates = [
     basePath,
@@ -292,6 +318,7 @@ function resolveImportPath(importPath: string, fromPath: string, candidatePaths:
     `${basePath}.vue`,
     `${basePath}.json`,
     `${basePath}.py`,
+    `${basePath}.java`,
     `${basePath}/index.ts`,
     `${basePath}/index.tsx`,
     `${basePath}/index.js`,
@@ -304,6 +331,15 @@ function resolveImportPath(importPath: string, fromPath: string, candidatePaths:
     for (let index = 0; index < fromParts.length - 1; index += 1) {
       const prefix = fromParts.slice(0, index + 1).join("/");
       candidates.push(`${prefix}/${basePath}.py`, `${prefix}/${basePath}/__init__.py`);
+    }
+  }
+  if (isJavaPackageImport) {
+    const importParts = importPath.split(".");
+    const className = importParts[importParts.length - 1];
+    const fromParts = fromPath.split("/");
+    for (let index = 0; index < fromParts.length - 1; index += 1) {
+      const prefix = fromParts.slice(0, index + 1).join("/");
+      candidates.push(`${prefix}/${className}.java`, `${prefix}/${basePath}.java`);
     }
   }
 

@@ -70,6 +70,21 @@ const shortFileName = (filePath: string) => {
   return parts[parts.length - 1] || filePath
 }
 
+const symbolPrefix = (kind: string) => {
+  if (kind === 'class') return 'C'
+  if (kind === 'interface') return 'I'
+  if (kind === 'enum') return 'E'
+  if (kind === 'record') return 'R'
+  return 'ƒ'
+}
+
+const symbolColor = (kind: string) => {
+  if (kind === 'class' || kind === 'record') return '#1d4ed8'
+  if (kind === 'interface') return '#0f766e'
+  if (kind === 'enum') return '#a16207'
+  return '#334155'
+}
+
 const buildGraphData = (
   files: CodeGraphViewFile[],
   symbols: CodeGraphViewSymbol[],
@@ -115,8 +130,8 @@ const buildGraphData = (
   })
   const symbolNodes: JsonNode[] = visibleSymbols.map((symbol) => ({
     id: `symbol:${symbol.id}`,
-    text: `${symbol.kind === 'class' ? 'C' : 'ƒ'} ${symbol.name}`,
-    color: symbol.kind === 'class' ? '#1d4ed8' : '#334155',
+    text: `${symbolPrefix(symbol.kind)} ${symbol.name}`,
+    color: symbolColor(symbol.kind),
     borderColor: '#94a3b8',
     borderWidth: 1,
     fontColor: '#f8fafc',
