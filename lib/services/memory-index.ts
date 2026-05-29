@@ -90,6 +90,7 @@ export interface MemoryIndexInput {
   commitSha: string;
   diffs: GitLabDiff[];
   forceRebuild?: boolean;
+  sourceCommitSha?: string;
 }
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
@@ -559,6 +560,7 @@ export class MemoryIndexService {
             branch: input.branch,
             graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
             lastIndexedCommitSha: input.commitSha,
+            sourceCommitSha: input.sourceCommitSha || input.commitSha,
             updateMode: "full",
             indexedFiles: files.length,
             totalIndexableFiles: indexableFiles.length,
@@ -590,6 +592,10 @@ export class MemoryIndexService {
       if (!snapshot || snapshot.status !== "ready") {
         return this.buildProjectIndex(input);
       }
+      const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
+      if (previousMemory.lastIndexedCommitSha === input.commitSha) {
+        return this.buildNoopProjectIndex(input, snapshot, "branch_head_unchanged");
+      }
       return this.buildIncrementalProjectIndex(input, snapshot);
     });
   }
@@ -603,7 +609,7 @@ export class MemoryIndexService {
       .map((diff) => diff.new_path);
     const changedFileSet = new Set(changedFiles);
     if (changedFiles.length === 0) {
-      return Promise.resolve(this.buildNoopProjectIndex(input, snapshot));
+      return Promise.resolve(this.buildNoopProjectIndex(input, snapshot, "no_indexable_changes"));
     }
 
     const treeItems = changedFiles.map((filePath) => ({
@@ -668,6 +674,7 @@ export class MemoryIndexService {
             branch: input.branch,
             graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
             lastIndexedCommitSha: input.commitSha,
+            sourceCommitSha: input.sourceCommitSha || input.commitSha,
             updateMode: "incremental",
             changedFiles,
             changedFileRoles: changedIndexedFiles.map((file) => ({ filePath: file.filePath, role: file.role })),
@@ -681,12 +688,15 @@ export class MemoryIndexService {
   private buildNoopProjectIndex(
     input: MemoryIndexInput,
     snapshot: { memoryJson: Prisma.JsonValue; layersJson: Prisma.JsonValue; entrypointsJson: Prisma.JsonValue },
+    reason: "branch_head_unchanged" | "no_indexable_changes",
   ): ProjectIndex {
     const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
     return {
       files: [],
       importEdges: [],
-      architectureSummary: "当前变更不包含可索引源码文件，Code Graph 复用已有分支图。",
+      architectureSummary: reason === "branch_head_unchanged"
+        ? "远端分支 HEAD 未变化，Code Graph 复用已有分支图。"
+        : "当前变更不包含可索引源码文件，Code Graph 复用已有分支图。",
       entrypoints: this.mergeEntrypoints(snapshot.entrypointsJson, []),
       layers: this.mergeLayers(this.parseJsonRecord(snapshot.layersJson), []),
       risks: [],
@@ -696,7 +706,9 @@ export class MemoryIndexService {
         branch: input.branch,
         graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
         lastIndexedCommitSha: input.commitSha,
+        sourceCommitSha: input.sourceCommitSha || input.commitSha,
         updateMode: "reuse",
+        reuseReason: reason,
         changedFiles: [],
         changedFileRoles: [],
       },

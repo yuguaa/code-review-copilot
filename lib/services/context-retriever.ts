@@ -16,6 +16,7 @@ export interface RetrievedAgentContext {
     status: string;
     graphCommitSha: string;
     lastIndexedCommitSha: string | null;
+    sourceCommitSha: string | null;
     lastIndexedAt: string | null;
     updateMode: string | null;
     indexedFiles: number;
@@ -144,6 +145,7 @@ export class ContextRetrieverService {
           status: snapshot?.status || "missing",
           graphCommitSha: snapshot?.commitSha || GRAPH_CACHE_COMMIT_SHA,
           lastIndexedCommitSha: typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null,
+          sourceCommitSha: typeof memoryJson.sourceCommitSha === "string" ? memoryJson.sourceCommitSha : null,
           lastIndexedAt: snapshot?.lastIndexedAt?.toISOString() || null,
           updateMode: typeof memoryJson.updateMode === "string" ? memoryJson.updateMode : null,
           indexedFiles: typeof memoryJson.indexedFiles === "number" ? memoryJson.indexedFiles : 0,

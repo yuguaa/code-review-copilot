@@ -104,6 +104,12 @@ export interface GitLabRepositoryTreeItem {
   mode: string
 }
 
+/** GitLab 分支信息 */
+export interface GitLabBranch {
+  name: string
+  commit: GitLabCommit
+}
+
 /** AI 模型配置 */
 export interface AIModelConfig {
   id: string

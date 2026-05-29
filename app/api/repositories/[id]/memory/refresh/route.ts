@@ -31,12 +31,8 @@ export async function POST(
       repository.gitLabAccount.accessToken,
     );
 
-    const commits = await gitlabService.getProjectCommits(repository.gitLabProjectId, {
-      ref_name: branch,
-      per_page: 1,
-      max_pages: 1,
-    });
-    const commitSha = commits[0]?.id;
+    const remoteBranch = await gitlabService.getBranch(repository.gitLabProjectId, branch);
+    const commitSha = remoteBranch.commit.id;
     if (!commitSha) {
       throw new Error(`Cannot resolve latest commit for branch ${branch}`);
     }

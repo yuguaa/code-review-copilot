@@ -9,7 +9,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabRepositoryTreeItem } from '@/lib/types'
+import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabRepositoryTreeItem, GitLabBranch } from '@/lib/types'
 
 type GitLabApiError = AxiosError<{ message?: string; error?: string }>
 
@@ -234,6 +234,19 @@ export class GitLabService {
     }
 
     return commits
+  }
+
+  /**
+   * 获取分支当前 HEAD
+   */
+  getBranch(projectId: number | string, branch: string): Promise<GitLabBranch> {
+    const encodedBranch = encodeURIComponent(branch)
+    return this.client.get(`/projects/${projectId}/repository/branches/${encodedBranch}`)
+      .then((response) => response.data as GitLabBranch)
+      .catch((error) => {
+        console.error(`Failed to fetch GitLab branch: ${branch}`, error)
+        throw new Error(`Failed to fetch branch ${branch} from GitLab`)
+      })
   }
 
   /**
