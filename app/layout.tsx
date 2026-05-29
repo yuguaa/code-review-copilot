@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@relation-graph/react/style.css";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "sonner";
 

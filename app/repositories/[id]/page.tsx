@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowDown, ArrowLeft, ArrowUp, Bot, GitFork, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { CodeGraphView } from './code-graph-view'
 
 type AIModel = {
   id: string
@@ -101,12 +102,6 @@ type CodeGraphRelation = {
 type CodeGraphData = {
   files: CodeGraphFile[]
   relations: CodeGraphRelation[]
-}
-
-type PositionedGraphNode = CodeGraphFile & {
-  x: number
-  y: number
-  color: string
 }
 
 type PromptMode = 'extend' | 'replace'
@@ -191,43 +186,6 @@ const toPositiveInteger = (value: unknown, fallback: number) => {
 const toNonNegativeInteger = (value: unknown, fallback: number) => {
   const numberValue = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numberValue) ? Math.max(0, Math.trunc(numberValue)) : fallback
-}
-
-const graphRoleColors: Record<string, string> = {
-  api_route: '#ef4444',
-  page: '#f97316',
-  component: '#06b6d4',
-  service: '#2563eb',
-  workflow_node: '#7c3aed',
-  review_workflow: '#9333ea',
-  data_model: '#16a34a',
-  hook: '#0d9488',
-  script: '#64748b',
-  project_config: '#ca8a04',
-  module: '#475569',
-}
-
-const shortFileName = (filePath: string) => {
-  const parts = filePath.split('/')
-  return parts[parts.length - 1] || filePath
-}
-
-const layoutCodeGraph = (files: CodeGraphFile[]): PositionedGraphNode[] => {
-  const width = 760
-  const height = 360
-  const centerX = width / 2
-  const centerY = height / 2
-  const radiusX = 300
-  const radiusY = 132
-  return files.slice(0, 80).map((file, index, visibleFiles) => {
-    const angle = (Math.PI * 2 * index) / Math.max(visibleFiles.length, 1)
-    return {
-      ...file,
-      x: centerX + Math.cos(angle) * radiusX,
-      y: centerY + Math.sin(angle) * radiusY,
-      color: graphRoleColors[file.role] || graphRoleColors.module,
-    }
-  })
 }
 
 export default function RepositoryDetailPage() { // 仓库详情页组件
@@ -688,14 +646,15 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
 
   const orderedReviewBots = sortBots(reviewBots)
   const activeReviewBotCount = orderedReviewBots.filter((bot) => bot.isActive).length
-  const graphNodes = layoutCodeGraph(codeGraphData?.files || [])
-  const graphNodeByPath = new Map(graphNodes.map((node) => [node.filePath, node]))
-  const visibleGraphRelations = (codeGraphData?.relations || [])
-    .filter((relation) => relation.to && graphNodeByPath.has(relation.from) && graphNodeByPath.has(relation.to))
-    .slice(0, 160)
-  const selectedGraphNode = selectedGraphFilePath ? graphNodeByPath.get(selectedGraphFilePath) : graphNodes[0]
+  const graphFiles = codeGraphData?.files || []
+  const graphRelations = codeGraphData?.relations || []
+  const graphFileByPath = new Map(graphFiles.map((file) => [file.filePath, file]))
+  const visibleGraphRelationCount = graphRelations
+    .filter((relation) => relation.to && graphFileByPath.has(relation.from) && graphFileByPath.has(relation.to))
+    .slice(0, 240).length
+  const selectedGraphNode = selectedGraphFilePath ? graphFileByPath.get(selectedGraphFilePath) : graphFiles[0]
   const selectedGraphRelations = selectedGraphNode
-    ? (codeGraphData?.relations || []).filter((relation) => relation.from === selectedGraphNode.filePath || relation.to === selectedGraphNode.filePath).slice(0, 12)
+    ? graphRelations.filter((relation) => relation.from === selectedGraphNode.filePath || relation.to === selectedGraphNode.filePath).slice(0, 12)
     : []
 
   return (
@@ -891,68 +850,19 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {graphNodes.length > 0 ? (
+          {graphFiles.length > 0 ? (
             <>
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">节点：{codeGraphData?.files.length || 0}</Badge>
                 <Badge variant="outline">关系：{codeGraphData?.relations.length || 0}</Badge>
-                <Badge variant="outline">当前展示：{graphNodes.length} 节点 / {visibleGraphRelations.length} 边</Badge>
+                <Badge variant="outline">当前展示：{Math.min(graphFiles.length, 120)} 节点 / {visibleGraphRelationCount} 边</Badge>
               </div>
-              <div className="overflow-hidden rounded-lg border bg-slate-950">
-                <svg viewBox="0 0 760 360" role="img" aria-label="Code Graph dependency map" className="h-[360px] w-full">
-                  <defs>
-                    <marker id="code-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                      <path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8" />
-                    </marker>
-                  </defs>
-                  {visibleGraphRelations.map((relation) => {
-                    const fromNode = graphNodeByPath.get(relation.from)
-                    const toNode = relation.to ? graphNodeByPath.get(relation.to) : null
-                    if (!fromNode || !toNode) return null
-                    const isSelected = selectedGraphNode && (relation.from === selectedGraphNode.filePath || relation.to === selectedGraphNode.filePath)
-                    return (
-                      <line
-                        key={relation.id}
-                        x1={fromNode.x}
-                        y1={fromNode.y}
-                        x2={toNode.x}
-                        y2={toNode.y}
-                        stroke={isSelected ? '#facc15' : '#64748b'}
-                        strokeOpacity={isSelected ? 0.85 : 0.28}
-                        strokeWidth={isSelected ? 2 : 1}
-                        markerEnd="url(#code-graph-arrow)"
-                      />
-                    )
-                  })}
-                  {graphNodes.map((node) => {
-                    const isSelected = selectedGraphNode?.filePath === node.filePath
-                    return (
-                      <g
-                        key={node.id}
-                        className="cursor-pointer"
-                        onClick={() => setSelectedGraphFilePath(node.filePath)}
-                      >
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={isSelected ? 11 : 8}
-                          fill={node.color}
-                          stroke={isSelected ? '#f8fafc' : '#0f172a'}
-                          strokeWidth={isSelected ? 3 : 1.5}
-                        />
-                        <text
-                          x={node.x + 12}
-                          y={node.y + 4}
-                          fill={isSelected ? '#f8fafc' : '#cbd5e1'}
-                          fontSize="10"
-                        >
-                          {shortFileName(node.filePath)}
-                        </text>
-                      </g>
-                    )
-                  })}
-                </svg>
-              </div>
+              <CodeGraphView
+                files={graphFiles}
+                relations={graphRelations}
+                selectedFilePath={selectedGraphNode?.filePath || null}
+                onSelectFile={setSelectedGraphFilePath}
+              />
               <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
                 <div className="rounded-md border p-3 text-sm">
                   <p className="font-medium">{selectedGraphNode?.filePath || '未选择节点'}</p>
