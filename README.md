@@ -25,7 +25,7 @@
 
 - **框架**: Next.js 16 (App Router)
 - **数据库**: PostgreSQL + Prisma ORM
-- **UI 库**: shadcn/ui + Tailwind CSS
+- **UI 库**: shadcn/ui + Tailwind CSS + @relation-graph/react
 - **AI SDK**: Vercel AI SDK (@ai-sdk/openai, @ai-sdk/anthropic)
 - **HTTP 客户端**: Axios
 
@@ -210,6 +210,40 @@ AI 模型配置（OpenAI/Claude/自定义）
 ### ReviewAgentTrace
 每个机器人独立的 Agent Loop 轨迹，包括每轮工具调用、上下文和 Critic 结果
 
+## Code Graph 架构
+
+Code Graph 是仓库级的代码关系记忆，和单次 ReviewLog 解耦。审查前系统会先确认目标分支的图谱状态，再把可用的文件角色、调用关系和架构摘要作为 Agent Tools 上下文提供给审查机器人。
+
+### 存储结构
+
+- `RepositoryMemorySnapshot` 保存分支级 Memory Wiki 快照，包括架构摘要、索引状态、索引 HEAD 和更新模式。
+- `CodeFileNode` 保存文件节点，包括文件路径、语言、角色、摘要、imports、exports 和 hash。
+- `CodeSymbolNode` 保存文件内符号节点，用于后续扩展到函数、类、接口级定位。
+- `CodeRelationEdge` 保存跨文件关系边，包括 from、to、relationType、confidence 和 evidence。
+- `RepositoryMemoryFact` 保存高置信仓库事实，和 Code Graph 一起组成审查时的长期记忆。
+
+### 更新策略
+
+- 首次没有 Code Graph 时，系统基于目标远端分支 HEAD 全量建立分支级图谱。
+- 普通刷新或审查前刷新时，会读取上次 `lastIndexedCommitSha`，和当前远端 source branch HEAD 做 compare，只重建发生变化的可索引文件。
+- 如果远端分支 HEAD 没变化，直接复用已有快照，不重复扫描仓库。
+- 如果本次变更没有可索引源码文件，也复用已有快照，只更新快照状态说明。
+- 仓库详情页的“重建 Code Graph”按钮会强制全量重建，用于索引逻辑升级、图谱数据异常或需要人工刷新基线的场景。
+
+### Agent Tools 使用方式
+
+审查机器人不会直接假设自己知道项目结构，而是通过上下文工具读取 Code Graph：
+
+- `get_code_graph_status` 检查图谱是否可用、索引模式和 HEAD 状态。
+- `get_architecture_summary` 读取基于 Code Graph 生成的项目架构摘要。
+- `get_file_context` 读取变更文件在图谱中的角色、imports、exports 和摘要。
+- `get_call_graph_neighbors` 读取变更文件附近的跨文件关系。
+- `rebuild_code_graph` 只作为图谱缺失时的系统准备动作。工具观测显示 Code Graph 可用后，机器人才能基于调用链下结论。
+
+### Web 页面展示
+
+仓库详情页会从 `/api/repositories/[id]/memory/graph` 读取数据库中的文件节点和关系边，并使用 `@relation-graph/react` 渲染图谱。页面不手绘 SVG，也不在前端重新发明布局算法；缩放、拖拽、关系线、迷你地图和节点点击交互由开源图谱组件负责。点击节点后，页面展示该文件的角色、语言、摘要和相关关系，方便直接查看 Memory Wiki 背后的图谱数据。
+
 ## 环境变量
 
 创建 `.env` 文件：
@@ -297,6 +331,9 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 - `POST /api/repositories/[id]/bots` - 新增审查机器人
 - `PUT /api/repositories/[id]/bots` - 更新审查机器人
 - `DELETE /api/repositories/[id]/bots?id=xxx` - 删除审查机器人
+- `GET /api/repositories/[id]/memory` - 获取仓库 Memory Wiki 和 Code Graph 元信息
+- `GET /api/repositories/[id]/memory/graph` - 获取 Code Graph 文件节点和关系边
+- `POST /api/repositories/[id]/memory/refresh` - 增量刷新 Memory Wiki，传 `force=true` 时强制全量重建 Code Graph
 
 ### 配置管理
 - `GET /api/settings/gitlab` - 获取 GitLab 账号
