@@ -14,6 +14,7 @@ import type { AIModelConfig, ReviewComment } from "@/lib/types";
 import { normalizeAgentLoopBudget, type AgentLoopBudget } from "@/lib/services/review-budget";
 
 const MEMORY_WRITE_CONFIDENCE = 0.85;
+const ADDITIONAL_AGENT_FINDINGS_THRESHOLD = 3;
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
@@ -253,6 +254,26 @@ function summarizeAdditionalAgentResults(results: AdditionalAgentToolResult[]): 
     .join("；");
 }
 
+function selectRemainingAdditionalAgents(
+  agents: AdditionalReviewAgent[],
+  executedAgentIds: Set<string>,
+): AdditionalReviewAgent[] {
+  return agents.filter((agent) => !executedAgentIds.has(agent.id));
+}
+
+function buildFindingsThresholdTask(findings: Array<ReviewComment & { confidence: number }>): string {
+  const findingLines = findings.slice(0, 12).map((finding, index) => (
+    `${index + 1}. [${finding.severity}] ${finding.filePath}:${finding.lineNumber} ${finding.content}`
+  ));
+
+  return [
+    `主 Agent 已发现 ${findings.length} 条问题或建议，达到辅助 Agent 复核阈值 ${ADDITIONAL_AGENT_FINDINGS_THRESHOLD}。`,
+    "请基于你的专属审查视角复核本次变更，重点判断是否存在主 Agent 漏掉的跨文件、架构、安全、性能、测试或可维护性问题。",
+    "不要重复下面已有问题；只有发现新的可定位、可修复问题才输出 comments。",
+    `【已有问题】\n${findingLines.join("\n")}`,
+  ].join("\n");
+}
+
 export class ReviewAgentLoopService {
   async run(input: AgentLoopInput): Promise<AgentLoopResult> {
     const budget = normalizeAgentLoopBudget(input.budget);
@@ -325,7 +346,7 @@ export class ReviewAgentLoopService {
         });
       }
 
-      const contextSummary = [
+      let contextSummary = [
         context.summary,
         additionalAgentObservation ? `辅助 Agent 工具结果：${additionalAgentObservation}` : "",
       ].filter(Boolean).join("\n");
@@ -352,6 +373,47 @@ export class ReviewAgentLoopService {
         ...parsedReview.commentItems,
       ], budget.maxFindings);
       const newFindings = findings.length - previousCount;
+
+      const shouldRunAdditionalAgentsByFindings = Boolean(
+        findings.length >= ADDITIONAL_AGENT_FINDINGS_THRESHOLD &&
+        (input.availableAdditionalAgents || []).length > 0 &&
+        selectRemainingAdditionalAgents(input.availableAdditionalAgents || [], executedAdditionalAgentIds).length > 0
+      );
+
+      if (shouldRunAdditionalAgentsByFindings) {
+        const thresholdAgents = selectRemainingAdditionalAgents(
+          input.availableAdditionalAgents || [],
+          executedAdditionalAgentIds,
+        );
+        thresholdAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
+        const thresholdTask = buildFindingsThresholdTask(findings);
+        const additionalAgentResults = await this.runAdditionalReviewAgents(
+          input,
+          thresholdAgents,
+          findings,
+          thresholdTask,
+        );
+        const additionalFindings = additionalAgentResults.flatMap((result) => result.findings);
+        findings = dedupeFindings([...findings, ...additionalFindings], budget.maxFindings);
+        additionalAgentObservation = summarizeAdditionalAgentResults(additionalAgentResults);
+        contextSummary = [
+          context.summary,
+          `辅助 Agent 工具结果：${additionalAgentObservation}`,
+        ].filter(Boolean).join("\n");
+        toolCalls.push({
+          tool: "run_additional_review_agents",
+          status: thresholdAgents.length > 0 ? "available" : "unavailable",
+          args: {
+            trigger: "findings_threshold",
+            threshold: ADDITIONAL_AGENT_FINDINGS_THRESHOLD,
+            agents: thresholdAgents.map((agent) => agent.name),
+            task: thresholdTask,
+          },
+          resultCount: additionalFindings.length,
+          observation: additionalAgentObservation,
+        });
+      }
+
       const criticPrompt = buildReviewAgentCriticPrompt({
         findings: findings.map((item) => ({
           filePath: item.filePath,
