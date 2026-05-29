@@ -17,7 +17,7 @@ export function runAgentLoopNode(state: ReviewState): Promise<Partial<ReviewStat
     return Promise.reject(new Error("Review bot run is required before running agent loop"));
   }
 
-  const branch = reviewLog.targetBranch || reviewLog.sourceBranch || "default";
+  const branch = reviewLog.sourceBranch || "default";
   const changedFiles = state.relevantDiffs.map((diff) => diff.new_path);
   const diffs = state.relevantDiffs.map((diff) => ({
     filePath: diff.new_path,

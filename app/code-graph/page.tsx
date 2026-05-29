@@ -425,7 +425,7 @@ export default function CodeGraphPage() {
             </div>
           ) : (
             <p className="rounded-xl border bg-background p-4 text-sm text-muted-foreground">
-              暂无可展示的 Code Graph。先在仓库页为目标分支重建图谱。
+              暂无可展示的 Code Graph。选择左侧仓库分支后点击“生成”，系统会基于该分支当前 HEAD 建图。
             </p>
           )}
         </div>
