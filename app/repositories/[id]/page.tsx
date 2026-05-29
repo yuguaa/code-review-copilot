@@ -166,6 +166,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const [memorySnapshots, setMemorySnapshots] = useState<MemorySnapshot[]>([])
   const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([])
   const [refreshingMemory, setRefreshingMemory] = useState(false)
+  const [rebuildingCodeGraph, setRebuildingCodeGraph] = useState(false)
   const [botDialogOpen, setBotDialogOpen] = useState(false)
   const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm)
 
@@ -513,6 +514,29 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       .finally(() => setRefreshingMemory(false))
   }
 
+  const rebuildCodeGraph = () => {
+    if (!repositoryId) return
+    setRebuildingCodeGraph(true)
+    return fetch(`/api/repositories/${repositoryId}/memory/refresh?force=true`, {
+      method: 'POST',
+    })
+      .then((response) => {
+        if (!response.ok) {
+          return response.json().then((error) => {
+            throw new Error(error.error || '重建 Code Graph 失败')
+          })
+        }
+        return loadMemory()
+      })
+      .then(() => {
+        toast.success('Code Graph 已全量重建')
+      })
+      .catch((error) => {
+        toast.error(toErrorMessage(error, '重建 Code Graph 失败'))
+      })
+      .finally(() => setRebuildingCodeGraph(false))
+  }
+
   // 默认系统 Prompt 模板
   const defaultPrompts = [
     {
@@ -624,16 +648,36 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                 Agent 审查时会读取这里的项目架构记忆和调用链上下文。
               </CardDescription>
             </div>
-            <Button variant="outline" onClick={refreshMemory} disabled={refreshingMemory}>
-              {refreshingMemory ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  刷新中...
-                </>
-              ) : (
-                '刷新 Memory'
-              )}
-            </Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={refreshMemory}
+                disabled={refreshingMemory || rebuildingCodeGraph}
+              >
+                {refreshingMemory ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    刷新中...
+                  </>
+                ) : (
+                  '增量刷新 Memory'
+                )}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={rebuildCodeGraph}
+                disabled={refreshingMemory || rebuildingCodeGraph}
+              >
+                {rebuildingCodeGraph ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    重建中...
+                  </>
+                ) : (
+                  '重建 Code Graph'
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -642,7 +686,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               <div className="flex flex-wrap gap-2 text-xs">
                 <Badge variant="outline">分支：{memorySnapshots[0].branch}</Badge>
                 <Badge variant="outline">状态：{memorySnapshots[0].status}</Badge>
-                <Badge variant="outline">Commit：{memorySnapshots[0].commitSha.slice(0, 8)}</Badge>
+                <Badge variant="outline">图缓存：{memorySnapshots[0].commitSha === '__branch_code_graph__' ? '分支级' : memorySnapshots[0].commitSha.slice(0, 8)}</Badge>
                 <Badge variant="outline">置信度：{memorySnapshots[0].confidence.toFixed(2)}</Badge>
               </div>
               <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">
@@ -665,7 +709,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              暂无 Memory Wiki。点击“刷新 Memory”后，Agent 会基于目标分支最近变更建立项目记忆。
+              暂无 Memory Wiki。点击“重建 Code Graph”后，Agent 会先建立目标分支的项目级结构图。
             </p>
           )}
         </CardContent>

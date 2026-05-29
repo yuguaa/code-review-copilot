@@ -14,6 +14,8 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const url = new URL(request.url);
+    const forceRebuild = url.searchParams.get("force") === "true";
     const repository = await prisma.repository.findUnique({
       where: { id },
       include: { gitLabAccount: true },
@@ -46,6 +48,7 @@ export async function POST(
       branch,
       commitSha,
       diffs,
+      forceRebuild,
     });
     return NextResponse.json({ success: true, snapshot });
   } catch (error) {

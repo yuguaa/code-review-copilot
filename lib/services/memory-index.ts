@@ -89,6 +89,7 @@ export interface MemoryIndexInput {
   branch: string;
   commitSha: string;
   diffs: GitLabDiff[];
+  forceRebuild?: boolean;
 }
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
@@ -573,6 +574,10 @@ export class MemoryIndexService {
   }
 
   private resolveProjectIndex(input: MemoryIndexInput): Promise<ProjectIndex> {
+    if (input.forceRebuild) {
+      return this.buildProjectIndex(input);
+    }
+
     return prisma.repositoryMemorySnapshot.findUnique({
       where: {
         repositoryId_branch_commitSha: {
