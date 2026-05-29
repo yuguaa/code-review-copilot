@@ -1,6 +1,6 @@
 /**
  * @file run-review-bots.ts
- * @description 并发执行仓库配置的多个审查机器人
+ * @description 先执行主审查 Agent，再由主 Agent 决定是否调用辅助 Agent
  */
 
 import type { Prisma } from "@prisma/client";
@@ -23,7 +23,18 @@ type BotRunResult = {
   aiResponsesByFile: Record<string, string>;
   reviewPromptsByFile: Record<string, string>;
   summary?: string;
+  finalPlan?: Record<string, unknown>;
 };
+
+type BotRunSettledResult = PromiseSettledResult<BotRunResult>;
+
+function isFulfilledBotRun(result: BotRunSettledResult): result is PromiseFulfilledResult<BotRunResult> {
+  return result.status === "fulfilled";
+}
+
+function isRejectedBotRun(result: BotRunSettledResult): result is PromiseRejectedResult {
+  return result.status === "rejected";
+}
 
 function generatePatch(diff: GitLabDiff): string {
   return `--- a/${diff.old_path}
@@ -103,6 +114,23 @@ function countsFrom(comments: ReviewComment[]) {
     normal: comments.filter((item) => item.severity === "normal").length,
     suggestion: comments.filter((item) => item.severity === "suggestion").length,
   };
+}
+
+function shouldRunAdditionalAgents(primaryResult: BotRunResult, assistantCount: number): boolean {
+  if (assistantCount <= 0) return false;
+  const plan = primaryResult.finalPlan || {};
+  return plan.shouldUseAdditionalAgents === true;
+}
+
+function additionalAgentReason(primaryResult: BotRunResult): string {
+  const plan = primaryResult.finalPlan || {};
+  if (typeof plan.additionalAgentReason === "string" && plan.additionalAgentReason.trim()) {
+    return plan.additionalAgentReason.trim();
+  }
+  if (plan.shouldUseAdditionalAgents === true) {
+    return "主审查 Agent 判断需要调用辅助 Agent 复核。";
+  }
+  return "主审查 Agent 判断当前审查可由单 Agent 完成。";
 }
 
 function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResult> {
@@ -232,6 +260,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel): Promise<BotRunResu
           [traceKey]: JSON.stringify(agentResult.finalPlan),
         },
         summary: agentResult.critic.reason,
+        finalPlan: agentResult.finalPlan as Record<string, unknown>,
       }));
     }).catch((error) => {
       return prisma.reviewBotRun.update({
@@ -265,16 +294,39 @@ export function runReviewBotsNode(state: ReviewState): Promise<Partial<ReviewSta
       throw new Error("No active review bots configured");
     }
 
-    return Promise.allSettled(bots.map((bot) => runBot(state, bot)))
-      .then((results) => ({ bots, results }));
-  }).then(({ bots, results }) => {
+    const [primaryBot, ...assistantBots] = bots;
+    return runBot(state, primaryBot)
+      .then((primaryResult) => {
+        if (!shouldRunAdditionalAgents(primaryResult, assistantBots.length)) {
+          console.log(`🤖 [ReviewBots] Additional agents skipped: ${additionalAgentReason(primaryResult)}`);
+          return {
+            bots,
+            results: [{ status: "fulfilled", value: primaryResult } satisfies PromiseFulfilledResult<BotRunResult>],
+          };
+        }
+
+        console.log(`🤖 [ReviewBots] Primary agent requested additional agents: ${additionalAgentReason(primaryResult)}`);
+        return Promise.allSettled(assistantBots.map((bot) => runBot(state, bot)))
+          .then((assistantResults) => ({
+            bots,
+            results: [
+              { status: "fulfilled", value: primaryResult } satisfies PromiseFulfilledResult<BotRunResult>,
+              ...assistantResults,
+            ],
+          }));
+      })
+      .catch((primaryError) => ({
+        bots,
+        results: [{ status: "rejected", reason: primaryError } satisfies PromiseRejectedResult],
+      }));
+  }).then(({ bots, results }: { bots: ReviewBotWithModel[]; results: BotRunSettledResult[] }) => {
     const successful = results
-      .filter((result): result is PromiseFulfilledResult<BotRunResult> => result.status === "fulfilled")
+      .filter(isFulfilledBotRun)
       .map((result) => result.value);
 
     if (successful.length === 0) {
       const errors = results
-        .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+        .filter(isRejectedBotRun)
         .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason));
       throw new Error(`All review bots failed: ${errors.join("; ")}`);
     }

@@ -46,6 +46,8 @@ interface AgentPlan {
   reviewStrategy?: string;
   needsMoreContext?: boolean;
   requestedTools?: string[];
+  shouldUseAdditionalAgents?: boolean;
+  additionalAgentReason?: string;
 }
 
 interface AgentCriticResult {
@@ -86,6 +88,8 @@ function safePlan(value: unknown): AgentPlan {
     reviewStrategy: typeof data.reviewStrategy === "string" ? data.reviewStrategy : "file_then_global_critic",
     needsMoreContext: Boolean(data.needsMoreContext),
     requestedTools: Array.isArray(data.requestedTools) ? data.requestedTools.filter((item): item is string => typeof item === "string") : [],
+    shouldUseAdditionalAgents: Boolean(data.shouldUseAdditionalAgents),
+    additionalAgentReason: typeof data.additionalAgentReason === "string" ? data.additionalAgentReason : "",
   };
 }
 
