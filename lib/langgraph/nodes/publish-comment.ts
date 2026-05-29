@@ -260,27 +260,10 @@ function formatSummaryComment(
   lines.push(`- 审查机器人：${botRuns.length} 个`);
 
   lines.push("");
-  lines.push("### 审查机器人结果");
-  if (botRuns.length === 0) {
-    lines.push("- 未记录机器人执行结果。");
-  } else {
-    botRuns.forEach((botRun) => {
-      const botName = botRun.reviewBot?.name || "未知机器人";
-      lines.push(`- **${botName}** / \`${botRun.aiModelName}\`：${formatBotRunStatus(botRun.status)}${botRun.summary ? `，${botRun.summary}` : ""}`);
-    });
-  }
-
-  if (summary) {
-    lines.push("");
-    lines.push("### 变更摘要");
-    lines.push(summary);
-  }
-
-  lines.push("");
   const actionableCount = criticalComments.length + normalComments.length;
   const nitpickCount = suggestionComments.length;
 
-  lines.push("### Review Index");
+  lines.push("### 问题索引");
   lines.push(`Actionable comments posted: **${actionableCount}**`);
   lines.push("");
   if (actionableCount === 0) {
@@ -336,25 +319,20 @@ function formatSummaryComment(
     }
   }
 
+  if (summary) {
+    lines.push("");
+    lines.push("### 技术走查");
+    lines.push(stripSummaryHeading(summary));
+  }
+
   lines.push("");
-  lines.push("### 各机器人原始评价");
+  lines.push("### 审查机器人结果");
   if (botRuns.length === 0) {
-    lines.push("- 暂无机器人原始评价。");
+    lines.push("- 未记录机器人执行结果。");
   } else {
     botRuns.forEach((botRun) => {
       const botName = botRun.reviewBot?.name || "未知机器人";
-      const rawReview = extractBotRawReview(botRun);
-      const criticReason = extractCriticReason(botRun.agentTrace?.criticJson);
-
-      lines.push(`#### ${botName} / ${botRun.aiModelName}`);
-      lines.push("");
-      lines.push(`- 状态：${formatBotRunStatus(botRun.status)}`);
-      if (botRun.summary) lines.push(`- 摘要：${botRun.summary}`);
-      if (criticReason) lines.push(`- Critic：${criticReason}`);
-      lines.push("");
-      lines.push("```text");
-      lines.push(rawReview || "无原始评价内容");
-      lines.push("```");
+      lines.push(`- **${botName}** / \`${botRun.aiModelName}\`：${formatBotRunStatus(botRun.status)}${botRun.summary ? `，${botRun.summary}` : ""}`);
     });
   }
 
@@ -373,9 +351,41 @@ function formatSummaryComment(
   }
 
   lines.push("");
+  lines.push("### 各机器人原始评价");
+  if (botRuns.length === 0) {
+    lines.push("- 暂无机器人原始评价。");
+  } else {
+    botRuns.forEach((botRun) => {
+      const botName = botRun.reviewBot?.name || "未知机器人";
+      const rawReview = extractBotRawReview(botRun);
+      const criticReason = extractCriticReason(botRun.agentTrace?.criticJson);
+
+      lines.push(`<details>`);
+      lines.push(`<summary>${botName} / ${botRun.aiModelName}：${formatBotRunStatus(botRun.status)}</summary>`);
+      lines.push("");
+      lines.push(`- 状态：${formatBotRunStatus(botRun.status)}`);
+      if (botRun.summary) lines.push(`- 摘要：${botRun.summary}`);
+      if (criticReason) lines.push(`- Critic：${criticReason}`);
+      lines.push("");
+      lines.push("```text");
+      lines.push(rawReview || "无原始评价内容");
+      lines.push("```");
+      lines.push("");
+      lines.push(`</details>`);
+    });
+  }
+
+  lines.push("");
   lines.push(`<sub>完成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`);
 
   return lines.join("\n");
+}
+
+function stripSummaryHeading(summary: string): string {
+  return summary
+    .replace(/^###\s*高层总结\s*/m, "")
+    .replace(/^###\s*技术走查\s*/m, "")
+    .trim();
 }
 
 function buildFileRiskRank(comments: ReviewComment[]): Array<{ filePath: string; critical: number; normal: number; suggestion: number }> {
