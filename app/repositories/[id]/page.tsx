@@ -81,6 +81,34 @@ type CodeGraphMemory = {
   topLevelStructure: Array<{ path?: string; files?: number; directories?: number }>
 }
 
+type CodeGraphFile = {
+  id: string
+  filePath: string
+  role: string
+  language: string
+  summary: string
+}
+
+type CodeGraphRelation = {
+  id: string
+  from: string
+  to: string | null
+  relationType: string
+  confidence: number
+  evidence: string
+}
+
+type CodeGraphData = {
+  files: CodeGraphFile[]
+  relations: CodeGraphRelation[]
+}
+
+type PositionedGraphNode = CodeGraphFile & {
+  x: number
+  y: number
+  color: string
+}
+
 type PromptMode = 'extend' | 'replace'
 
 type ReviewBot = {
@@ -165,6 +193,43 @@ const toNonNegativeInteger = (value: unknown, fallback: number) => {
   return Number.isFinite(numberValue) ? Math.max(0, Math.trunc(numberValue)) : fallback
 }
 
+const graphRoleColors: Record<string, string> = {
+  api_route: '#ef4444',
+  page: '#f97316',
+  component: '#06b6d4',
+  service: '#2563eb',
+  workflow_node: '#7c3aed',
+  review_workflow: '#9333ea',
+  data_model: '#16a34a',
+  hook: '#0d9488',
+  script: '#64748b',
+  project_config: '#ca8a04',
+  module: '#475569',
+}
+
+const shortFileName = (filePath: string) => {
+  const parts = filePath.split('/')
+  return parts[parts.length - 1] || filePath
+}
+
+const layoutCodeGraph = (files: CodeGraphFile[]): PositionedGraphNode[] => {
+  const width = 760
+  const height = 360
+  const centerX = width / 2
+  const centerY = height / 2
+  const radiusX = 300
+  const radiusY = 132
+  return files.slice(0, 80).map((file, index, visibleFiles) => {
+    const angle = (Math.PI * 2 * index) / Math.max(visibleFiles.length, 1)
+    return {
+      ...file,
+      x: centerX + Math.cos(angle) * radiusX,
+      y: centerY + Math.sin(angle) * radiusY,
+      color: graphRoleColors[file.role] || graphRoleColors.module,
+    }
+  })
+}
+
 export default function RepositoryDetailPage() { // 仓库详情页组件
   const params = useParams() // 读取路由参数
   const router = useRouter() // 获取路由实例
@@ -180,6 +245,9 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const [memorySnapshots, setMemorySnapshots] = useState<MemorySnapshot[]>([])
   const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([])
   const [codeGraphMemory, setCodeGraphMemory] = useState<CodeGraphMemory | null>(null)
+  const [codeGraphData, setCodeGraphData] = useState<CodeGraphData | null>(null)
+  const [loadingCodeGraph, setLoadingCodeGraph] = useState(false)
+  const [selectedGraphFilePath, setSelectedGraphFilePath] = useState<string | null>(null)
   const [refreshingMemory, setRefreshingMemory] = useState(false)
   const [rebuildingCodeGraph, setRebuildingCodeGraph] = useState(false)
   const [botDialogOpen, setBotDialogOpen] = useState(false)
@@ -266,6 +334,24 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       })
   }, [repositoryId])
 
+  const loadCodeGraph = useCallback(() => {
+    if (!repositoryId) return
+    setLoadingCodeGraph(true)
+    return fetch(`/api/repositories/${repositoryId}/memory/graph`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!data) return
+        const files = Array.isArray(data.files) ? data.files as CodeGraphFile[] : []
+        const relations = Array.isArray(data.relations) ? data.relations as CodeGraphRelation[] : []
+        setCodeGraphData({ files, relations })
+        setSelectedGraphFilePath((current) => current && files.some((file) => file.filePath === current) ? current : files[0]?.filePath || null)
+      })
+      .catch((error) => {
+        console.error('Failed to load code graph:', error)
+      })
+      .finally(() => setLoadingCodeGraph(false))
+  }, [repositoryId])
+
   useEffect(() => { // 监听仓库 ID 变化
     if (!repositoryId) { // 当仓库 ID 不存在
       return // 直接返回避免请求
@@ -275,8 +361,9 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       loadAIModels() // 加载 AI 模型
       loadReviewBots() // 加载审查机器人
       loadMemory() // 加载 Memory Wiki
+      loadCodeGraph() // 加载 Code Graph 图谱
     })
-  }, [loadAIModels, loadMemory, loadRepository, loadReviewBots, repositoryId]) // 依赖仓库 ID
+  }, [loadAIModels, loadCodeGraph, loadMemory, loadRepository, loadReviewBots, repositoryId]) // 依赖仓库 ID
 
   // 保存配置
   const saveConfig = () => {
@@ -519,7 +606,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             throw new Error(error.error || '刷新 Memory Wiki 失败')
           })
         }
-        return loadMemory()
+        return Promise.all([loadMemory(), loadCodeGraph()])
       })
       .then(() => {
         toast.success('Memory Wiki 已刷新')
@@ -542,7 +629,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             throw new Error(error.error || '重建 Code Graph 失败')
           })
         }
-        return loadMemory()
+        return Promise.all([loadMemory(), loadCodeGraph()])
       })
       .then(() => {
         toast.success('Code Graph 已全量重建')
@@ -601,6 +688,15 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
 
   const orderedReviewBots = sortBots(reviewBots)
   const activeReviewBotCount = orderedReviewBots.filter((bot) => bot.isActive).length
+  const graphNodes = layoutCodeGraph(codeGraphData?.files || [])
+  const graphNodeByPath = new Map(graphNodes.map((node) => [node.filePath, node]))
+  const visibleGraphRelations = (codeGraphData?.relations || [])
+    .filter((relation) => relation.to && graphNodeByPath.has(relation.from) && graphNodeByPath.has(relation.to))
+    .slice(0, 160)
+  const selectedGraphNode = selectedGraphFilePath ? graphNodeByPath.get(selectedGraphFilePath) : graphNodes[0]
+  const selectedGraphRelations = selectedGraphNode
+    ? (codeGraphData?.relations || []).filter((relation) => relation.from === selectedGraphNode.filePath || relation.to === selectedGraphNode.filePath).slice(0, 12)
+    : []
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
@@ -768,6 +864,125 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
           ) : (
             <p className="text-sm text-muted-foreground">
               暂无 Memory Wiki。点击“重建 Code Graph”后，Agent 会先建立目标分支的项目级结构图。
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle>Code Graph 图谱</CardTitle>
+              <CardDescription>
+                从数据库中的文件节点和关系边生成，帮助直接查看仓库结构与跨文件依赖。
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={loadCodeGraph} disabled={loadingCodeGraph}>
+              {loadingCodeGraph ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  加载中...
+                </>
+              ) : (
+                '刷新图谱'
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {graphNodes.length > 0 ? (
+            <>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant="outline">节点：{codeGraphData?.files.length || 0}</Badge>
+                <Badge variant="outline">关系：{codeGraphData?.relations.length || 0}</Badge>
+                <Badge variant="outline">当前展示：{graphNodes.length} 节点 / {visibleGraphRelations.length} 边</Badge>
+              </div>
+              <div className="overflow-hidden rounded-lg border bg-slate-950">
+                <svg viewBox="0 0 760 360" role="img" aria-label="Code Graph dependency map" className="h-[360px] w-full">
+                  <defs>
+                    <marker id="code-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                      <path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8" />
+                    </marker>
+                  </defs>
+                  {visibleGraphRelations.map((relation) => {
+                    const fromNode = graphNodeByPath.get(relation.from)
+                    const toNode = relation.to ? graphNodeByPath.get(relation.to) : null
+                    if (!fromNode || !toNode) return null
+                    const isSelected = selectedGraphNode && (relation.from === selectedGraphNode.filePath || relation.to === selectedGraphNode.filePath)
+                    return (
+                      <line
+                        key={relation.id}
+                        x1={fromNode.x}
+                        y1={fromNode.y}
+                        x2={toNode.x}
+                        y2={toNode.y}
+                        stroke={isSelected ? '#facc15' : '#64748b'}
+                        strokeOpacity={isSelected ? 0.85 : 0.28}
+                        strokeWidth={isSelected ? 2 : 1}
+                        markerEnd="url(#code-graph-arrow)"
+                      />
+                    )
+                  })}
+                  {graphNodes.map((node) => {
+                    const isSelected = selectedGraphNode?.filePath === node.filePath
+                    return (
+                      <g
+                        key={node.id}
+                        className="cursor-pointer"
+                        onClick={() => setSelectedGraphFilePath(node.filePath)}
+                      >
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={isSelected ? 11 : 8}
+                          fill={node.color}
+                          stroke={isSelected ? '#f8fafc' : '#0f172a'}
+                          strokeWidth={isSelected ? 3 : 1.5}
+                        />
+                        <text
+                          x={node.x + 12}
+                          y={node.y + 4}
+                          fill={isSelected ? '#f8fafc' : '#cbd5e1'}
+                          fontSize="10"
+                        >
+                          {shortFileName(node.filePath)}
+                        </text>
+                      </g>
+                    )
+                  })}
+                </svg>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-md border p-3 text-sm">
+                  <p className="font-medium">{selectedGraphNode?.filePath || '未选择节点'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedGraphNode ? `${selectedGraphNode.role} / ${selectedGraphNode.language}` : '点击图谱节点查看详情'}
+                  </p>
+                  {selectedGraphNode?.summary && (
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{selectedGraphNode.summary}</p>
+                  )}
+                </div>
+                <div className="rounded-md border p-3 text-xs">
+                  <p className="mb-2 font-medium">相关关系</p>
+                  {selectedGraphRelations.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedGraphRelations.map((relation) => (
+                        <div key={relation.id} className="rounded bg-muted p-2">
+                          <Badge variant="secondary" className="mr-2">{relation.relationType}</Badge>
+                          <span>{relation.from} → {relation.to || 'external'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">暂无关联边</p>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              暂无可视化图谱。请先点击“重建 Code Graph”，建立仓库级结构图。
             </p>
           )}
         </CardContent>
