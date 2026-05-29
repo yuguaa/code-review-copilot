@@ -3,7 +3,8 @@
  * @description 工作流节点：刷新仓库 Memory Wiki 和轻量 Code Graph
  */
 
-import { memoryIndexService } from "@/lib/services/memory-index";
+import { getCodeGraphCacheCommitSha, memoryIndexService } from "@/lib/services/memory-index";
+import { prisma } from "@/lib/prisma";
 import type { ReviewState } from "../types";
 
 export function refreshMemoryNode(state: ReviewState): Promise<Partial<ReviewState>> {
@@ -30,19 +31,38 @@ export function refreshMemoryNode(state: ReviewState): Promise<Partial<ReviewSta
   return state.gitlabService.getBranch(gitLabProjectId, branch)
     .then((remoteBranch) => {
       const branchHeadSha = remoteBranch.commit.id;
-      const loadGraphDiffs = branchHeadSha === reviewLog.commitSha
-        ? Promise.resolve(state.relevantDiffs)
-        : state.gitlabService!.getCommitDiff(gitLabProjectId, branchHeadSha);
+      const graphCacheCommitSha = getCodeGraphCacheCommitSha();
 
-      return loadGraphDiffs.then((graphDiffs) => memoryIndexService.refreshRepositoryMemory({
-        repositoryId: reviewLog.repositoryId,
-        gitLabProjectId,
-        gitlabService: state.gitlabService!,
-        branch,
-        commitSha: branchHeadSha,
-        diffs: graphDiffs,
-        sourceCommitSha: reviewLog.commitSha,
-      }));
+      return prisma.repositoryMemorySnapshot.findUnique({
+        where: {
+          repositoryId_branch_commitSha: {
+            repositoryId: reviewLog.repositoryId,
+            branch,
+            commitSha: graphCacheCommitSha,
+          },
+        },
+      }).then((snapshot) => {
+        const memoryJson = snapshot?.memoryJson && typeof snapshot.memoryJson === "object" && !Array.isArray(snapshot.memoryJson)
+          ? snapshot.memoryJson as Record<string, unknown>
+          : {};
+        const previousHeadSha = typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null;
+        const loadGraphDiffs = previousHeadSha && previousHeadSha !== branchHeadSha
+          ? state.gitlabService!.compareCommits(gitLabProjectId, previousHeadSha, branchHeadSha).then((result) => result.diffs)
+          : branchHeadSha === reviewLog.commitSha
+            ? Promise.resolve(state.relevantDiffs)
+            : state.gitlabService!.getCommitDiff(gitLabProjectId, branchHeadSha);
+
+        return loadGraphDiffs.then((graphDiffs) => memoryIndexService.refreshRepositoryMemory({
+          repositoryId: reviewLog.repositoryId,
+          gitLabProjectId,
+          gitlabService: state.gitlabService!,
+          branch,
+          commitSha: branchHeadSha,
+          diffs: graphDiffs,
+          sourceCommitSha: reviewLog.commitSha,
+          previousIndexedCommitSha: previousHeadSha,
+        }));
+      });
     })
     .then((snapshot) => ({
       memorySnapshotId: snapshot.id,

@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "@/lib/services/gitlab";
-import { memoryIndexService } from "@/lib/services/memory-index";
+import { getCodeGraphCacheCommitSha, memoryIndexService } from "@/lib/services/memory-index";
 
 export async function POST(
   request: NextRequest,
@@ -36,7 +36,26 @@ export async function POST(
     if (!commitSha) {
       throw new Error(`Cannot resolve latest commit for branch ${branch}`);
     }
-    const diffs = await gitlabService.getCommitDiff(repository.gitLabProjectId, commitSha);
+
+    const graphCacheCommitSha = getCodeGraphCacheCommitSha();
+    const existingSnapshot = await prisma.repositoryMemorySnapshot.findUnique({
+      where: {
+        repositoryId_branch_commitSha: {
+          repositoryId: repository.id,
+          branch,
+          commitSha: graphCacheCommitSha,
+        },
+      },
+    });
+    const memoryJson = existingSnapshot?.memoryJson && typeof existingSnapshot.memoryJson === "object" && !Array.isArray(existingSnapshot.memoryJson)
+      ? existingSnapshot.memoryJson as Record<string, unknown>
+      : {};
+    const previousIndexedCommitSha = typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null;
+    const diffs = forceRebuild
+      ? []
+      : previousIndexedCommitSha && previousIndexedCommitSha !== commitSha
+        ? (await gitlabService.compareCommits(repository.gitLabProjectId, previousIndexedCommitSha, commitSha)).diffs
+        : await gitlabService.getCommitDiff(repository.gitLabProjectId, commitSha);
     const snapshot = await memoryIndexService.refreshRepositoryMemory({
       repositoryId: repository.id,
       gitLabProjectId: repository.gitLabProjectId,
@@ -45,6 +64,7 @@ export async function POST(
       commitSha,
       diffs,
       forceRebuild,
+      previousIndexedCommitSha,
     });
     return NextResponse.json({ success: true, snapshot });
   } catch (error) {

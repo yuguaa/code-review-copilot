@@ -91,6 +91,7 @@ export interface MemoryIndexInput {
   diffs: GitLabDiff[];
   forceRebuild?: boolean;
   sourceCommitSha?: string;
+  previousIndexedCommitSha?: string | null;
 }
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
@@ -560,6 +561,7 @@ export class MemoryIndexService {
             branch: input.branch,
             graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
             lastIndexedCommitSha: input.commitSha,
+            previousIndexedCommitSha: input.previousIndexedCommitSha || null,
             sourceCommitSha: input.sourceCommitSha || input.commitSha,
             updateMode: "full",
             indexedFiles: files.length,
@@ -674,6 +676,7 @@ export class MemoryIndexService {
             branch: input.branch,
             graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
             lastIndexedCommitSha: input.commitSha,
+            previousIndexedCommitSha: input.previousIndexedCommitSha || null,
             sourceCommitSha: input.sourceCommitSha || input.commitSha,
             updateMode: "incremental",
             changedFiles,
@@ -706,6 +709,7 @@ export class MemoryIndexService {
         branch: input.branch,
         graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
         lastIndexedCommitSha: input.commitSha,
+        previousIndexedCommitSha: input.previousIndexedCommitSha || null,
         sourceCommitSha: input.sourceCommitSha || input.commitSha,
         updateMode: "reuse",
         reuseReason: reason,
@@ -802,3 +806,7 @@ export class MemoryIndexService {
 }
 
 export const memoryIndexService = new MemoryIndexService();
+
+export function getCodeGraphCacheCommitSha() {
+  return GRAPH_CACHE_COMMIT_SHA;
+}

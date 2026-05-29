@@ -220,6 +220,7 @@ export function buildReviewAgentPlanPrompt(params: {
     updateMode: string | null
     indexedFiles: number
     lastIndexedCommitSha: string | null
+    previousIndexedCommitSha: string | null
     sourceCommitSha: string | null
     recommendation: string
   }
@@ -237,7 +238,7 @@ export function buildReviewAgentPlanPrompt(params: {
     params.title ? `【变更主题】${params.title}` : '',
     params.description ? `【描述】${params.description}` : '',
     `【变更文件】\n${params.changedFiles.map((file) => `- ${file}`).join('\n')}`,
-    params.codeGraph ? `【Code Graph 状态】\n可用：${params.codeGraph.available ? '是' : '否'}\n状态：${params.codeGraph.status}\n模式：${params.codeGraph.updateMode || 'unknown'}\n索引文件：${params.codeGraph.indexedFiles}\n索引 HEAD：${params.codeGraph.lastIndexedCommitSha || 'unknown'}\n审查事件提交：${params.codeGraph.sourceCommitSha || 'unknown'}\n建议：${params.codeGraph.recommendation}` : '',
+    params.codeGraph ? `【Code Graph 状态】\n可用：${params.codeGraph.available ? '是' : '否'}\n状态：${params.codeGraph.status}\n模式：${params.codeGraph.updateMode || 'unknown'}\n索引文件：${params.codeGraph.indexedFiles}\n上次 HEAD：${params.codeGraph.previousIndexedCommitSha || 'none'}\n索引 HEAD：${params.codeGraph.lastIndexedCommitSha || 'unknown'}\n审查事件提交：${params.codeGraph.sourceCommitSha || 'unknown'}\n建议：${params.codeGraph.recommendation}` : '',
     params.toolCatalog?.length ? `【Agent Tools】\n${params.toolCatalog.map((tool) => `- ${tool.name} [${tool.status}]：${tool.description}；观测：${tool.observation}`).join('\n')}` : '',
     `【项目架构摘要】\n${params.architectureSummary || '暂无'}`,
     `【Memory Facts】\n${params.memoryFacts.length ? params.memoryFacts.map((fact) => `- ${fact}`).join('\n') : '无'}`,

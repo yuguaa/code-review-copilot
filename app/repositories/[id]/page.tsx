@@ -67,6 +67,20 @@ type MemoryFact = {
   confidence: number
 }
 
+type CodeGraphMemory = {
+  fileCount: number
+  relationCount: number
+  symbolCount: number
+  updateMode: string | null
+  reuseReason: string | null
+  lastIndexedCommitSha: string | null
+  previousIndexedCommitSha: string | null
+  sourceCommitSha: string | null
+  changedFiles: string[]
+  changedFileRoles: Array<{ filePath?: string; role?: string }>
+  topLevelStructure: Array<{ path?: string; files?: number; directories?: number }>
+}
+
 type PromptMode = 'extend' | 'replace'
 
 type ReviewBot = {
@@ -165,6 +179,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const [savingBot, setSavingBot] = useState(false)
   const [memorySnapshots, setMemorySnapshots] = useState<MemorySnapshot[]>([])
   const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([])
+  const [codeGraphMemory, setCodeGraphMemory] = useState<CodeGraphMemory | null>(null)
   const [refreshingMemory, setRefreshingMemory] = useState(false)
   const [rebuildingCodeGraph, setRebuildingCodeGraph] = useState(false)
   const [botDialogOpen, setBotDialogOpen] = useState(false)
@@ -244,6 +259,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         if (!data) return
         setMemorySnapshots(Array.isArray(data.snapshots) ? data.snapshots : [])
         setMemoryFacts(Array.isArray(data.facts) ? data.facts : [])
+        setCodeGraphMemory(data.codeGraph || null)
       })
       .catch((error) => {
         console.error('Failed to load memory wiki:', error)
@@ -688,7 +704,49 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                 <Badge variant="outline">状态：{memorySnapshots[0].status}</Badge>
                 <Badge variant="outline">图缓存：{memorySnapshots[0].commitSha === '__branch_code_graph__' ? '分支级' : memorySnapshots[0].commitSha.slice(0, 8)}</Badge>
                 <Badge variant="outline">置信度：{memorySnapshots[0].confidence.toFixed(2)}</Badge>
+                {codeGraphMemory?.updateMode && (
+                  <Badge variant="outline">更新模式：{codeGraphMemory.updateMode}</Badge>
+                )}
               </div>
+              {codeGraphMemory && (
+                <div className="grid gap-3 rounded-md border p-3 text-xs sm:grid-cols-3">
+                  <div>
+                    <p className="text-muted-foreground">图规模</p>
+                    <p className="font-medium">
+                      {codeGraphMemory.fileCount} 文件 / {codeGraphMemory.relationCount} 关系 / {codeGraphMemory.symbolCount} 符号
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">索引 HEAD</p>
+                    <p className="font-medium">{codeGraphMemory.lastIndexedCommitSha?.slice(0, 8) || '未知'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">上次 HEAD / 触发提交</p>
+                    <p className="font-medium">
+                      {codeGraphMemory.previousIndexedCommitSha?.slice(0, 8) || '无'} / {codeGraphMemory.sourceCommitSha?.slice(0, 8) || '未知'}
+                    </p>
+                  </div>
+                  {codeGraphMemory.reuseReason && (
+                    <div className="sm:col-span-3">
+                      <p className="text-muted-foreground">复用原因</p>
+                      <p className="font-medium">{codeGraphMemory.reuseReason}</p>
+                    </div>
+                  )}
+                  {codeGraphMemory.changedFiles.length > 0 && (
+                    <div className="sm:col-span-3">
+                      <p className="mb-1 text-muted-foreground">本次图更新文件</p>
+                      <div className="flex flex-wrap gap-1">
+                        {codeGraphMemory.changedFiles.slice(0, 12).map((filePath) => (
+                          <Badge key={filePath} variant="secondary">{filePath}</Badge>
+                        ))}
+                        {codeGraphMemory.changedFiles.length > 12 && (
+                          <Badge variant="outline">+{codeGraphMemory.changedFiles.length - 12}</Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">
                 {memorySnapshots[0].architectureSummary}
               </div>
