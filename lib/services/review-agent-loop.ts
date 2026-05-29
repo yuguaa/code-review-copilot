@@ -151,43 +151,30 @@ function dedupeFindings(
 }
 
 function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: string[], maxDepth: number) {
-  return [
-    {
-      tool: "get_architecture_summary",
-      args: {},
-      resultCount: context.architectureSummary ? 1 : 0,
-    },
-    {
-      tool: "get_memory_snapshot",
-      args: {},
-      resultCount: context.architectureSummary ? 1 : 0,
-    },
-    {
-      tool: "search_memory_facts",
-      args: {},
-      resultCount: context.memoryFacts.length,
-    },
-    {
-      tool: "get_changed_files",
-      args: {},
-      resultCount: requestedFiles.length,
-    },
-    {
-      tool: "get_file_context",
-      args: { files: requestedFiles },
-      resultCount: context.fileContexts.length,
-    },
-    {
-      tool: "get_call_graph_neighbors",
-      args: { maxDepth },
-      resultCount: context.graphNeighbors.length,
-    },
-    {
-      tool: "get_related_review_history",
-      args: { files: requestedFiles },
-      resultCount: context.relatedReviews.length,
-    },
-  ];
+  const resultCounts: Record<string, number> = {
+    get_code_graph_status: context.codeGraph.available ? 1 : 0,
+    get_architecture_summary: context.architectureSummary ? 1 : 0,
+    get_memory_snapshot: context.architectureSummary ? 1 : 0,
+    search_memory_facts: context.memoryFacts.length,
+    get_changed_files: requestedFiles.length,
+    get_file_context: context.fileContexts.length,
+    get_call_graph_neighbors: context.graphNeighbors.length,
+    get_related_review_history: context.relatedReviews.length,
+    rebuild_code_graph: context.codeGraph.available ? 0 : 1,
+  };
+  const argsByTool: Record<string, Record<string, unknown>> = {
+    get_changed_files: { files: requestedFiles },
+    get_file_context: { files: requestedFiles },
+    get_call_graph_neighbors: { maxDepth },
+  };
+
+  return context.tools.map((tool) => ({
+    tool: tool.name,
+    status: tool.status,
+    args: argsByTool[tool.name] || {},
+    resultCount: resultCounts[tool.name] ?? 0,
+    observation: tool.observation,
+  }));
 }
 
 export class ReviewAgentLoopService {
@@ -219,6 +206,8 @@ export class ReviewAgentLoopService {
         changedFiles: input.changedFiles,
         architectureSummary: context.architectureSummary,
         memoryFacts: context.memoryFacts.map((fact) => fact.content),
+        toolCatalog: context.tools,
+        codeGraph: context.codeGraph,
         contextSummary: context.summary,
         existingFindingsCount: findings.length,
         remainingIterations,

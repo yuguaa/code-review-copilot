@@ -11,6 +11,23 @@ type GraphRelation = Prisma.CodeRelationEdgeGetPayload<{
 }>;
 
 export interface RetrievedAgentContext {
+  codeGraph: {
+    available: boolean;
+    status: string;
+    graphCommitSha: string;
+    lastIndexedCommitSha: string | null;
+    lastIndexedAt: string | null;
+    updateMode: string | null;
+    indexedFiles: number;
+    changedFilesIndexed: number;
+    recommendation: string;
+  };
+  tools: Array<{
+    name: string;
+    status: "available" | "unavailable";
+    description: string;
+    observation: string;
+  }>;
   architectureSummary: string;
   memoryFacts: Array<{
     id: string;
@@ -119,8 +136,33 @@ export class ContextRetrieverService {
           confidence: edge.confidence,
         }));
 
+        const memoryJson = snapshot?.memoryJson && typeof snapshot.memoryJson === "object" && !Array.isArray(snapshot.memoryJson)
+          ? snapshot.memoryJson as Record<string, unknown>
+          : {};
+        const codeGraph = {
+          available: Boolean(snapshot && fileNodes.length > 0),
+          status: snapshot?.status || "missing",
+          graphCommitSha: snapshot?.commitSha || GRAPH_CACHE_COMMIT_SHA,
+          lastIndexedCommitSha: typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null,
+          lastIndexedAt: snapshot?.lastIndexedAt?.toISOString() || null,
+          updateMode: typeof memoryJson.updateMode === "string" ? memoryJson.updateMode : null,
+          indexedFiles: typeof memoryJson.indexedFiles === "number" ? memoryJson.indexedFiles : 0,
+          changedFilesIndexed: fileContexts.length,
+          recommendation: snapshot
+            ? "Code Graph 已可用，优先使用 get_call_graph_neighbors 和 get_file_context 做跨文件审查。"
+            : "Code Graph 不存在，系统应先执行 GitLab Code Graph 索引器全量重建，再进行深度跨文件审查。",
+        };
+        const tools = this.buildToolCatalog({
+          codeGraphAvailable: codeGraph.available,
+          memoryFactsCount: facts.length,
+          fileContextCount: fileContexts.length,
+          graphNeighborCount: graphNeighbors.length,
+          relatedReviewCount: relatedReviews.length,
+        });
         const architectureSummary = snapshot?.architectureSummary || "当前仓库尚无可用架构摘要。";
         const summary = [
+          `Code Graph：${codeGraph.available ? `可用，模式=${codeGraph.updateMode || "unknown"}，索引文件=${codeGraph.indexedFiles}` : "不可用，需要先重建 Code Graph"}`,
+          `Agent Tools：${tools.map((tool) => `${tool.name}(${tool.status})`).join("，")}`,
           `架构摘要：${architectureSummary}`,
           fileContexts.length
             ? `相关文件：${fileContexts.map((item) => `${item.filePath}(${item.role})`).join("，")}`
@@ -134,6 +176,8 @@ export class ContextRetrieverService {
         ].join("\n");
 
         return {
+          codeGraph,
+          tools,
           architectureSummary,
           memoryFacts: facts.map((fact) => ({
             id: fact.id,
@@ -155,6 +199,59 @@ export class ContextRetrieverService {
         };
       });
     });
+  }
+
+  private buildToolCatalog(params: {
+    codeGraphAvailable: boolean;
+    memoryFactsCount: number;
+    fileContextCount: number;
+    graphNeighborCount: number;
+    relatedReviewCount: number;
+  }): RetrievedAgentContext["tools"] {
+    return [
+      {
+        name: "get_code_graph_status",
+        status: "available",
+        description: "检查当前分支 Code Graph 是否存在、索引模式和更新时间。",
+        observation: params.codeGraphAvailable ? "Code Graph 已存在。" : "Code Graph 缺失，需要强制重建。",
+      },
+      {
+        name: "get_architecture_summary",
+        status: params.codeGraphAvailable ? "available" : "unavailable",
+        description: "读取基于 Code Graph 的项目架构摘要。",
+        observation: params.codeGraphAvailable ? "可用于判断模块边界和入口。" : "缺少 Code Graph，无法提供可靠架构摘要。",
+      },
+      {
+        name: "get_file_context",
+        status: params.fileContextCount > 0 ? "available" : "unavailable",
+        description: "读取变更文件在 Code Graph 中的角色、imports、exports。",
+        observation: params.fileContextCount > 0 ? `命中 ${params.fileContextCount} 个文件上下文。` : "变更文件未命中图节点。",
+      },
+      {
+        name: "get_call_graph_neighbors",
+        status: params.graphNeighborCount > 0 ? "available" : "unavailable",
+        description: "读取变更文件的图邻居关系，用于跨文件影响分析。",
+        observation: params.graphNeighborCount > 0 ? `命中 ${params.graphNeighborCount} 条关系。` : "暂无可用图邻居。",
+      },
+      {
+        name: "search_memory_facts",
+        status: params.memoryFactsCount > 0 ? "available" : "unavailable",
+        description: "检索历史审查写入的高置信 Memory Facts。",
+        observation: params.memoryFactsCount > 0 ? `命中 ${params.memoryFactsCount} 条记忆事实。` : "暂无高置信记忆事实。",
+      },
+      {
+        name: "get_related_review_history",
+        status: params.relatedReviewCount > 0 ? "available" : "unavailable",
+        description: "读取相关文件历史审查问题。",
+        observation: params.relatedReviewCount > 0 ? `命中 ${params.relatedReviewCount} 条历史审查。` : "暂无相关历史审查。",
+      },
+      {
+        name: "rebuild_code_graph",
+        status: params.codeGraphAvailable ? "unavailable" : "available",
+        description: "当 Code Graph 缺失时，请求系统执行 GitLab Code Graph 索引器全量重建。",
+        observation: params.codeGraphAvailable ? "当前无需重建。" : "应先执行 /memory/refresh?force=true 重建 Code Graph，再做深度跨文件审查。",
+      },
+    ];
   }
 
   private getGraphRelations(params: {
