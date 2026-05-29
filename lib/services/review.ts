@@ -9,9 +9,18 @@
 
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "./gitlab";
-import { createReviewWorkflow } from "@/lib/langgraph";
-import type { ReviewState } from "@/lib/langgraph/types";
-import { isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
+import { aggregateResultsStep } from "@/lib/review/steps/aggregate-results";
+import { fetchDiffStep } from "@/lib/review/steps/fetch-diff";
+import { generateSummaryStep } from "@/lib/review/steps/generate-summary";
+import { publishCommentStep } from "@/lib/review/steps/publish-comment";
+import { refreshMemoryStep } from "@/lib/review/steps/refresh-memory";
+import { runReviewBotsStep } from "@/lib/review/steps/run-review-bots";
+import { createInitialReviewState, type ReviewState } from "@/lib/review/types";
+import { assertStateReviewNotCancelled, isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
+
+function mergeState(state: ReviewState, patch: Partial<ReviewState>): ReviewState {
+  return { ...state, ...patch };
+}
 
 /**
  * 代码审查服务类
@@ -57,24 +66,44 @@ export class ReviewService {
       reviewLog.repository.gitLabAccount.accessToken,
     );
 
-    // 3. 初始化审查工作流状态
-    const initialState: Partial<ReviewState> = {
+    // 3. 初始化审查状态
+    let state = createInitialReviewState({
       reviewLogId,
       gitlabService,
-    };
+    });
 
-    // 4. 运行工作流
+    // 4. 按固定链路执行，下一步由状态直接 if/else 决定。
     try {
-      const workflow = createReviewWorkflow();
+      console.log(`🚀 [ReviewService] Running review steps`);
 
-      console.log(`🚀 [ReviewService] Invoking review workflow`);
-      const result = await workflow.invoke(initialState);
+      state = mergeState(state, await fetchDiffStep(state));
+
+      if (!state.error) {
+        await assertStateReviewNotCancelled(state);
+        state = mergeState(state, await refreshMemoryStep(state));
+      }
+
+      if (!state.error) {
+        await assertStateReviewNotCancelled(state);
+        state = mergeState(state, await generateSummaryStep(state));
+      }
+
+      if (!state.error && state.relevantDiffs.length > 0) {
+        await assertStateReviewNotCancelled(state);
+        state = mergeState(state, await runReviewBotsStep(state));
+      }
+
+      await assertStateReviewNotCancelled(state);
+      state = mergeState(state, await aggregateResultsStep(state));
+
+      await assertStateReviewNotCancelled(state);
+      const result = mergeState(state, await publishCommentStep(state));
       
       if (result.error) {
         throw new Error(result.error);
       }
 
-      console.log(`✅ [ReviewService] Workflow completed successfully`);
+      console.log(`✅ [ReviewService] Review completed successfully`);
       return {
         success: true,
         totalComments: result.statistics.total,

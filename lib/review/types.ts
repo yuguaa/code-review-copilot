@@ -1,6 +1,6 @@
 /**
  * @file types.ts
- * @description 代码审查工作流类型定义
+ * @description 代码审查状态类型定义
  */
 
 import type { ReviewLog } from "@prisma/client";
@@ -111,7 +111,7 @@ export interface RepositoryConfig {
   customPromptMode?: "extend" | "replace";
 }
 
-/** 代码审查工作流状态 */
+/** 代码审查执行状态 */
 export interface ReviewState {
   reviewLogId: string;
   reviewBotRunId: string | null;

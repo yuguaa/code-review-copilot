@@ -261,7 +261,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
   });
 }
 
-export function runReviewBotsNode(state: ReviewState): Promise<Partial<ReviewState>> {
+export function runReviewBotsStep(state: ReviewState): Promise<Partial<ReviewState>> {
   const reviewLog = state.reviewLog;
   if (!reviewLog) {
     return Promise.reject(new Error("Review log is required before running review bots"));

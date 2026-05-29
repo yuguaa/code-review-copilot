@@ -1,8 +1,8 @@
 /**
  * @file fetch-diff.ts
- * @description 工作流节点：获取 GitLab Diff
+ * @description 审查步骤：获取 GitLab Diff
  *
- * 此节点负责：
+ * 此步骤负责：
  * 1. 从数据库获取 ReviewLog 信息
  * 2. 根据 MR/Commit 类型调用 GitLab API 获取 diff
  * 3. 过滤并准备待审查的文件列表
@@ -13,10 +13,10 @@ import type { ReviewState } from "../types";
 import type { GitLabDiff, GitLabMergeRequest } from "@/lib/types";
 
 /**
- * 获取 GitLab Diff 节点
+ * 获取 GitLab Diff
  */
-export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log(`🔍 [FetchDiffNode] Starting review for log: ${state.reviewLogId}`);
+export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewState>> {
+  console.log(`🔍 [FetchDiffStep] Starting review for log: ${state.reviewLogId}`);
 
   const reviewLog = await prisma.reviewLog.findUnique({
     where: { id: state.reviewLogId },
@@ -30,16 +30,16 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
   });
 
   if (!reviewLog) {
-    console.error(`❌ [FetchDiffNode] Review log not found: ${state.reviewLogId}`);
+    console.error(`❌ [FetchDiffStep] Review log not found: ${state.reviewLogId}`);
     return {
       error: "Review log not found",
       completed: true,
     };
   }
 
-  console.log(`📋 [FetchDiffNode] Review: ${reviewLog.title}`);
+  console.log(`📋 [FetchDiffStep] Review: ${reviewLog.title}`);
   console.log(
-    `📂 [FetchDiffNode] Branch: ${reviewLog.sourceBranch} → ${reviewLog.targetBranch || "N/A"}`,
+    `📂 [FetchDiffStep] Branch: ${reviewLog.sourceBranch} → ${reviewLog.targetBranch || "N/A"}`,
   );
 
   // 更新状态为 pending
@@ -47,7 +47,7 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
     where: { id: state.reviewLogId },
     data: { status: "pending" },
   });
-  console.log(`🔄 [FetchDiffNode] Status updated to: pending`);
+  console.log(`🔄 [FetchDiffStep] Status updated to: pending`);
 
   const gitlabService = state.gitlabService;
   if (!gitlabService) {
@@ -65,7 +65,7 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
 
   if (isPushEvent) {
     console.log(
-      `📌 [FetchDiffNode] Processing Push event for commit: ${reviewLog.commitSha}`,
+      `📌 [FetchDiffStep] Processing Push event for commit: ${reviewLog.commitSha}`,
     );
     diffs = await gitlabService.getCommitDiff(
       reviewLog.repository.gitLabProjectId,
@@ -101,16 +101,16 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
           reviewScope = "incremental";
           incrementalBaseSha = previousCompletedReview.commitSha;
           diffs = compareResult.diffs;
-          console.log(`📌 [FetchDiffNode] Incremental review enabled: ${incrementalBaseSha} -> ${reviewLog.commitSha}, files=${diffs.length}`);
+          console.log(`📌 [FetchDiffStep] Incremental review enabled: ${incrementalBaseSha} -> ${reviewLog.commitSha}, files=${diffs.length}`);
         }
       } catch (error) {
-        console.warn(`⚠️ [FetchDiffNode] Incremental compare failed, fallback to full MR changes`, error);
+        console.warn(`⚠️ [FetchDiffStep] Incremental compare failed, fallback to full MR changes`, error);
       }
     }
 
     // 回退全量：没有可用增量基线或增量为空时，审查 MR 全量变更
     if (diffs.length === 0) {
-      console.log(`📌 [FetchDiffNode] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
+      console.log(`📌 [FetchDiffStep] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
       diffs = await gitlabService.getMergeRequestChanges(
         reviewLog.repository.gitLabProjectId,
         reviewLog.mergeRequestIid,
@@ -118,19 +118,19 @@ export async function fetchDiffNode(state: ReviewState): Promise<Partial<ReviewS
     }
 
     if (!diffs || diffs.length === 0) {
-      console.log(`⏭️ [FetchDiffNode] No changes found in MR`);
+      console.log(`⏭️ [FetchDiffStep] No changes found in MR`);
       return {
         error: "No changes found in merge request",
         completed: true,
       };
     }
 
-    console.log(`📌 [FetchDiffNode] Found ${diffs.length} files with changes in MR`);
+    console.log(`📌 [FetchDiffStep] Found ${diffs.length} files with changes in MR`);
   }
 
   const relevantDiffs = diffs.filter((diff) => !diff.deleted_file);
 
-  console.log(`📁 [FetchDiffNode] Total files changed: ${relevantDiffs.length}`);
+  console.log(`📁 [FetchDiffStep] Total files changed: ${relevantDiffs.length}`);
 
   // 更新文件总数
   await prisma.reviewLog.update({

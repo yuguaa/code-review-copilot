@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { ReviewState } from "@/lib/langgraph/types";
+import type { ReviewState } from "@/lib/review/types";
 
 export const REVIEW_CANCELLED_STATUS = "cancelled";
 

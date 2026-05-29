@@ -1,8 +1,8 @@
 /**
  * @file publish-comment.ts
- * @description 工作流节点：发布评论
+ * @description 审查步骤：发布评论
  *
- * 此节点负责：
+ * 此步骤负责：
  * 1. 遍历收集到的严重问题
  * 2. 调用 GitLab API 发布评论（MR 或 Commit）
  * 3. 记录发布结果
@@ -26,14 +26,14 @@ type BotRunForSummary = {
 };
 
 /**
- * 发布评论节点
+ * 发布评论
  */
-export async function publishCommentNode(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log(`💬 [PublishCommentNode] Publishing comments to GitLab`);
+export async function publishCommentStep(state: ReviewState): Promise<Partial<ReviewState>> {
+  console.log(`💬 [PublishCommentStep] Publishing comments to GitLab`);
 
   const gitlabService = state.gitlabService;
   if (!gitlabService) {
-    console.error(`❌ [PublishCommentNode] GitLab service not initialized`);
+    console.error(`❌ [PublishCommentStep] GitLab service not initialized`);
     return {};
   }
 
@@ -109,15 +109,15 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
               where: { id: state.reviewLogId },
               data: { gitlabNoteId: resolvedNoteId },
             });
-            console.log(`📝 [PublishCommentNode] Resolved placeholder commit noteId=${resolvedNoteId} by marker=${pushMarker}`);
+            console.log(`📝 [PublishCommentStep] Resolved placeholder commit noteId=${resolvedNoteId} by marker=${pushMarker}`);
           }
         } catch (error) {
-          console.warn(`⚠️ [PublishCommentNode] Failed to resolve commit placeholder by marker`, error);
+          console.warn(`⚠️ [PublishCommentStep] Failed to resolve commit placeholder by marker`, error);
         }
       }
 
       if (resolvedNoteId) {
-        console.log(`📝 [PublishCommentNode] Updating placeholder commit comment: noteId=${resolvedNoteId || reviewLog.gitlabNoteId}`);
+        console.log(`📝 [PublishCommentStep] Updating placeholder commit comment: noteId=${resolvedNoteId || reviewLog.gitlabNoteId}`);
         try {
           result = await gitlabService.updateCommitComment(
             projectId,
@@ -126,7 +126,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
             summaryContent
           ) as { id: number | string };
         } catch (updateError) {
-          console.warn(`⚠️ [PublishCommentNode] Failed to update commit placeholder(noteId=${resolvedNoteId}), fallback to create summary`, updateError);
+          console.warn(`⚠️ [PublishCommentStep] Failed to update commit placeholder(noteId=${resolvedNoteId}), fallback to create summary`, updateError);
           result = await gitlabService.createCommitComment(
             projectId,
             reviewLog.commitSha,
@@ -134,7 +134,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
           ) as { id: number | string };
         }
       } else {
-        console.warn(`⚠️ [PublishCommentNode] Unable to resolve placeholder by marker=${pushMarker}, fallback to create summary`);
+        console.warn(`⚠️ [PublishCommentStep] Unable to resolve placeholder by marker=${pushMarker}, fallback to create summary`);
         result = await gitlabService.createCommitComment(
           projectId,
           reviewLog.commitSha,
@@ -159,15 +159,15 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
               where: { id: state.reviewLogId },
               data: { gitlabNoteId: resolvedNoteId },
             });
-            console.log(`📝 [PublishCommentNode] Resolved placeholder noteId=${resolvedNoteId} from discussion`);
+            console.log(`📝 [PublishCommentStep] Resolved placeholder noteId=${resolvedNoteId} from discussion`);
           }
         } catch (error) {
-          console.warn(`⚠️ [PublishCommentNode] Failed to resolve placeholder noteId, fallback to create new summary`, error);
+          console.warn(`⚠️ [PublishCommentStep] Failed to resolve placeholder noteId, fallback to create new summary`, error);
         }
       }
 
       if (resolvedDiscussionId && resolvedNoteId) {
-        console.log(`📝 [PublishCommentNode] Updating placeholder MR comment: discussionId=${resolvedDiscussionId}`);
+        console.log(`📝 [PublishCommentStep] Updating placeholder MR comment: discussionId=${resolvedDiscussionId}`);
         result = await gitlabService.updateMergeRequestComment(
           projectId,
           reviewLog.mergeRequestIid,
@@ -176,7 +176,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
           summaryContent
         ) as { id: number | string };
       } else {
-        console.log(`📝 [PublishCommentNode] Posting new MR comment`);
+        console.log(`📝 [PublishCommentStep] Posting new MR comment`);
         result = await gitlabService.createMergeRequestComment(
           projectId,
           reviewLog.mergeRequestIid,
@@ -196,7 +196,7 @@ export async function publishCommentNode(state: ReviewState): Promise<Partial<Re
 
   } catch (error) {
     console.error(
-      `❌ [PublishCommentNode] Failed to publish summary comment`,
+      `❌ [PublishCommentStep] Failed to publish summary comment`,
       error
     );
   }

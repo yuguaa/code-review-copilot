@@ -1,8 +1,8 @@
 /**
  * @file review-file.ts
- * @description 工作流节点：审查单个文件
+ * @description 审查步骤：审查单个文件
  *
- * 此节点负责：
+ * 此步骤负责：
  * 1. 获取当前待审查的文件
  * 2. 构建 prompt（支持自定义提示词 extend/replace 模式）
  * 3. 调用 AI 进行审查
@@ -26,12 +26,12 @@ ${diff.diff}`;
 }
 
 /**
- * 审查单个文件节点
+ * 审查单个文件
  */
-export async function reviewFileNode(state: ReviewState): Promise<Partial<ReviewState>> {
+export async function reviewFileStep(state: ReviewState): Promise<Partial<ReviewState>> {
   const index = state.currentFileIndex;
-  console.log(`🔍 [ReviewFileNode] Starting with currentFileIndex=${index}, relevantDiffs.length=${state.relevantDiffs.length}`);
-  console.log(`🔍 [ReviewFileNode] Full state:`, JSON.stringify({
+  console.log(`🔍 [ReviewFileStep] Starting with currentFileIndex=${index}, relevantDiffs.length=${state.relevantDiffs.length}`);
+  console.log(`🔍 [ReviewFileStep] Full state:`, JSON.stringify({
     currentFileIndex: state.currentFileIndex,
     relevantDiffsLength: state.relevantDiffs.length,
     fileResultsLength: state.fileResults?.length || 0,
@@ -39,7 +39,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
   }));
 
   if (index >= state.relevantDiffs.length) {
-    console.log(`⏭️ [ReviewFileNode] No more files to review (index=${index} >= length=${state.relevantDiffs.length})`);
+    console.log(`⏭️ [ReviewFileStep] No more files to review (index=${index} >= length=${state.relevantDiffs.length})`);
     // 返回一个标志，表示已经完成
     return {
       completed: true,
@@ -49,7 +49,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
   const diff = state.relevantDiffs[index];
   const filePath = diff.new_path;
 
-  console.log(`📄 [ReviewFileNode] Reviewing file [${index + 1}/${state.relevantDiffs.length}]: ${filePath}`);
+  console.log(`📄 [ReviewFileStep] Reviewing file [${index + 1}/${state.relevantDiffs.length}]: ${filePath}`);
 
   const patch = generatePatch(diff);
 
@@ -88,7 +88,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
   );
 
   // 调试：打印 AI 响应
-  console.log(`\n🤖 [ReviewFileNode] AI Response for ${filePath}:`);
+  console.log(`\n🤖 [ReviewFileStep] AI Response for ${filePath}:`);
   console.log("┌─────────────────────────────────────────────┐");
   aiResponse.split("\n").forEach((line) => console.log(`│ ${line}`));
   console.log("└─────────────────────────────────────────────┘");
@@ -160,7 +160,7 @@ export async function reviewFileNode(state: ReviewState): Promise<Partial<Review
     criticalComments,
     reviewComments,
   };
-  console.log(`✅ [ReviewFileNode] Completed review for ${filePath}, NOT returning currentFileIndex`);
+  console.log(`✅ [ReviewFileStep] Completed review for ${filePath}, NOT returning currentFileIndex`);
   return result;
 }
 

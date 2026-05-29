@@ -1,8 +1,8 @@
 /**
  * @file generate-summary.ts
- * @description 工作流节点：生成变更摘要
+ * @description 审查步骤：生成变更摘要
  *
- * 此节点负责：
+ * 此步骤负责：
  * 1. 收集所有 diff 内容
  * 2. 调用 AI 生成变更摘要
  * 3. 将摘要保存到数据库和状态中
@@ -38,10 +38,10 @@ function toModelConfig(model: {
 }
 
 /**
- * 生成变更摘要节点
+ * 生成变更摘要
  */
-export async function generateSummaryNode(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log(`📝 [GenerateSummaryNode] Generating change summary`);
+export async function generateSummaryStep(state: ReviewState): Promise<Partial<ReviewState>> {
+  console.log(`📝 [GenerateSummaryStep] Generating change summary`);
 
   const reviewLog = state.reviewLog;
   if (!reviewLog) {
@@ -78,7 +78,7 @@ export async function generateSummaryNode(state: ReviewState): Promise<Partial<R
     SUMMARY_SYSTEM_PROMPT,
   );
 
-  console.log(`✅ [GenerateSummaryNode] Summary generated: ${summary.slice(0, 100)}...`);
+  console.log(`✅ [GenerateSummaryStep] Summary generated: ${summary.slice(0, 100)}...`);
 
   // 保存摘要到数据库
   await prisma.reviewLog.update({

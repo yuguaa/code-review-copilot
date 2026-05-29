@@ -1,13 +1,13 @@
 /**
  * @file run-agent-loop.ts
- * @description 工作流节点：执行单 Agent 有界循环
+ * @description 审查步骤：执行单 Agent 有界循环
  */
 
 import { reviewAgentLoopService } from "@/lib/services/review-agent-loop";
 import type { ReviewState } from "../types";
 
-export function runAgentLoopNode(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log("🔁 [RunAgentLoopNode] Running bounded review agent loop");
+export function runAgentLoopStep(state: ReviewState): Promise<Partial<ReviewState>> {
+  console.log("🔁 [RunAgentLoopStep] Running bounded review agent loop");
 
   const reviewLog = state.reviewLog;
   if (!reviewLog) {
@@ -47,7 +47,7 @@ ${diff.diff}`,
     reviewComments: result.agentFindings,
     criticalComments: result.agentFindings.filter((item) => item.severity === "critical"),
   })).catch((error) => {
-    console.error("❌ [RunAgentLoopNode] Agent loop failed", error);
+    console.error("❌ [RunAgentLoopStep] Agent loop failed", error);
     throw error;
   });
 }

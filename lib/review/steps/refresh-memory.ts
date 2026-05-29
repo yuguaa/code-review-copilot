@@ -1,14 +1,14 @@
 /**
  * @file refresh-memory.ts
- * @description 工作流节点：刷新仓库 Code Graph
+ * @description 审查步骤：刷新当前提交 Code Graph
  */
 
 import { memoryIndexService } from "@/lib/services/memory-index";
 import { prisma } from "@/lib/prisma";
 import type { ReviewState } from "../types";
 
-export function refreshMemoryNode(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log("🧠 [RefreshMemoryNode] Refreshing repository memory");
+export function refreshMemoryStep(state: ReviewState): Promise<Partial<ReviewState>> {
+  console.log("🧠 [RefreshMemoryStep] Refreshing repository memory");
 
   const reviewLog = state.reviewLog;
   if (!reviewLog) {
@@ -72,7 +72,7 @@ export function refreshMemoryNode(state: ReviewState): Promise<Partial<ReviewSta
       memorySnapshotId: snapshot.id,
       architectureSummary: snapshot.architectureSummary,
     })).catch((error) => {
-    console.error("❌ [RefreshMemoryNode] Failed to refresh memory", error);
+    console.error("❌ [RefreshMemoryStep] Failed to refresh memory", error);
     throw error;
   });
 }

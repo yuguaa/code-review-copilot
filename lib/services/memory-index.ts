@@ -128,9 +128,9 @@ function detectRole(filePath: string): string {
   if (filePath.includes("/controller/") && filePath.endsWith(".java")) return "api_route";
   if (filePath.includes("/controllers/") && filePath.endsWith(".java")) return "api_route";
   if (filePath.startsWith("app/") && filePath.endsWith("page.tsx")) return "page";
-  if (filePath.includes("/agents/") && filePath.endsWith(".py")) return "workflow_node";
-  if (filePath.includes("lib/langgraph/nodes/")) return "workflow_node";
-  if (filePath.includes("lib/langgraph/")) return "review_workflow";
+  if (filePath.includes("/agents/") && filePath.endsWith(".py")) return "agent_step";
+  if (filePath.includes("lib/review/steps/")) return "review_step";
+  if (filePath.startsWith("lib/review/")) return "review_core";
   if (filePath.includes("lib/services/")) return "service";
   if ((filePath.includes("/services/") || filePath.endsWith("/service.py")) && filePath.endsWith(".py")) return "service";
   if ((filePath.includes("/service/") || filePath.includes("/services/")) && filePath.endsWith(".java")) return "service";
@@ -153,7 +153,7 @@ function isIndexableFile(filePath: string): boolean {
 }
 
 function isLikelyEntrypoint(file: IndexedFile): boolean {
-  return ["api_route", "page", "workflow_node", "review_workflow", "data_model", "project_config"].includes(file.role);
+  return ["api_route", "page", "agent_step", "review_step", "review_core", "data_model", "project_config"].includes(file.role);
 }
 
 function shouldPrioritize(filePath: string): boolean {
@@ -736,7 +736,7 @@ export class MemoryIndexService {
           return acc;
         }, {});
         const risks = files
-          .filter((file) => file.isChanged && ["api_route", "service", "review_workflow", "workflow_node", "data_model"].includes(file.role))
+          .filter((file) => file.isChanged && ["api_route", "service", "review_core", "review_step", "agent_step", "data_model"].includes(file.role))
           .map((file) => ({
             filePath: file.filePath,
             risk: `${file.role} 变更可能影响审查主链路、数据一致性或外部接口契约`,
@@ -870,7 +870,7 @@ export class MemoryIndexService {
         const existingLayers = this.parseJsonRecord(snapshot.layersJson);
         const layers = this.mergeLayers(existingLayers, changedIndexedFiles);
         const risks = changedIndexedFiles
-          .filter((file) => ["api_route", "service", "review_workflow", "workflow_node", "data_model"].includes(file.role))
+          .filter((file) => ["api_route", "service", "review_core", "review_step", "agent_step", "data_model"].includes(file.role))
           .map((file) => ({
             filePath: file.filePath,
             risk: `${file.role} 变更可能影响审查主链路、数据一致性或外部接口契约`,

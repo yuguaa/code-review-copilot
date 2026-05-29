@@ -1,8 +1,8 @@
 /**
  * @file aggregate-results.ts
- * @description 工作流节点：汇总审查结果
+ * @description 审查步骤：汇总审查结果
  *
- * 此节点负责：
+ * 此步骤负责：
  * 1. 统计所有文件的审查结果
  * 2. 汇总问题数量
  * 3. 保存审查结果到数据库
@@ -34,10 +34,10 @@ function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
 }
 
 /**
- * 汇总审查结果节点
+ * 汇总审查结果
  */
-export async function aggregateResultsNode(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log(`📊 [AggregateResultsNode] Aggregating review results`);
+export async function aggregateResultsStep(state: ReviewState): Promise<Partial<ReviewState>> {
+  console.log(`📊 [AggregateResultsStep] Aggregating review results`);
 
   // 最终发布口径以去重后的评论为准，confidence 只用于内部排序和去重。
   const commentsToSave = normalizeComments(
@@ -56,7 +56,7 @@ export async function aggregateResultsNode(state: ReviewState): Promise<Partial<
     total: totalCritical + totalNormal + totalSuggestion,
   };
 
-  console.log(`📊 [AggregateResultsNode] Review complete:`);
+  console.log(`📊 [AggregateResultsStep] Review complete:`);
   console.log(`   🔴 Critical: ${statistics.critical}`);
   console.log(`   ⚠️ Normal: ${statistics.normal}`);
   console.log(`   💡 Suggestions: ${statistics.suggestion}`);

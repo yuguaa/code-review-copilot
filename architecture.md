@@ -31,7 +31,7 @@ ReviewTriggerService
 ReviewService
         │
         ▼
-Review Workflow
+Review Steps
         │
         ├── fetch_diff
         ├── refresh_memory
@@ -46,17 +46,17 @@ PostgreSQL + GitLab 评论
 
 `ReviewTriggerService` 是统一入口。手动触发、Webhook 和 Retry 都走这里，避免重复创建审查日志和重复实现触发逻辑。
 
-当前工作流代码位于 `lib/langgraph/`，目录名保留了历史命名，但运行时已经不再依赖 LangGraph 或 LangChain。审查工作流是普通顺序执行器，Agent Loop 内部使用 `while (true)` 加预算条件控制。
+审查主链路直接写在 `ReviewService.performReview` 中，通过 `if/else` 根据状态进入下一步；步骤函数位于 `lib/review/steps/`，共享类型位于 `lib/review/types.ts`。运行时不依赖任何图编排库或额外编排层，Agent Loop 内部使用 `while (true)` 加预算条件控制。
 
-## 审查工作流
+## 审查步骤
 
 ### fetch_diff
 
-读取 MR 或 Commit diff，只获取一次并写入工作流状态。Webhook、手动审查和 Retry 共用同一条 diff 获取链路。
+读取 MR 或 Commit diff，只获取一次并写入审查状态。Webhook、手动审查和 Retry 共用同一条 diff 获取链路。
 
 ### refresh_memory
 
-审查前刷新目标分支的 Memory Wiki。命中相同 `repositoryId + branch + commitSha` 的 ready snapshot 时复用；否则基于当前 diff 和仓库信息生成新的 Memory Snapshot、Code File Node、Symbol Node 和 Relation Edge。
+审查前为当前审查提交刷新 Code Graph。命中相同 `repositoryId + sourceBranch + commitSha` 的 ready snapshot 时复用；否则基于当前 diff 和仓库信息生成新的 Snapshot、Code File Node、Symbol Node 和 Relation Edge。
 
 刷新失败时，`ReviewLog` 标记为 failed。这里不做裸 diff 降级，因为裸 diff 审查会改变用户对 Agent 审查能力的预期，也会让结果不可追溯。
 
@@ -204,7 +204,7 @@ Code Graph 第一版重点支持 TypeScript 和 TSX，主要识别：
 - import / export
 - 函数和组件
 - API route
-- 工作流节点
+- 审查步骤
 - service、page、component、data model 等文件角色
 
 上下文检索从变更文件对应的 `CodeFileNode` 出发，按 `maxCallGraphDepth` 逐跳查找上下游关系。`maxCallGraphDepth = 0` 时不查调用图，只返回 Memory、文件摘要和历史审查。
