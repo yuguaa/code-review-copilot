@@ -437,7 +437,17 @@ function extractBotRawReview(botRun: BotRunForSummary): string {
     return typeof review?.response === "string" && review.response.trim();
   });
   const review = lastIteration?.review as { response?: string } | undefined;
-  return review?.response ? compactText(review.response, 3500) : "";
+  if (!review?.response || isEmptyStructuredReview(review.response)) return "";
+  return compactText(review.response, 3500);
+}
+
+function isEmptyStructuredReview(response: string): boolean {
+  try {
+    const parsed = JSON.parse(response) as { comments?: unknown };
+    return Array.isArray(parsed.comments) && parsed.comments.length === 0;
+  } catch {
+    return false;
+  }
 }
 
 function extractCriticReason(criticJson: unknown): string {
