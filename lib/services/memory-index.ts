@@ -9,7 +9,6 @@ const MAX_INDEXED_FILES = 260;
 const MAX_FILE_BYTES = 180_000;
 const MAX_RELATION_EDGES = 2_000;
 const FILE_FETCH_CONCURRENCY = 8;
-const GRAPH_CACHE_COMMIT_SHA = "__branch_code_graph__";
 
 const INDEXABLE_EXTENSIONS = new Set([
   ".ts",
@@ -71,6 +70,8 @@ type ProjectIndex = {
   layers: Record<string, string[]>;
   risks: Array<{ filePath: string; risk: string }>;
   memory: Record<string, unknown>;
+  baseSnapshotBranch?: string | null;
+  baseSnapshotCommitSha?: string | null;
 };
 
 type MemoryGitLabService = {
@@ -94,6 +95,8 @@ export interface MemoryIndexInput {
   forceRebuild?: boolean;
   sourceCommitSha?: string;
   previousIndexedCommitSha?: string | null;
+  baseBranch?: string | null;
+  baseCommitSha?: string | null;
 }
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
@@ -422,12 +425,15 @@ export class MemoryIndexService {
   refreshRepositoryMemory(input: MemoryIndexInput) {
     return this.resolveProjectIndex(input).then((projectIndex) => {
       return prisma.$transaction((tx) => {
+        const targetCommitSha = input.commitSha;
+        const baseSnapshotBranch = projectIndex.baseSnapshotBranch || input.branch;
+        const baseSnapshotCommitSha = projectIndex.baseSnapshotCommitSha;
         return tx.repositoryMemorySnapshot.upsert({
           where: {
             repositoryId_branch_commitSha: {
               repositoryId: input.repositoryId,
               branch: input.branch,
-              commitSha: GRAPH_CACHE_COMMIT_SHA,
+              commitSha: targetCommitSha,
             },
           },
           update: {
@@ -451,7 +457,7 @@ export class MemoryIndexService {
           create: {
             repositoryId: input.repositoryId,
             branch: input.branch,
-            commitSha: GRAPH_CACHE_COMMIT_SHA,
+            commitSha: targetCommitSha,
             status: "ready",
             architectureSummary: projectIndex.architectureSummary,
             memoryJson: toJsonInput(projectIndex.memory),
@@ -468,12 +474,81 @@ export class MemoryIndexService {
             confidence: 0.82,
           },
         }).then((snapshot) => {
+          if (!baseSnapshotCommitSha && projectIndex.files.length === 0) {
+            return snapshot;
+          }
+
+          const baseNodesPromise = baseSnapshotCommitSha
+            ? tx.codeFileNode.findMany({
+              where: {
+                repositoryId: input.repositoryId,
+                branch: baseSnapshotBranch,
+                commitSha: baseSnapshotCommitSha,
+                filePath: { notIn: projectIndex.files.map((file) => file.filePath) },
+              },
+              include: {
+                symbols: true,
+                outgoingRelations: true,
+              },
+            })
+            : Promise.resolve([]);
+
+          return baseNodesPromise.then((baseNodes) => Promise.all(baseNodes.map((baseNode) => {
+            return tx.codeFileNode.upsert({
+              where: {
+                repositoryId_branch_commitSha_filePath: {
+                  repositoryId: input.repositoryId,
+                  branch: input.branch,
+                  commitSha: targetCommitSha,
+                  filePath: baseNode.filePath,
+                },
+              },
+              update: {
+                contentHash: baseNode.contentHash,
+                language: baseNode.language,
+                role: baseNode.role,
+                summary: baseNode.summary,
+                importsJson: baseNode.importsJson ?? undefined,
+                exportsJson: baseNode.exportsJson ?? undefined,
+                lastIndexedAt: new Date(),
+              },
+              create: {
+                repositoryId: input.repositoryId,
+                branch: input.branch,
+                commitSha: targetCommitSha,
+                filePath: baseNode.filePath,
+                contentHash: baseNode.contentHash,
+                language: baseNode.language,
+                role: baseNode.role,
+                summary: baseNode.summary,
+                importsJson: baseNode.importsJson ?? undefined,
+                exportsJson: baseNode.exportsJson ?? undefined,
+              },
+            }).then((copiedNode) => {
+              return tx.codeSymbolNode.deleteMany({ where: { fileNodeId: copiedNode.id } })
+                .then(() => baseNode.symbols.length > 0
+                  ? tx.codeSymbolNode.createMany({
+                    data: baseNode.symbols.map((symbol) => ({
+                      fileNodeId: copiedNode.id,
+                      name: symbol.name,
+                      kind: symbol.kind,
+                      signature: symbol.signature,
+                      startLine: symbol.startLine,
+                      endLine: symbol.endLine,
+                      summary: symbol.summary,
+                    })),
+                  })
+                  : null)
+                .then(() => copiedNode);
+            });
+          }))).then(() => snapshot);
+        }).then((snapshot) => {
           return Promise.all(projectIndex.files.map((file) => tx.codeFileNode.upsert({
               where: {
                 repositoryId_branch_commitSha_filePath: {
                   repositoryId: input.repositoryId,
                   branch: input.branch,
-                  commitSha: GRAPH_CACHE_COMMIT_SHA,
+                  commitSha: targetCommitSha,
                   filePath: file.filePath,
                 },
               },
@@ -489,7 +564,7 @@ export class MemoryIndexService {
               create: {
                 repositoryId: input.repositoryId,
                 branch: input.branch,
-                commitSha: GRAPH_CACHE_COMMIT_SHA,
+                commitSha: targetCommitSha,
                 filePath: file.filePath,
                 contentHash: file.contentHash,
                 language: file.language,
@@ -499,14 +574,54 @@ export class MemoryIndexService {
                 exportsJson: toJsonInput(file.exports),
               },
             }))).then((fileNodes) => {
-              const fileNodeByPath = new Map(fileNodes.map((node) => [node.filePath, node]));
+              return tx.codeFileNode.findMany({
+                where: {
+                  repositoryId: input.repositoryId,
+                  branch: input.branch,
+                  commitSha: targetCommitSha,
+                },
+              }).then((allFileNodes) => {
+              const fileNodeByPath = new Map(allFileNodes.map((node) => [node.filePath, node]));
+              const copyBaseRelations = () => baseSnapshotCommitSha
+                ? tx.codeRelationEdge.findMany({
+                  where: {
+                    repositoryId: input.repositoryId,
+                    branch: baseSnapshotBranch,
+                    fromFileNode: { commitSha: baseSnapshotCommitSha },
+                  },
+                  include: {
+                    fromFileNode: { select: { filePath: true } },
+                    toFileNode: { select: { filePath: true } },
+                  },
+                }).then((baseRelations) => {
+                  const changedFilePaths = new Set(projectIndex.files.map((file) => file.filePath));
+                  const relationData = baseRelations.flatMap((relation) => {
+                    if (changedFilePaths.has(relation.fromFileNode.filePath)) return [];
+                    if (relation.toFileNode?.filePath && changedFilePaths.has(relation.toFileNode.filePath)) return [];
+                    const fromNode = fileNodeByPath.get(relation.fromFileNode.filePath);
+                    const toNode = relation.toFileNode?.filePath ? fileNodeByPath.get(relation.toFileNode.filePath) : null;
+                    if (!fromNode) return [];
+                    return [{
+                      repositoryId: input.repositoryId,
+                      branch: input.branch,
+                      fromFileNodeId: fromNode.id,
+                      toFileNodeId: toNode?.id,
+                      relationType: relation.relationType,
+                      confidence: relation.confidence,
+                      evidence: relation.evidence,
+                    }];
+                  }).slice(0, MAX_RELATION_EDGES);
+                  return relationData.length > 0 ? tx.codeRelationEdge.createMany({ data: relationData }) : null;
+                })
+                : Promise.resolve(null);
+
               return tx.codeRelationEdge.deleteMany({
                 where: {
                   repositoryId: input.repositoryId,
                   branch: input.branch,
-                  fromFileNodeId: { in: fileNodes.map((node) => node.id) },
+                  fromFileNode: { commitSha: targetCommitSha },
                 },
-              }).then(() => Promise.all(fileNodes.map((fileNode, index) => {
+              }).then(() => copyBaseRelations()).then(() => Promise.all(fileNodes.map((fileNode, index) => {
                 const file = projectIndex.files[index];
                 return tx.codeSymbolNode.deleteMany({ where: { fileNodeId: fileNode.id } })
                   .then(() => {
@@ -567,6 +682,7 @@ export class MemoryIndexService {
 
                 if (relationData.length === 0) return snapshot;
                 return tx.codeRelationEdge.createMany({ data: relationData }).then(() => snapshot);
+              });
               });
             });
         });
@@ -643,10 +759,12 @@ export class MemoryIndexService {
           memory: {
             source: "gitlab_repository_tree",
             branch: input.branch,
-            graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
+            graphCommitSha: input.commitSha,
             lastIndexedCommitSha: input.commitSha,
             previousIndexedCommitSha: input.previousIndexedCommitSha || null,
             sourceCommitSha: input.sourceCommitSha || input.commitSha,
+            baseBranch: input.baseBranch || input.branch,
+            baseCommitSha: input.baseCommitSha || null,
             updateMode: "full",
             indexedFiles: files.length,
             totalIndexableFiles: indexableFiles.length,
@@ -666,29 +784,48 @@ export class MemoryIndexService {
       return this.buildProjectIndex(input);
     }
 
-    return prisma.repositoryMemorySnapshot.findUnique({
-      where: {
-        repositoryId_branch_commitSha: {
+    const loadBaseSnapshot = () => {
+      const baseBranch = input.baseBranch || input.branch;
+      const baseCommitSha = input.baseCommitSha || undefined;
+      return prisma.repositoryMemorySnapshot.findFirst({
+        where: {
           repositoryId: input.repositoryId,
-          branch: input.branch,
-          commitSha: GRAPH_CACHE_COMMIT_SHA,
+          branch: baseBranch,
+          status: "ready",
+          ...(baseCommitSha ? { commitSha: baseCommitSha } : {}),
         },
+        orderBy: { lastIndexedAt: "desc" },
+      });
+    };
+
+    return prisma.repositoryMemorySnapshot.findFirst({
+      where: {
+        repositoryId: input.repositoryId,
+        branch: input.branch,
+        commitSha: input.commitSha,
+        status: "ready",
       },
-    }).then((snapshot) => {
-      if (!snapshot || snapshot.status !== "ready") {
-        return this.buildProjectIndex(input);
+    }).then<ProjectIndex>((targetSnapshot) => {
+      if (targetSnapshot) {
+        return this.buildNoopProjectIndex(input, targetSnapshot, "branch_head_unchanged");
       }
-      const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
-      if (previousMemory.lastIndexedCommitSha === input.commitSha) {
-        return this.buildNoopProjectIndex(input, snapshot, "branch_head_unchanged");
-      }
-      return this.buildIncrementalProjectIndex(input, snapshot);
+
+      return loadBaseSnapshot().then((snapshot) => {
+        if (!snapshot || snapshot.status !== "ready") {
+          return this.buildProjectIndex(input);
+        }
+        const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
+        if (previousMemory.lastIndexedCommitSha === input.commitSha) {
+          return this.buildNoopProjectIndex(input, snapshot, "branch_head_unchanged");
+        }
+        return this.buildIncrementalProjectIndex(input, snapshot);
+      });
     });
   }
 
   private buildIncrementalProjectIndex(
     input: MemoryIndexInput,
-    snapshot: { memoryJson: Prisma.JsonValue; layersJson: Prisma.JsonValue; entrypointsJson: Prisma.JsonValue },
+    snapshot: { branch: string; commitSha: string; memoryJson: Prisma.JsonValue; layersJson: Prisma.JsonValue; entrypointsJson: Prisma.JsonValue },
   ): Promise<ProjectIndex> {
     const changedFiles = input.diffs
       .filter((diff) => !diff.deleted_file && isIndexableFile(diff.new_path))
@@ -713,8 +850,8 @@ export class MemoryIndexService {
       return prisma.codeFileNode.findMany({
         where: {
           repositoryId: input.repositoryId,
-          branch: input.branch,
-          commitSha: GRAPH_CACHE_COMMIT_SHA,
+          branch: snapshot.branch,
+          commitSha: snapshot.commitSha,
         },
         select: { filePath: true },
       }).then((existingNodes) => {
@@ -758,15 +895,19 @@ export class MemoryIndexService {
             ...previousMemory,
             source: "gitlab_repository_tree",
             branch: input.branch,
-            graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
+            graphCommitSha: input.commitSha,
             lastIndexedCommitSha: input.commitSha,
             previousIndexedCommitSha: input.previousIndexedCommitSha || null,
             sourceCommitSha: input.sourceCommitSha || input.commitSha,
+            baseBranch: snapshot.branch,
+            baseCommitSha: snapshot.commitSha,
             updateMode: "incremental",
             changedFiles,
             changedFileRoles: changedIndexedFiles.map((file) => ({ filePath: file.filePath, role: file.role })),
             indexedFiles: existingNodes.length,
           },
+          baseSnapshotBranch: snapshot.branch,
+          baseSnapshotCommitSha: snapshot.commitSha,
         };
       });
     });
@@ -774,7 +915,7 @@ export class MemoryIndexService {
 
   private buildNoopProjectIndex(
     input: MemoryIndexInput,
-    snapshot: { memoryJson: Prisma.JsonValue; layersJson: Prisma.JsonValue; entrypointsJson: Prisma.JsonValue },
+    snapshot: { branch: string; commitSha: string; memoryJson: Prisma.JsonValue; layersJson: Prisma.JsonValue; entrypointsJson: Prisma.JsonValue },
     reason: "branch_head_unchanged" | "no_indexable_changes",
   ): ProjectIndex {
     const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
@@ -791,15 +932,19 @@ export class MemoryIndexService {
         ...previousMemory,
         source: "gitlab_repository_tree",
         branch: input.branch,
-        graphCommitSha: GRAPH_CACHE_COMMIT_SHA,
+        graphCommitSha: input.commitSha,
         lastIndexedCommitSha: input.commitSha,
         previousIndexedCommitSha: input.previousIndexedCommitSha || null,
         sourceCommitSha: input.sourceCommitSha || input.commitSha,
+        baseBranch: snapshot.branch,
+        baseCommitSha: snapshot.commitSha,
         updateMode: "reuse",
         reuseReason: reason,
         changedFiles: [],
         changedFileRoles: [],
       },
+      baseSnapshotBranch: snapshot.branch === input.branch && snapshot.commitSha === input.commitSha ? null : snapshot.branch,
+      baseSnapshotCommitSha: snapshot.branch === input.branch && snapshot.commitSha === input.commitSha ? null : snapshot.commitSha,
     };
   }
 
@@ -890,7 +1035,3 @@ export class MemoryIndexService {
 }
 
 export const memoryIndexService = new MemoryIndexService();
-
-export function getCodeGraphCacheCommitSha() {
-  return GRAPH_CACHE_COMMIT_SHA;
-}

@@ -4,9 +4,24 @@
  */
 
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
-const GRAPH_CACHE_COMMIT_SHA = "__branch_code_graph__";
+type CodeGraphPayload = {
+  snapshot: Prisma.RepositoryMemorySnapshotGetPayload<object> | null;
+  files: Prisma.CodeFileNodeGetPayload<object>[];
+  symbols: Prisma.CodeSymbolNodeGetPayload<{
+    include: { fileNode: { select: { filePath: true } } };
+  }>[];
+  relations: Prisma.CodeRelationEdgeGetPayload<{
+    include: {
+      fromFileNode: { select: { filePath: true } };
+      toFileNode: { select: { filePath: true } };
+      fromSymbolNode: { select: { name: true; kind: true } };
+      toSymbolNode: { select: { name: true; kind: true } };
+    };
+  }>[];
+};
 
 export function GET(
   request: Request,
@@ -15,14 +30,25 @@ export function GET(
   return params.then(({ id }) => {
     const url = new URL(request.url);
     const branch = url.searchParams.get("branch") || undefined;
+    const commitSha = url.searchParams.get("commitSha") || undefined;
     return prisma.repositoryMemorySnapshot.findFirst({
-      where: { repositoryId: id, ...(branch ? { branch } : {}), status: "ready" },
+      where: { repositoryId: id, ...(branch ? { branch } : {}), ...(commitSha ? { commitSha } : {}), status: "ready" },
       orderBy: { lastIndexedAt: "desc" },
-    }).then((snapshot) => prisma.codeFileNode.findMany({
+    }).then<CodeGraphPayload>((snapshot) => {
+      if (!snapshot) {
+        return {
+          snapshot: null,
+          files: [],
+          symbols: [],
+          relations: [],
+        };
+      }
+
+      return prisma.codeFileNode.findMany({
         where: {
           repositoryId: id,
-          ...(branch ? { branch } : {}),
-          commitSha: snapshot?.commitSha || GRAPH_CACHE_COMMIT_SHA,
+          branch: snapshot.branch,
+          commitSha: snapshot.commitSha,
         },
         orderBy: { filePath: "asc" },
         take: 200,
@@ -36,8 +62,8 @@ export function GET(
         const relationsPromise = prisma.codeRelationEdge.findMany({
           where: {
             repositoryId: id,
-            ...(branch ? { branch } : {}),
-            fromFileNode: { commitSha: snapshot?.commitSha || GRAPH_CACHE_COMMIT_SHA },
+            branch: snapshot.branch,
+            fromFileNode: { commitSha: snapshot.commitSha },
           },
           include: {
             fromFileNode: { select: { filePath: true } },
@@ -50,7 +76,8 @@ export function GET(
 
         return Promise.all([symbolsPromise, relationsPromise])
           .then(([symbols, relations]) => ({ snapshot, files, symbols, relations }));
-      }));
+      });
+    });
   }).then(({ snapshot, files, symbols, relations }) => NextResponse.json({
     snapshot,
     files,

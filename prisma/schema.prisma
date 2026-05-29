@@ -211,7 +211,7 @@ model NotificationSetting {
   @@map("notification_settings")
 }
 
-// 仓库 Memory Wiki 快照
+// 仓库 Code Graph 快照
 model RepositoryMemorySnapshot {
   id                  String     @id @default(cuid())
   repositoryId        String

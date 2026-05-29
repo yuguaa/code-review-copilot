@@ -61,6 +61,13 @@ type MemorySnapshot = {
   lastIndexedAt: string
 }
 
+type CodeGraphBranch = {
+  name: string
+  commitSha?: string | null
+  committedDate?: string | null
+  lastIndexedAt?: string | null
+}
+
 type MemoryFact = {
   id: string
   type: string
@@ -113,6 +120,7 @@ type CodeGraphSymbol = {
 }
 
 type CodeGraphData = {
+  snapshot?: MemorySnapshot | null
   files: CodeGraphFile[]
   symbols: CodeGraphSymbol[]
   relations: CodeGraphRelation[]
@@ -202,6 +210,14 @@ const toNonNegativeInteger = (value: unknown, fallback: number) => {
   return Number.isFinite(numberValue) ? Math.max(0, Math.trunc(numberValue)) : fallback
 }
 
+const buildGraphQuery = (branch?: string, commitSha?: string) => {
+  const searchParams = new URLSearchParams()
+  if (branch) searchParams.set('branch', branch)
+  if (commitSha) searchParams.set('commitSha', commitSha)
+  const query = searchParams.toString()
+  return query ? `?${query}` : ''
+}
+
 export default function RepositoryDetailPage() { // 仓库详情页组件
   const params = useParams() // 读取路由参数
   const router = useRouter() // 获取路由实例
@@ -215,6 +231,9 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const [loadingBots, setLoadingBots] = useState(false)
   const [savingBot, setSavingBot] = useState(false)
   const [memorySnapshots, setMemorySnapshots] = useState<MemorySnapshot[]>([])
+  const [codeGraphBranches, setCodeGraphBranches] = useState<CodeGraphBranch[]>([])
+  const [selectedGraphBranch, setSelectedGraphBranch] = useState<string>('')
+  const [selectedGraphCommitSha, setSelectedGraphCommitSha] = useState<string>('')
   const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([])
   const [codeGraphMemory, setCodeGraphMemory] = useState<CodeGraphMemory | null>(null)
   const [codeGraphData, setCodeGraphData] = useState<CodeGraphData | null>(null)
@@ -291,39 +310,75 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       .finally(() => setLoadingBots(false))
   }, [repositoryId])
 
+  const loadCodeGraphBranches = useCallback(() => {
+    if (!repositoryId) return
+    return fetch(`/api/repositories/${repositoryId}/branches`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (!data) return
+        const branches = Array.isArray(data.branches) ? data.branches as CodeGraphBranch[] : []
+        setCodeGraphBranches(branches)
+        setSelectedGraphBranch((current) => current || branches[0]?.name || '')
+      })
+      .catch((error) => {
+        console.error('Failed to load code graph branches:', error)
+      })
+  }, [repositoryId])
+
   const loadMemory = useCallback(() => {
     if (!repositoryId) return
-    return fetch(`/api/repositories/${repositoryId}/memory`)
+    const query = buildGraphQuery(selectedGraphBranch, selectedGraphCommitSha)
+    return fetch(`/api/repositories/${repositoryId}/memory${query}`)
       .then((response) => response.ok ? response.json() : null)
       .then((data) => {
         if (!data) return
         setMemorySnapshots(Array.isArray(data.snapshots) ? data.snapshots : [])
+        if (Array.isArray(data.branches)) {
+          setCodeGraphBranches((current) => {
+            const byName = new Map(current.map((branch) => [branch.name, branch]))
+            ;(data.branches as CodeGraphBranch[]).forEach((branch) => {
+              byName.set(branch.name, { ...byName.get(branch.name), ...branch })
+            })
+            const branches = [...byName.values()]
+            setSelectedGraphBranch((currentBranch) => currentBranch || branches[0]?.name || '')
+            return branches
+          })
+        }
+        if (data.selectedSnapshot?.branch) {
+          setSelectedGraphBranch((current) => current || data.selectedSnapshot.branch)
+          setSelectedGraphCommitSha((current) => current || data.selectedSnapshot.commitSha)
+        }
         setMemoryFacts(Array.isArray(data.facts) ? data.facts : [])
         setCodeGraphMemory(data.codeGraph || null)
       })
       .catch((error) => {
         console.error('Failed to load code graph memory:', error)
       })
-  }, [repositoryId])
+  }, [repositoryId, selectedGraphBranch, selectedGraphCommitSha])
 
   const loadCodeGraph = useCallback(() => {
     if (!repositoryId) return
     setLoadingCodeGraph(true)
-    return fetch(`/api/repositories/${repositoryId}/memory/graph`)
+    const query = buildGraphQuery(selectedGraphBranch, selectedGraphCommitSha)
+    return fetch(`/api/repositories/${repositoryId}/memory/graph${query}`)
       .then((response) => response.ok ? response.json() : null)
       .then((data) => {
         if (!data) return
         const files = Array.isArray(data.files) ? data.files as CodeGraphFile[] : []
         const symbols = Array.isArray(data.symbols) ? data.symbols as CodeGraphSymbol[] : []
         const relations = Array.isArray(data.relations) ? data.relations as CodeGraphRelation[] : []
-        setCodeGraphData({ files, symbols, relations })
+        setCodeGraphData({ snapshot: data.snapshot || null, files, symbols, relations })
+        if (data.snapshot?.branch) {
+          setSelectedGraphBranch((current) => current || data.snapshot.branch)
+          setSelectedGraphCommitSha((current) => current || data.snapshot.commitSha)
+        }
         setSelectedGraphFilePath((current) => current && files.some((file) => file.filePath === current) ? current : files[0]?.filePath || null)
       })
       .catch((error) => {
         console.error('Failed to load code graph:', error)
       })
       .finally(() => setLoadingCodeGraph(false))
-  }, [repositoryId])
+  }, [repositoryId, selectedGraphBranch, selectedGraphCommitSha])
 
   useEffect(() => { // 监听仓库 ID 变化
     if (!repositoryId) { // 当仓库 ID 不存在
@@ -333,10 +388,17 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       loadRepository() // 加载仓库详情
       loadAIModels() // 加载 AI 模型
       loadReviewBots() // 加载审查机器人
-      loadMemory() // 加载 Code Graph Memory
-      loadCodeGraph() // 加载 Code Graph 图谱
+      loadCodeGraphBranches() // 加载远端分支
     })
-  }, [loadAIModels, loadCodeGraph, loadMemory, loadRepository, loadReviewBots, repositoryId]) // 依赖仓库 ID
+  }, [loadAIModels, loadCodeGraphBranches, loadRepository, loadReviewBots, repositoryId]) // 依赖仓库 ID
+
+  useEffect(() => {
+    if (!repositoryId) return
+    void Promise.resolve().then(() => Promise.all([
+      loadMemory(),
+      loadCodeGraph(),
+    ]))
+  }, [loadCodeGraph, loadMemory, repositoryId])
 
   // 保存配置
   const saveConfig = () => {
@@ -570,7 +632,8 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const refreshMemory = () => {
     if (!repositoryId) return
     setRefreshingMemory(true)
-    return fetch(`/api/repositories/${repositoryId}/memory/refresh`, {
+    const query = buildGraphQuery(selectedGraphBranch)
+    return fetch(`/api/repositories/${repositoryId}/memory/refresh${query}`, {
       method: 'POST',
     })
       .then((response) => {
@@ -593,7 +656,10 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
   const rebuildCodeGraph = () => {
     if (!repositoryId) return
     setRebuildingCodeGraph(true)
-    return fetch(`/api/repositories/${repositoryId}/memory/refresh?force=true`, {
+    const searchParams = new URLSearchParams()
+    searchParams.set('force', 'true')
+    if (selectedGraphBranch) searchParams.set('branch', selectedGraphBranch)
+    return fetch(`/api/repositories/${repositoryId}/memory/refresh?${searchParams.toString()}`, {
       method: 'POST',
     })
       .then((response) => {
@@ -661,6 +727,11 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
 
   const orderedReviewBots = sortBots(reviewBots)
   const activeReviewBotCount = orderedReviewBots.filter((bot) => bot.isActive).length
+  const selectedSnapshot = memorySnapshots.find((snapshot) => snapshot.commitSha === selectedGraphCommitSha)
+    || memorySnapshots[0]
+    || codeGraphData?.snapshot
+    || null
+  const selectedBranchHead = codeGraphBranches.find((branch) => branch.name === selectedGraphBranch)
   const graphFiles = codeGraphData?.files || []
   const graphSymbols = codeGraphData?.symbols || []
   const graphRelations = codeGraphData?.relations || []
@@ -730,9 +801,9 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle>Code Graph Memory</CardTitle>
+              <CardTitle>目标分支 Code Graph</CardTitle>
               <CardDescription>
-                Agent 审查时直接读取 Code Graph、符号节点、调用关系和历史高置信风险。
+                Agent 审查时按目标分支读取对应 HEAD/提交图，再结合 diff 判断跨文件影响。
               </CardDescription>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
@@ -768,13 +839,74 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {memorySnapshots[0] ? (
+          <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 md:grid-cols-[1fr_1fr_auto]">
+            <div className="space-y-1">
+              <Label className="text-xs">目标分支</Label>
+              <Select
+                value={selectedGraphBranch || undefined}
+                onValueChange={(value) => {
+                  setSelectedGraphBranch(value)
+                  setSelectedGraphCommitSha('')
+                  setSelectedGraphFilePath(null)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择要查看的目标分支" />
+                </SelectTrigger>
+                <SelectContent>
+                  {codeGraphBranches.map((branch) => (
+                    <SelectItem key={branch.name} value={branch.name}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                MR 审查使用目标分支；Push 审查使用当前推送分支。
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Code Graph 快照</Label>
+              <Select
+                value={selectedGraphCommitSha || selectedSnapshot?.commitSha || undefined}
+                onValueChange={(value) => {
+                  setSelectedGraphCommitSha(value)
+                  setSelectedGraphFilePath(null)
+                }}
+                disabled={memorySnapshots.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="暂无快照，先重建当前分支" />
+                </SelectTrigger>
+                <SelectContent>
+                  {memorySnapshots.map((snapshot) => (
+                    <SelectItem key={snapshot.id} value={snapshot.commitSha}>
+                      {snapshot.commitSha.slice(0, 8)} · {snapshot.status} · {new Date(snapshot.lastIndexedAt).toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                远端 HEAD：{selectedBranchHead?.commitSha?.slice(0, 8) || '未加载'}
+              </p>
+            </div>
+            <div className="flex items-end">
+              <Button variant="outline" onClick={() => {
+                setSelectedGraphCommitSha('')
+                setSelectedGraphFilePath(null)
+              }}>
+                读取最新快照
+              </Button>
+            </div>
+          </div>
+
+          {selectedSnapshot ? (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2 text-xs">
-                <Badge variant="outline">分支：{memorySnapshots[0].branch}</Badge>
-                <Badge variant="outline">状态：{memorySnapshots[0].status}</Badge>
-                  <Badge variant="outline">图缓存：{memorySnapshots[0].commitSha === '__branch_code_graph__' ? '分支级' : memorySnapshots[0].commitSha.slice(0, 8)}</Badge>
-                <Badge variant="outline">置信度：{memorySnapshots[0].confidence.toFixed(2)}</Badge>
+                <Badge variant="outline">分支：{selectedSnapshot.branch}</Badge>
+                <Badge variant="outline">状态：{selectedSnapshot.status}</Badge>
+                <Badge variant="outline">图提交：{selectedSnapshot.commitSha.slice(0, 8)}</Badge>
+                <Badge variant="outline">置信度：{selectedSnapshot.confidence.toFixed(2)}</Badge>
                 {codeGraphMemory?.updateMode && (
                   <Badge variant="outline">更新模式：{codeGraphMemory.updateMode}</Badge>
                 )}
@@ -819,7 +951,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                 </div>
               )}
               <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">
-                {memorySnapshots[0].architectureSummary}
+                {selectedSnapshot.architectureSummary}
               </div>
               {memoryFacts.length > 0 && (
                 <div className="space-y-2">
@@ -838,7 +970,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              暂无 Code Graph。点击“重建 Code Graph”后，Agent 会先建立目标分支的项目级结构图。
+              当前目标分支暂无 Code Graph。选择分支后点击“重建 Code Graph”，Agent 后续审查会读取这条分支视角的图。
             </p>
           )}
         </CardContent>
@@ -850,7 +982,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             <div>
               <CardTitle>Code Graph 图谱</CardTitle>
               <CardDescription>
-                从数据库中的文件节点和关系边生成，帮助直接查看仓库结构与跨文件依赖。
+                展示当前目标分支快照中的文件、符号和跨文件关系。
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={loadCodeGraph} disabled={loadingCodeGraph}>
@@ -910,7 +1042,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              暂无可视化图谱。请先点击“重建 Code Graph”，建立仓库级结构图。
+              暂无可视化图谱。请先为当前目标分支重建 Code Graph。
             </p>
           )}
         </CardContent>

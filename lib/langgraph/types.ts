@@ -86,6 +86,7 @@ export interface GitLabServiceInstance {
   updateCommitComment: (projectId: number | string, commitSha: string, noteId: number, body: string) => Promise<GitLabCommentResult>;
   compareCommits: (projectId: number | string, fromSha: string, toSha: string) => Promise<{ diffs: GitLabDiff[] }>;
   getBranch: (projectId: number | string, branch: string) => Promise<GitLabBranch>;
+  getBranches?: (projectId: number | string, params?: { search?: string; per_page?: number; max_pages?: number }) => Promise<GitLabBranch[]>;
   getRepositoryTree: (projectId: number | string, params: {
     ref: string;
     path?: string;

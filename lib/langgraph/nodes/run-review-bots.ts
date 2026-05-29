@@ -127,7 +127,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
     return Promise.reject(new Error(`AI model is disabled: ${modelConfig.modelId}`));
   }
 
-  const branch = reviewLog.sourceBranch || reviewLog.targetBranch || "default";
+  const branch = reviewLog.targetBranch || reviewLog.sourceBranch || "default";
   const changedFiles = state.relevantDiffs.map((diff) => diff.new_path);
   const diffs = state.relevantDiffs.map((diff) => ({
     filePath: diff.new_path,

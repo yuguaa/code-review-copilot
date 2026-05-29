@@ -6,7 +6,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "@/lib/services/gitlab";
-import { getCodeGraphCacheCommitSha, memoryIndexService } from "@/lib/services/memory-index";
+import { memoryIndexService } from "@/lib/services/memory-index";
+
+function resolveRequestedBranch(url: URL, watchBranches: string | null): string {
+  const branch = url.searchParams.get("branch")?.trim();
+  if (branch) return branch;
+  const watchedBranch = watchBranches
+    ?.split(",")
+    .map((item) => item.trim())
+    .find((item) => item && !item.includes("*"));
+  return watchedBranch || "main";
+}
 
 export async function POST(
   request: NextRequest,
@@ -25,7 +35,7 @@ export async function POST(
       return NextResponse.json({ error: "Repository not found" }, { status: 404 });
     }
 
-    const branch = repository.watchBranches?.split(",")[0]?.replace("*", "").trim() || "main";
+    const branch = resolveRequestedBranch(url, repository.watchBranches);
     const gitlabService = createGitLabService(
       repository.gitLabAccount.url,
       repository.gitLabAccount.accessToken,
@@ -37,15 +47,9 @@ export async function POST(
       throw new Error(`Cannot resolve latest commit for branch ${branch}`);
     }
 
-    const graphCacheCommitSha = getCodeGraphCacheCommitSha();
-    const existingSnapshot = await prisma.repositoryMemorySnapshot.findUnique({
-      where: {
-        repositoryId_branch_commitSha: {
-          repositoryId: repository.id,
-          branch,
-          commitSha: graphCacheCommitSha,
-        },
-      },
+    const existingSnapshot = await prisma.repositoryMemorySnapshot.findFirst({
+      where: { repositoryId: repository.id, branch, status: "ready" },
+      orderBy: { lastIndexedAt: "desc" },
     });
     const memoryJson = existingSnapshot?.memoryJson && typeof existingSnapshot.memoryJson === "object" && !Array.isArray(existingSnapshot.memoryJson)
       ? existingSnapshot.memoryJson as Record<string, unknown>

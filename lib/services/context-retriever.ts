@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-const GRAPH_CACHE_COMMIT_SHA = "__branch_code_graph__";
-
 type GraphRelation = Prisma.CodeRelationEdgeGetPayload<{
   include: {
     fromFileNode: true;
@@ -80,10 +78,9 @@ export class ContextRetrieverService {
         where: {
           repositoryId: params.repositoryId,
           branch: params.branch,
-          commitSha: GRAPH_CACHE_COMMIT_SHA,
+          commitSha: params.commitSha,
           status: "ready",
         },
-        orderBy: { lastIndexedAt: "desc" },
       }),
       prisma.repositoryMemoryFact.findMany({
         where: {
@@ -97,7 +94,7 @@ export class ContextRetrieverService {
         where: {
           repositoryId: params.repositoryId,
           branch: params.branch,
-          commitSha: GRAPH_CACHE_COMMIT_SHA,
+          commitSha: params.commitSha,
           filePath: { in: selectedFiles },
         },
       }),
@@ -118,6 +115,7 @@ export class ContextRetrieverService {
       return this.getGraphRelations({
         repositoryId: params.repositoryId,
         branch: params.branch,
+        commitSha: params.commitSha,
         seedFileNodeIds: fileNodes.map((node) => node.id),
         maxDepth,
         maxEdges: Math.max(60, maxFiles * 8),
@@ -142,9 +140,9 @@ export class ContextRetrieverService {
           ? snapshot.memoryJson as Record<string, unknown>
           : {};
         const codeGraph = {
-          available: Boolean(snapshot && fileNodes.length > 0),
+          available: Boolean(snapshot),
           status: snapshot?.status || "missing",
-          graphCommitSha: snapshot?.commitSha || GRAPH_CACHE_COMMIT_SHA,
+          graphCommitSha: snapshot?.commitSha || params.commitSha,
           lastIndexedCommitSha: typeof memoryJson.lastIndexedCommitSha === "string" ? memoryJson.lastIndexedCommitSha : null,
           previousIndexedCommitSha: typeof memoryJson.previousIndexedCommitSha === "string" ? memoryJson.previousIndexedCommitSha : null,
           sourceCommitSha: typeof memoryJson.sourceCommitSha === "string" ? memoryJson.sourceCommitSha : null,
@@ -240,8 +238,8 @@ export class ContextRetrieverService {
       {
         name: "search_memory_facts",
         status: params.memoryFactsCount > 0 ? "available" : "unavailable",
-        description: "检索历史审查写入的高置信 Code Graph Memory Facts。",
-        observation: params.memoryFactsCount > 0 ? `命中 ${params.memoryFactsCount} 条记忆事实。` : "暂无高置信记忆事实。",
+        description: "检索历史审查写入的高置信 Code Graph 事实。",
+        observation: params.memoryFactsCount > 0 ? `命中 ${params.memoryFactsCount} 条图谱事实。` : "暂无高置信图谱事实。",
       },
       {
         name: "get_related_review_history",
@@ -261,6 +259,7 @@ export class ContextRetrieverService {
   private getGraphRelations(params: {
     repositoryId: string;
     branch: string;
+    commitSha: string;
     seedFileNodeIds: string[];
     maxDepth: number;
     maxEdges: number;
@@ -290,6 +289,7 @@ export class ContextRetrieverService {
         where: {
           repositoryId: params.repositoryId,
           branch: params.branch,
+          fromFileNode: { commitSha: params.commitSha },
           OR: [
             { fromFileNodeId: { in: currentFrontier } },
             { toFileNodeId: { in: currentFrontier } },

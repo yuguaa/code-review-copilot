@@ -250,6 +250,38 @@ export class GitLabService {
   }
 
   /**
+   * 获取项目分支列表
+   */
+  getBranches(projectId: number | string, params?: { search?: string; per_page?: number; max_pages?: number }): Promise<GitLabBranch[]> {
+    const perPage = params?.per_page ?? 100
+    const maxPages = params?.max_pages ?? 10
+    const branches: GitLabBranch[] = []
+    let page = 1
+
+    const loadPage = (): Promise<GitLabBranch[]> => {
+      if (page > maxPages) return Promise.resolve(branches)
+      return this.client.get(`/projects/${projectId}/repository/branches`, {
+        params: {
+          search: params?.search,
+          per_page: perPage,
+          page,
+        },
+      }).then((response) => {
+        const batch = Array.isArray(response.data) ? response.data as GitLabBranch[] : []
+        branches.push(...batch)
+        page += 1
+        if (batch.length < perPage) return branches
+        return loadPage()
+      }).catch((error) => {
+        console.error('Failed to fetch GitLab branches:', error)
+        throw new Error('Failed to fetch branches from GitLab')
+      })
+    }
+
+    return loadPage()
+  }
+
+  /**
    * 获取 MR 的所有变更（使用 version API 获取完整 diff）
    * 这是获取 MR 所有变更的正确方法，不会遗漏任何 commit 的变更
    */

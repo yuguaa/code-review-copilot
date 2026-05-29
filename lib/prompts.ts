@@ -121,7 +121,7 @@ export const REVIEW_AGENT_CRITIC_SYSTEM_PROMPT = `你是一名代码审查 Criti
   "memoryFacts": [
     {
       "type": "architecture | convention | risk | module | review_lesson",
-      "content": "可写入 Code Graph Memory 的高置信事实",
+      "content": "可写入 Code Graph 的高置信事实",
       "confidence": 0.9,
       "evidence": "来自本次审查的证据"
     }
@@ -247,7 +247,7 @@ export function buildReviewAgentPlanPrompt(params: {
     params.toolCatalog?.length ? `【Agent Tools】\n${params.toolCatalog.map((tool) => `- ${tool.name} [${tool.status}]：${tool.description}；观测：${tool.observation}`).join('\n')}` : '',
     params.availableAdditionalAgents?.length ? `【可调用辅助 Agent】\n${params.availableAdditionalAgents.map((agent) => `- ${agent.name}${agent.description ? `：${agent.description}` : ''}；Prompt 模式：${agent.promptMode || 'extend'}`).join('\n')}` : '',
     `【项目架构摘要】\n${params.architectureSummary || '暂无'}`,
-    `【Code Graph Memory Facts】\n${params.memoryFacts.length ? params.memoryFacts.map((fact) => `- ${fact}`).join('\n') : '无'}`,
+    `【Code Graph 高置信事实】\n${params.memoryFacts.length ? params.memoryFacts.map((fact) => `- ${fact}`).join('\n') : '无'}`,
     `【当前上下文摘要】\n${params.contextSummary || '暂无'}`,
     `【已有问题数】${params.existingFindingsCount}`,
     `【剩余轮数】${params.remainingIterations}`,
