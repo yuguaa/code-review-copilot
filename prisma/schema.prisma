@@ -93,6 +93,8 @@ model ReviewLog {
   description       String?         // MR 描述（可选）
   commitSha         String          // 提交的 SHA
   commitShortId     String          // 提交的短 ID
+  baseCommitSha     String?         // Push 事件的起始 SHA，用于覆盖一次 push 的多 commit diff
+  pushCommitShasJson Json?          // Push 事件包含的 commit SHA 列表，用于新分支等无 before 场景
   status            String          // 状态: pending, completed, failed
   error             String?         // 错误信息（如果有）
   totalFiles        Int             // 总文件数

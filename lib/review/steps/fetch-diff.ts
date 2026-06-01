@@ -12,6 +12,38 @@ import { prisma } from "@/lib/prisma";
 import type { ReviewState } from "../types";
 import type { GitLabDiff, GitLabMergeRequest } from "@/lib/types";
 
+function isValidCompareBaseSha(sha: string | null | undefined): sha is string {
+  return Boolean(sha && !/^0+$/.test(sha));
+}
+
+function readPushCommitShas(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
+}
+
+function mergeDiffsByFile(diffs: GitLabDiff[]): GitLabDiff[] {
+  const map = new Map<string, GitLabDiff>();
+
+  diffs.forEach((diff) => {
+    const key = diff.new_path || diff.old_path;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, diff);
+      return;
+    }
+
+    map.set(key, {
+      ...diff,
+      diff: [existing.diff, diff.diff].filter(Boolean).join("\n\n"),
+      deleted_file: existing.deleted_file && diff.deleted_file,
+      new_file: existing.new_file || diff.new_file,
+      renamed_file: existing.renamed_file || diff.renamed_file,
+    });
+  });
+
+  return [...map.values()];
+}
+
 /**
  * 获取 GitLab Diff
  */
@@ -65,57 +97,50 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
 
   if (isPushEvent) {
     console.log(
-      `📌 [FetchDiffStep] Processing Push event for commit: ${reviewLog.commitSha}`,
+      `📌 [FetchDiffStep] Processing Push event: ${reviewLog.baseCommitSha || "N/A"} -> ${reviewLog.commitSha}`,
     );
-    diffs = await gitlabService.getCommitDiff(
-      reviewLog.repository.gitLabProjectId,
-      reviewLog.commitSha,
-    );
+    if (isValidCompareBaseSha(reviewLog.baseCommitSha) && reviewLog.baseCommitSha !== reviewLog.commitSha) {
+      try {
+        const compareResult = await gitlabService.compareCommits(
+          reviewLog.repository.gitLabProjectId,
+          reviewLog.baseCommitSha,
+          reviewLog.commitSha,
+        );
+        diffs = compareResult.diffs || [];
+        reviewScope = "incremental";
+        incrementalBaseSha = reviewLog.baseCommitSha;
+        console.log(`📌 [FetchDiffStep] Push range diff enabled: ${incrementalBaseSha} -> ${reviewLog.commitSha}, files=${diffs.length}`);
+      } catch (error) {
+        console.warn(`⚠️ [FetchDiffStep] Push range compare failed, fallback to head commit diff`, error);
+      }
+    }
+
+    if (diffs.length === 0) {
+      const pushCommitShas = readPushCommitShas(reviewLog.pushCommitShasJson);
+      if (pushCommitShas.length > 0) {
+        console.log(`📌 [FetchDiffStep] Fetching push commit diffs, commits=${pushCommitShas.length}`);
+        const commitDiffGroups = await Promise.all(
+          pushCommitShas.map((sha) => gitlabService.getCommitDiff(reviewLog.repository.gitLabProjectId, sha)),
+        );
+        diffs = commitDiffGroups.flat();
+      }
+    }
+
+    if (diffs.length === 0) {
+      console.log(`📌 [FetchDiffStep] Fallback to head commit diff: ${reviewLog.commitSha}`);
+      diffs = await gitlabService.getCommitDiff(reviewLog.repository.gitLabProjectId, reviewLog.commitSha);
+    }
   } else {
     mr = await gitlabService.getMergeRequest(
       reviewLog.repository.gitLabProjectId,
       reviewLog.mergeRequestIid,
     );
 
-    // 优先增量审查：仅审查“上次已审 commit -> 当前 commit”的新增变更
-    const previousCompletedReview = await prisma.reviewLog.findFirst({
-      where: {
-        repositoryId: reviewLog.repositoryId,
-        mergeRequestIid: reviewLog.mergeRequestIid,
-        status: "completed",
-        id: { not: reviewLog.id },
-      },
-      orderBy: { completedAt: "desc" },
-      select: { commitSha: true },
-    });
-
-    if (previousCompletedReview?.commitSha && previousCompletedReview.commitSha !== reviewLog.commitSha) {
-      try {
-        const compareResult = await gitlabService.compareCommits(
-          reviewLog.repository.gitLabProjectId,
-          previousCompletedReview.commitSha,
-          reviewLog.commitSha
-        );
-
-        if (Array.isArray(compareResult.diffs) && compareResult.diffs.length > 0) {
-          reviewScope = "incremental";
-          incrementalBaseSha = previousCompletedReview.commitSha;
-          diffs = compareResult.diffs;
-          console.log(`📌 [FetchDiffStep] Incremental review enabled: ${incrementalBaseSha} -> ${reviewLog.commitSha}, files=${diffs.length}`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ [FetchDiffStep] Incremental compare failed, fallback to full MR changes`, error);
-      }
-    }
-
-    // 回退全量：没有可用增量基线或增量为空时，审查 MR 全量变更
-    if (diffs.length === 0) {
-      console.log(`📌 [FetchDiffStep] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
-      diffs = await gitlabService.getMergeRequestChanges(
-        reviewLog.repository.gitLabProjectId,
-        reviewLog.mergeRequestIid,
-      );
-    }
+    console.log(`📌 [FetchDiffStep] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
+    diffs = await gitlabService.getMergeRequestChanges(
+      reviewLog.repository.gitLabProjectId,
+      reviewLog.mergeRequestIid,
+    );
 
     if (!diffs || diffs.length === 0) {
       console.log(`⏭️ [FetchDiffStep] No changes found in MR`);
@@ -128,6 +153,7 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
     console.log(`📌 [FetchDiffStep] Found ${diffs.length} files with changes in MR`);
   }
 
+  diffs = mergeDiffsByFile(diffs);
   const relevantDiffs = diffs.filter((diff) => !diff.deleted_file);
 
   console.log(`📁 [FetchDiffStep] Total files changed: ${relevantDiffs.length}`);

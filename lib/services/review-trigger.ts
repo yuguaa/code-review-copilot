@@ -100,6 +100,8 @@ export class ReviewTriggerService {
   startWebhookPushReview(params: {
     repository: RepositoryWithGitLab;
     branchName: string;
+    baseCommitSha?: string | null;
+    pushCommitShas?: string[];
     commitSha: string;
     authorName?: string | null;
     authorUsername?: string | null;
@@ -120,6 +122,8 @@ export class ReviewTriggerService {
         description: null,
         commitSha: params.commitSha,
         commitShortId: params.commitSha.substring(0, 8),
+        baseCommitSha: params.baseCommitSha || null,
+        pushCommitShasJson: params.pushCommitShas || [],
         status: "pending",
         totalFiles: 0,
       },
@@ -166,6 +170,8 @@ export class ReviewTriggerService {
           description: sourceReview.description,
           commitSha: sourceReview.commitSha,
           commitShortId: sourceReview.commitShortId,
+          baseCommitSha: sourceReview.baseCommitSha,
+          pushCommitShasJson: sourceReview.pushCommitShasJson || [],
           status: "pending",
           totalFiles: 0,
         },

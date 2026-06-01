@@ -251,9 +251,9 @@ function formatSummaryComment(
 
   lines.push("### 概览");
   if (reviewScope === "incremental") {
-    lines.push(`- 审查模式：增量审查（基线 ${shortSha(incrementalBaseSha)} -> 当前 ${shortSha(reviewLog.commitSha)}）`);
+    lines.push(`- 审查模式：Push 范围审查（${shortSha(incrementalBaseSha)} -> ${shortSha(reviewLog.commitSha)} 的完整变更）`);
   } else {
-    lines.push(`- 审查模式：全量审查（当前 MR/Commit 全部变更）`);
+    lines.push(`- 审查模式：全量审查（当前 MR/Commit 完整变更）`);
   }
   lines.push(`- 审查文件：${reviewedFiles}/${totalFiles}（其中 ${filesWithIssues} 个文件存在问题）`);
   lines.push(`- 问题统计：🔴 严重 ${critical} / ⚠️ 一般 ${normal} / 💡 建议 ${suggestion}`);

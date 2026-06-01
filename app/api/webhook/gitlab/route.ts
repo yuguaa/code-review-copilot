@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     // 处理不同类型的事件
     const body = await request.json()
-    const { object_kind, project, object_attributes, ref, checkout_sha, user_username, user } = body
+    const { object_kind, project, object_attributes, ref, before, checkout_sha, user_username, user } = body
 
     const projectId = project?.id
     console.log('Looking for repository with gitLabProjectId:', projectId)
@@ -160,6 +160,12 @@ export async function POST(request: NextRequest) {
     if (event === 'Push Hook' || object_kind === 'push') {
       const branchName = ref?.replace('refs/heads/', '')
       const commitSha = checkout_sha
+      const baseCommitSha = typeof before === 'string' && before.trim() ? before : null
+      const pushCommitShas = Array.isArray(body.commits)
+        ? body.commits
+          .map((commit: { id?: unknown }) => commit.id)
+          .filter((id: unknown): id is string => typeof id === 'string' && Boolean(id.trim()))
+        : []
       // 获取作者工号和姓名
       const authorUsername = body.user_username || 'unknown'
       const authorName = body.user_name || ''
@@ -168,7 +174,9 @@ export async function POST(request: NextRequest) {
 
       console.log(`📝 Push Event`)
       console.log(`📂 Branch: ${branchName}`)
+      console.log(`🔙 Before: ${baseCommitSha || 'N/A'}`)
       console.log(`💾 Commit: ${commitSha}`)
+      console.log(`📦 Push commits: ${pushCommitShas.length}`)
       console.log(`👤 Author: ${author}`)
 
       if (!branchName || !commitSha) {
@@ -188,6 +196,8 @@ export async function POST(request: NextRequest) {
       const reviewLog = await reviewTriggerService.startWebhookPushReview({
         repository,
         branchName,
+        baseCommitSha,
+        pushCommitShas,
         commitSha,
         authorName,
         authorUsername,

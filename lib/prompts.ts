@@ -318,8 +318,8 @@ export function buildSummaryPrompt(params: {
   headCommitSha?: string
 }): string {
   const scopeText = params.reviewScope === 'incremental'
-    ? `增量审查（从 ${params.baseCommitSha || 'unknown'} 到 ${params.headCommitSha || 'current'}）`
-    : '全量审查（MR/Commit 当前完整变更）'
+    ? `Push 范围审查（从 ${params.baseCommitSha || 'unknown'} 到 ${params.headCommitSha || 'current'} 的完整变更）`
+    : 'MR/Commit 全量审查（当前事件的完整变更）'
 
   return `请按要求总结以下代码变更：
 
