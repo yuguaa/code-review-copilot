@@ -14,7 +14,8 @@ import type { AIModelConfig, ReviewComment } from "@/lib/types";
 import { normalizeAgentLoopBudget, type AgentLoopBudget } from "@/lib/services/review-budget";
 
 const MEMORY_WRITE_CONFIDENCE = 0.85;
-const ADDITIONAL_AGENT_FINDINGS_THRESHOLD = 3;
+const ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD = 1;
+const ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD = 1;
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
@@ -261,13 +262,52 @@ function selectRemainingAdditionalAgents(
   return agents.filter((agent) => !executedAgentIds.has(agent.id));
 }
 
+function getAdditionalAgentTrigger(findings: Array<ReviewComment & { confidence: number }>): {
+  enabled: boolean;
+  criticalCount: number;
+  actionableCount: number;
+  reason: string;
+} {
+  const criticalCount = findings.filter((finding) => finding.severity === "critical").length;
+  const actionableCount = findings.filter((finding) => (
+    finding.severity === "critical" || finding.severity === "normal"
+  )).length;
+
+  if (criticalCount >= ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD) {
+    return {
+      enabled: true,
+      criticalCount,
+      actionableCount,
+      reason: `发现 ${criticalCount} 个严重问题`,
+    };
+  }
+
+  if (actionableCount >= ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD) {
+    return {
+      enabled: true,
+      criticalCount,
+      actionableCount,
+      reason: `发现 ${actionableCount} 个需处理问题`,
+    };
+  }
+
+  return {
+    enabled: false,
+    criticalCount,
+    actionableCount,
+    reason: "未达到辅助 Agent 触发条件",
+  };
+}
+
 function buildFindingsThresholdTask(findings: Array<ReviewComment & { confidence: number }>): string {
+  const trigger = getAdditionalAgentTrigger(findings);
   const findingLines = findings.slice(0, 12).map((finding, index) => (
     `${index + 1}. [${finding.severity}] ${finding.filePath}:${finding.lineNumber} ${finding.content}`
   ));
 
   return [
-    `主 Agent 已发现 ${findings.length} 条问题或建议，达到辅助 Agent 复核阈值 ${ADDITIONAL_AGENT_FINDINGS_THRESHOLD}。`,
+    `主 Agent ${trigger.reason}，达到辅助 Agent 复核条件。`,
+    `当前统计：严重 ${trigger.criticalCount} 个，需处理问题 ${trigger.actionableCount} 个，总发现 ${findings.length} 条。`,
     "请基于你的专属审查视角复核本次变更，重点判断是否存在主 Agent 漏掉的跨文件、架构、安全、性能、测试或可维护性问题。",
     "不要重复下面已有问题；只有发现新的可定位、可修复问题才输出 comments。",
     `【已有问题】\n${findingLines.join("\n")}`,
@@ -374,8 +414,9 @@ export class ReviewAgentLoopService {
       ], budget.maxFindings);
       const newFindings = findings.length - previousCount;
 
+      const thresholdTrigger = getAdditionalAgentTrigger(findings);
       const shouldRunAdditionalAgentsByFindings = Boolean(
-        findings.length >= ADDITIONAL_AGENT_FINDINGS_THRESHOLD &&
+        thresholdTrigger.enabled &&
         (input.availableAdditionalAgents || []).length > 0 &&
         selectRemainingAdditionalAgents(input.availableAdditionalAgents || [], executedAdditionalAgentIds).length > 0
       );
@@ -405,7 +446,11 @@ export class ReviewAgentLoopService {
           status: thresholdAgents.length > 0 ? "available" : "unavailable",
           args: {
             trigger: "findings_threshold",
-            threshold: ADDITIONAL_AGENT_FINDINGS_THRESHOLD,
+            threshold: {
+              critical: ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD,
+              actionable: ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD,
+            },
+            reason: thresholdTrigger.reason,
             agents: thresholdAgents.map((agent) => agent.name),
             task: thresholdTask,
           },
