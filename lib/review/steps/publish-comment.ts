@@ -350,35 +350,6 @@ function formatSummaryComment(
     lines.push("2. 建议关注可维护性优化项。");
   }
 
-  const botRunsWithRawReview = botRuns
-    .map((botRun) => ({
-      botRun,
-      rawReview: extractBotRawReview(botRun),
-      criticReason: extractCriticReason(botRun.agentTrace?.criticJson),
-    }))
-    .filter((item) => item.rawReview);
-
-  if (botRunsWithRawReview.length > 0) {
-    lines.push("");
-    lines.push("### 各机器人原始评价");
-    botRunsWithRawReview.forEach(({ botRun, rawReview, criticReason }) => {
-      const botName = botRun.reviewBot?.name || "未知机器人";
-
-      lines.push(`<details>`);
-      lines.push(`<summary>${botName} / ${botRun.aiModelName}：${formatBotRunStatus(botRun.status)}</summary>`);
-      lines.push("");
-      lines.push(`- 状态：${formatBotRunStatus(botRun.status)}`);
-      if (botRun.summary) lines.push(`- 摘要：${botRun.summary}`);
-      if (criticReason) lines.push(`- Critic：${criticReason}`);
-      lines.push("");
-      lines.push("```text");
-      lines.push(rawReview);
-      lines.push("```");
-      lines.push("");
-      lines.push(`</details>`);
-    });
-  }
-
   lines.push("");
   lines.push(`<sub>完成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`);
 
@@ -424,40 +395,6 @@ function formatBotRunStatus(status: string): string {
   if (status === "failed") return "失败";
   if (status === "cancelled") return "已停止";
   return status;
-}
-
-function compactText(input: string, maxLen: number): string {
-  const text = input.replace(/\s+/g, " ").trim();
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 1)}…`;
-}
-
-function extractBotRawReview(botRun: BotRunForSummary): string {
-  const iterations = Array.isArray(botRun.agentTrace?.loopIterationsJson)
-    ? botRun.agentTrace?.loopIterationsJson as Array<Record<string, unknown>>
-    : [];
-  const lastIteration = [...iterations].reverse().find((item) => {
-    const review = item.review as { response?: unknown } | undefined;
-    return typeof review?.response === "string" && review.response.trim();
-  });
-  const review = lastIteration?.review as { response?: string } | undefined;
-  if (!review?.response || isEmptyStructuredReview(review.response)) return "";
-  return compactText(review.response, 3500);
-}
-
-function isEmptyStructuredReview(response: string): boolean {
-  try {
-    const parsed = JSON.parse(response) as { comments?: unknown };
-    return Array.isArray(parsed.comments) && parsed.comments.length === 0;
-  } catch {
-    return false;
-  }
-}
-
-function extractCriticReason(criticJson: unknown): string {
-  if (!criticJson || typeof criticJson !== "object") return "";
-  const reason = (criticJson as { reason?: unknown }).reason;
-  return typeof reason === "string" ? reason : "";
 }
 
 function formatCommentSources(comment: ReviewComment): string {
