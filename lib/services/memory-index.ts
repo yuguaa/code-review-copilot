@@ -65,6 +65,7 @@ type ImportEdge = {
 type ProjectIndex = {
   files: IndexedFile[];
   importEdges: ImportEdge[];
+  removedFilePaths: string[];
   architectureSummary: string;
   entrypoints: IndexedFile[];
   layers: Record<string, string[]>;
@@ -484,7 +485,12 @@ export class MemoryIndexService {
                 repositoryId: input.repositoryId,
                 branch: baseSnapshotBranch,
                 commitSha: baseSnapshotCommitSha,
-                filePath: { notIn: projectIndex.files.map((file) => file.filePath) },
+                filePath: {
+                  notIn: [
+                    ...projectIndex.files.map((file) => file.filePath),
+                    ...projectIndex.removedFilePaths,
+                  ],
+                },
               },
               include: {
                 symbols: true,
@@ -595,9 +601,16 @@ export class MemoryIndexService {
                   },
                 }).then((baseRelations) => {
                   const changedFilePaths = new Set(projectIndex.files.map((file) => file.filePath));
+                  const removedFilePaths = new Set(projectIndex.removedFilePaths);
                   const relationData = baseRelations.flatMap((relation) => {
+                    if (removedFilePaths.has(relation.fromFileNode.filePath)) return [];
+                    if (relation.toFileNode?.filePath && removedFilePaths.has(relation.toFileNode.filePath)) return [];
                     if (changedFilePaths.has(relation.fromFileNode.filePath)) return [];
-                    if (relation.toFileNode?.filePath && changedFilePaths.has(relation.toFileNode.filePath)) return [];
+                    if (
+                      relation.toFileNode?.filePath &&
+                      changedFilePaths.has(relation.toFileNode.filePath) &&
+                      relation.relationType !== "imports"
+                    ) return [];
                     const fromNode = fileNodeByPath.get(relation.fromFileNode.filePath);
                     const toNode = relation.toFileNode?.filePath ? fileNodeByPath.get(relation.toFileNode.filePath) : null;
                     if (!fromNode) return [];
@@ -752,6 +765,7 @@ export class MemoryIndexService {
         return {
           files,
           importEdges,
+          removedFilePaths: [],
           architectureSummary,
           entrypoints: files.filter(isLikelyEntrypoint).slice(0, 40),
           layers,
@@ -830,8 +844,13 @@ export class MemoryIndexService {
     const changedFiles = input.diffs
       .filter((diff) => !diff.deleted_file && isIndexableFile(diff.new_path))
       .map((diff) => diff.new_path);
+    const removedFilePaths = input.diffs
+      .filter((diff) => diff.deleted_file || (diff.renamed_file && diff.old_path !== diff.new_path))
+      .map((diff) => diff.old_path)
+      .filter((filePath) => isIndexableFile(filePath));
     const changedFileSet = new Set(changedFiles);
-    if (changedFiles.length === 0) {
+    const removedFileSet = new Set(removedFilePaths);
+    if (changedFiles.length === 0 && removedFilePaths.length === 0) {
       return Promise.resolve(this.buildNoopProjectIndex(input, snapshot, "no_indexable_changes"));
     }
 
@@ -855,8 +874,11 @@ export class MemoryIndexService {
         },
         select: { filePath: true },
       }).then((existingNodes) => {
+        const existingFilePaths = existingNodes
+          .map((node) => node.filePath)
+          .filter((filePath) => !removedFileSet.has(filePath));
         const candidatePaths = new Set([
-          ...existingNodes.map((node) => node.filePath),
+          ...existingFilePaths,
           ...changedIndexedFiles.map((file) => file.filePath),
         ]);
         const importEdges = changedIndexedFiles.flatMap((file) => {
@@ -868,7 +890,10 @@ export class MemoryIndexService {
           }));
         });
         const existingLayers = this.parseJsonRecord(snapshot.layersJson);
-        const layers = this.mergeLayers(existingLayers, changedIndexedFiles);
+        const layers = this.removeFilesFromLayers(
+          this.mergeLayers(existingLayers, changedIndexedFiles),
+          removedFilePaths,
+        );
         const risks = changedIndexedFiles
           .filter((file) => ["api_route", "service", "review_core", "review_step", "agent_step", "data_model"].includes(file.role))
           .map((file) => ({
@@ -887,8 +912,10 @@ export class MemoryIndexService {
         return {
           files: changedIndexedFiles,
           importEdges,
+          removedFilePaths,
           architectureSummary,
-          entrypoints: this.mergeEntrypoints(snapshot.entrypointsJson, changedIndexedFiles),
+          entrypoints: this.mergeEntrypoints(snapshot.entrypointsJson, changedIndexedFiles)
+            .filter((file) => !removedFileSet.has(file.filePath)),
           layers,
           risks,
           memory: {
@@ -903,6 +930,7 @@ export class MemoryIndexService {
             baseCommitSha: snapshot.commitSha,
             updateMode: "incremental",
             changedFiles,
+            removedFilePaths,
             changedFileRoles: changedIndexedFiles.map((file) => ({ filePath: file.filePath, role: file.role })),
             indexedFiles: candidatePaths.size,
           },
@@ -922,6 +950,7 @@ export class MemoryIndexService {
     return {
       files: [],
       importEdges: [],
+      removedFilePaths: [],
       architectureSummary: reason === "branch_head_unchanged"
         ? "当前快照已存在，Code Graph 复用已有分支图。"
         : "当前变更不包含可索引源码文件，Code Graph 复用已有分支图。",
@@ -1014,6 +1043,15 @@ export class MemoryIndexService {
     });
 
     return nextLayers;
+  }
+
+  private removeFilesFromLayers(layers: Record<string, string[]>, removedFilePaths: string[]): Record<string, string[]> {
+    if (removedFilePaths.length === 0) return layers;
+    const removedFileSet = new Set(removedFilePaths);
+    return Object.entries(layers).reduce<Record<string, string[]>>((acc, [role, files]) => {
+      acc[role] = files.filter((filePath) => !removedFileSet.has(filePath));
+      return acc;
+    }, {});
   }
 
   private mergeEntrypoints(existingEntrypoints: Prisma.JsonValue, changedFiles: IndexedFile[]): IndexedFile[] {
