@@ -5,6 +5,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getReviewFilePath, validateReviewFindings } from "@/lib/review/finding-validation";
 import { reviewAgentLoopService, type AdditionalReviewAgent } from "@/lib/services/review-agent-loop";
 import { normalizeAgentLoopBudget, totalFindingsBudget } from "@/lib/services/review-budget";
 import type { AIModelConfig, GitLabDiff, ReviewComment, ReviewCommentSource } from "@/lib/types";
@@ -128,9 +129,9 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
   }
 
   const branch = reviewLog.sourceBranch || "default";
-  const changedFiles = state.relevantDiffs.map((diff) => diff.new_path);
+  const changedFiles = state.relevantDiffs.map(getReviewFilePath);
   const diffs = state.relevantDiffs.map((diff) => ({
-    filePath: diff.new_path,
+    filePath: getReviewFilePath(diff),
     diff: generatePatch(diff),
   }));
   const botModel = `${modelConfig.provider}/${modelConfig.modelId}`;
@@ -185,7 +186,8 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
       botPromptMode: bot.promptMode,
       availableAdditionalAgents,
     }).then((agentResult) => {
-      const comments = mergeComments(agentResult.agentFindings.map((item) => ({
+      const validatedFindings = validateReviewFindings(agentResult.agentFindings, state.relevantDiffs);
+      const comments = mergeComments(validatedFindings.map((item) => ({
         ...item,
         reviewBotRunId: botRun.id,
         sourceBotName: bot.name,

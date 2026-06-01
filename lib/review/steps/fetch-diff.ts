@@ -9,6 +9,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getReviewableDiffs } from "@/lib/review/finding-validation";
 import type { ReviewState } from "../types";
 import type { GitLabDiff, GitLabMergeRequest } from "@/lib/types";
 
@@ -154,7 +155,7 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
   }
 
   diffs = mergeDiffsByFile(diffs);
-  const relevantDiffs = diffs.filter((diff) => !diff.deleted_file);
+  const relevantDiffs = getReviewableDiffs(diffs);
 
   console.log(`📁 [FetchDiffStep] Total files changed: ${relevantDiffs.length}`);
 

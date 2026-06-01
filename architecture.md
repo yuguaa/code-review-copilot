@@ -1,11 +1,11 @@
 # Code Review Copilot 架构说明
 
-本文档记录当前项目的实现架构，作为后续开发和审查策略调整的工程基准。系统目标是把 GitLab 代码审查从一次性 diff 审查，升级为带长期记忆、代码图谱和多机器人并发审查的 Agent 系统。
+本文档记录当前项目的实现架构，作为后续开发和审查策略调整的工程基准。系统目标是把 GitLab 代码审查从一次性 diff 审查，升级为带长期记忆、代码图谱和主 Agent + 条件辅助 Agent 的审查系统。
 
 ## 设计目标
 
 - 一个仓库可以配置多个审查机器人，每个机器人有独立模型、Prompt、启停状态、排序和审查预算。
-- 一次触发只创建一个 `ReviewLog`，所有启用机器人并发执行，最终只发布一条 GitLab 总评。
+- 一次触发只创建一个 `ReviewLog`，排序第一的启用机器人作为主 Agent 执行审查，其余启用机器人作为可被条件调用的辅助 Agent。
 - 审查结果要可追溯到机器人、模型、Prompt 快照、Memory Snapshot、检索上下文和 Agent Loop 轨迹。
 - Memory Wiki 保存项目架构摘要、代码图谱和高置信事实，减少每次审查重复读取全仓库的成本。
 - PostgreSQL 是运行数据库，Prisma 是唯一 ORM。
@@ -17,7 +17,7 @@
 - Agent Loop 只使用只读工具，不允许写代码仓库。
 - 审查评论第一版合并成一条 GitLab 总评，不做行内评论。
 - Memory 刷新失败时审查快速失败，不降级成裸 diff 审查。
-- 多机器人第一版全量并发，不做队列限流。成本和限流由启用机器人数量和预算控制。
+- 辅助 Agent 不默认执行，只有主 Agent 明确请求或主 Agent 发现的问题达到复核阈值时才会运行。
 
 ## 总体链路
 
@@ -62,23 +62,23 @@ PostgreSQL + GitLab 评论
 
 ### generate_summary
 
-使用排序第一的启用机器人生成公共变更摘要。这个摘要会被后续所有机器人复用，避免每个机器人重复总结同一份 diff。
+使用排序第一的启用机器人生成公共变更摘要。这个摘要会被主 Agent 审查链路复用，避免重复总结同一份 diff。
 
 ### run_review_bots
 
-加载当前仓库所有启用机器人，为每个机器人创建或更新一个 `ReviewBotRun`，并通过 `Promise.allSettled` 并发运行。
+加载当前仓库所有启用机器人，排序第一的机器人作为主 Agent 执行 Agent Loop，其余机器人作为辅助 Agent 暴露给主 Agent。
 
-单个机器人失败只会把自己的 `ReviewBotRun` 标记为 failed。只要至少一个机器人成功，系统继续汇总成功结果并发布评论。所有机器人都失败时，`ReviewLog` 标记为 failed，不发布空评论。
+辅助 Agent 只有在主 Agent 明确请求，或主 Agent 已发现严重/可处理问题达到复核阈值时才会创建 `ReviewBotRun` 并运行。主 Agent 失败时本次审查失败；辅助 Agent 失败只记录自己的失败状态，不阻塞主 Agent 的结果汇总。
 
 ### aggregate_results
 
-汇总所有成功机器人的 findings。重复问题按以下 key 去重：
+汇总主 Agent 和已运行辅助 Agent 的 findings。重复问题按以下 key 去重：
 
 ```text
 filePath + lineNumber + lineRangeEnd + severity + normalized content
 ```
 
-去重后保留来源机器人列表和各自 confidence。低置信问题不会被过滤，confidence 只用于展示、排序和辅助判断。长期 Memory 写回仍使用高置信阈值，避免污染项目记忆。
+去重前会校验 finding 必须命中本次 diff 的文件和行号，并过滤 `confidence < 0.6` 的低置信问题。长期 Memory 写回仍使用高置信阈值，避免污染项目记忆。
 
 ### publish_comment
 
@@ -117,7 +117,7 @@ ReviewLog
 - `maxCallGraphDepth`：调用图上下游检索深度，默认 2，运行时限制 0 到 4。
 - `maxFindings`：单机器人最多 findings，默认 50，运行时限制 1 到 200。
 
-最终合并 findings 的上限按成功机器人预算求和，并有全局硬上限 500。
+最终合并 findings 的上限按已启用机器人预算求和，并有全局硬上限 500；未被调用的辅助 Agent 不会产生结果。
 
 ## Agent Loop
 
@@ -334,7 +334,7 @@ npm run build
 - Memory Snapshot 命中和刷新。
 - Code Graph TS / TSX 解析。
 - Agent Loop 预算停止。
-- 多机器人并发和单机器人失败隔离。
+- 主 Agent 条件调用辅助 Agent，以及辅助 Agent 失败隔离。
 - findings 去重和来源合并。
 - Memory Fact 高置信写回和重复跳过。
 - SQLite 到 PostgreSQL 历史数据迁移。

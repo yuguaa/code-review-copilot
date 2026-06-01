@@ -8,7 +8,7 @@
 - **多仓库管理**: 支持连接多个 GitLab 实例和仓库
 - **AI 模型集成**: 支持 OpenAI、Claude 和自定义 AI 模型
 - **智能代码审查**: 自动分析 GitLab Merge Request 的 Staged Diff
-- **多机器人并发审查**: 每个仓库可配置多个审查机器人，独立模型和 Prompt 并发运行
+- **主 Agent + 条件辅助 Agent**: 每个仓库可配置多个审查机器人，排序第一的启用机器人作为主 Agent，其余启用机器人按需复核
 - **Code Graph Memory**: 保存项目架构摘要、代码图谱、符号节点和高置信审查事实，减少重复全量读取
 - **三级问题分类**: 严重 / 一般 / 建议
 - **分支配置**: 为不同分支配置不同的审查策略
@@ -105,7 +105,7 @@ npm run dev
    - 机器人名称：例如“安全审查机器人”“架构审查机器人”
    - AI 模型：选择已有 `AIModel`
    - Prompt 模式：扩展内置 Prompt 或完全替换
-   - 启用状态和排序：启用的机器人会在同一次审查中并发执行
+   - 启用状态和排序：排序第一的启用机器人作为主 Agent，其余启用机器人作为条件辅助 Agent
 
 ### 第四步：配置 Webhook（可选）
 
@@ -360,8 +360,8 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
    - 只获取一次 MR/Commit Diff
    - 刷新或复用 Code Graph
    - 使用排序第一的启用机器人生成公共变更摘要
-   - 为每个启用机器人创建 `ReviewBotRun`
-   - 通过 `Promise.allSettled` 并发执行机器人 Agent Loop
+   - 主 Agent 执行 Agent Loop
+   - 主 Agent 明确请求或问题达到复核阈值时，条件调用辅助 Agent
    - 合并重复问题，保留来源机器人和各自 confidence
    - 保存评论和 Trace，只发布一条 GitLab 总评
 

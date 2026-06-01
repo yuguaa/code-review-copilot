@@ -4,6 +4,7 @@
  */
 
 import { reviewAgentLoopService } from "@/lib/services/review-agent-loop";
+import { getReviewFilePath, validateReviewFindings } from "@/lib/review/finding-validation";
 import type { ReviewState } from "../types";
 
 export function runAgentLoopStep(state: ReviewState): Promise<Partial<ReviewState>> {
@@ -18,9 +19,9 @@ export function runAgentLoopStep(state: ReviewState): Promise<Partial<ReviewStat
   }
 
   const branch = reviewLog.sourceBranch || "default";
-  const changedFiles = state.relevantDiffs.map((diff) => diff.new_path);
+  const changedFiles = state.relevantDiffs.map(getReviewFilePath);
   const diffs = state.relevantDiffs.map((diff) => ({
-    filePath: diff.new_path,
+    filePath: getReviewFilePath(diff),
     diff: `--- a/${diff.old_path}
 +++ b/${diff.new_path}
 ${diff.diff}`,
@@ -39,14 +40,17 @@ ${diff.diff}`,
     modelConfig: state.modelConfig,
     memorySnapshotId: state.memorySnapshotId,
     existingFindings: state.reviewComments,
-  }).then((result) => ({
-    agentTraceId: result.traceId,
-    agentPlan: result.finalPlan as Record<string, unknown>,
-    agentContextSummary: result.context.summary,
-    architectureSummary: result.context.architectureSummary,
-    reviewComments: result.agentFindings,
-    criticalComments: result.agentFindings.filter((item) => item.severity === "critical"),
-  })).catch((error) => {
+  }).then((result) => {
+    const reviewComments = validateReviewFindings(result.agentFindings, state.relevantDiffs);
+    return {
+      agentTraceId: result.traceId,
+      agentPlan: result.finalPlan as Record<string, unknown>,
+      agentContextSummary: result.context.summary,
+      architectureSummary: result.context.architectureSummary,
+      reviewComments,
+      criticalComments: reviewComments.filter((item) => item.severity === "critical"),
+    };
+  }).catch((error) => {
     console.error("❌ [RunAgentLoopStep] Agent loop failed", error);
     throw error;
   });

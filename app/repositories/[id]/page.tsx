@@ -616,7 +616,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                 审查机器人
               </CardTitle>
               <CardDescription>
-                每个启用机器人会在同一次 ReviewLog 下并发执行，最终合并为一条 GitLab 总评。
+                排序第一的启用机器人作为主 Agent，其余启用机器人会作为条件辅助 Agent 参与复核。
               </CardDescription>
             </div>
             <Button onClick={openCreateBotDialog} disabled={aiModels.length === 0}>
@@ -649,7 +649,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             <div className="rounded-md border border-dashed p-6 text-center">
               <p className="text-sm font-medium">还没有审查机器人</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                新增至少一个启用机器人后，手动审查、Webhook 和 Retry 才会进入并发审查流程。
+                新增至少一个启用机器人后，手动审查、Webhook 和 Retry 才会进入 Agent 审查流程。
               </p>
               <Button className="mt-4" variant="outline" onClick={openCreateBotDialog} disabled={aiModels.length === 0}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -740,7 +740,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             <DialogHeader>
               <DialogTitle>{botForm.id ? '编辑审查机器人' : '新增审查机器人'}</DialogTitle>
               <DialogDescription>
-                机器人会使用自己的模型和 Prompt 独立执行 Agent Loop，评论中会标注来源。
+                主 Agent 会使用自己的模型和 Prompt 执行 Agent Loop，辅助 Agent 被条件调用时会标注来源。
               </DialogDescription>
             </DialogHeader>
 
@@ -818,7 +818,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  只有启用机器人会参与下一次并发审查。
+                  只有启用机器人会参与下一次 Agent 审查。
                 </p>
               </div>
             </div>

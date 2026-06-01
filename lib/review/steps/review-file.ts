@@ -11,6 +11,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getReviewFilePath, validateReviewFindings } from "@/lib/review/finding-validation";
 import { aiService } from "@/lib/services/ai";
 import { buildReviewPrompt, SYSTEM_PROMPT, OUTPUT_FORMAT } from "@/lib/prompts";
 import type { ReviewState, FileReviewResult } from "../types";
@@ -47,7 +48,7 @@ export async function reviewFileStep(state: ReviewState): Promise<Partial<Review
   }
 
   const diff = state.relevantDiffs[index];
-  const filePath = diff.new_path;
+  const filePath = getReviewFilePath(diff);
 
   console.log(`📄 [ReviewFileStep] Reviewing file [${index + 1}/${state.relevantDiffs.length}]: ${filePath}`);
 
@@ -100,23 +101,8 @@ export async function reviewFileStep(state: ReviewState): Promise<Partial<Review
     maxItems: 50,
   });
 
-  // 构建文件审查结果
-  const fileResult: FileReviewResult = {
-    filePath,
-    aiResponse,
-    prompt: fullPrompt,
-    counts: {
-      critical: parsed.counts.critical,
-      normal: parsed.counts.normal,
-      suggestion: parsed.counts.suggestion,
-    },
-    criticalItems: parsed.criticalItems.map((item) => ({
-      filePath: item.filePath || filePath,
-      lineNumber: item.lineNumber,
-      lineRangeEnd: item.lineRangeEnd,
-      content: item.content,
-    })),
-    reviewItems: parsed.commentItems.map((item) => ({
+  const validatedComments = validateReviewFindings(
+    parsed.commentItems.map((item) => ({
       filePath: item.filePath || filePath,
       lineNumber: item.lineNumber,
       lineRangeEnd: item.lineRangeEnd,
@@ -124,6 +110,27 @@ export async function reviewFileStep(state: ReviewState): Promise<Partial<Review
       content: item.content,
       confidence: item.confidence,
     })),
+    [diff],
+  );
+  const validatedCriticalComments = validatedComments.filter((item) => item.severity === "critical");
+
+  // 构建文件审查结果
+  const fileResult: FileReviewResult = {
+    filePath,
+    aiResponse,
+    prompt: fullPrompt,
+    counts: {
+      critical: validatedCriticalComments.length,
+      normal: validatedComments.filter((item) => item.severity === "normal").length,
+      suggestion: validatedComments.filter((item) => item.severity === "suggestion").length,
+    },
+    criticalItems: validatedCriticalComments.map((item) => ({
+      filePath: item.filePath || filePath,
+      lineNumber: item.lineNumber,
+      lineRangeEnd: item.lineRangeEnd,
+      content: item.content,
+    })),
+    reviewItems: validatedComments,
   };
 
   // 更新数据库进度
@@ -133,14 +140,7 @@ export async function reviewFileStep(state: ReviewState): Promise<Partial<Review
   });
 
   // 收集三种级别问题
-  const reviewComments = parsed.commentItems.map((item) => ({
-    filePath: item.filePath || filePath,
-    lineNumber: item.lineNumber,
-    lineRangeEnd: item.lineRangeEnd,
-    severity: item.severity,
-    content: item.content,
-    confidence: item.confidence,
-  }));
+  const reviewComments = validatedComments;
   const criticalComments = reviewComments.filter((item) => item.severity === "critical");
 
   const result = {

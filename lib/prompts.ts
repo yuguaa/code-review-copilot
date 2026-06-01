@@ -39,6 +39,7 @@ JSON Schema 语义如下：
 - comments 没有发现问题时返回空数组 []。
 - severity 只能是 "critical"、"normal"、"suggestion"。
 - lineNumber 必须是正整数；lineRangeEnd 无范围时可省略或为 null。
+- 删除文件的问题必须使用输入 diff 的 old_path 作为 filePath，并使用删除侧旧行号。
 - confidence 必须是 0 到 1 的数字，仅供系统内部排序和去重，不要在正文里提及。
 - issue、impact、suggestion 必须是中文短句，不能为空。
 - 不要为了凑数量输出不可定位、不可修复的问题。`
