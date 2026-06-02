@@ -55,6 +55,11 @@ type GraphData = {
   relations: CodeGraphViewRelation[]
 }
 
+type GenerateStatus = {
+  type: 'success' | 'error'
+  message: string
+}
+
 const shortSha = (sha?: string | null) => sha ? sha.slice(0, 8) : '无'
 
 const buildGraphQuery = (selection: GraphSelection) => {
@@ -75,6 +80,7 @@ export default function CodeGraphPage() {
   const [loadingTree, setLoadingTree] = useState(true)
   const [loadingGraph, setLoadingGraph] = useState(false)
   const [generatingKey, setGeneratingKey] = useState<string | null>(null)
+  const [generateStatusByKey, setGenerateStatusByKey] = useState<Record<string, GenerateStatus>>({})
   const [treeError, setTreeError] = useState<string | null>(null)
   const [graphError, setGraphError] = useState<string | null>(null)
 
@@ -198,6 +204,11 @@ export default function CodeGraphPage() {
     const key = `${repositoryId}:${branchName}`
     setGeneratingKey(key)
     setTreeError(null)
+    setGenerateStatusByKey((current) => {
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
 
     return fetch(`/api/repositories/${repositoryId}/memory/refresh?branch=${encodeURIComponent(branchName)}&force=true`, {
       method: 'POST',
@@ -207,18 +218,50 @@ export default function CodeGraphPage() {
         return response.json()
       })
       .then((data) => {
-        const commitSha = typeof data.snapshot?.commitSha === 'string' ? data.snapshot.commitSha : null
-        if (commitSha) {
-          selectSnapshot({ repositoryId, branch: branchName, commitSha })
-        }
-        return loadTree()
+        const snapshot = data.snapshot as GraphSnapshot | undefined
+        const branch = data.branch as { headCommitSha?: string; committedDate?: string | null } | undefined
+        if (!snapshot?.commitSha) throw new Error('生成分支 Code Graph 失败')
+
+        setRepositories((currentRepositories) => currentRepositories.map((repository) => {
+          if (repository.id !== repositoryId) return repository
+          return {
+            ...repository,
+            branches: repository.branches.map((item) => {
+              if (item.name !== branchName) return item
+              const nextSnapshots = [
+                snapshot,
+                ...item.snapshots.filter((currentSnapshot) => currentSnapshot.id !== snapshot.id),
+              ].sort((a, b) => new Date(b.lastIndexedAt).getTime() - new Date(a.lastIndexedAt).getTime())
+              return {
+                ...item,
+                headCommitSha: branch?.headCommitSha || snapshot.commitSha,
+                committedDate: branch?.committedDate || item.committedDate,
+                snapshots: nextSnapshots,
+              }
+            }),
+          }
+        }))
+        setGenerateStatusByKey((current) => ({
+          ...current,
+          [key]: {
+            type: 'success',
+            message: `${snapshot.updateMode === 'reuse' ? '已复用' : '已更新'} ${shortSha(snapshot.commitSha)}`,
+          },
+        }))
+        selectSnapshot({ repositoryId, branch: branchName, commitSha: snapshot.commitSha })
       })
       .catch((error) => {
         console.error('Failed to generate branch Code Graph:', error)
-        setTreeError(error instanceof Error ? error.message : '生成分支 Code Graph 失败')
+        setGenerateStatusByKey((current) => ({
+          ...current,
+          [key]: {
+            type: 'error',
+            message: error instanceof Error ? error.message : '生成分支 Code Graph 失败',
+          },
+        }))
       })
       .finally(() => setGeneratingKey(null))
-  }, [loadTree, selectSnapshot])
+  }, [selectSnapshot])
 
   const loadGraph = useCallback((nextSelection: GraphSelection | null) => {
     if (!nextSelection) {
@@ -334,6 +377,7 @@ export default function CodeGraphPage() {
                             latestSnapshot.commitSha === branch.headCommitSha
                           )
                           const generating = generatingKey === `${repository.id}:${branch.name}`
+                          const generateStatus = generateStatusByKey[`${repository.id}:${branch.name}`]
                           return (
                             <div key={branch.name} className="border-l pl-3">
                               <div className="mb-2 flex items-center gap-2">
@@ -363,6 +407,16 @@ export default function CodeGraphPage() {
                                   {hasHeadGraph ? '更新' : '生成'}
                                 </Button>
                               </div>
+                              {generateStatus && (
+                                <p className={[
+                                  'mb-2 rounded-md px-2 py-1 text-xs',
+                                  generateStatus.type === 'success'
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : 'bg-destructive/10 text-destructive',
+                                ].join(' ')}>
+                                  {generateStatus.message}
+                                </p>
+                              )}
                               {branchExpanded && (
                                 <div className="space-y-1">
                                   {branch.headCommitSha && (

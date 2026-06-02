@@ -4,77 +4,28 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { createGitLabService } from "@/lib/services/gitlab";
-import { memoryIndexService } from "@/lib/services/memory-index";
+import {
+  CodeGraphRefreshError,
+  refreshRepositoryCodeGraph,
+} from "@/lib/services/code-graph-refresh";
 
-function resolveRequestedBranch(url: URL, watchBranches: string | null): string {
-  const branch = url.searchParams.get("branch")?.trim();
-  if (branch) return branch;
-  const watchedBranch = watchBranches
-    ?.split(",")
-    .map((item) => item.trim())
-    .find((item) => item && !item.includes("*"));
-  return watchedBranch || "main";
-}
-
-export async function POST(
+export function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const { id } = await params;
+  return params.then(({ id }) => {
     const url = new URL(request.url);
-    const forceRebuild = url.searchParams.get("force") === "true";
-    const repository = await prisma.repository.findUnique({
-      where: { id },
-      include: { gitLabAccount: true },
+    return refreshRepositoryCodeGraph({
+      repositoryId: id,
+      branch: url.searchParams.get("branch")?.trim() || undefined,
+      forceRebuild: url.searchParams.get("force") === "true",
     });
-
-    if (!repository) {
-      return NextResponse.json({ error: "Repository not found" }, { status: 404 });
-    }
-
-    const branch = resolveRequestedBranch(url, repository.watchBranches);
-    const gitlabService = createGitLabService(
-      repository.gitLabAccount.url,
-      repository.gitLabAccount.accessToken,
-    );
-
-    const remoteBranch = await gitlabService.getBranch(repository.gitLabProjectId, branch);
-    const commitSha = remoteBranch.commit.id;
-    if (!commitSha) {
-      throw new Error(`Cannot resolve latest commit for branch ${branch}`);
-    }
-
-    const existingSnapshot = await prisma.repositoryMemorySnapshot.findFirst({
-      where: { repositoryId: repository.id, branch, status: "ready" },
-      orderBy: { lastIndexedAt: "desc" },
-    });
-    const previousIndexedCommitSha = existingSnapshot?.commitSha || null;
-    const diffs = forceRebuild
-      ? []
-      : previousIndexedCommitSha && previousIndexedCommitSha !== commitSha
-        ? (await gitlabService.compareCommits(repository.gitLabProjectId, previousIndexedCommitSha, commitSha)).diffs
-        : await gitlabService.getCommitDiff(repository.gitLabProjectId, commitSha);
-    const snapshot = await memoryIndexService.refreshRepositoryMemory({
-      repositoryId: repository.id,
-      gitLabProjectId: repository.gitLabProjectId,
-      gitlabService,
-      branch,
-      commitSha,
-      diffs,
-      forceRebuild,
-      previousIndexedCommitSha,
-      baseBranch: existingSnapshot && !forceRebuild ? branch : null,
-      baseCommitSha: existingSnapshot && !forceRebuild ? existingSnapshot.commitSha : null,
-    });
-    return NextResponse.json({ success: true, snapshot });
-  } catch (error) {
+  }).then((result) => NextResponse.json(result)).catch((error) => {
     console.error("Failed to refresh repository memory:", error);
+    const status = error instanceof CodeGraphRefreshError ? error.statusCode : 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to refresh repository memory" },
-      { status: 500 },
+      { status },
     );
-  }
+  });
 }

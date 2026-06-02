@@ -9,6 +9,8 @@ const MAX_INDEXED_FILES = 260;
 const MAX_FILE_BYTES = 180_000;
 const MAX_RELATION_EDGES = 2_000;
 const FILE_FETCH_CONCURRENCY = 8;
+const CODE_GRAPH_TRANSACTION_MAX_WAIT_MS = 10_000;
+const CODE_GRAPH_TRANSACTION_TIMEOUT_MS = 60_000;
 
 const INDEXABLE_EXTENSIONS = new Set([
   ".ts",
@@ -699,6 +701,9 @@ export class MemoryIndexService {
               });
             });
         });
+      }, {
+        maxWait: CODE_GRAPH_TRANSACTION_MAX_WAIT_MS,
+        timeout: CODE_GRAPH_TRANSACTION_TIMEOUT_MS,
       });
     });
   }

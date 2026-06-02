@@ -13,8 +13,25 @@ services:
       DATABASE_URL: postgresql://code_review:code_review@postgres:5432/code_review_copilot?schema=public
       DINGTALK_WEBHOOK_URL: ${DINGTALK_WEBHOOK_URL:-}
       DINGTALK_SECRET: ${DINGTALK_SECRET:-}
+      CODE_GRAPH_CRON_SECRET: ${CODE_GRAPH_CRON_SECRET:?CODE_GRAPH_CRON_SECRET is required}
     ports:
       - "3000:3000"
+
+  code-graph-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: code-graph-cron
+    container_name: code-review-copilot-code-graph-cron
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      APP_BASE_URL: http://app:3000
+      CODE_GRAPH_CRON_SECRET: ${CODE_GRAPH_CRON_SECRET:?CODE_GRAPH_CRON_SECRET is required}
+      CODE_GRAPH_CRON_SCHEDULE: ${CODE_GRAPH_CRON_SCHEDULE:-0 23 * * *}
 
   postgres:
     image: postgres:16-alpine
