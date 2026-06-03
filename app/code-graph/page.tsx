@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { CodeGraphView } from '@/components/code-graph/code-graph-view'
 import type {
+  CodeGraphDb,
   CodeGraphViewFile,
   CodeGraphViewRelation,
   CodeGraphViewSymbol,
@@ -50,6 +51,7 @@ type GraphSelection = {
 
 type GraphData = {
   snapshot?: GraphSnapshot | null
+  codegraphDb?: CodeGraphDb | null
   files: CodeGraphViewFile[]
   symbols: CodeGraphViewSymbol[]
   relations: CodeGraphViewRelation[]
@@ -279,7 +281,8 @@ export default function CodeGraphPage() {
         const files = Array.isArray(data.files) ? data.files as CodeGraphViewFile[] : []
         const symbols = Array.isArray(data.symbols) ? data.symbols as CodeGraphViewSymbol[] : []
         const relations = Array.isArray(data.relations) ? data.relations as CodeGraphViewRelation[] : []
-        setGraphData({ snapshot: data.snapshot || null, files, symbols, relations })
+        const codegraphDb = data.codegraphDb && typeof data.codegraphDb === 'object' ? data.codegraphDb as CodeGraphDb : null
+        setGraphData({ snapshot: data.snapshot || null, codegraphDb, files, symbols, relations })
         setSelectedFilePath((current) => current && files.some((file) => file.filePath === current) ? current : files[0]?.filePath || null)
       })
       .catch((error) => {
@@ -301,6 +304,7 @@ export default function CodeGraphPage() {
   const graphFiles = graphData?.files || []
   const graphSymbols = graphData?.symbols || []
   const graphRelations = graphData?.relations || []
+  const graphDb = graphData?.codegraphDb || null
 
   return (
     <div className="flex h-[calc(100vh-1px)] min-h-0 bg-background">
@@ -532,6 +536,7 @@ export default function CodeGraphPage() {
                     <Badge variant="outline">文件 {graphFiles.length}</Badge>
                     <Badge variant="outline">符号 {graphSymbols.length}</Badge>
                     <Badge variant="outline">关系 {graphRelations.length}</Badge>
+                    {graphDb && <Badge variant="secondary">标准边 {graphDb.edges.length}</Badge>}
                   </div>
                 </div>
               </CardHeader>
@@ -551,6 +556,7 @@ export default function CodeGraphPage() {
                       files={graphFiles}
                       symbols={graphSymbols}
                       relations={graphRelations}
+                      codegraphDb={graphDb}
                       selectedFilePath={selectedFile?.filePath || null}
                       onSelectFile={setSelectedFilePath}
                     />

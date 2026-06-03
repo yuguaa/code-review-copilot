@@ -42,10 +42,64 @@ export type CodeGraphViewRelation = {
   evidence: string
 }
 
+export type CodeGraphDbFile = {
+  path: string
+  content_hash: string
+  language: string
+  size: number
+  modified_at: number
+  indexed_at: number
+  node_count: number
+  errors: string | null
+}
+
+export type CodeGraphDbNode = {
+  id: string
+  kind: string
+  name: string
+  qualified_name: string
+  file_path: string
+  language: string
+  start_line: number
+  end_line: number
+  start_column: number
+  end_column: number
+  docstring: string | null
+  signature: string | null
+  visibility: string | null
+  is_exported: number
+  is_async: number
+  is_static: number
+  is_abstract: number
+  decorators: string | null
+  type_parameters: string | null
+  updated_at: number
+}
+
+export type CodeGraphDbEdge = {
+  source: string
+  target: string
+  kind: string
+  metadata: string | null
+  line: number | null
+  col: number | null
+  provenance: string | null
+}
+
+export type CodeGraphDb = {
+  schema_versions: Array<{ version: number; applied_at: number; description: string }>
+  files: CodeGraphDbFile[]
+  nodes: CodeGraphDbNode[]
+  edges: CodeGraphDbEdge[]
+  unresolved_refs: Array<Record<string, unknown>>
+  project_metadata: Array<Record<string, unknown>>
+}
+
 type CodeGraphViewProps = {
   files: CodeGraphViewFile[]
   symbols: CodeGraphViewSymbol[]
   relations: CodeGraphViewRelation[]
+  codegraphDb?: CodeGraphDb | null
   selectedFilePath: string | null
   onSelectFile: (filePath: string) => void
 }
@@ -64,6 +118,22 @@ const roleColors: Record<string, string> = {
   project_config: '#ca8a04',
   module: '#475569',
   symbol: '#f8fafc',
+  import: '#0f172a',
+  file: '#475569',
+}
+
+const kindColors: Record<string, string> = {
+  file: '#475569',
+  import: '#111827',
+  component: '#0891b2',
+  function: '#2563eb',
+  method: '#4f46e5',
+  class: '#7c3aed',
+  interface: '#0f766e',
+  type_alias: '#0d9488',
+  constant: '#ca8a04',
+  variable: '#64748b',
+  property: '#64748b',
 }
 
 const shortFileName = (filePath: string) => {
@@ -84,6 +154,82 @@ const symbolColor = (kind: string) => {
   if (kind === 'interface') return '#0f766e'
   if (kind === 'enum') return '#a16207'
   return '#334155'
+}
+
+const nodeText = (node: CodeGraphDbNode) => {
+  if (node.kind === 'file') return shortFileName(node.file_path)
+  if (node.kind === 'import') return `↗ ${node.name}`
+  return `${symbolPrefix(node.kind)} ${node.name}`
+}
+
+const buildCodegraphDbGraphData = (
+  codegraphDb: CodeGraphDb,
+  selectedFilePath: string | null,
+): RGJsonData => {
+  const selectedNodeIds = selectedFilePath
+    ? new Set(codegraphDb.nodes.filter((node) => node.file_path === selectedFilePath).map((node) => node.id))
+    : new Set<string>()
+  const relationNodeIds = new Set<string>()
+
+  codegraphDb.edges.forEach((edge) => {
+    if (edge.kind === 'contains') return
+    relationNodeIds.add(edge.source)
+    relationNodeIds.add(edge.target)
+    if (selectedNodeIds.has(edge.source) || selectedNodeIds.has(edge.target)) {
+      relationNodeIds.add(edge.source)
+      relationNodeIds.add(edge.target)
+    }
+  })
+
+  const visibleNodes = [
+    ...codegraphDb.nodes.filter((node) => selectedNodeIds.has(node.id)),
+    ...codegraphDb.nodes.filter((node) => relationNodeIds.has(node.id)),
+    ...codegraphDb.nodes.filter((node) => node.kind === 'file'),
+    ...codegraphDb.nodes,
+  ].filter((node, index, allNodes) => allNodes.findIndex((item) => item.id === node.id) === index).slice(0, 180)
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id))
+  const graphNodes: JsonNode[] = visibleNodes.map((node) => {
+    const selected = selectedFilePath === node.file_path
+    return {
+      id: node.id,
+      text: nodeText(node),
+      color: kindColors[node.kind] || '#334155',
+      borderColor: selected ? '#f8fafc' : node.kind === 'import' ? '#334155' : '#1e293b',
+      borderWidth: selected ? 3 : 1,
+      fontColor: '#f8fafc',
+      width: node.kind === 'import' ? 110 : node.kind === 'file' ? 92 : 96,
+      height: node.kind === 'import' || node.kind !== 'file' ? 28 : 38,
+      nodeShape: RGNodeShape.rect,
+      borderRadius: node.kind === 'file' ? 10 : 999,
+      data: node,
+    }
+  })
+  const graphLines: JsonLine[] = codegraphDb.edges
+    .filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
+    .slice(0, 320)
+    .map((edge, index) => {
+      const selected = selectedNodeIds.has(edge.source) || selectedNodeIds.has(edge.target)
+      return {
+        id: `${edge.source}:${edge.target}:${edge.kind}:${index}`,
+        from: edge.source,
+        to: edge.target,
+        text: edge.kind,
+        color: selected ? '#facc15' : edge.kind === 'contains' ? '#475569' : '#64748b',
+        fontColor: selected ? '#fde68a' : '#94a3b8',
+        lineWidth: selected ? 2 : 1,
+        opacity: edge.kind === 'contains' ? 0.26 : selected ? 1 : 0.55,
+        lineShape: RGLineShape.StandardCurve,
+        showEndArrow: edge.kind !== 'contains',
+        useTextOnPath: edge.kind !== 'contains',
+        data: edge,
+      }
+    })
+
+  return {
+    rootId: selectedFilePath ? `file:${selectedFilePath}` : visibleNodes[0]?.id,
+    nodes: graphNodes,
+    lines: graphLines,
+  }
 }
 
 const buildGraphData = (
@@ -216,11 +362,13 @@ const graphOptions: RGOptions = {
   },
 }
 
-function CodeGraphCanvas({ files, symbols, relations, selectedFilePath, onSelectFile }: CodeGraphViewProps) {
+function CodeGraphCanvas({ files, symbols, relations, codegraphDb, selectedFilePath, onSelectFile }: CodeGraphViewProps) {
   const graphInstance = RGHooks.useGraphInstance()
   const graphData = useMemo(
-    () => buildGraphData(files, symbols, relations, selectedFilePath),
-    [files, relations, selectedFilePath, symbols],
+    () => codegraphDb
+      ? buildCodegraphDbGraphData(codegraphDb, selectedFilePath)
+      : buildGraphData(files, symbols, relations, selectedFilePath),
+    [codegraphDb, files, relations, selectedFilePath, symbols],
   )
 
   useEffect(() => {
@@ -233,7 +381,12 @@ function CodeGraphCanvas({ files, symbols, relations, selectedFilePath, onSelect
   }, [graphData, graphInstance])
 
   const handleNodeClick = (node: RGNode) => {
+    const dbFilePath = typeof node.data?.file_path === 'string' ? node.data.file_path : null
     const symbolFilePath = typeof node.data?.filePath === 'string' ? node.data.filePath : null
+    if (dbFilePath) {
+      onSelectFile(dbFilePath)
+      return true
+    }
     onSelectFile(node.id.startsWith('symbol:') && symbolFilePath ? symbolFilePath : node.id)
     return true
   }

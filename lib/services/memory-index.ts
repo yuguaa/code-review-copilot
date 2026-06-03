@@ -43,6 +43,9 @@ const IGNORED_PATH_PARTS = new Set([
 type ImportRecord = {
   source: string;
   importedNames: string[];
+  line: number;
+  col: number;
+  signature: string;
 };
 
 type IndexedFile = {
@@ -51,6 +54,8 @@ type IndexedFile = {
   language: string;
   role: string;
   summary: string;
+  size: number;
+  lineCount: number;
   imports: ImportRecord[];
   exports: string[];
   symbols: Array<{ name: string; kind: string; startLine: number; endLine: number; signature: string }>;
@@ -75,6 +80,76 @@ type ProjectIndex = {
   memory: Record<string, unknown>;
   baseSnapshotBranch?: string | null;
   baseSnapshotCommitSha?: string | null;
+};
+
+type CodeGraphDbFile = {
+  path: string;
+  content_hash: string;
+  language: string;
+  size: number;
+  modified_at: number;
+  indexed_at: number;
+  node_count: number;
+  errors: string | null;
+};
+
+type CodeGraphDbNode = {
+  id: string;
+  kind: string;
+  name: string;
+  qualified_name: string;
+  file_path: string;
+  language: string;
+  start_line: number;
+  end_line: number;
+  start_column: number;
+  end_column: number;
+  docstring: string | null;
+  signature: string | null;
+  visibility: string | null;
+  is_exported: number;
+  is_async: number;
+  is_static: number;
+  is_abstract: number;
+  decorators: string | null;
+  type_parameters: string | null;
+  updated_at: number;
+};
+
+type CodeGraphDbEdge = {
+  source: string;
+  target: string;
+  kind: string;
+  metadata: string | null;
+  line: number | null;
+  col: number | null;
+  provenance: string | null;
+};
+
+type CodeGraphDbUnresolvedRef = {
+  from_node_id: string;
+  reference_name: string;
+  reference_kind: string;
+  line: number;
+  col: number;
+  candidates: string;
+  file_path: string;
+  language: string;
+};
+
+type CodeGraphDbMetadata = {
+  key: string;
+  value: string;
+  updated_at: number;
+};
+
+type CodeGraphDb = {
+  schema_versions: Array<{ version: number; applied_at: number; description: string }>;
+  files: CodeGraphDbFile[];
+  nodes: CodeGraphDbNode[];
+  edges: CodeGraphDbEdge[];
+  unresolved_refs: CodeGraphDbUnresolvedRef[];
+  project_metadata: CodeGraphDbMetadata[];
 };
 
 type MemoryGitLabService = {
@@ -110,11 +185,13 @@ function hashContent(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
+function hashId(content: string): string {
+  return crypto.createHash("md5").update(content).digest("hex");
+}
+
 function detectLanguage(filePath: string): string {
-  if (filePath.endsWith(".tsx")) return "tsx";
-  if (filePath.endsWith(".ts")) return "ts";
-  if (filePath.endsWith(".jsx")) return "jsx";
-  if (filePath.endsWith(".js")) return "js";
+  if (filePath.endsWith(".tsx") || filePath.endsWith(".ts")) return "typescript";
+  if (filePath.endsWith(".jsx") || filePath.endsWith(".js") || filePath.endsWith(".mjs") || filePath.endsWith(".cjs")) return "javascript";
   if (filePath.endsWith(".vue")) return "vue";
   if (filePath.endsWith(".prisma")) return "prisma";
   if (filePath.endsWith(".css") || filePath.endsWith(".scss")) return "style";
@@ -182,25 +259,39 @@ function parseNamedImports(specifier: string): string[] {
     .filter((item): item is string => Boolean(item));
 }
 
+function findLineColumn(content: string, index: number | undefined): { line: number; col: number } {
+  if (typeof index !== "number" || index < 0) return { line: 1, col: 0 };
+  const before = content.slice(0, index);
+  const lines = before.split("\n");
+  return { line: lines.length, col: lines[lines.length - 1]?.length || 0 };
+}
+
 function extractImports(content: string): ImportRecord[] {
-  const imports = new Map<string, Set<string>>();
-  const addImport = (source: string, names: string[] = []) => {
-    const bucket = imports.get(source) || new Set<string>();
+  const imports = new Map<string, { names: Set<string>; line: number; col: number; signature: string }>();
+  const addImport = (source: string, names: string[] = [], index?: number, signature?: string) => {
+    const current = imports.get(source);
+    const position = findLineColumn(content, index);
+    const bucket = current?.names || new Set<string>();
     names.forEach((name) => bucket.add(name));
-    imports.set(source, bucket);
+    imports.set(source, {
+      names: bucket,
+      line: current?.line || position.line,
+      col: current?.col ?? position.col,
+      signature: current?.signature || (signature || "").trim().slice(0, 240),
+    });
   };
 
   for (const match of content.matchAll(/import\s+(?:type\s+)?([\s\S]*?)\s+from\s+["']([^"']+)["']/g)) {
-    if (match[2]) addImport(match[2], parseNamedImports(match[1] || ""));
+    if (match[2]) addImport(match[2], parseNamedImports(match[1] || ""), match.index, match[0]);
   }
   for (const match of content.matchAll(/import\s+["']([^"']+)["']/g)) {
-    if (match[1]) addImport(match[1]);
+    if (match[1]) addImport(match[1], [], match.index, match[0]);
   }
   for (const match of content.matchAll(/export\s+(?:type\s+)?(?:\{[\s\S]*?\}|\*)\s+from\s+["']([^"']+)["']/g)) {
-    if (match[1]) addImport(match[1]);
+    if (match[1]) addImport(match[1], [], match.index, match[0]);
   }
   for (const match of content.matchAll(/require\(["']([^"']+)["']\)/g)) {
-    if (match[1]) addImport(match[1]);
+    if (match[1]) addImport(match[1], [], match.index, match[0]);
   }
   for (const match of content.matchAll(/^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+([A-Za-z0-9_,\s*()]+)$/gm)) {
     if (!match[1]) continue;
@@ -209,25 +300,28 @@ function extractImports(content: string): ImportRecord[] {
       .split(",")
       .map((item) => item.trim().split(/\s+as\s+/)[0]?.trim())
       .filter((item): item is string => Boolean(item) && item !== "*");
-    addImport(match[1], names);
+    addImport(match[1], names, match.index, match[0]);
   }
   for (const match of content.matchAll(/^\s*import\s+([A-Za-z0-9_\.,\s]+)$/gm)) {
     if (!match[1]) continue;
     match[1].split(",")
       .map((item) => item.trim().split(/\s+as\s+/)[0]?.trim())
       .filter((item): item is string => Boolean(item))
-      .forEach((source) => addImport(source));
+      .forEach((source) => addImport(source, [], match.index, match[0]));
   }
   for (const match of content.matchAll(/^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.*]*)\s*;/gm)) {
     if (!match[1]) continue;
     const importTarget = match[1].replace(/\.\*$/, "");
     const parts = importTarget.split(".");
-    addImport(importTarget, parts.length > 1 ? [parts[parts.length - 1]] : []);
+    addImport(importTarget, parts.length > 1 ? [parts[parts.length - 1]] : [], match.index, match[0]);
   }
 
-  return [...imports.entries()].map(([source, names]) => ({
+  return [...imports.entries()].map(([source, item]) => ({
     source,
-    importedNames: [...names],
+    importedNames: [...item.names],
+    line: item.line,
+    col: item.col,
+    signature: item.signature,
   }));
 }
 
@@ -422,6 +516,257 @@ function mapWithConcurrency<T, R>(
 
     launch();
   });
+}
+
+function codeGraphFileNodeId(filePath: string): string {
+  return `file:${filePath}`;
+}
+
+function codeGraphImportNodeId(filePath: string, importPath: string): string {
+  return `import:${hashId(`${filePath}:${importPath}`)}`;
+}
+
+function normalizeCodeGraphSymbolKind(kind: string): string {
+  if (kind === "type") return "type_alias";
+  if (kind === "record") return "class";
+  return kind;
+}
+
+function codeGraphSymbolNodeId(filePath: string, symbol: { name: string; kind: string; startLine: number }): string {
+  return `${normalizeCodeGraphSymbolKind(symbol.kind)}:${hashId(`${filePath}:${symbol.kind}:${symbol.name}:${symbol.startLine}`)}`;
+}
+
+function buildCodeGraphDb(input: {
+  files: IndexedFile[];
+  importEdges: ImportEdge[];
+  branch: string;
+  commitSha: string;
+  sourceCommitSha?: string;
+  updateMode: "full" | "incremental" | "reuse";
+}): CodeGraphDb {
+  const indexedAt = Date.now();
+  const fileByPath = new Map(input.files.map((file) => [file.filePath, file]));
+  const nodes: CodeGraphDbNode[] = [];
+  const edges: CodeGraphDbEdge[] = [];
+  const unresolvedRefs: CodeGraphDbUnresolvedRef[] = [];
+
+  const addEdge = (edge: CodeGraphDbEdge) => {
+    edges.push(edge);
+  };
+
+  input.files.forEach((file) => {
+    const fileNodeId = codeGraphFileNodeId(file.filePath);
+    nodes.push({
+      id: fileNodeId,
+      kind: "file",
+      name: path.posix.basename(file.filePath),
+      qualified_name: file.filePath,
+      file_path: file.filePath,
+      language: file.language,
+      start_line: 1,
+      end_line: Math.max(1, file.lineCount),
+      start_column: 0,
+      end_column: 0,
+      docstring: null,
+      signature: null,
+      visibility: null,
+      is_exported: 0,
+      is_async: 0,
+      is_static: 0,
+      is_abstract: 0,
+      decorators: null,
+      type_parameters: null,
+      updated_at: indexedAt,
+    });
+
+    file.imports.forEach((importRecord) => {
+      const importNodeId = codeGraphImportNodeId(file.filePath, importRecord.source);
+      nodes.push({
+        id: importNodeId,
+        kind: "import",
+        name: importRecord.source,
+        qualified_name: importRecord.source,
+        file_path: file.filePath,
+        language: file.language,
+        start_line: importRecord.line,
+        end_line: importRecord.line,
+        start_column: importRecord.col,
+        end_column: importRecord.col + importRecord.signature.length,
+        docstring: null,
+        signature: importRecord.signature || null,
+        visibility: null,
+        is_exported: 0,
+        is_async: 0,
+        is_static: 0,
+        is_abstract: 0,
+        decorators: null,
+        type_parameters: null,
+        updated_at: indexedAt,
+      });
+      addEdge({
+        source: fileNodeId,
+        target: importNodeId,
+        kind: "contains",
+        metadata: null,
+        line: null,
+        col: null,
+        provenance: null,
+      });
+    });
+
+    file.symbols.forEach((symbol) => {
+      const kind = normalizeCodeGraphSymbolKind(symbol.kind);
+      const symbolNodeId = codeGraphSymbolNodeId(file.filePath, symbol);
+      nodes.push({
+        id: symbolNodeId,
+        kind,
+        name: symbol.name,
+        qualified_name: `${file.filePath}::${symbol.name}`,
+        file_path: file.filePath,
+        language: file.language,
+        start_line: symbol.startLine,
+        end_line: symbol.endLine,
+        start_column: 0,
+        end_column: symbol.signature.length,
+        docstring: null,
+        signature: symbol.signature || null,
+        visibility: symbol.signature.includes("private ") ? "private" : symbol.signature.includes("protected ") ? "protected" : null,
+        is_exported: file.exports.includes(symbol.name) || symbol.signature.startsWith("export ") ? 1 : 0,
+        is_async: symbol.signature.includes("async ") ? 1 : 0,
+        is_static: symbol.signature.includes("static ") ? 1 : 0,
+        is_abstract: symbol.signature.includes("abstract ") ? 1 : 0,
+        decorators: null,
+        type_parameters: null,
+        updated_at: indexedAt,
+      });
+      addEdge({
+        source: fileNodeId,
+        target: symbolNodeId,
+        kind: "contains",
+        metadata: null,
+        line: null,
+        col: null,
+        provenance: null,
+      });
+    });
+  });
+
+  input.importEdges.forEach((edge) => {
+    const fromFile = fileByPath.get(edge.fromPath);
+    if (!fromFile) return;
+    const importRecord = fromFile.imports.find((item) => item.source === edge.importPath);
+    const target = edge.toPath ? codeGraphFileNodeId(edge.toPath) : codeGraphImportNodeId(edge.fromPath, edge.importPath);
+    addEdge({
+      source: codeGraphFileNodeId(edge.fromPath),
+      target,
+      kind: "imports",
+      metadata: JSON.stringify({
+        confidence: edge.toPath ? 0.9 : 0.4,
+        resolvedBy: edge.toPath ? "framework" : "exact-match",
+        importedNames: edge.importedNames,
+      }),
+      line: importRecord?.line || null,
+      col: importRecord?.col ?? null,
+      provenance: null,
+    });
+
+    if (!edge.toPath) {
+      unresolvedRefs.push({
+        from_node_id: codeGraphFileNodeId(edge.fromPath),
+        reference_name: edge.importPath,
+        reference_kind: "import",
+        line: importRecord?.line || 1,
+        col: importRecord?.col ?? 0,
+        candidates: JSON.stringify([]),
+        file_path: edge.fromPath,
+        language: fromFile.language,
+      });
+    }
+  });
+
+  const files = input.files.map<CodeGraphDbFile>((file) => ({
+    path: file.filePath,
+    content_hash: file.contentHash,
+    language: file.language,
+    size: file.size,
+    modified_at: indexedAt,
+    indexed_at: indexedAt,
+    node_count: nodes.filter((node) => node.file_path === file.filePath).length,
+    errors: null,
+  }));
+
+  return {
+    schema_versions: [{
+      version: 1,
+      applied_at: indexedAt,
+      description: "ai-founder codegraph.db compatible json export",
+    }],
+    files,
+    nodes,
+    edges,
+    unresolved_refs: unresolvedRefs,
+    project_metadata: [
+      { key: "branch", value: input.branch, updated_at: indexedAt },
+      { key: "commit_sha", value: input.commitSha, updated_at: indexedAt },
+      { key: "source_commit_sha", value: input.sourceCommitSha || input.commitSha, updated_at: indexedAt },
+      { key: "update_mode", value: input.updateMode, updated_at: indexedAt },
+      { key: "schema", value: "ai-founder.codegraph.db", updated_at: indexedAt },
+    ],
+  };
+}
+
+function isCodeGraphDb(value: unknown): value is CodeGraphDb {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Array.isArray((value as { files?: unknown }).files) &&
+    Array.isArray((value as { nodes?: unknown }).nodes) &&
+    Array.isArray((value as { edges?: unknown }).edges) &&
+    Array.isArray((value as { unresolved_refs?: unknown }).unresolved_refs) &&
+    Array.isArray((value as { project_metadata?: unknown }).project_metadata),
+  );
+}
+
+function mergeCodeGraphDb(input: {
+  previous: unknown;
+  changed: CodeGraphDb;
+  changedFilePaths: string[];
+  removedFilePaths: string[];
+}): CodeGraphDb {
+  if (!isCodeGraphDb(input.previous)) return input.changed;
+
+  const replacedFilePaths = new Set([...input.changedFilePaths, ...input.removedFilePaths]);
+  const droppedNodeIds = new Set(
+    input.previous.nodes
+      .filter((node) => replacedFilePaths.has(node.file_path))
+      .map((node) => node.id),
+  );
+  const changedNodeIds = new Set(input.changed.nodes.map((node) => node.id));
+
+  return {
+    schema_versions: input.changed.schema_versions,
+    files: [
+      ...input.previous.files.filter((file) => !replacedFilePaths.has(file.path)),
+      ...input.changed.files,
+    ],
+    nodes: [
+      ...input.previous.nodes.filter((node) => !droppedNodeIds.has(node.id)),
+      ...input.changed.nodes,
+    ],
+    edges: [
+      ...input.previous.edges.filter((edge) => (
+        !droppedNodeIds.has(edge.source) &&
+        (!droppedNodeIds.has(edge.target) || changedNodeIds.has(edge.target))
+      )),
+      ...input.changed.edges,
+    ],
+    unresolved_refs: [
+      ...input.previous.unresolved_refs.filter((ref) => !replacedFilePaths.has(ref.file_path)),
+      ...input.changed.unresolved_refs,
+    ],
+    project_metadata: input.changed.project_metadata,
+  };
 }
 
 export class MemoryIndexService {
@@ -766,6 +1111,14 @@ export class MemoryIndexService {
           changedFiles,
           mode: "full",
         });
+        const codegraphDb = buildCodeGraphDb({
+          files,
+          importEdges,
+          branch: input.branch,
+          commitSha: input.commitSha,
+          sourceCommitSha: input.sourceCommitSha,
+          updateMode: "full",
+        });
 
         return {
           files,
@@ -792,6 +1145,7 @@ export class MemoryIndexService {
               .filter((file) => file.isChanged)
               .map((file) => ({ filePath: file.filePath, role: file.role })),
             topLevelStructure: this.summarizeTopLevelStructure(treeItems),
+            codegraphDb,
           },
         };
       });
@@ -913,6 +1267,20 @@ export class MemoryIndexService {
           mode: "incremental",
         });
         const previousMemory = this.parseJsonRecord(snapshot.memoryJson);
+        const changedCodegraphDb = buildCodeGraphDb({
+          files: changedIndexedFiles,
+          importEdges,
+          branch: input.branch,
+          commitSha: input.commitSha,
+          sourceCommitSha: input.sourceCommitSha,
+          updateMode: "incremental",
+        });
+        const codegraphDb = mergeCodeGraphDb({
+          previous: previousMemory.codegraphDb,
+          changed: changedCodegraphDb,
+          changedFilePaths: changedFiles,
+          removedFilePaths,
+        });
 
         return {
           files: changedIndexedFiles,
@@ -938,6 +1306,7 @@ export class MemoryIndexService {
             removedFilePaths,
             changedFileRoles: changedIndexedFiles.map((file) => ({ filePath: file.filePath, role: file.role })),
             indexedFiles: candidatePaths.size,
+            codegraphDb,
           },
           baseSnapshotBranch: snapshot.branch,
           baseSnapshotCommitSha: snapshot.commitSha,
@@ -976,6 +1345,7 @@ export class MemoryIndexService {
         reuseReason: reason,
         changedFiles: [],
         changedFileRoles: [],
+        codegraphDb: previousMemory.codegraphDb || null,
       },
       baseSnapshotBranch: snapshot.branch === input.branch && snapshot.commitSha === input.commitSha ? null : snapshot.branch,
       baseSnapshotCommitSha: snapshot.branch === input.branch && snapshot.commitSha === input.commitSha ? null : snapshot.commitSha,
@@ -990,12 +1360,16 @@ export class MemoryIndexService {
     const role = detectRole(item.path);
     const language = detectLanguage(item.path);
     const isChanged = changedFileSet.has(item.path);
+    const size = Buffer.byteLength(limitedContent, "utf8");
+    const lineCount = limitedContent.split("\n").length;
 
     return {
       filePath: item.path,
       contentHash: hashContent(`${item.id}:${item.path}:${limitedContent}`),
       language,
       role,
+      size,
+      lineCount,
       summary: [
         `${item.path} 是 ${role} 文件，语言为 ${language}。`,
         imports.length ? `依赖 ${imports.length} 个模块。` : "未识别到模块依赖。",
