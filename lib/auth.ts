@@ -68,6 +68,15 @@ export function isClientIpAllowed(headers: Headers): boolean {
   return allowedIps.includes(clientIp);
 }
 
+export function shouldUseSecureAuthCookie(headers: Headers, protocol: string): boolean {
+  const forwardedProto = headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (forwardedProto) {
+    return forwardedProto === "https";
+  }
+
+  return protocol === "https:";
+}
+
 export function verifyLoginCredential(username: string, secret: string): boolean {
   const config = getAuthConfig();
   if (!config) return false;

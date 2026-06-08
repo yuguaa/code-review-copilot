@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { AUTH_COOKIE_NAME, shouldUseSecureAuthCookie } from "@/lib/auth";
 
-export function POST() {
+export function POST(request: NextRequest) {
   const response = NextResponse.json({ success: true });
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
@@ -9,7 +9,7 @@ export function POST() {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureAuthCookie(request.headers, request.nextUrl.protocol),
     maxAge: 0,
   });
 

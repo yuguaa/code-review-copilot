@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -70,7 +69,7 @@ function LoginForm() {
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Code Review Copilot</p>
-            <p className="text-xs text-muted-foreground">受保护的审查工作台</p>
+            <p className="text-xs text-muted-foreground">审查工作台</p>
           </div>
         </div>
 
@@ -80,9 +79,6 @@ function LoginForm() {
               <ShieldCheck className="size-4" />
             </div>
             <CardTitle className="text-2xl leading-tight">登录账号</CardTitle>
-            <CardDescription>
-              使用部署环境中初始化的账号密钥进入系统。
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
@@ -121,7 +117,6 @@ function LoginForm() {
 
             <div className="mt-5 flex items-start gap-2 rounded-md bg-muted/70 p-3 text-xs leading-5 text-muted-foreground">
               <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-              <span>账号和密钥只从服务端环境变量读取，不提供注册入口。</span>
             </div>
           </CardContent>
         </Card>

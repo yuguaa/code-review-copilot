@@ -4,6 +4,7 @@ import {
   AUTH_SESSION_MAX_AGE_SECONDS,
   createAuthSession,
   getMissingAuthEnv,
+  shouldUseSecureAuthCookie,
   verifyLoginCredential,
 } from "@/lib/auth";
 
@@ -41,7 +42,7 @@ export function POST(request: NextRequest) {
           path: "/",
           httpOnly: true,
           sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
+          secure: shouldUseSecureAuthCookie(request.headers, request.nextUrl.protocol),
           maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
         });
 
