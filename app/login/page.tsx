@@ -114,10 +114,6 @@ function LoginForm() {
                 登录
               </Button>
             </form>
-
-            <div className="mt-5 flex items-start gap-2 rounded-md bg-muted/70 p-3 text-xs leading-5 text-muted-foreground">
-              <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-            </div>
           </CardContent>
         </Card>
       </div>
