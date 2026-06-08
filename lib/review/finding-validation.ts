@@ -2,6 +2,17 @@ import type { GitLabDiff, ReviewComment } from "@/lib/types";
 
 const MIN_FINDING_CONFIDENCE = 0.6;
 
+type FindingRejectionReason = "low_confidence" | "file_not_in_diff" | "invalid_line_range";
+
+export type ReviewFindingValidationReport<T extends ReviewComment> = {
+  accepted: T[];
+  rejected: Array<{
+    finding: T;
+    reason: FindingRejectionReason;
+  }>;
+  counts: Record<FindingRejectionReason, number>;
+};
+
 type DiffLineType = "new" | "old";
 
 type DiffLineLocation = {
@@ -103,6 +114,14 @@ function isLineRangeValid(entry: DiffIndexEntry, lineNumber: number, lineRangeEn
   return true;
 }
 
+function createEmptyRejectionCounts(): Record<FindingRejectionReason, number> {
+  return {
+    low_confidence: 0,
+    file_not_in_diff: 0,
+    invalid_line_range: 0,
+  };
+}
+
 export function getReviewFilePath(diff: GitLabDiff): string {
   return getReviewPath(diff);
 }
@@ -116,16 +135,43 @@ export function validateReviewFindings<T extends ReviewComment>(
   diffs: GitLabDiff[],
   options?: { minConfidence?: number },
 ): T[] {
+  return validateReviewFindingsWithReport(findings, diffs, options).accepted;
+}
+
+export function validateReviewFindingsWithReport<T extends ReviewComment>(
+  findings: T[],
+  diffs: GitLabDiff[],
+  options?: { minConfidence?: number },
+): ReviewFindingValidationReport<T> {
   const minConfidence = options?.minConfidence ?? MIN_FINDING_CONFIDENCE;
   const diffIndex = buildDiffIndex(diffs);
+  const accepted: T[] = [];
+  const rejected: ReviewFindingValidationReport<T>["rejected"] = [];
+  const counts = createEmptyRejectionCounts();
 
-  return findings.filter((finding) => {
+  findings.forEach((finding) => {
     const confidence = finding.confidence ?? 0.5;
-    if (!Number.isFinite(confidence) || confidence < minConfidence) return false;
+    if (!Number.isFinite(confidence) || confidence < minConfidence) {
+      counts.low_confidence += 1;
+      rejected.push({ finding, reason: "low_confidence" });
+      return;
+    }
 
     const entry = diffIndex.get(finding.filePath);
-    if (!entry) return false;
+    if (!entry) {
+      counts.file_not_in_diff += 1;
+      rejected.push({ finding, reason: "file_not_in_diff" });
+      return;
+    }
 
-    return isLineRangeValid(entry, finding.lineNumber, finding.lineRangeEnd);
+    if (!isLineRangeValid(entry, finding.lineNumber, finding.lineRangeEnd)) {
+      counts.invalid_line_range += 1;
+      rejected.push({ finding, reason: "invalid_line_range" });
+      return;
+    }
+
+    accepted.push(finding);
   });
+
+  return { accepted, rejected, counts };
 }

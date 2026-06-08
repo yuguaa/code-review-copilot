@@ -189,10 +189,12 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
       const validatedFindings = validateReviewFindings(agentResult.agentFindings, state.relevantDiffs);
       const comments = mergeComments(validatedFindings.map((item) => ({
         ...item,
-        reviewBotRunId: botRun.id,
-        sourceBotName: bot.name,
-        sourceBotModel: botModel,
-        sourceBots: [sourceFor(botRun.id, bot.name, botModel, item.confidence)],
+        reviewBotRunId: item.reviewBotRunId || botRun.id,
+        sourceBotName: item.sourceBotName || bot.name,
+        sourceBotModel: item.sourceBotModel || botModel,
+        sourceBots: item.sourceBots?.length
+          ? item.sourceBots
+          : [sourceFor(botRun.id, bot.name, botModel, item.confidence)],
       })), budget.maxFindings);
       const counts = countsFrom(comments);
       const traceKey = `${bot.name}:agent-loop`;

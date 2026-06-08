@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Network,
+  LogOut,
 } from 'lucide-react'
 
 import {
@@ -82,6 +83,12 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     return pathname === href || pathname.startsWith(`${href}/`)
   }
 
+  const handleLogout = () => {
+    fetch('/api/auth/logout', { method: 'POST' }).then(() => {
+      window.location.href = '/login'
+    })
+  }
+
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
@@ -126,6 +133,12 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleLogout} tooltip="退出登录">
+                <LogOut className="size-4" />
+                <span>退出登录</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarToggle />
             </SidebarMenuItem>

@@ -4,9 +4,10 @@
 
 ## 设计目标
 
+- 应用作为私有工作台部署，除登录接口和外部回调入口外，页面和业务 API 都要先经过登录校验。
 - 一个仓库可以配置多个审查机器人，每个机器人有独立模型、Prompt、启停状态、排序和审查预算。
 - 一次触发只创建一个 `ReviewLog`，排序第一的启用机器人作为主 Agent 执行审查，其余启用机器人作为可被条件调用的辅助 Agent。
-- 审查结果要可追溯到机器人、模型、Prompt 快照、Memory Snapshot、检索上下文和 Agent Loop 轨迹。
+- 审查结果要可追溯到机器人、模型、Prompt 快照、Memory Snapshot、检索上下文、Finding 校验报告和 Agent Loop 轨迹。
 - Memory Wiki 保存项目架构摘要、代码图谱和高置信事实，减少每次审查重复读取全仓库的成本。
 - PostgreSQL 是运行数据库，Prisma 是唯一 ORM。
 - Docker 可以直接启动完整应用，容器入口只自动执行 PostgreSQL migration，不自动导入历史 SQLite 数据。
@@ -48,6 +49,29 @@ PostgreSQL + GitLab 评论
 
 审查主链路直接写在 `ReviewService.performReview` 中，通过 `if/else` 根据状态进入下一步；步骤函数位于 `lib/review/steps/`，共享类型位于 `lib/review/types.ts`。运行时不依赖任何图编排库或额外编排层，Agent Loop 内部使用 `while (true)` 加预算条件控制。
 
+## 认证边界
+
+认证由 `proxy.ts` 统一拦截，页面和业务 API 默认都需要登录。公开路径只保留三类：
+
+- `/login`
+- `/api/auth/*`
+- 外部回调入口：`/api/webhook/gitlab` 和 `/api/code-graph/refresh-scheduled`
+
+登录账号不落库，由环境变量提供：
+
+```text
+APP_AUTH_USERNAME
+APP_AUTH_SECRET
+APP_AUTH_SESSION_SECRET
+APP_AUTH_IP_WHITELIST
+```
+
+`APP_AUTH_SECRET` 用于登录校验，`APP_AUTH_SESSION_SECRET` 用 HMAC-SHA256 签名会话 Cookie。Cookie 名为 `code_review_copilot_session`，HTTP-only，默认有效期 7 天。
+
+IP 白名单为空时不启用限制。配置后，系统先读取 `x-forwarded-for` 的第一个 IP，再读取 `x-real-ip`。部署在反向代理后时，代理层必须覆盖这两个请求头，不能透传客户端伪造的值。
+
+根布局通过 `AppShell` 分流：`/login` 直接渲染登录页，其余页面进入带侧边栏的工作台。侧边栏提供退出登录，调用 `/api/auth/logout` 清理 Cookie 后回到登录页。
+
 ## 审查步骤
 
 ### fetch_diff
@@ -68,7 +92,9 @@ PostgreSQL + GitLab 评论
 
 加载当前仓库所有启用机器人，排序第一的机器人作为主 Agent 执行 Agent Loop，其余机器人作为辅助 Agent 暴露给主 Agent。
 
-辅助 Agent 只有在主 Agent 明确请求，或主 Agent 已发现严重/可处理问题达到复核阈值时才会创建 `ReviewBotRun` 并运行。主 Agent 失败时本次审查失败；辅助 Agent 失败只记录自己的失败状态，不阻塞主 Agent 的结果汇总。
+辅助 Agent 只有在主 Agent 明确请求且存在可调用辅助 Agent，或主 Agent 已发现严重/可处理问题达到复核阈值时才会创建 `ReviewBotRun` 并运行。主 Agent 失败时本次审查失败；辅助 Agent 失败只记录自己的失败状态，不阻塞主 Agent 的结果汇总。
+
+如果当前主 Agent 没有可调用辅助 Agent，Plan Prompt 会明确写入“可调用辅助 Agent：无”，并禁止请求 `run_additional_review_agents`。服务端仍会做二次保护：模型误请求该工具时不创建空的辅助运行，只把本轮工具状态记录为 `unavailable`，然后继续走当前主 Agent 的审查链路。
 
 ### aggregate_results
 
@@ -78,7 +104,7 @@ PostgreSQL + GitLab 评论
 filePath + lineNumber + lineRangeEnd + severity + normalized content
 ```
 
-去重前会校验 finding 必须命中本次 diff 的文件和行号，并过滤 `confidence < 0.6` 的低置信问题。长期 Memory 写回仍使用高置信阈值，避免污染项目记忆。
+去重前会校验 finding 必须命中本次 diff 的文件和行号，并过滤 `confidence < 0.6` 的低置信问题。Agent Loop 内部会保存 Finding 校验报告，记录 `low_confidence`、`file_not_in_diff`、`invalid_line_range` 三类丢弃原因。辅助 Agent 产出的 finding 会保留自己的 `reviewBotRunId`、来源机器人、模型和 `sourceBots` 列表，不会在主 Agent 汇总阶段被覆盖。长期 Memory 写回仍使用高置信阈值，避免污染项目记忆。
 
 ### publish_comment
 
@@ -149,6 +175,24 @@ while (true)
 4. `review` 基于新增上下文输出结构化 findings。
 5. `critic` 去重、判断是否继续，并提取可写回 Memory 的高置信事实。
 
+每轮停止原因会归一成 `stopReason` 写入 `ReviewAgentTrace.loopIterationsJson`：
+
+- `continue`：本轮继续扩展上下文。
+- `max_iterations`：达到 `maxIterations`。
+- `max_findings`：达到 `maxFindings`。
+- `critic_stop`：Critic 判定不需要继续。
+- `no_new_findings`：本轮没有新增问题。
+- `no_more_context`：计划没有更多上下文或没有新的目标文件。
+- `no_requested_tools`：计划没有请求工具。
+- `no_progress`：连续两次进展指纹相同。
+
+进展指纹由已请求文件、请求工具、计划上下文文件和已接受 finding 组成。这个保险丝用来阻止 Agent 在相同上下文、相同工具和相同发现上反复循环。
+
+每轮还会写入两类可观测指标：
+
+- `review.rawFindings / acceptedFindings / rejectedFindings / rejectionCounts`：说明模型原始输出和校验过滤结果。
+- `contextMetrics`：记录请求文件数、选中文件数、文件上下文命中数、调用关系数、历史审查数和缺失文件列表。
+
 Agent Loop 的工具权限第一版只读：
 
 - `get_memory_snapshot`
@@ -158,8 +202,11 @@ Agent Loop 的工具权限第一版只读：
 - `get_call_graph_neighbors`
 - `get_related_review_history`
 - `get_architecture_summary`
+- `run_additional_review_agents`
 
 不允许修改代码、生成补丁、执行写操作或自动修复。
+
+`run_additional_review_agents` 只会运行当前主 Agent 之外、尚未执行过的启用机器人。没有候选机器人时快速跳过并记录 `unavailable`，不进入空辅助 Agent 流程。
 
 ## 大仓库如何处理
 
@@ -240,6 +287,13 @@ GitLabAccount
 
 ## API 和页面
 
+### 认证
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+
+登录接口校验环境变量账号和密钥，成功后写入 HTTP-only 会话 Cookie。退出登录接口清理 Cookie，不访问数据库。
+
 ### 审查入口
 
 - `POST /api/review`
@@ -269,7 +323,7 @@ GitLabAccount
 
 - `GET /api/reviews/[id]/agent-trace`
 
-审查详情页可以查看每个机器人的 loop 轮次、工具调用、检索上下文、Critic 停止原因、最终 findings 和 Memory 写回。
+审查详情页可以查看每个机器人的 loop 轮次、工具调用、检索上下文、Finding 校验、Critic 停止原因、最终 findings 和 Memory 写回。页面会把每轮 Trace 可视化成五个阶段：计划、上下文、工具、Finding、Critic。
 
 ## Docker 和数据库迁移
 
@@ -312,11 +366,15 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_DATABASE_URL" code-r
 
 ## 失败策略
 
+- 认证环境变量缺失：页面和业务 API 返回未授权，登录接口返回环境变量缺失。
+- IP 不在白名单：页面和业务 API 返回 403。
 - Memory 刷新失败：`ReviewLog` failed，不发布评论。
 - 仓库没有启用机器人：`ReviewLog` failed，错误为 `No active review bots configured`。
 - 单个机器人失败：对应 `ReviewBotRun` failed，不阻塞其他机器人。
 - 所有机器人失败：`ReviewLog` failed，不发布空评论。
 - AI JSON 解析失败：当前机器人失败，错误写入 `ReviewBotRun.error`。
+- 主 Agent 请求辅助 Agent 但没有候选机器人：工具调用记为 `unavailable`，主 Agent 继续审查，不创建空的辅助运行。
+- Agent Loop 重复无进展：停止原因记为 `no_progress`，本轮 Trace 保留重复次数。
 - Retry：清理旧 comments、bot runs、agent traces，再按当前启用机器人重新运行。
 
 ## 质量门禁
@@ -331,10 +389,12 @@ npm run build
 
 项目暂时没有 `npm test` 脚本。后续补测试时，应优先覆盖：
 
+- 环境变量登录、会话过期、退出登录和 IP 白名单。
 - Memory Snapshot 命中和刷新。
 - Code Graph TS / TSX 解析。
-- Agent Loop 预算停止。
-- 主 Agent 条件调用辅助 Agent，以及辅助 Agent 失败隔离。
+- Agent Loop 预算停止、无新增问题停止、重复无进展停止。
+- 主 Agent 条件调用辅助 Agent、无候选辅助 Agent 快速跳过，以及辅助 Agent 失败隔离。
+- Finding 校验报告和 Trace 可视化字段。
 - findings 去重和来源合并。
 - Memory Fact 高置信写回和重复跳过。
 - SQLite 到 PostgreSQL 历史数据迁移。

@@ -587,3 +587,74 @@ When photography is used (rare — mostly testimonials), avatars crop to perfect
 - Form validation states beyond `{component.text-input-focused}` are not extracted — error / success states would need a sign-up or feedback flow to confirm.
 - The actual Claude product surface (claude.ai chat interface) shares some tokens with the marketing site but adds many product-specific components (chat bubbles, message tools, file upload chips, conversation history sidebar) that are out of scope for this marketing-surface document.
 - The "agent" / "computer use" demo cards on certain pages display animated Claude controlling a browser — the static screenshot doesn't fully capture the animation chrome.
+
+## Code Review Copilot 工作台落地规范
+
+当前产品不是营销页，而是一个私有化部署的审查工作台。界面延续上面的暖色画布和珊瑚色主色，但信息密度更高，装饰更少，所有视觉层级都服务于审查、排障和回溯。
+
+### App Shell
+
+根布局通过 `AppShell` 区分登录页和工作台页面。`/login` 不显示侧边栏，避免登录表单被工作台导航挤压；其他路径进入 `AppSidebar`。
+
+工作台侧边栏保留固定导航和折叠能力，底部新增退出登录入口。退出登录使用 `LogOut` 图标和文字，和侧边栏折叠按钮放在同一区域，表示这是会话级动作，不属于具体业务页面。
+
+### 登录页
+
+登录页使用居中的窄卡片，宽度约 420px。页面左上区域只保留产品名和“受保护的审查工作台”提示，不出现营销说明。
+
+结构顺序固定为：
+
+1. 产品标识：深色方形图标容器 + `Bot` 图标。
+2. 登录卡片：`ShieldCheck` 图标、标题“登录账号”、说明文案。
+3. 账号输入框。
+4. 密钥输入框。
+5. 主按钮“登录”，提交中切换为 `Loader2`。
+6. 轻量安全提示：账号和密钥只从服务端环境变量读取，不提供注册入口。
+
+视觉上，登录页使用暖色背景、`Card`、`Input`、`Button` 的现有基础组件，不新增独立表单风格。按钮保持 40px 高度，输入框使用标准 9 高度 token。
+
+### 审查详情页
+
+审查详情是工作台里信息密度最高的页面。结构保持三层：
+
+1. 顶部摘要区：审查结论、状态、GitLab 链接、重试或停止按钮、问题统计。
+2. 左侧索引：问题索引、Agent 时间线、页面锚点。
+3. 右侧主内容：问题清单、技术走查、Agent Loop 追溯、原始材料。
+
+顶部摘要用暖色渐变和半透明背景承载，不额外加入装饰图形。左侧索引用 `bg-sidebar/25` 和轻边框区分，右侧内容使用卡片式 section，但 section 只承担信息分组，不做营销卡片效果。
+
+### Agent Loop 过程可视化
+
+Agent Loop 不再只展示 JSON。每个机器人卡片下默认展开“审查过程可视化”，每轮 Loop 被拆成五个阶段：
+
+```text
+计划 → 上下文 → 工具 → Finding → Critic
+```
+
+每个阶段使用一个小节点卡片，包含图标、阶段名、摘要和一行细节：
+
+- 计划：`Brain`，展示是否需要更多上下文、请求工具数和目标文件。
+- 上下文：`FileSearch`，展示文件上下文命中、调用关系、历史审查和缺失数量。
+- 工具：`Wrench`，展示工具调用次数、产出数量和可用状态。
+- Finding：`ListChecks`，展示原始、接受、丢弃和累计问题数。
+- Critic：`ShieldCheck`，展示继续或停止原因，以及重复进展次数。
+
+阶段状态只保留四种语义：
+
+- `done`：绿色系，表示该阶段完成且没有明显阻塞。
+- `active`：主色系，表示 Critic 决策为继续。
+- `warning`：琥珀色，表示有缺失上下文、工具不可用、Finding 被丢弃或重复无进展。
+- `idle`：中性色，表示旧 Trace 没有该字段或本轮没有该动作。
+
+节点在桌面端用 5 列横排，形成流程感；窄屏自动换行，不压缩文字到不可读。每轮节点下面保留三条文字摘要：工具调用、Finding 校验和上下文指标。原始 `Final Plan / Critic` 和 Agent 原始评价仍放在折叠区里，默认不抢占主视线。
+
+### Trace 文案规则
+
+Trace 文案只描述可观察事实，不做结论包装：
+
+- 使用“达到最大轮次”“无新增问题”“无更多上下文”“无工具请求”“重复无进展”等明确原因。
+- Finding 丢弃原因直接写成“低置信”“非 Diff 文件”“无效行号”。
+- 上下文指标使用短标签：请求、选择、文件命中、关系、历史、缺失。
+- 旧数据缺字段时写“旧 Trace 未记录”，不猜测原因。
+
+这些文案面向排障，不面向用户增长。要让维护者一眼知道 Agent 是继续、正常停、预算停，还是因为没有工具或没有进展停。

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { aiService } from "@/lib/services/ai";
 import { contextRetrieverService, type RetrievedAgentContext } from "@/lib/services/context-retriever";
+import { validateReviewFindingsWithReport } from "@/lib/review/finding-validation";
 import {
   buildReviewAgentCriticPrompt,
   buildReviewAgentPlanPrompt,
@@ -16,9 +17,21 @@ import { normalizeAgentLoopBudget, type AgentLoopBudget } from "@/lib/services/r
 const MEMORY_WRITE_CONFIDENCE = 0.85;
 const ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD = 1;
 const ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD = 1;
+const MAX_REPEATED_PROGRESS_SIGNATURES = 2;
 
 function toJsonInput(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+}
+
+function toValidationDiff(diff: AgentLoopInput["diffs"][number]) {
+  return {
+    old_path: diff.filePath,
+    new_path: diff.filePath,
+    diff: diff.diff,
+    new_file: false,
+    renamed_file: false,
+    deleted_file: false,
+  };
 }
 
 export interface AgentLoopInput {
@@ -75,6 +88,16 @@ interface AgentCriticResult {
     evidence: string;
   }>;
 }
+
+type AgentLoopStopReason =
+  | "continue"
+  | "max_iterations"
+  | "max_findings"
+  | "critic_stop"
+  | "no_new_findings"
+  | "no_more_context"
+  | "no_requested_tools"
+  | "no_progress";
 
 interface AdditionalAgentToolResult {
   agentId: string;
@@ -175,6 +198,50 @@ function dedupeFindings(
     }));
 }
 
+function findingKey(finding: ReviewComment): string {
+  return [
+    finding.filePath,
+    finding.lineNumber,
+    finding.lineRangeEnd || "",
+    finding.severity,
+    finding.content.replace(/\s+/g, " ").trim(),
+  ].join("|");
+}
+
+function buildProgressSignature(params: {
+  requestedFiles: string[];
+  requestedTools: string[];
+  contextFiles: string[];
+  findings: Array<ReviewComment & { confidence?: number }>;
+}): string {
+  return JSON.stringify({
+    requestedFiles: [...new Set(params.requestedFiles)].sort(),
+    requestedTools: [...new Set(params.requestedTools)].sort(),
+    contextFiles: [...new Set(params.contextFiles)].sort(),
+    findingKeys: params.findings.map(findingKey).sort(),
+  });
+}
+
+function resolveStopReason(params: {
+  hasBudget: boolean;
+  hasFindingBudget: boolean;
+  critic: AgentCriticResult;
+  newFindings: number;
+  needsMoreContext?: boolean;
+  requestedTools: string[];
+  nextFiles: string[];
+  repeatedProgressCount: number;
+}): AgentLoopStopReason {
+  if (!params.hasBudget) return "max_iterations";
+  if (!params.hasFindingBudget) return "max_findings";
+  if (params.repeatedProgressCount >= MAX_REPEATED_PROGRESS_SIGNATURES) return "no_progress";
+  if (!params.critic.shouldContinue) return "critic_stop";
+  if (params.newFindings <= 0) return "no_new_findings";
+  if (!params.needsMoreContext || params.nextFiles.length === 0) return "no_more_context";
+  if (params.requestedTools.length === 0) return "no_requested_tools";
+  return "continue";
+}
+
 function summarizeToolCalls(context: RetrievedAgentContext, requestedFiles: string[], maxDepth: number) {
   const resultCounts: Record<string, number> = {
     get_code_graph_status: context.codeGraph.available ? 1 : 0,
@@ -215,6 +282,7 @@ function selectAdditionalAgents(
   executedAgentIds: Set<string>,
 ): AdditionalReviewAgent[] {
   if (!(plan.requestedTools || []).includes("run_additional_review_agents")) return [];
+  if (agents.length === 0) return [];
 
   const requestedNames = plan.requestedAgentNames || [];
   if (requestedNames.length === 0) {
@@ -236,6 +304,16 @@ function selectAdditionalAgents(
   }
 
   return selected;
+}
+
+function canRunAdditionalAgents(
+  plan: AgentPlan,
+  agents: AdditionalReviewAgent[],
+): boolean {
+  return Boolean(
+    (plan.requestedTools || []).includes("run_additional_review_agents") &&
+    agents.length > 0,
+  );
 }
 
 function buildAdditionalAgentPrompt(agent: AdditionalReviewAgent, task?: string): string | null {
@@ -325,6 +403,7 @@ export class ReviewAgentLoopService {
     let requestedFiles = [...input.changedFiles];
     let iteration = 1;
     const executedAdditionalAgentIds = new Set<string>();
+    const progressSignatures = new Map<string, number>();
 
     while (true) {
       const remainingIterations = budget.maxIterations - iteration;
@@ -356,14 +435,16 @@ export class ReviewAgentLoopService {
 
       const planResponse = await aiService.reviewCode(planPrompt, input.modelConfig, REVIEW_AGENT_PLAN_SYSTEM_PROMPT);
       finalPlan = safePlan(aiService.parseJsonObject<AgentPlan>(planResponse));
+      const availableAdditionalAgents = input.availableAdditionalAgents || [];
       const additionalAgents = selectAdditionalAgents(
         finalPlan,
-        input.availableAdditionalAgents || [],
+        availableAdditionalAgents,
         executedAdditionalAgentIds,
       );
       let additionalAgentObservation = "";
 
-      if ((finalPlan.requestedTools || []).includes("run_additional_review_agents")) {
+      const requestedAdditionalAgents = (finalPlan.requestedTools || []).includes("run_additional_review_agents");
+      if (canRunAdditionalAgents(finalPlan, availableAdditionalAgents)) {
         additionalAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
         const additionalAgentResults = await this.runAdditionalReviewAgents(
           input,
@@ -383,6 +464,17 @@ export class ReviewAgentLoopService {
           },
           resultCount: additionalFindings.length,
           observation: additionalAgentObservation,
+        });
+      } else if (requestedAdditionalAgents) {
+        toolCalls.push({
+          tool: "run_additional_review_agents",
+          status: "unavailable",
+          args: {
+            agents: [],
+            task: finalPlan.additionalAgentTask || "",
+          },
+          resultCount: 0,
+          observation: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
         });
       }
 
@@ -407,10 +499,11 @@ export class ReviewAgentLoopService {
       const parsedReview = aiService.parseStructuredReview(reviewResponse, {
         maxItems: Math.max(budget.maxFindings - findings.length, 0),
       });
+      const validationReport = validateReviewFindingsWithReport(parsedReview.commentItems, input.diffs.map(toValidationDiff));
       const previousCount = findings.length;
       findings = dedupeFindings([
         ...findings,
-        ...parsedReview.commentItems,
+        ...validationReport.accepted,
       ], budget.maxFindings);
       const newFindings = findings.length - previousCount;
 
@@ -473,6 +566,33 @@ export class ReviewAgentLoopService {
 
       const criticResponse = await aiService.reviewCode(criticPrompt, input.modelConfig, REVIEW_AGENT_CRITIC_SYSTEM_PROMPT);
       latestCritic = safeCritic(aiService.parseJsonObject<AgentCriticResult>(criticResponse));
+
+      const hasBudget = iteration < budget.maxIterations;
+      const hasFindingBudget = findings.length < budget.maxFindings;
+      const requestedTools = finalPlan.requestedTools || [];
+      const nextFiles = finalPlan.contextFiles?.filter((file) => !requestedFiles.includes(file)) || [];
+      const progressSignature = buildProgressSignature({
+        requestedFiles,
+        requestedTools,
+        contextFiles: finalPlan.contextFiles || [],
+        findings,
+      });
+      const repeatedProgressCount = (progressSignatures.get(progressSignature) || 0) + 1;
+      progressSignatures.set(progressSignature, repeatedProgressCount);
+      const stopReason = resolveStopReason({
+        hasBudget,
+        hasFindingBudget,
+        critic: latestCritic,
+        newFindings,
+        needsMoreContext: finalPlan.needsMoreContext,
+        requestedTools,
+        nextFiles,
+        repeatedProgressCount,
+      });
+      const shouldContinue = Boolean(
+        stopReason === "continue"
+      );
+
       loopIterations.push({
         iteration,
         budget,
@@ -480,27 +600,23 @@ export class ReviewAgentLoopService {
         toolCalls,
         plan: finalPlan,
         review: {
+          rawFindings: parsedReview.commentItems.length,
+          acceptedFindings: validationReport.accepted.length,
+          rejectedFindings: validationReport.rejected.length,
+          rejectionCounts: validationReport.counts,
           newFindings,
           totalFindings: findings.length,
           response: reviewResponse,
         },
+        contextMetrics: context.metrics,
+        progress: {
+          signature: progressSignature,
+          repeatedCount: repeatedProgressCount,
+          stopReason,
+        },
         critic: latestCritic,
         contextSummary,
       });
-
-      const hasBudget = iteration < budget.maxIterations;
-      const hasFindingBudget = findings.length < budget.maxFindings;
-      const requestedTools = finalPlan.requestedTools || [];
-      const nextFiles = finalPlan.contextFiles?.filter((file) => !requestedFiles.includes(file)) || [];
-      const shouldContinue = Boolean(
-        hasBudget &&
-        hasFindingBudget &&
-        latestCritic.shouldContinue &&
-        newFindings > 0 &&
-        finalPlan.needsMoreContext &&
-        requestedTools.length > 0 &&
-        nextFiles.length > 0
-      );
 
       if (!shouldContinue) break;
       requestedFiles = [...new Set([...requestedFiles, ...nextFiles])];

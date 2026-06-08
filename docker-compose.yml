@@ -12,6 +12,10 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://code_review:code_review@postgres:5432/code_review_copilot?schema=public
+      APP_AUTH_USERNAME: ${APP_AUTH_USERNAME:?APP_AUTH_USERNAME is required}
+      APP_AUTH_SECRET: ${APP_AUTH_SECRET:?APP_AUTH_SECRET is required}
+      APP_AUTH_SESSION_SECRET: ${APP_AUTH_SESSION_SECRET:?APP_AUTH_SESSION_SECRET is required}
+      APP_AUTH_IP_WHITELIST: ${APP_AUTH_IP_WHITELIST:-}
       DINGTALK_WEBHOOK_URL: ${DINGTALK_WEBHOOK_URL:-}
       DINGTALK_SECRET: ${DINGTALK_SECRET:-}
       CODE_GRAPH_CRON_SECRET: ${CODE_GRAPH_CRON_SECRET:?CODE_GRAPH_CRON_SECRET is required}

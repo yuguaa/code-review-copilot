@@ -5,19 +5,23 @@
 ## 功能特性
 
 ### 核心功能
+- **私有工作台登录**: 通过环境变量初始化唯一登录账号，页面和业务 API 默认需要登录后访问
 - **多仓库管理**: 支持连接多个 GitLab 实例和仓库
 - **AI 模型集成**: 支持 OpenAI、Claude 和自定义 AI 模型
 - **智能代码审查**: 自动分析 GitLab Merge Request 的 Staged Diff
 - **主 Agent + 条件辅助 Agent**: 每个仓库可配置多个审查机器人，排序第一的启用机器人作为主 Agent，其余启用机器人按需复核
 - **Code Graph Memory**: 保存项目架构摘要、代码图谱、符号节点和高置信审查事实，减少重复全量读取
+- **Agent Loop 保险丝**: 记录最大轮次、问题上限、无新增问题、无更多上下文、无工具请求和重复无进展等停止原因
 - **三级问题分类**: 严重 / 一般 / 建议
 - **分支配置**: 为不同分支配置不同的审查策略
-- **审查历史**: 完整的审查日志和历史记录
+- **审查历史**: 完整的审查日志、历史记录和 Agent Loop 可视化追溯
 - **Webhook 集成**: 自动监听 GitLab MR 事件并触发审查
 - **统计仪表盘**: 仓库维度和用户维度的审查统计
 
 ### UI 特性
 - 基于 **shadcn/ui** 的现代化界面
+- 独立登录页，登录成功后进入带侧边栏的工作台
+- 审查详情页展示 Agent 每轮“计划 → 上下文 → 工具 → Finding → Critic”的执行过程
 - 完全响应式设计
 - 暗色模式支持
 
@@ -36,6 +40,14 @@
 ```bash
 cp .env.example .env
 docker compose up --build -d
+```
+
+启动前至少需要在 `.env` 中替换登录相关配置：
+
+```env
+APP_AUTH_USERNAME="admin"
+APP_AUTH_SECRET="replace-with-login-secret"
+APP_AUTH_SESSION_SECRET="replace-with-long-random-session-secret"
 ```
 
 访问 http://localhost:3000
@@ -75,7 +87,14 @@ npm run dev
 
 ## 使用指南
 
-### 第一步：配置 GitLab 账号
+### 第一步：登录工作台
+
+1. 打开部署后的站点
+2. 使用 `.env` 中的 `APP_AUTH_USERNAME` 和 `APP_AUTH_SECRET` 登录
+3. 登录会话由 HTTP-only Cookie 保存，有效期 7 天
+4. 侧边栏底部可以退出登录
+
+### 第二步：配置 GitLab 账号
 
 1. 进入"配置"页面
 2. 点击"添加账号"
@@ -84,7 +103,7 @@ npm run dev
    - URL：GitLab 实例地址（如 https://gitlab.com）
    - Access Token：个人访问令牌（需要 api 权限）
 
-### 第二步：配置 AI 模型
+### 第三步：配置 AI 模型
 
 1. 在"配置"页面切换到"AI 模型"标签
 2. 点击"添加模型"
@@ -94,7 +113,7 @@ npm run dev
    - 模型 ID：如 gpt-4, claude-3-5-sonnet
    - API 密钥：对应的 API 密钥
 
-### 第三步：添加仓库
+### 第四步：添加仓库
 
 1. 进入"仓库列表"页面
 2. 选择 GitLab 账号
@@ -107,7 +126,7 @@ npm run dev
    - Prompt 模式：扩展内置 Prompt 或完全替换
    - 启用状态和排序：排序第一的启用机器人作为主 Agent，其余启用机器人作为条件辅助 Agent
 
-### 第四步：配置 Webhook（可选）
+### 第五步：配置 Webhook（可选）
 
 #### 生产环境
 
@@ -169,10 +188,11 @@ gitlab_rails['outbound_local_requests_whitelist'] = ['localhost', '127.0.0.1', '
 - `http://localhost:3000/api/webhook/gitlab`
 - `http://host.docker.internal:3000/api/webhook/gitlab`（GitLab 在 Docker 中）
 
-### 第五步：查看审查结果
+### 第六步：查看审查结果
 
 - **仪表盘**: 查看整体统计和趋势
 - **审查历史**: 查看每次审查的详细结果
+- **Agent Loop 追溯**: 查看每个机器人每轮计划、上下文命中、工具调用、Finding 校验和 Critic 决策
 - **GitLab MR**: AI 评论会自动发布到 MR
 
 ## 数据库模型
@@ -250,10 +270,27 @@ Code Graph 是提交级代码关系图。每次审查都会围绕 `sourceBranch 
 
 ```env
 DATABASE_URL="postgresql://code_review:code_review@localhost:5432/code_review_copilot?schema=public"
+
+# 系统登录账号。项目只支持这个由 env 初始化的账号，不提供注册功能。
+APP_AUTH_USERNAME="admin"
+APP_AUTH_SECRET="change-me-login-secret"
+APP_AUTH_SESSION_SECRET="change-me-session-signing-secret"
+# 可选：配置后只有这些 IP 可以访问页面和业务 API，多个 IP 用英文逗号分隔。
+APP_AUTH_IP_WHITELIST="127.0.0.1,::1"
+
 DINGTALK_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
 # 可选：开启加签时填写（钉钉机器人安全设置中的加签密钥）
 DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
 ```
+
+`APP_AUTH_SECRET` 是登录密钥，`APP_AUTH_SESSION_SECRET` 用于签名登录会话。
+生产环境必须替换为足够长的随机字符串。
+`APP_AUTH_IP_WHITELIST` 为空时不启用 IP 限制；部署在 Nginx、Docker 或反向代理后时，
+系统会优先读取 `x-forwarded-for` 的第一个 IP，其次读取 `x-real-ip`。
+反向代理必须覆盖客户端传入的这些头，避免外部请求伪造来源 IP。
+
+`/api/webhook/gitlab` 和 `/api/code-graph/refresh-scheduled` 是外部回调入口，不要求登录 Cookie。
+除登录接口和这两个外部入口外，页面和业务 API 都会经过登录校验；配置了 IP 白名单时，白名单校验会先于登录校验执行。
 
 ## SQLite 历史数据迁移
 
@@ -297,18 +334,23 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 ```
 ├── app/
 │   ├── api/              # API 路由
+│   │   ├── auth/         # 登录和退出登录
 │   │   ├── repositories/ # 仓库管理
 │   │   ├── review/       # 代码审查
 │   │   ├── settings/     # 配置管理
 │   │   └── webhook/      # Webhook 处理
 │   ├── layout.tsx        # 根布局
+│   ├── login/            # 登录页
 │   ├── page.tsx          # 仪表盘
+│   ├── reviews/          # 审查历史和审查过程可视化
 │   ├── settings/         # 配置页面
 │   └── repositories/     # 仓库页面
 ├── components/
 │   ├── ui/               # shadcn/ui 组件
-│   └── app-sidebar.tsx   # 侧边栏
+│   ├── app-shell.tsx     # 登录页和工作台布局分流
+│   └── app-sidebar.tsx   # 工作台侧边栏和退出登录
 ├── lib/
+│   ├── auth.ts           # 登录会话、签名和 IP 白名单
 │   ├── prisma.ts         # Prisma Client
 │   ├── types.ts          # TypeScript 类型
 │   ├── prompts.ts        # AI Prompt 模板
@@ -321,6 +363,10 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 ```
 
 ## API 端点
+
+### 认证
+- `POST /api/auth/login` - 校验环境变量账号和密钥，写入登录 Cookie
+- `POST /api/auth/logout` - 清理登录 Cookie
 
 ### 仓库管理
 - `GET /api/repositories` - 获取所有仓库
@@ -361,9 +407,12 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
    - 刷新或复用 Code Graph
    - 使用排序第一的启用机器人生成公共变更摘要
    - 主 Agent 执行 Agent Loop
-   - 主 Agent 明确请求或问题达到复核阈值时，条件调用辅助 Agent
-   - 合并重复问题，保留来源机器人和各自 confidence
+   - 主 Agent 明确请求且存在可调用辅助 Agent 时，条件调用辅助 Agent
+   - 主 Agent 发现严重或可处理问题达到复核阈值时，也会调用剩余辅助 Agent 复核
+   - 每轮校验 finding 是否命中本次 diff、行号是否有效、confidence 是否达到阈值
+   - 合并重复问题，保留主 Agent 和辅助 Agent 各自的来源机器人、模型和 confidence
    - 保存评论和 Trace，只发布一条 GitLab 总评
+   - 审查详情页把 Trace 展示为“计划 → 上下文 → 工具 → Finding → Critic”的可视化过程
 
 3. **问题级别**：
    - **严重**: 安全漏洞、重大 bug、性能问题

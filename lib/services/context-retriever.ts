@@ -52,6 +52,14 @@ export interface RetrievedAgentContext {
     commitShortId: string;
     issueCount: number;
   }>;
+  metrics: {
+    requestedFilesCount: number;
+    selectedFilesCount: number;
+    fileContextCount: number;
+    graphNeighborCount: number;
+    relatedReviewCount: number;
+    missingSelectedFiles: string[];
+  };
   summary: string;
 }
 
@@ -114,6 +122,7 @@ export class ContextRetrieverService {
           imports: node.importsJson,
           exports: node.exportsJson,
         }));
+        const fileContextPaths = new Set(fileContexts.map((item) => item.filePath));
 
         const graphNeighbors = relations.map((edge) => ({
           from: edge.fromFileNode.filePath,
@@ -175,6 +184,14 @@ export class ContextRetrieverService {
             commitShortId: review.commitShortId,
             issueCount: review.criticalIssues + review.normalIssues + review.suggestions,
           })),
+          metrics: {
+            requestedFilesCount: params.changedFiles.length,
+            selectedFilesCount: selectedFiles.length,
+            fileContextCount: fileContexts.length,
+            graphNeighborCount: graphNeighbors.length,
+            relatedReviewCount: relatedReviews.length,
+            missingSelectedFiles: selectedFiles.filter((file) => !fileContextPaths.has(file)),
+          },
           summary,
         };
       });
