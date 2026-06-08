@@ -14,6 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -34,7 +35,8 @@ import {
   Check,
   ShieldCheck,
   Square,
-  Wrench
+  Wrench,
+  X
 } from 'lucide-react'
 
 // 审查记录类型定义
@@ -968,7 +970,7 @@ export default function ReviewsPage() {
 
       {/* 审查详情弹窗 */}
       <Dialog open={!!selectedReview} onOpenChange={() => setSelectedReview(null)}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[1500px] max-h-[92vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={true}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[1500px] max-h-[92vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={false}>
           {selectedReview && (
             <div className="flex h-[90vh] min-w-0 flex-col bg-background">
               <DialogHeader className="border-b border-border/50 bg-[linear-gradient(135deg,var(--sidebar)_0%,var(--background)_55%,color-mix(in_srgb,var(--primary)_10%,var(--background))_100%)] px-6 py-5">
@@ -1002,7 +1004,7 @@ export default function ReviewsPage() {
                     </DialogDescription>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                     {selectedReview.status === 'pending' && (
                       <Button
                         variant="outline"
@@ -1026,6 +1028,11 @@ export default function ReviewsPage() {
                         {retryingReviewId === selectedReview.id ? '重审中...' : '重新审查'}
                       </Button>
                     )}
+                    <DialogClose asChild>
+                      <Button variant="ghost" size="icon-sm" aria-label="关闭审查详情弹窗">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </DialogClose>
                   </div>
                 </div>
 

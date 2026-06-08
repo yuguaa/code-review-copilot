@@ -86,6 +86,7 @@ export async function reviewFileStep(state: ReviewState): Promise<Partial<Review
     reviewPrompt,
     state.modelConfig,
     systemPrompt,
+    { responseFormat: "jsonObject" },
   );
 
   // 调试：打印 AI 响应

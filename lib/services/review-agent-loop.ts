@@ -433,7 +433,12 @@ export class ReviewAgentLoopService {
         availableAdditionalAgents: input.availableAdditionalAgents || [],
       });
 
-      const planResponse = await aiService.reviewCode(planPrompt, input.modelConfig, REVIEW_AGENT_PLAN_SYSTEM_PROMPT);
+      const planResponse = await aiService.reviewCode(
+        planPrompt,
+        input.modelConfig,
+        REVIEW_AGENT_PLAN_SYSTEM_PROMPT,
+        { responseFormat: "jsonObject" },
+      );
       finalPlan = safePlan(aiService.parseJsonObject<AgentPlan>(planResponse));
       const availableAdditionalAgents = input.availableAdditionalAgents || [];
       const additionalAgents = selectAdditionalAgents(
@@ -495,7 +500,12 @@ export class ReviewAgentLoopService {
         botPromptMode: input.botPromptMode,
       });
 
-      const reviewResponse = await aiService.reviewCode(reviewPrompt, input.modelConfig, REVIEW_AGENT_REVIEW_SYSTEM_PROMPT);
+      const reviewResponse = await aiService.reviewCode(
+        reviewPrompt,
+        input.modelConfig,
+        REVIEW_AGENT_REVIEW_SYSTEM_PROMPT,
+        { responseFormat: "jsonObject" },
+      );
       const parsedReview = aiService.parseStructuredReview(reviewResponse, {
         maxItems: Math.max(budget.maxFindings - findings.length, 0),
       });
@@ -564,7 +574,12 @@ export class ReviewAgentLoopService {
         remainingIterations,
       });
 
-      const criticResponse = await aiService.reviewCode(criticPrompt, input.modelConfig, REVIEW_AGENT_CRITIC_SYSTEM_PROMPT);
+      const criticResponse = await aiService.reviewCode(
+        criticPrompt,
+        input.modelConfig,
+        REVIEW_AGENT_CRITIC_SYSTEM_PROMPT,
+        { responseFormat: "jsonObject" },
+      );
       latestCritic = safeCritic(aiService.parseJsonObject<AgentCriticResult>(criticResponse));
 
       const hasBudget = iteration < budget.maxIterations;

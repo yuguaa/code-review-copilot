@@ -7,7 +7,7 @@
 
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { streamText, generateText } from 'ai'
+import { streamText, generateText, Output } from 'ai'
 import OpenAI from 'openai'
 import type { AIModelConfig, ReviewSeverity } from '@/lib/types'
 import { SYSTEM_PROMPT } from '@/lib/prompts'
@@ -73,6 +73,10 @@ type OpenAICompatibleResponse = {
   }
 }
 
+type ReviewCodeOptions = {
+  responseFormat?: 'text' | 'jsonObject'
+}
+
 /**
  * AI 服务类
  * 
@@ -88,12 +92,13 @@ export class AIService {
   async reviewCode(
     prompt: string,
     modelConfig: AIModelConfig,
-    systemPrompt: string = SYSTEM_PROMPT
+    systemPrompt: string = SYSTEM_PROMPT,
+    options: ReviewCodeOptions = {}
   ): Promise<string> {
     try {
       // 自定义模型使用 OpenAI SDK 直接调用，避免 Vercel AI SDK 兼容性问题
       if (modelConfig.provider === 'custom') {
-        return await this.reviewCodeWithOpenAISDK(prompt, modelConfig, systemPrompt)
+        return await this.reviewCodeWithOpenAISDK(prompt, modelConfig, systemPrompt, options)
       }
 
       let model
@@ -117,6 +122,7 @@ export class AIService {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
         ],
+        output: options.responseFormat === 'jsonObject' ? Output.json() : Output.text(),
       })
 
       console.log('AI Response type:', typeof response)
@@ -124,6 +130,10 @@ export class AIService {
 
       if (response.text) {
         return response.text
+      }
+
+      if (options.responseFormat === 'jsonObject') {
+        return JSON.stringify(response.output)
       }
 
       console.error('Unexpected AI response format:', response)
@@ -141,7 +151,8 @@ export class AIService {
   private async reviewCodeWithOpenAISDK(
     prompt: string,
     modelConfig: AIModelConfig,
-    systemPrompt: string = SYSTEM_PROMPT
+    systemPrompt: string = SYSTEM_PROMPT,
+    options: ReviewCodeOptions = {}
   ): Promise<string> {
     console.log('🔧 Using custom API for model:', modelConfig.modelId)
     console.log('🔧 API Endpoint:', modelConfig.apiEndpoint)
@@ -151,7 +162,7 @@ export class AIService {
     if (isAnthropicFormat) {
       return await this.callAnthropicAPI(prompt, modelConfig, systemPrompt)
     } else {
-      return await this.callOpenAIAPI(prompt, modelConfig, systemPrompt)
+      return await this.callOpenAIAPI(prompt, modelConfig, systemPrompt, options)
     }
   }
 
@@ -161,7 +172,8 @@ export class AIService {
   private async callOpenAIAPI(
     prompt: string,
     modelConfig: AIModelConfig,
-    systemPrompt: string = SYSTEM_PROMPT
+    systemPrompt: string = SYSTEM_PROMPT,
+    options: ReviewCodeOptions = {}
   ): Promise<string> {
     const client = new OpenAI({
       apiKey: modelConfig.apiKey,
@@ -176,6 +188,7 @@ export class AIService {
       ],
       max_tokens: modelConfig.maxTokens || 4096,
       temperature: modelConfig.temperature || 0.3,
+      response_format: options.responseFormat === 'jsonObject' ? { type: 'json_object' } : undefined,
     })
 
     console.log('✅ OpenAI API Response received')
