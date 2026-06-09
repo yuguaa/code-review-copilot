@@ -43,3 +43,16 @@ export type WorkflowIssue = {
   content: string
   gitlabDiffUrl?: string | null
 }
+
+export const reviewWorkflowKindLabels: Record<string, string> = {
+  trigger: '触发',
+  diff: 'Diff',
+  memory: 'Memory',
+  summary: '摘要',
+  agent: 'Agent',
+  decision: '决策',
+  iteration_stage: 'Loop',
+  aggregate: '聚合',
+  publish: '发布',
+  finish: '结束',
+}
