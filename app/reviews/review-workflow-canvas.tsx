@@ -25,22 +25,32 @@ type ReviewWorkflowCanvasProps = {
 }
 
 const statusStyles: Record<string, { background: string; border: string; color: string }> = {
-  running: { background: '#fff7ed', border: '#f97316', color: '#9a3412' },
-  success: { background: '#ecfdf5', border: '#10b981', color: '#065f46' },
-  warning: { background: '#fffbeb', border: '#f59e0b', color: '#92400e' },
-  failed: { background: '#fef2f2', border: '#ef4444', color: '#991b1b' },
-  cancelled: { background: '#f1f5f9', border: '#64748b', color: '#334155' },
-  skipped: { background: '#f8fafc', border: '#cbd5e1', color: '#64748b' },
-  idle: { background: '#ffffff', border: '#d6d3d1', color: '#57534e' },
+  running: { background: '#fff7ed', border: '#cc785c', color: '#8a3d25' },
+  success: { background: '#f2fbf7', border: '#5db872', color: '#1f6b3b' },
+  warning: { background: '#fff8e6', border: '#d4a017', color: '#7a5600' },
+  failed: { background: '#fff1f1', border: '#c64545', color: '#8d2323' },
+  cancelled: { background: '#f5f0e8', border: '#cfc7bb', color: '#6c6a64' },
+  skipped: { background: '#faf9f5', border: '#d8d0c5', color: '#6c6a64' },
+  idle: { background: '#fffdf8', border: '#d8d0c5', color: '#57534e' },
 }
 
-const nodeWidth = 240
-const mainLaneX = 40
-const loopLaneX = 360
+const statusLabels: Record<string, string> = {
+  running: '运行中',
+  success: '成功',
+  warning: '警告',
+  failed: '失败',
+  cancelled: '取消',
+  skipped: '跳过',
+  idle: '等待',
+}
+
+const nodeWidth = 226
+const mainLaneX = 44
+const loopLaneX = 340
 const topOffset = 36
-const mainGapY = 150
-const loopGapX = 300
-const loopGapY = 150
+const mainGapY = 112
+const loopGapX = 286
+const loopGapY = 92
 
 const loopStageOrder: Record<string, number> = {
   agent: 0,
@@ -53,7 +63,7 @@ const loopStageOrder: Record<string, number> = {
   tool: 7,
   critic: 8,
   finish: 9,
-  error: 10,
+  error: 9,
 }
 
 function formatDuration(durationMs: number | null) {
@@ -67,19 +77,21 @@ function formatDuration(durationMs: number | null) {
 function nodeLabel(node: ReviewWorkflowNode) {
   const duration = formatDuration(node.durationMs)
   return (
-    <div className="w-[220px] text-left">
+    <div className="w-[210px] text-left">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
+        <span className="truncate text-[11px] font-medium opacity-70">
           {reviewWorkflowKindLabels[node.kind] || node.kind}
         </span>
-        <span className="text-[10px] font-mono opacity-70">{node.status}</span>
+        <span className="rounded-full bg-white/55 px-1.5 py-0.5 text-[10px] font-medium opacity-80">
+          {statusLabels[node.status] || node.status}
+        </span>
       </div>
-      <div className="mt-1 truncate text-sm font-semibold">{node.title}</div>
+      <div className="mt-1.5 truncate text-sm font-semibold">{node.title}</div>
       {node.summary && (
-        <div className="mt-1 line-clamp-2 text-xs leading-4 opacity-80">{node.summary}</div>
+        <div className="mt-1 line-clamp-1 text-xs leading-4 opacity-80">{node.summary}</div>
       )}
       {duration && (
-        <div className="mt-2 text-[10px] font-mono opacity-60">{duration}</div>
+        <div className="mt-2 font-mono text-[10px] opacity-60">{duration}</div>
       )}
     </div>
   )
@@ -137,14 +149,20 @@ function buildNodePositions(workflowNodes: ReviewWorkflowNode[]) {
   const sortedAgentGroups = [...agentGroups.entries()].sort((left, right) => (
     left[1].firstSequence - right[1].firstSequence
   ))
-  const agentRowStart = new Map<string, number>()
-  let loopRowCount = 0
-  sortedAgentGroups.forEach(([agentId, group]) => {
-    agentRowStart.set(agentId, loopRowCount)
-    loopRowCount += group.maxIteration
+  const agentColumnIndex = new Map<string, number>()
+  sortedAgentGroups.forEach(([agentId]) => {
+    agentColumnIndex.set(agentId, agentColumnIndex.size)
   })
 
-  const loopSpace = runAgentsIndex === -1 ? 0 : Math.max(0, loopRowCount - 1) * loopGapY + (loopRowCount > 0 ? loopGapY : 0)
+  const loopStageCount = Math.max(...Object.values(loopStageOrder)) + 1
+  const loopRows = loopNodes.reduce((maxRows, { info }) => {
+    const row = (info.iteration - 1) * loopStageCount + info.stageIndex + 1
+    return Math.max(maxRows, row)
+  }, 0)
+  const loopSpace = runAgentsIndex === -1 || loopRows === 0
+    ? 0
+    : (loopRows - 1) * loopGapY
+
   const positions = new Map<string, { x: number; y: number }>()
 
   mainNodes.forEach((node, index) => {
@@ -157,10 +175,11 @@ function buildNodePositions(workflowNodes: ReviewWorkflowNode[]) {
 
   const loopBaseY = positions.get('run_agents')?.y ?? (topOffset + Math.max(1, mainNodes.length) * mainGapY)
   loopNodes.forEach(({ node, info }) => {
-    const groupStart = agentRowStart.get(info.agentId) ?? 0
+    const columnIndex = agentColumnIndex.get(info.agentId) ?? 0
+    const iterationOffset = (info.iteration - 1) * loopStageCount
     positions.set(node.nodeKey, {
-      x: loopLaneX + info.stageIndex * loopGapX,
-      y: loopBaseY + (groupStart + info.iteration - 1) * loopGapY,
+      x: loopLaneX + columnIndex * loopGapX,
+      y: loopBaseY + (iterationOffset + info.stageIndex) * loopGapY,
     })
   })
 
@@ -180,12 +199,12 @@ function toReactFlowNodes(
       id: node.nodeKey,
       data: { label: nodeLabel(node) },
       position: positions.get(node.nodeKey) || { x: mainLaneX, y: topOffset },
-      sourcePosition: loopNode || node.nodeKey === 'run_agents' ? Position.Right : Position.Bottom,
-      targetPosition: loopNode ? Position.Left : Position.Top,
-      className: selected ? 'shadow-[0_0_0_3px_rgba(204,120,92,0.25)]' : undefined,
+      sourcePosition: Position.Bottom,
+      targetPosition: loopNode && node.nodeKey.split(':').length === 2 ? Position.Left : Position.Top,
+      className: selected ? 'shadow-[0_0_0_3px_rgba(204,120,92,0.22)]' : undefined,
       style: {
         width: nodeWidth,
-        minHeight: 92,
+        minHeight: 78,
         borderRadius: 8,
         border: `1.5px solid ${style.border}`,
         background: style.background,
@@ -207,17 +226,23 @@ function toReactFlowEdges(workflowEdges: ReviewWorkflowEdge[], nodes: ReviewWork
     animated: runningNodeKeys.has(edge.target),
     markerEnd: {
       type: MarkerType.ArrowClosed,
+      width: 16,
+      height: 16,
     },
     style: {
-      strokeWidth: edge.kind === 'main' ? 2 : 1.5,
-      stroke: edge.kind === 'main' ? '#78716c' : '#a8a29e',
+      strokeWidth: edge.kind === 'main' ? 2 : 1.6,
+      stroke: edge.kind === 'main' ? '#6c6a64' : '#b7afa4',
     },
     labelStyle: {
       fontSize: 11,
-      fill: '#57534e',
+      fill: '#3d3d3a',
     },
     labelBgPadding: [6, 3],
     labelBgBorderRadius: 4,
+    labelBgStyle: {
+      fill: '#fffdf8',
+      fillOpacity: 0.92,
+    },
   }))
 }
 
@@ -237,7 +262,7 @@ export function ReviewWorkflowCanvas({
   const nodeMap = useMemo(() => new Map(workflow.nodes.map((node) => [node.nodeKey, node])), [workflow.nodes])
 
   return (
-    <div className="h-[620px] min-h-0 overflow-hidden rounded-lg border border-border/60 bg-background">
+    <div className="h-[560px] min-h-0 overflow-hidden rounded-lg border border-border/60 bg-background">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -245,7 +270,7 @@ export function ReviewWorkflowCanvas({
         nodesConnectable={false}
         elementsSelectable
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.16 }}
         onNodeClick={(_, node) => {
           const matched = nodeMap.get(node.id)
           if (matched) onSelectNode(matched)

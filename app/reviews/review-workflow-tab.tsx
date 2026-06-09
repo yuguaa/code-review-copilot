@@ -1,8 +1,8 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ExternalLink, Gitlab, Loader2, RefreshCw, Terminal } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { Activity, AlertCircle, ExternalLink, Gitlab, Loader2, RefreshCw, Route } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type {
@@ -17,7 +17,7 @@ const WorkflowCanvas = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[620px] items-center justify-center rounded-lg border border-border/60 bg-muted/30 text-sm text-muted-foreground">
+      <div className="flex h-[560px] items-center justify-center rounded-lg border border-border/60 bg-muted/30 text-sm text-muted-foreground">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         加载过程图...
       </div>
@@ -44,20 +44,37 @@ const statusClassNames: Record<string, string> = {
   idle: 'border-border bg-background text-muted-foreground',
 }
 
-const consoleLevelClassNames: Record<string, string> = {
-  running: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
-  success: 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100',
-  warning: 'border-orange-300/30 bg-orange-300/10 text-orange-100',
-  error: 'border-red-300/35 bg-red-300/10 text-red-100',
-  muted: 'border-zinc-700 bg-zinc-900/70 text-zinc-300',
+const eventLevelClassNames: Record<string, string> = {
+  running: 'border-primary/30 bg-primary/10 text-primary',
+  success: 'border-emerald-600/20 bg-emerald-500/10 text-emerald-800',
+  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-800',
+  error: 'border-destructive/30 bg-destructive/5 text-destructive',
+  muted: 'border-border bg-muted/50 text-muted-foreground',
 }
 
-const consoleDotClassNames: Record<string, string> = {
-  running: 'bg-amber-300 shadow-[0_0_0_4px_rgba(252,211,77,0.16)]',
-  success: 'bg-emerald-300',
-  warning: 'bg-orange-300',
-  error: 'bg-red-300 shadow-[0_0_0_4px_rgba(252,165,165,0.18)]',
-  muted: 'bg-zinc-500',
+const eventDotClassNames: Record<string, string> = {
+  running: 'bg-primary shadow-[0_0_0_4px_rgba(204,120,92,0.14)]',
+  success: 'bg-emerald-600',
+  warning: 'bg-amber-500',
+  error: 'bg-destructive',
+  muted: 'bg-muted-foreground',
+}
+
+const statusLabels: Record<string, string> = {
+  running: '运行中',
+  success: '成功',
+  warning: '警告',
+  failed: '失败',
+  cancelled: '已取消',
+  skipped: '跳过',
+  idle: '等待',
+}
+
+function getAgentRoleLabel(node: ReviewWorkflowNode | null) {
+  if (!node?.nodeKey.startsWith('agent:')) return '主链路'
+  if (node.title.includes('辅助 Agent')) return '辅助 Agent'
+  if (node.title.includes('主 Agent')) return '主 Agent'
+  return 'Agent 内部步骤'
 }
 
 function formatJson(value: unknown) {
@@ -86,7 +103,7 @@ function formatDuration(durationMs: number | null) {
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
 }
 
-function getConsoleLevel(status: string) {
+function getEventLevel(status: string): keyof typeof eventLevelClassNames {
   if (status === 'running') return 'running'
   if (status === 'success') return 'success'
   if (status === 'warning') return 'warning'
@@ -94,23 +111,8 @@ function getConsoleLevel(status: string) {
   return 'muted'
 }
 
-function getConsoleStatusLabel(status: string) {
-  switch (status) {
-    case 'running':
-      return 'RUNNING'
-    case 'success':
-      return 'SUCCESS'
-    case 'warning':
-      return 'WARN'
-    case 'failed':
-      return 'ERROR'
-    case 'cancelled':
-      return 'CANCELLED'
-    case 'skipped':
-      return 'SKIPPED'
-    default:
-      return status.toUpperCase()
-  }
+function getStatusLabel(status: string) {
+  return statusLabels[status] || status
 }
 
 function nodeTimestamp(node: ReviewWorkflowNode) {
@@ -133,6 +135,198 @@ function issueMatchesNode(issue: WorkflowIssue, node: ReviewWorkflowNode | null)
   return issue.reviewBotRunId === node.reviewBotRunId
 }
 
+function WorkflowMetric({
+  label,
+  value,
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate font-mono text-xs text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function NodeInspector({
+  node,
+  relatedIssues,
+  onOpenIssue,
+}: {
+  node: ReviewWorkflowNode | null
+  relatedIssues: WorkflowIssue[]
+  onOpenIssue: (issueId: string) => void
+}) {
+  if (!node) {
+    return (
+      <div className="rounded-xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
+        选择一个流程节点查看状态、耗时、关联问题和原始指标。
+      </div>
+    )
+  }
+
+  return (
+    <section className="rounded-xl border border-border/60 bg-card/90 p-4 shadow-[0_8px_18px_rgba(20,20,19,0.04)]">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={statusClassNames[node.status] || statusClassNames.idle}>
+          {getStatusLabel(node.status)}
+        </Badge>
+        <Badge variant="outline">{reviewWorkflowKindLabels[node.kind] || node.kind}</Badge>
+        <Badge variant="secondary">{getAgentRoleLabel(node)}</Badge>
+      </div>
+
+      <h3 className="mt-3 text-base font-semibold leading-6 text-card-foreground">{node.title}</h3>
+      {node.summary && (
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">{node.summary}</p>
+      )}
+      {node.detail && (
+        <p className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/35 p-3 text-xs leading-5 text-foreground/80">
+          {node.detail}
+        </p>
+      )}
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <WorkflowMetric label="开始" value={formatTime(node.startedAt)} />
+        <WorkflowMetric label="完成" value={formatTime(node.completedAt)} />
+        <WorkflowMetric label="耗时" value={formatDuration(node.durationMs)} />
+      </div>
+
+      <div className="mt-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-foreground">关联问题</p>
+          <span className="font-mono text-xs text-muted-foreground">{relatedIssues.length}</span>
+        </div>
+        {relatedIssues.length > 0 ? (
+          <div className="mt-2 divide-y divide-border/60 rounded-lg border border-border/60 bg-background/70">
+            {relatedIssues.slice(0, 4).map((issue) => (
+              <div key={issue.id} className="p-3 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="outline">{issue.severity}</Badge>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="xs" onClick={() => onOpenIssue(issue.id)}>
+                      <ExternalLink className="h-3 w-3" />
+                      查看问题
+                    </Button>
+                    {issue.gitlabDiffUrl && (
+                      <Button variant="ghost" size="xs" asChild>
+                        <a href={issue.gitlabDiffUrl} target="_blank" rel="noreferrer">
+                          <Gitlab className="h-3 w-3" />
+                          打开行
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-2 truncate font-mono text-muted-foreground">
+                  {issue.filePath}:{issue.lineNumber}
+                </p>
+                <p className="mt-1 line-clamp-2 leading-5 text-foreground/80">{issue.content}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+            暂无关联问题。
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        <details className="rounded-lg border border-border/60 bg-background/70 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">指标</summary>
+          <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+            {formatJson(node.metricsJson)}
+          </pre>
+        </details>
+
+        <details className="rounded-lg border border-border/60 bg-background/70 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">原始节点</summary>
+          <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+            {formatJson(node.rawJson || node)}
+          </pre>
+        </details>
+      </div>
+    </section>
+  )
+}
+
+function WorkflowEventStream({
+  logs,
+  selectedNodeKey,
+  runningNode,
+  updatedAt,
+  eventRef,
+  onSelectNode,
+}: {
+  logs: Array<{
+    node: ReviewWorkflowNode
+    level: keyof typeof eventLevelClassNames
+    timestamp: string
+    message: string
+  }>
+  selectedNodeKey: string | null
+  runningNode: ReviewWorkflowNode | null
+  updatedAt: string
+  eventRef: RefObject<HTMLDivElement | null>
+  onSelectNode: (nodeKey: string) => void
+}) {
+  return (
+    <section className="min-h-0 rounded-xl border border-border/60 bg-card/70">
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold text-foreground">事件流</p>
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {runningNode ? `当前：${runningNode.title}` : `快照：${formatTime(updatedAt)}`}
+          </p>
+        </div>
+        <Badge className={runningNode ? statusClassNames.running : statusClassNames.success}>
+          {runningNode ? '实时更新' : '最终快照'}
+        </Badge>
+      </div>
+
+      <div ref={eventRef} className="max-h-[300px] min-h-[220px] overflow-y-auto p-2">
+        <div className="space-y-1">
+          {logs.map(({ node, level, timestamp, message }) => {
+            const selected = selectedNodeKey === node.nodeKey
+            const duration = node.durationMs === null ? '' : formatDuration(node.durationMs)
+            return (
+              <button
+                key={node.nodeKey}
+                type="button"
+                className={`grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-lg border px-3 py-2 text-left transition-[background-color,border-color,transform] active:scale-[0.99] ${
+                  selected
+                    ? 'border-primary/40 bg-primary/10'
+                    : 'border-transparent hover:border-border/80 hover:bg-muted/35'
+                }`}
+                onClick={() => onSelectNode(node.nodeKey)}
+              >
+                <span className={`mt-2 h-2 w-2 rounded-full ${eventDotClassNames[level]}`} />
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-mono text-[11px] text-muted-foreground">{formatTime(timestamp)}</span>
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${eventLevelClassNames[level]}`}>
+                      {getStatusLabel(node.status)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{reviewWorkflowKindLabels[node.kind] || node.kind}</span>
+                    {duration && <span className="font-mono text-[11px] text-muted-foreground">{duration}</span>}
+                  </span>
+                  <span className="mt-1 block truncate text-[13px] font-medium text-foreground">{node.title}</span>
+                  <span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-muted-foreground">{message}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export function ReviewWorkflowTab({
   reviewId,
   reviewStatus,
@@ -143,7 +337,7 @@ export function ReviewWorkflowTab({
   const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const consoleRef = useRef<HTMLDivElement | null>(null)
+  const eventRef = useRef<HTMLDivElement | null>(null)
 
   const loadWorkflow = useCallback((options: { silent?: boolean } = {}) => {
     if (!options.silent) setLoading(true)
@@ -204,12 +398,12 @@ export function ReviewWorkflowTab({
     return matched.length > 0 ? matched : issues.slice(0, 8)
   }, [issues, selectedNode])
 
-  const consoleLogs = useMemo(() => {
+  const eventLogs = useMemo(() => {
     if (!workflow) return []
     return workflow.nodes
       .map((node) => ({
         node,
-        level: getConsoleLevel(node.status),
+        level: getEventLevel(node.status),
         timestamp: nodeTimestamp(node),
         message: nodeConsoleMessage(node),
       }))
@@ -224,9 +418,9 @@ export function ReviewWorkflowTab({
   ), [workflow])
 
   useEffect(() => {
-    if (!consoleRef.current) return
-    consoleRef.current.scrollTop = consoleRef.current.scrollHeight
-  }, [consoleLogs.length, workflow?.updatedAt])
+    if (!eventRef.current) return
+    eventRef.current.scrollTop = eventRef.current.scrollHeight
+  }, [eventLogs.length, workflow?.updatedAt])
 
   if (loading && !workflow) {
     return (
@@ -255,165 +449,53 @@ export function ReviewWorkflowTab({
   if (!workflow) return null
 
   return (
-    <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
-      <div className="min-w-0">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="min-w-0 rounded-xl border border-border/60 bg-card/70 p-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">节点 {workflow.nodes.length}</Badge>
             <Badge variant="outline">边 {workflow.edges.length}</Badge>
-            <Badge className={statusClassNames[workflow.nodes.find((node) => node.status === 'running') ? 'running' : 'success']}>
-              {workflow.nodes.find((node) => node.status === 'running') ? '动态更新中' : '当前快照'}
+            <Badge className={runningNode ? statusClassNames.running : statusClassNames.success}>
+              {runningNode ? '动态更新中' : '当前快照'}
             </Badge>
           </div>
           <Button variant="outline" size="sm" onClick={() => loadWorkflow()}>
             <RefreshCw className="h-4 w-4" />
-            刷新图
+            刷新过程图
           </Button>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-foreground">
+            <Route className="h-3.5 w-3.5 text-primary" />
+            链路
+          </span>
+          <span className="h-px w-8 bg-stone-600" />
+          <span>主流程</span>
+          <span className="h-px w-8 bg-stone-300" />
+          <span>Agent 内部步骤</span>
+          <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5">节点内显示状态文字</span>
         </div>
         <WorkflowCanvas
           workflow={workflow}
           selectedNodeKey={selectedNode?.nodeKey || null}
           onSelectNode={(node) => setSelectedNodeKey(node.nodeKey)}
         />
-      </div>
+      </section>
 
-      <aside className="flex min-h-0 max-h-[720px] flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-[0_18px_45px_rgba(24,24,27,0.18)]">
-        <div className="border-b border-zinc-800 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-zinc-400" />
-                <p className="text-sm font-semibold text-zinc-100">实时控制台</p>
-              </div>
-              <p className="mt-1 truncate text-xs text-zinc-500">
-                {runningNode ? `当前：${runningNode.title}` : `快照：${formatTime(workflow.updatedAt)}`}
-              </p>
-            </div>
-            <Badge className={runningNode ? consoleLevelClassNames.running : consoleLevelClassNames.success}>
-              {runningNode ? 'LIVE' : 'IDLE'}
-            </Badge>
-          </div>
-        </div>
-
-        <div ref={consoleRef} className="min-h-[340px] flex-1 space-y-2 overflow-y-auto px-3 py-3 font-mono text-xs">
-          {consoleLogs.map(({ node, level, timestamp, message }) => {
-            const selected = selectedNode?.nodeKey === node.nodeKey
-            const duration = node.durationMs === null ? '' : formatDuration(node.durationMs)
-            return (
-              <button
-                key={node.nodeKey}
-                type="button"
-                className={`block w-full rounded-lg border p-3 text-left transition-[background-color,border-color,transform] active:scale-[0.99] ${
-                  selected
-                    ? 'border-zinc-500 bg-zinc-900'
-                    : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700 hover:bg-zinc-900/80'
-                }`}
-                onClick={() => setSelectedNodeKey(node.nodeKey)}
-              >
-                <div className="flex items-start gap-2">
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${consoleDotClassNames[level]}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-zinc-500">{formatTime(timestamp)}</span>
-                      <span className={`rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${consoleLevelClassNames[level]}`}>
-                        {getConsoleStatusLabel(node.status)}
-                      </span>
-                      <span className="text-zinc-400">{reviewWorkflowKindLabels[node.kind] || node.kind}</span>
-                      {duration && <span className="text-zinc-600">{duration}</span>}
-                    </div>
-                    <p className="mt-1 truncate text-[13px] font-semibold text-zinc-100">{node.title}</p>
-                    <p className={`mt-1 whitespace-pre-wrap break-words leading-5 ${
-                      node.status === 'failed' ? 'text-red-100' : 'text-zinc-400'
-                    }`}>
-                      {message}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="border-t border-zinc-800 bg-zinc-950/95 p-4">
-          {selectedNode ? (
-            <div className="space-y-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className={statusClassNames[selectedNode.status] || statusClassNames.idle}>
-                    {selectedNode.status}
-                  </Badge>
-                  <Badge variant="outline" className="border-zinc-700 text-zinc-300">{selectedNode.kind}</Badge>
-                </div>
-                <h3 className="mt-2 text-base font-semibold text-zinc-100">{selectedNode.title}</h3>
-                {selectedNode.summary && (
-                  <p className="mt-1 text-sm leading-6 text-zinc-400">{selectedNode.summary}</p>
-                )}
-                {selectedNode.detail && (
-                  <p className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-900 p-3 text-xs leading-5 text-zinc-300">
-                    {selectedNode.detail}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-[11px] text-zinc-500">
-                <p className="rounded-md bg-zinc-900 p-2">开始<br /><span className="text-zinc-300">{formatTime(selectedNode.startedAt)}</span></p>
-                <p className="rounded-md bg-zinc-900 p-2">完成<br /><span className="text-zinc-300">{formatTime(selectedNode.completedAt)}</span></p>
-                <p className="rounded-md bg-zinc-900 p-2">耗时<br /><span className="text-zinc-300">{formatDuration(selectedNode.durationMs)}</span></p>
-              </div>
-
-              <section>
-                <p className="text-xs font-medium text-zinc-300">相关问题</p>
-                {relatedIssues.length > 0 ? (
-                  <div className="mt-2 space-y-2">
-                    {relatedIssues.slice(0, 4).map((issue) => (
-                      <div key={issue.id} className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-2 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant="outline" className="border-zinc-700 text-zinc-300">{issue.severity}</Badge>
-                          <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="xs" className="text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100" onClick={() => onOpenIssue(issue.id)}>
-                              <ExternalLink className="h-3 w-3" />
-                              查看
-                            </Button>
-                            {issue.gitlabDiffUrl && (
-                              <Button variant="ghost" size="xs" className="text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100" asChild>
-                                <a href={issue.gitlabDiffUrl} target="_blank" rel="noreferrer">
-                                  <Gitlab className="h-3 w-3" />
-                                  行
-                                </a>
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <p className="mt-1 truncate font-mono text-zinc-500">
-                          {issue.filePath}:{issue.lineNumber}
-                        </p>
-                        <p className="mt-1 line-clamp-2 text-zinc-300">{issue.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 rounded-lg bg-zinc-900 p-3 text-xs text-zinc-500">暂无关联问题。</p>
-                )}
-              </section>
-
-              <details className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
-                <summary className="cursor-pointer text-sm font-medium text-zinc-200">指标</summary>
-                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-zinc-400">
-                  {formatJson(selectedNode.metricsJson)}
-                </pre>
-              </details>
-
-              <details className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
-                <summary className="cursor-pointer text-sm font-medium text-zinc-200">原始节点</summary>
-                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-zinc-400">
-                  {formatJson(selectedNode.rawJson || selectedNode)}
-                </pre>
-              </details>
-            </div>
-          ) : (
-            <p className="text-sm text-zinc-500">选择一个节点查看详情。</p>
-          )}
-        </div>
+      <aside className="flex min-h-0 flex-col gap-4">
+        <NodeInspector
+          node={selectedNode}
+          relatedIssues={relatedIssues}
+          onOpenIssue={onOpenIssue}
+        />
+        <WorkflowEventStream
+          logs={eventLogs}
+          selectedNodeKey={selectedNode?.nodeKey || null}
+          runningNode={runningNode}
+          updatedAt={workflow.updatedAt}
+          eventRef={eventRef}
+          onSelectNode={setSelectedNodeKey}
+        />
       </aside>
     </div>
   )
