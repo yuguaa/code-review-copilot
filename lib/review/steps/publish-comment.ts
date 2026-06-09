@@ -12,6 +12,9 @@ import { prisma } from "@/lib/prisma";
 import { sendReviewToDingTalk } from "@/lib/services/dingtalk";
 import type { ReviewComment, ReviewLog } from "@prisma/client";
 import type { ReviewState } from "../types";
+import { createLogger, logError, logWarn } from "@/lib/logger";
+
+const log = createLogger("PublishCommentStep");
 
 type BotRunForSummary = {
   status: string;
@@ -29,12 +32,15 @@ type BotRunForSummary = {
  * 发布评论
  */
 export async function publishCommentStep(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log(`💬 [PublishCommentStep] Publishing comments to GitLab`);
+  log.info(`💬 [PublishCommentStep] Publishing comments to GitLab`);
 
   const gitlabService = state.gitlabService;
   if (!gitlabService) {
-    console.error(`❌ [PublishCommentStep] GitLab service not initialized`);
-    return {};
+    log.error(`❌ [PublishCommentStep] GitLab service not initialized`);
+    return {
+      completed: true,
+      error: "GitLab service not initialized",
+    };
   }
 
   const reviewLog = await prisma.reviewLog.findUnique({
@@ -66,7 +72,10 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
   });
 
   if (!reviewLog) {
-    return {};
+    return {
+      completed: true,
+      error: "Review log not found",
+    };
   }
 
   const isPushEvent = reviewLog.mergeRequestIid === 0;
@@ -86,6 +95,8 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
   );
 
   // 发布总体摘要评论
+  let publishError: string | null = null;
+
   try {
     let result: { id: number | string } | null = null;
 
@@ -109,15 +120,15 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
               where: { id: state.reviewLogId },
               data: { gitlabNoteId: resolvedNoteId },
             });
-            console.log(`📝 [PublishCommentStep] Resolved placeholder commit noteId=${resolvedNoteId} by marker=${pushMarker}`);
+            log.info(`📝 [PublishCommentStep] Resolved placeholder commit noteId=${resolvedNoteId} by marker=${pushMarker}`);
           }
         } catch (error) {
-          console.warn(`⚠️ [PublishCommentStep] Failed to resolve commit placeholder by marker`, error);
+          logWarn(log, error, `⚠️ [PublishCommentStep] Failed to resolve commit placeholder by marker`);
         }
       }
 
       if (resolvedNoteId) {
-        console.log(`📝 [PublishCommentStep] Updating placeholder commit comment: noteId=${resolvedNoteId || reviewLog.gitlabNoteId}`);
+        log.info(`📝 [PublishCommentStep] Updating placeholder commit comment: noteId=${resolvedNoteId || reviewLog.gitlabNoteId}`);
         try {
           result = await gitlabService.updateCommitComment(
             projectId,
@@ -126,7 +137,7 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
             summaryContent
           ) as { id: number | string };
         } catch (updateError) {
-          console.warn(`⚠️ [PublishCommentStep] Failed to update commit placeholder(noteId=${resolvedNoteId}), fallback to create summary`, updateError);
+          logWarn(log, updateError, `⚠️ [PublishCommentStep] Failed to update commit placeholder(noteId=${resolvedNoteId}), fallback to create summary`);
           result = await gitlabService.createCommitComment(
             projectId,
             reviewLog.commitSha,
@@ -134,7 +145,7 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
           ) as { id: number | string };
         }
       } else {
-        console.warn(`⚠️ [PublishCommentStep] Unable to resolve placeholder by marker=${pushMarker}, fallback to create summary`);
+        log.warn(`⚠️ [PublishCommentStep] Unable to resolve placeholder by marker=${pushMarker}, fallback to create summary`);
         result = await gitlabService.createCommitComment(
           projectId,
           reviewLog.commitSha,
@@ -159,15 +170,15 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
               where: { id: state.reviewLogId },
               data: { gitlabNoteId: resolvedNoteId },
             });
-            console.log(`📝 [PublishCommentStep] Resolved placeholder noteId=${resolvedNoteId} from discussion`);
+            log.info(`📝 [PublishCommentStep] Resolved placeholder noteId=${resolvedNoteId} from discussion`);
           }
-        } catch (error) {
-          console.warn(`⚠️ [PublishCommentStep] Failed to resolve placeholder noteId, fallback to create new summary`, error);
+        } catch {
+          log.warn(`⚠️ [PublishCommentStep] Failed to resolve placeholder noteId, fallback to create new summary`);
         }
       }
 
       if (resolvedDiscussionId && resolvedNoteId) {
-        console.log(`📝 [PublishCommentStep] Updating placeholder MR comment: discussionId=${resolvedDiscussionId}`);
+        log.info(`📝 [PublishCommentStep] Updating placeholder MR comment: discussionId=${resolvedDiscussionId}`);
         result = await gitlabService.updateMergeRequestComment(
           projectId,
           reviewLog.mergeRequestIid,
@@ -176,7 +187,7 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
           summaryContent
         ) as { id: number | string };
       } else {
-        console.log(`📝 [PublishCommentStep] Posting new MR comment`);
+        log.info(`📝 [PublishCommentStep] Posting new MR comment`);
         result = await gitlabService.createMergeRequestComment(
           projectId,
           reviewLog.mergeRequestIid,
@@ -195,10 +206,8 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
     });
 
   } catch (error) {
-    console.error(
-      `❌ [PublishCommentStep] Failed to publish summary comment`,
-      error
-    );
+    logError(log, error, "❌ [PublishCommentStep] Failed to publish summary comment");
+    publishError = error instanceof Error ? error.message : "Failed to publish summary comment";
   }
 
   // 发送钉钉机器人通知（不影响主流程）
@@ -208,10 +217,13 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
     repositoryPath: reviewLog.repository.path,
     gitlabUrl: reviewLog.repository.gitLabAccount.url,
     messageOverride: summaryContent,
+  }).catch((error) => {
+    logWarn(log, error, `⚠️ [PublishCommentStep] Failed to send DingTalk notification`);
   });
 
   return {
     completed: true,
+    error: publishError,
   };
 }
 

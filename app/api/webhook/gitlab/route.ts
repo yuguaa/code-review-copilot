@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.webhook.gitlab");
 /**
  * @file /api/webhook/gitlab
  * @description GitLab Webhook 处理器
@@ -42,19 +45,19 @@ function isValidWebhookSecret(configuredSecret: string | null | undefined, recei
 
 /** POST /api/webhook/gitlab - 处理 GitLab Webhook */
 export async function POST(request: NextRequest) {
-  console.log(' ')
-  console.log('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
-  console.log('%%%    🤖WEBHOOK REQUEST RECEIVED    %%%')
-  console.log('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
-  console.log(' ')
+  log.info(' ')
+  log.info('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+  log.info('%%%    🤖WEBHOOK REQUEST RECEIVED    %%%')
+  log.info('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+  log.info(' ')
 
   try {
     // 获取 webhook 事件类型
     const event = request.headers.get('x-gitlab-event')
-    console.log('>>> Event header:', event)
+    log.info('>>> Event header:', event)
 
     if (!event) {
-      console.error('❌ Missing X-GitLab-Event header')
+      log.error('❌ Missing X-GitLab-Event header')
       return NextResponse.json(
         { error: 'Missing X-GitLab-Event header' },
         { status: 400 }
@@ -66,10 +69,10 @@ export async function POST(request: NextRequest) {
     const { object_kind, project, object_attributes, ref, before, checkout_sha, user_username, user } = body
 
     const projectId = project?.id
-    console.log('Looking for repository with gitLabProjectId:', projectId)
+    log.info('Looking for repository with gitLabProjectId:', projectId)
 
     if (!projectId) {
-      console.error('❌ Missing project id')
+      log.error('❌ Missing project id')
       return NextResponse.json({ error: 'Missing project id' }, { status: 400 })
     }
 
@@ -85,22 +88,22 @@ export async function POST(request: NextRequest) {
     })
 
     if (!repository) {
-      console.log(`❌ No repository found for project ${projectId}`)
+      log.info(`❌ No repository found for project ${projectId}`)
       return NextResponse.json({ received: true })
     }
 
     if (!isValidWebhookSecret(repository.gitLabAccount.webhookSecret, request.headers.get('x-gitlab-token'))) {
-      console.error('❌ Invalid GitLab webhook secret')
+      log.error('❌ Invalid GitLab webhook secret')
       return NextResponse.json({ error: 'Invalid webhook secret' }, { status: 401 })
     }
 
-    console.log(`✅ Found repository: ${repository.name} (${repository.id})`)
-    console.log(`🔧 Auto-review enabled: ${repository.autoReview}`)
-    console.log(`👀 Watch branches: ${repository.watchBranches || 'all branches'}`)
+    log.info(`✅ Found repository: ${repository.name} (${repository.id})`)
+    log.info(`🔧 Auto-review enabled: ${repository.autoReview}`)
+    log.info(`👀 Watch branches: ${repository.watchBranches || 'all branches'}`)
 
     // 检查是否启用了自动审查
     if (!repository.autoReview) {
-      console.log(`⏭️ Auto-review is disabled for repository ${repository.id}`)
+      log.info(`⏭️ Auto-review is disabled for repository ${repository.id}`)
       return NextResponse.json({ received: true })
     }
 
@@ -114,30 +117,30 @@ export async function POST(request: NextRequest) {
       const mrAuthorName = user?.name || ''
       const mrAuthor = mrAuthorName ? `${mrAuthorName}(${mrAuthorUsername})` : mrAuthorUsername
 
-      console.log(`🔀 MR Event: ${action} !${mrIid}`)
-      console.log(`📂 Source branch: ${mr.source_branch} → Target branch: ${mr.target_branch}`)
-      console.log(`👤 Author: ${mrAuthor}`)
-      console.log(`📝 Title: ${mr.title}`)
+      log.info(`🔀 MR Event: ${action} !${mrIid}`)
+      log.info(`📂 Source branch: ${mr.source_branch} → Target branch: ${mr.target_branch}`)
+      log.info(`👤 Author: ${mrAuthor}`)
+      log.info(`📝 Title: ${mr.title}`)
 
       // 跳过已合并、关闭的 MR 事件
       if (['merge', 'merged', 'close', 'closed'].includes(action)) {
-        console.log(`⏭️ Skipping MR action: ${action} (merged/closed MRs are not reviewed)`)
+        log.info(`⏭️ Skipping MR action: ${action} (merged/closed MRs are not reviewed)`)
         return NextResponse.json({ received: true })
       }
 
       // 检查分支是否匹配监听规则（MR 事件检查目标分支）
       const shouldReview = checkBranchMatch(mr.target_branch, repository.watchBranches)
       if (!shouldReview) {
-        console.log(`⏭️ Target branch ${mr.target_branch} does not match watch rules: ${repository.watchBranches}`)
+        log.info(`⏭️ Target branch ${mr.target_branch} does not match watch rules: ${repository.watchBranches}`)
         return NextResponse.json({ received: true })
       }
 
-      console.log(`✅ Target branch ${mr.target_branch} matches watch rules`)
+      log.info(`✅ Target branch ${mr.target_branch} matches watch rules`)
 
       // 获取 commit SHA（优先使用 diff_refs，否则使用 last_commit）
       const commitSha = mr.diff_refs?.head_sha || mr.last_commit?.id
       if (!commitSha) {
-        console.error('❌ Cannot find commit SHA in MR event')
+        log.error('❌ Cannot find commit SHA in MR event')
         return NextResponse.json({ error: 'Missing commit SHA' }, { status: 400 })
       }
 
@@ -172,26 +175,26 @@ export async function POST(request: NextRequest) {
       // 格式：姓名(工号) 或 仅工号
       const author = authorName ? `${authorName}(${authorUsername})` : authorUsername
 
-      console.log(`📝 Push Event`)
-      console.log(`📂 Branch: ${branchName}`)
-      console.log(`🔙 Before: ${baseCommitSha || 'N/A'}`)
-      console.log(`💾 Commit: ${commitSha}`)
-      console.log(`📦 Push commits: ${pushCommitShas.length}`)
-      console.log(`👤 Author: ${author}`)
+      log.info(`📝 Push Event`)
+      log.info(`📂 Branch: ${branchName}`)
+      log.info(`🔙 Before: ${baseCommitSha || 'N/A'}`)
+      log.info(`💾 Commit: ${commitSha}`)
+      log.info(`📦 Push commits: ${pushCommitShas.length}`)
+      log.info(`👤 Author: ${author}`)
 
       if (!branchName || !commitSha) {
-        console.error('❌ Invalid push event data')
+        log.error('❌ Invalid push event data')
         return NextResponse.json({ error: 'Invalid push event data' }, { status: 400 })
       }
 
       // 检查分支是否匹配监听规则
       const shouldReview = checkBranchMatch(branchName, repository.watchBranches)
       if (!shouldReview) {
-        console.log(`⏭️ Branch ${branchName} does not match watch rules: ${repository.watchBranches}`)
+        log.info(`⏭️ Branch ${branchName} does not match watch rules: ${repository.watchBranches}`)
         return NextResponse.json({ received: true })
       }
 
-      console.log(`✅ Branch ${branchName} matches watch rules`)
+      log.info(`✅ Branch ${branchName} matches watch rules`)
 
       const reviewLog = await reviewTriggerService.startWebhookPushReview({
         repository,
@@ -211,10 +214,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 其他事件类型不处理
-    console.log(`⏭️ Unhandled event type: ${event} / ${object_kind}`)
+    log.info(`⏭️ Unhandled event type: ${event} / ${object_kind}`)
     return NextResponse.json({ received: true })
   } catch (error) {
-    console.error('❌ Webhook processing failed:', error)
+    log.error('❌ Webhook processing failed:', error)
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 }

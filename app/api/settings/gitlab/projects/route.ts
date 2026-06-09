@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.settings.gitlab.projects");
 /**
  * @file /api/settings/gitlab/projects
  * @description GitLab 项目列表查询 API
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(projects)
   } catch (error) {
-    console.error('Failed to fetch GitLab projects:', error)
+    log.error('Failed to fetch GitLab projects:', error)
     return NextResponse.json(
       { error: 'Failed to fetch GitLab projects' },
       { status: 500 }
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(projects)
   } catch (error) {
-    console.error('Failed to fetch GitLab projects:', error)
+    log.error('Failed to fetch GitLab projects:', error)
     return NextResponse.json(
       { error: 'Failed to fetch GitLab projects' },
       { status: 500 }

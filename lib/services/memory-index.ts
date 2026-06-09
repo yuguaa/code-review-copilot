@@ -2,6 +2,7 @@ import crypto from "crypto";
 import path from "path";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { toPrismaJsonInput } from "@/lib/review/utils";
 import type { GitLabDiff, GitLabRepositoryTreeItem } from "@/lib/types";
 
 const MAX_TREE_PAGES = 200;
@@ -175,10 +176,6 @@ export interface MemoryIndexInput {
   previousIndexedCommitSha?: string | null;
   baseBranch?: string | null;
   baseCommitSha?: string | null;
-}
-
-function toJsonInput(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
 }
 
 function hashContent(content: string): string {
@@ -787,17 +784,17 @@ export class MemoryIndexService {
           update: {
             status: "ready",
             architectureSummary: projectIndex.architectureSummary,
-            memoryJson: toJsonInput(projectIndex.memory),
-            entrypointsJson: toJsonInput(projectIndex.entrypoints),
-            layersJson: toJsonInput(projectIndex.layers),
-            conventionsJson: toJsonInput({
+            memoryJson: toPrismaJsonInput(projectIndex.memory),
+            entrypointsJson: toPrismaJsonInput(projectIndex.entrypoints),
+            layersJson: toPrismaJsonInput(projectIndex.layers),
+            conventionsJson: toPrismaJsonInput({
               reviewMode: "agent_loop",
               graphSource: "gitlab_repository_tree",
               maxIndexedFiles: MAX_INDEXED_FILES,
               maxFileBytes: MAX_FILE_BYTES,
               confidenceThreshold: 0.6,
             }),
-            risksJson: toJsonInput(projectIndex.risks),
+            risksJson: toPrismaJsonInput(projectIndex.risks),
             confidence: 0.82,
             lastIndexedAt: new Date(),
             error: null,
@@ -808,17 +805,17 @@ export class MemoryIndexService {
             commitSha: targetCommitSha,
             status: "ready",
             architectureSummary: projectIndex.architectureSummary,
-            memoryJson: toJsonInput(projectIndex.memory),
-            entrypointsJson: toJsonInput(projectIndex.entrypoints),
-            layersJson: toJsonInput(projectIndex.layers),
-            conventionsJson: toJsonInput({
+            memoryJson: toPrismaJsonInput(projectIndex.memory),
+            entrypointsJson: toPrismaJsonInput(projectIndex.entrypoints),
+            layersJson: toPrismaJsonInput(projectIndex.layers),
+            conventionsJson: toPrismaJsonInput({
               reviewMode: "agent_loop",
               graphSource: "gitlab_repository_tree",
               maxIndexedFiles: MAX_INDEXED_FILES,
               maxFileBytes: MAX_FILE_BYTES,
               confidenceThreshold: 0.6,
             }),
-            risksJson: toJsonInput(projectIndex.risks),
+            risksJson: toPrismaJsonInput(projectIndex.risks),
             confidence: 0.82,
           },
         }).then((snapshot) => {
@@ -910,8 +907,8 @@ export class MemoryIndexService {
                 language: file.language,
                 role: file.role,
                 summary: file.summary,
-                importsJson: toJsonInput(file.imports),
-                exportsJson: toJsonInput(file.exports),
+                importsJson: toPrismaJsonInput(file.imports),
+                exportsJson: toPrismaJsonInput(file.exports),
                 lastIndexedAt: new Date(),
               },
               create: {
@@ -923,8 +920,8 @@ export class MemoryIndexService {
                 language: file.language,
                 role: file.role,
                 summary: file.summary,
-                importsJson: toJsonInput(file.imports),
-                exportsJson: toJsonInput(file.exports),
+                importsJson: toPrismaJsonInput(file.imports),
+                exportsJson: toPrismaJsonInput(file.exports),
               },
             }))).then((fileNodes) => {
               return tx.codeFileNode.findMany({

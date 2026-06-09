@@ -3,8 +3,18 @@
  * @description 代码审查状态类型定义
  */
 
-import type { ReviewLog } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { GitLabDiff, AIModelConfig, ReviewComment, ReviewCommentSource, GitLabMergeRequest, GitLabRepositoryTreeItem, GitLabBranch } from "@/lib/types";
+
+export type ReviewLogWithRepository = Prisma.ReviewLogGetPayload<{
+  include: {
+    repository: {
+      include: {
+        gitLabAccount: true;
+      };
+    };
+  };
+}>;
 
 /** 单个文件审查输入 */
 export interface FileReviewInput {
@@ -119,7 +129,7 @@ export interface ReviewState {
   repositoryConfig: RepositoryConfig;
   modelConfig: AIModelConfig;
   mrInfo: GitLabMergeRequest | null;
-  reviewLog: ReviewLog | null;
+  reviewLog: ReviewLogWithRepository | null;
   diffs: GitLabDiff[];
   relevantDiffs: GitLabDiff[];
   reviewScope: "full" | "incremental";

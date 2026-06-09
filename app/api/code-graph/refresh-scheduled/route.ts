@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.code-graph.refresh-scheduled");
 /**
  * @file /api/code-graph/refresh-scheduled
  * @description 内部定时任务入口：刷新活跃仓库的 Code Graph。
@@ -22,7 +25,7 @@ export function POST(request: NextRequest) {
   return refreshScheduledCodeGraphs()
     .then((summary) => NextResponse.json({ success: true, summary }))
     .catch((error) => {
-      console.error("Failed to run scheduled Code Graph refresh:", error);
+      log.error("Failed to run scheduled Code Graph refresh:", error);
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "Failed to run scheduled Code Graph refresh" },
         { status: 500 },

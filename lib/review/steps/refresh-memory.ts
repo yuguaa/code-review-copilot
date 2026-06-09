@@ -6,9 +6,12 @@
 import { memoryIndexService } from "@/lib/services/memory-index";
 import { prisma } from "@/lib/prisma";
 import type { ReviewState } from "../types";
+import { createLogger, logError } from "@/lib/logger";
+
+const log = createLogger("RefreshMemoryStep");
 
 export function refreshMemoryStep(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log("🧠 [RefreshMemoryStep] Refreshing repository memory");
+  log.info("🧠 [RefreshMemoryStep] Refreshing repository memory");
 
   const reviewLog = state.reviewLog;
   if (!reviewLog) {
@@ -72,7 +75,7 @@ export function refreshMemoryStep(state: ReviewState): Promise<Partial<ReviewSta
       memorySnapshotId: snapshot.id,
       architectureSummary: snapshot.architectureSummary,
     })).catch((error) => {
-    console.error("❌ [RefreshMemoryStep] Failed to refresh memory", error);
+    logError(log, error, "❌ [RefreshMemoryStep] Failed to refresh memory");
     throw error;
   });
 }

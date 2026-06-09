@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.dashboard.contributions");
 /**
  * @file /api/dashboard/contributions
  * @description 获取贡献趋势（按天聚合）
@@ -153,7 +156,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error("Failed to fetch contributions:", error);
+    log.error("Failed to fetch contributions:", error);
     return NextResponse.json(
       { error: "Failed to fetch contributions" },
       { status: 500 },

@@ -10,6 +10,9 @@
 
 import axios, { AxiosError, AxiosInstance } from 'axios'
 import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabRepositoryTreeItem, GitLabBranch } from '@/lib/types'
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("GitLabService");
 
 type GitLabApiError = AxiosError<{ message?: string; error?: string }>
 
@@ -61,6 +64,8 @@ type GitLabWebhookResult = {
   url: string
 }
 
+const GITLAB_REQUEST_TIMEOUT_MS = 30 * 1000
+
 /**
  * GitLab 服务类
  */
@@ -72,6 +77,7 @@ export class GitLabService {
     this.client = axios.create({
       baseURL: normalizedBaseUrl,
       headers: { 'PRIVATE-TOKEN': accessToken },
+      timeout: GITLAB_REQUEST_TIMEOUT_MS,
     })
   }
 
@@ -100,7 +106,7 @@ export class GitLabService {
       })
       return response.data
     } catch (error) {
-      console.error('Failed to fetch GitLab projects:', error)
+      log.error('Failed to fetch GitLab projects:', error)
       throw new Error('Failed to fetch projects from GitLab')
     }
   }
@@ -113,7 +119,7 @@ export class GitLabService {
       const response = await this.client.get(`/projects/${projectId}`)
       return response.data
     } catch (error) {
-      console.error('Failed to fetch GitLab project:', error)
+      log.error('Failed to fetch GitLab project:', error)
       throw new Error('Failed to fetch project from GitLab')
     }
   }
@@ -139,7 +145,7 @@ export class GitLabService {
       })
       return response.data
     } catch (error) {
-      console.error('Failed to fetch merge requests:', error)
+      log.error('Failed to fetch merge requests:', error)
       throw new Error('Failed to fetch merge requests from GitLab')
     }
   }
@@ -154,7 +160,7 @@ export class GitLabService {
       )
       return response.data
     } catch (error) {
-      console.error('Failed to fetch merge request:', error)
+      log.error('Failed to fetch merge request:', error)
       throw new Error('Failed to fetch merge request from GitLab')
     }
   }
@@ -169,7 +175,7 @@ export class GitLabService {
       )
       return response.data
     } catch (error) {
-      console.error('Failed to fetch merge request diffs:', error)
+      log.error('Failed to fetch merge request diffs:', error)
       throw new Error('Failed to fetch merge request diffs from GitLab')
     }
   }
@@ -186,7 +192,7 @@ export class GitLabService {
       )
       return response.data
     } catch (error) {
-      console.error('Failed to fetch merge request commits:', error)
+      log.error('Failed to fetch merge request commits:', error)
       throw new Error('Failed to fetch merge request commits from GitLab')
     }
   }
@@ -228,7 +234,7 @@ export class GitLabService {
         commits.push(...batch)
         if (batch.length < perPage) break
       } catch (error) {
-        console.error('Failed to fetch project commits:', error)
+        log.error('Failed to fetch project commits:', error)
         throw new Error('Failed to fetch project commits from GitLab')
       }
     }
@@ -244,7 +250,7 @@ export class GitLabService {
     return this.client.get(`/projects/${projectId}/repository/branches/${encodedBranch}`)
       .then((response) => response.data as GitLabBranch)
       .catch((error) => {
-        console.error(`Failed to fetch GitLab branch: ${branch}`, error)
+        log.error(`Failed to fetch GitLab branch: ${branch}`, error)
         throw new Error(`Failed to fetch branch ${branch} from GitLab`)
       })
   }
@@ -273,7 +279,7 @@ export class GitLabService {
         if (batch.length < perPage) return branches
         return loadPage()
       }).catch((error) => {
-        console.error('Failed to fetch GitLab branches:', error)
+        log.error('Failed to fetch GitLab branches:', error)
         throw new Error('Failed to fetch branches from GitLab')
       })
     }
@@ -292,7 +298,7 @@ export class GitLabService {
       )
       return response.data.changes || response.data
     } catch (error) {
-      console.error('Failed to fetch merge request changes:', error)
+      log.error('Failed to fetch merge request changes:', error)
       throw new Error('Failed to fetch merge request changes from GitLab')
     }
   }
@@ -307,7 +313,7 @@ export class GitLabService {
       )
       return response.data
     } catch (error) {
-      console.error('Failed to fetch commit diff:', error)
+      log.error('Failed to fetch commit diff:', error)
       throw new Error('Failed to fetch commit diff from GitLab')
     }
   }
@@ -347,7 +353,7 @@ export class GitLabService {
         if (batch.length < perPage) return treeItems
         return loadPage()
       }).catch((error) => {
-        console.error('Failed to fetch repository tree:', error)
+        log.error('Failed to fetch repository tree:', error)
         throw new Error('Failed to fetch repository tree from GitLab')
       })
     }
@@ -365,7 +371,7 @@ export class GitLabService {
       responseType: 'text',
       transformResponse: [(data) => data],
     }).then((response) => String(response.data || '')).catch((error) => {
-      console.error(`Failed to fetch repository file raw: ${filePath}`, error)
+      log.error(`Failed to fetch repository file raw: ${filePath}`, error)
       throw new Error(`Failed to fetch repository file ${filePath} from GitLab`)
     })
   }
@@ -391,7 +397,7 @@ export class GitLabService {
       )
       return response.data
     } catch (error) {
-      console.error('Failed to compare commits:', error)
+      log.error('Failed to compare commits:', error)
       throw new Error('Failed to compare commits from GitLab')
     }
   }
@@ -406,7 +412,7 @@ export class GitLabService {
       )
       return Array.isArray(response.data) ? response.data : []
     } catch (error) {
-      console.error('Failed to fetch commit comments:', error)
+      log.error('Failed to fetch commit comments:', error)
       throw new Error('Failed to fetch commit comments from GitLab')
     }
   }
@@ -444,7 +450,7 @@ export class GitLabService {
     } catch (error) {
       const apiError = error as GitLabApiError
       if (apiError.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
+        log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
       throw error
     }
@@ -475,9 +481,9 @@ export class GitLabService {
     } catch (error) {
       const apiError = error as GitLabApiError
       if (apiError.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
+        log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
-      console.error('Failed to update MR comment:', error)
+      log.error('Failed to update MR comment:', error)
       throw new Error('Failed to update comment on GitLab MR')
     }
   }
@@ -498,7 +504,7 @@ export class GitLabService {
     } catch (error) {
       const apiError = error as GitLabApiError
       if (apiError.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
+        log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
       throw error
     }
@@ -531,9 +537,9 @@ export class GitLabService {
         const apiError = error as GitLabApiError
         lastError = apiError
         if (apiError.response?.data) {
-          console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
+          log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
         }
-        console.error(`Failed to update commit comment with id=${id}:`, apiError.response?.status || error)
+        log.error(`Failed to update commit comment with id=${id}:`, apiError.response?.status || error)
       }
     }
 
@@ -557,7 +563,7 @@ export class GitLabService {
       })
       return response.data
     } catch (error) {
-      console.error('Failed to create webhook:', error)
+      log.error('Failed to create webhook:', error)
       throw new Error('Failed to create webhook on GitLab')
     }
   }
@@ -589,7 +595,7 @@ export class GitLabService {
         data.line_type = options.line_type || 'new'
       }
 
-      console.log('Creating commit comment with data:', JSON.stringify(data, null, 2))
+      log.info('Creating commit comment with data:', JSON.stringify(data, null, 2))
 
       const response = await this.client.post(
         `/projects/${projectId}/repository/commits/${commitSha}/comments`,
@@ -600,7 +606,7 @@ export class GitLabService {
       const apiError = error as GitLabApiError
       // 如果带行号失败，重试不带行号
       if (apiError.response?.status === 400 && options?.path) {
-        console.log('Retry without line info...')
+        log.info('Retry without line info...')
         try {
           let fullComment = comment
           if (options?.path) {
@@ -612,14 +618,14 @@ export class GitLabService {
           )
           return response.data
         } catch (retryError) {
-          console.error('Retry also failed:', retryError)
+          log.error('Retry also failed:', retryError)
         }
       }
 
       if (apiError.response?.data) {
-        console.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
+        log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
       }
-      console.error('Failed to create commit comment:', error)
+      log.error('Failed to create commit comment:', error)
       throw new Error('Failed to create comment on GitLab commit')
     }
   }
@@ -632,7 +638,7 @@ export class GitLabService {
       const response = await this.client.get('/user')
       return !!response.data
     } catch (error) {
-      console.error('GitLab connection test failed:', error)
+      log.error('GitLab connection test failed:', error)
       return false
     }
   }

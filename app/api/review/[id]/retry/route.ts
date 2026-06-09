@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.review.[id].retry");
 /**
  * @file /api/review/[id]/retry
  * @description 重新触发代码审查
@@ -16,7 +19,7 @@ export async function POST(
   try {
     const { id: reviewId } = await params
 
-    console.log(`🔄 [RetryAPI] Retrying review: ${reviewId}`)
+    log.info(`🔄 [RetryAPI] Retrying review: ${reviewId}`)
     const reviewLog = await reviewTriggerService.retryReview(reviewId)
 
     return NextResponse.json({
@@ -26,7 +29,7 @@ export async function POST(
       sourceReviewLogId: reviewId,
     })
   } catch (error) {
-    console.error('❌ [RetryAPI] Failed to retry review:', error)
+    log.error('❌ [RetryAPI] Failed to retry review:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to retry review' },
       { status: error instanceof Error && error.message.includes('progress') ? 400 : 500 }

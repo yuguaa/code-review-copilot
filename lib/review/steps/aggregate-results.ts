@@ -9,20 +9,18 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { buildFindingKey, toPrismaJsonInput } from "@/lib/review/utils";
 import type { ReviewState, ReviewStatistics } from "../types";
 import type { ReviewComment } from "@/lib/types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("AggregateResultsStep");
 
 function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
   const seen = new Set<string>();
   return comments
     .filter((comment) => {
-      const key = [
-        comment.filePath,
-        comment.lineNumber,
-        comment.lineRangeEnd || "",
-        comment.severity,
-        comment.content.replace(/\s+/g, " ").trim(),
-      ].join("|");
+      const key = buildFindingKey(comment);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -37,7 +35,7 @@ function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
  * 汇总审查结果
  */
 export async function aggregateResultsStep(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log(`📊 [AggregateResultsStep] Aggregating review results`);
+  log.info(`📊 [AggregateResultsStep] Aggregating review results`);
 
   // 最终发布口径以去重后的评论为准，confidence 只用于内部排序和去重。
   const commentsToSave = normalizeComments(
@@ -56,10 +54,10 @@ export async function aggregateResultsStep(state: ReviewState): Promise<Partial<
     total: totalCritical + totalNormal + totalSuggestion,
   };
 
-  console.log(`📊 [AggregateResultsStep] Review complete:`);
-  console.log(`   🔴 Critical: ${statistics.critical}`);
-  console.log(`   ⚠️ Normal: ${statistics.normal}`);
-  console.log(`   💡 Suggestions: ${statistics.suggestion}`);
+  log.info(`📊 [AggregateResultsStep] Review complete:`);
+  log.info(`   🔴 Critical: ${statistics.critical}`);
+  log.info(`   ⚠️ Normal: ${statistics.normal}`);
+  log.info(`   💡 Suggestions: ${statistics.suggestion}`);
 
   await prisma.$transaction(async (tx) => {
     if (commentsToSave.length > 0) {
@@ -74,7 +72,7 @@ export async function aggregateResultsStep(state: ReviewState): Promise<Partial<
           content: comment.content,
           sourceBotName: comment.sourceBotName,
           sourceBotModel: comment.sourceBotModel,
-          sourceBotsJson: comment.sourceBots ? JSON.parse(JSON.stringify(comment.sourceBots)) : undefined,
+          sourceBotsJson: comment.sourceBots ? toPrismaJsonInput(comment.sourceBots) : undefined,
           diffHunk: comment.diffHunk,
           confidence: comment.confidence,
         })),

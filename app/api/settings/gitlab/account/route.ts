@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.settings.gitlab.account");
 /**
  * @file /api/settings/gitlab/account
  * @description GitLab 账号配置 API（单账号模式）
@@ -27,7 +30,7 @@ export async function GET() {
 
     return NextResponse.json(account)
   } catch (error) {
-    console.error('Failed to fetch GitLab account:', error)
+    log.error('Failed to fetch GitLab account:', error)
     return NextResponse.json(
       { error: 'Failed to fetch GitLab account' },
       { status: 500 }
@@ -79,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(account)
   } catch (error) {
-    console.error('Failed to create GitLab account:', error)
+    log.error('Failed to create GitLab account:', error)
     return NextResponse.json(
       { error: 'Failed to create GitLab account' },
       { status: 500 }
@@ -120,7 +123,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(account)
   } catch (error) {
-    console.error('Failed to update GitLab account:', error)
+    log.error('Failed to update GitLab account:', error)
     return NextResponse.json(
       { error: 'Failed to update GitLab account' },
       { status: 500 }
@@ -147,7 +150,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Failed to delete GitLab account:', error)
+    log.error('Failed to delete GitLab account:', error)
     return NextResponse.json(
       { error: 'Failed to delete GitLab account' },
       { status: 500 }

@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.settings.models.test");
 /**
  * @file /api/settings/models/test
  * @description AI 模型连接测试 API
@@ -102,7 +105,7 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error('Failed to test AI model:', error)
+    log.error('Failed to test AI model:', error)
     return NextResponse.json(
       { error: getErrorMessage(error, 'Failed to test AI model') },
       { status: 500 }

@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "@/lib/services/gitlab";
 import { reviewService } from "@/lib/services/review";
 import { REVIEW_CANCELLED_STATUS } from "@/lib/services/review-cancellation";
+import { createLogger, logError } from "@/lib/logger";
+
+const log = createLogger("ReviewTriggerService");
 
 type RepositoryWithGitLab = Prisma.RepositoryGetPayload<{
   include: { gitLabAccount: true };
@@ -87,7 +90,7 @@ export class ReviewTriggerService {
       return this.createMergeRequestPlaceholder(params.repository, reviewLog)
         .then(() => reviewLog)
         .catch((error) => {
-          console.error("⚠️ [ReviewTriggerService] Failed to create MR placeholder:", error);
+          logError(log, error, "⚠️ [ReviewTriggerService] Failed to create MR placeholder:");
           return reviewLog;
         })
         .then((reviewLog) => {
@@ -131,7 +134,7 @@ export class ReviewTriggerService {
       return this.createPushPlaceholder(params.repository, reviewLog)
         .then(() => reviewLog)
         .catch((error) => {
-          console.error("⚠️ [ReviewTriggerService] Failed to create push placeholder:", error);
+          logError(log, error, "⚠️ [ReviewTriggerService] Failed to create push placeholder:");
           return reviewLog;
         })
         .then((reviewLog) => {
@@ -182,7 +185,7 @@ export class ReviewTriggerService {
 
         return placeholderPromise
           .catch((error) => {
-            console.error("⚠️ [ReviewTriggerService] Failed to create retry placeholder:", error);
+            logError(log, error, "⚠️ [ReviewTriggerService] Failed to create retry placeholder:");
             return reviewLog;
           });
       });
@@ -292,7 +295,7 @@ export class ReviewTriggerService {
 
   runAsync(reviewLogId: string) {
     reviewService.performReview(reviewLogId).catch((error) => {
-      console.error("❌ [ReviewTriggerService] Review failed:", error);
+      logError(log, error, "❌ [ReviewTriggerService] Review failed:");
     });
   }
 }

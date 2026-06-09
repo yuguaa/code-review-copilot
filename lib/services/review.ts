@@ -17,6 +17,9 @@ import { refreshMemoryStep } from "@/lib/review/steps/refresh-memory";
 import { runReviewBotsStep } from "@/lib/review/steps/run-review-bots";
 import { createInitialReviewState, type ReviewState } from "@/lib/review/types";
 import { assertStateReviewNotCancelled, isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
+import { createLogger, logError } from "@/lib/logger";
+
+const log = createLogger("ReviewService");
 
 function mergeState(state: ReviewState, patch: Partial<ReviewState>): ReviewState {
   return { ...state, ...patch };
@@ -30,7 +33,7 @@ export class ReviewService {
    * 执行代码审查
    */
   async performReview(reviewLogId: string) {
-    console.log(`🔍 [ReviewService] Starting review for log: ${reviewLogId}`);
+    log.info(`🔍 [ReviewService] Starting review for log: ${reviewLogId}`);
 
     // 1. 获取 ReviewLog 以初始化 GitLab 服务
     const reviewLog = await prisma.reviewLog.findUnique({
@@ -45,12 +48,12 @@ export class ReviewService {
     });
 
     if (!reviewLog) {
-      console.error(`❌ [ReviewService] Review log not found: ${reviewLogId}`);
+      log.error(`❌ [ReviewService] Review log not found: ${reviewLogId}`);
       throw new Error("Review log not found");
     }
 
     if (isReviewCancelledStatus(reviewLog.status)) {
-      console.log(`🛑 [ReviewService] Review already cancelled: ${reviewLogId}`);
+      log.info(`🛑 [ReviewService] Review already cancelled: ${reviewLogId}`);
       return {
         success: false,
         totalComments: 0,
@@ -70,11 +73,12 @@ export class ReviewService {
     let state = createInitialReviewState({
       reviewLogId,
       gitlabService,
+      reviewLog,
     });
 
     // 4. 按固定链路执行，下一步由状态直接 if/else 决定。
     try {
-      console.log(`🚀 [ReviewService] Running review steps`);
+      log.info(`🚀 [ReviewService] Running review steps`);
 
       state = mergeState(state, await fetchDiffStep(state));
 
@@ -103,7 +107,7 @@ export class ReviewService {
         throw new Error(result.error);
       }
 
-      console.log(`✅ [ReviewService] Review completed successfully`);
+      log.info(`✅ [ReviewService] Review completed successfully`);
       return {
         success: true,
         totalComments: result.statistics.total,
@@ -114,7 +118,7 @@ export class ReviewService {
 
     } catch (error) {
       if (error instanceof ReviewCancelledError) {
-        console.log(`🛑 [ReviewService] Review cancelled: ${reviewLogId}`);
+        log.info(`🛑 [ReviewService] Review cancelled: ${reviewLogId}`);
         return {
           success: false,
           totalComments: 0,
@@ -124,7 +128,7 @@ export class ReviewService {
         };
       }
 
-      console.error("Review failed:", error);
+      logError(log, error, "Review failed");
       await prisma.reviewLog.updateMany({
         where: { id: reviewLogId, status: { not: "cancelled" } },
         data: {

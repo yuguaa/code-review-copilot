@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.reviews.[id].agent-trace");
 /**
  * @file /api/reviews/[id]/agent-trace
  * @description 获取审查 Agent Loop 轨迹
@@ -29,7 +32,7 @@ export function GET(
     }
     return NextResponse.json({ traces });
   }).catch((error) => {
-    console.error("Failed to fetch review agent trace:", error);
+    log.error("Failed to fetch review agent trace:", error);
     return NextResponse.json(
       { error: "Failed to fetch review agent trace" },
       { status: 500 },

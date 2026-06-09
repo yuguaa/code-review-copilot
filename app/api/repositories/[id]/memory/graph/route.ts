@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.repositories.[id].memory.graph");
 /**
  * @file /api/repositories/[id]/memory/graph
  * @description 获取仓库轻量调用图
@@ -264,7 +267,7 @@ export function GET(
       })),
     });
   }).catch((error) => {
-    console.error("Failed to fetch repository memory graph:", error);
+    log.error("Failed to fetch repository memory graph:", error);
     return NextResponse.json(
       { error: "Failed to fetch repository memory graph" },
       { status: 500 },

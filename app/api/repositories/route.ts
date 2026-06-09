@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.repositories");
 /**
  * @file /api/repositories
  * @description 仓库管理 API 路由
@@ -80,7 +83,7 @@ export async function GET() {
 
     return NextResponse.json(repositories)
   } catch (error) {
-    console.error('Failed to fetch repositories:', error)
+    log.error('Failed to fetch repositories:', error)
     return NextResponse.json(
       { error: 'Failed to fetch repositories' },
       { status: 500 }
@@ -174,7 +177,7 @@ export async function POST(request: NextRequest) {
         )
       }
     }
-    console.error('Failed to create repository:', error)
+    log.error('Failed to create repository:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create repository' },
       { status: 500 }
@@ -263,7 +266,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(repository)
   } catch (error) {
-    console.error('Failed to update repository:', error)
+    log.error('Failed to update repository:', error)
     return NextResponse.json(
       { error: 'Failed to update repository' },
       { status: 500 }
@@ -290,7 +293,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Failed to delete repository:', error)
+    log.error('Failed to delete repository:', error)
     return NextResponse.json(
       { error: 'Failed to delete repository' },
       { status: 500 }

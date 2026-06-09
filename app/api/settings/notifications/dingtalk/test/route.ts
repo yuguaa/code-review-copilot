@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.settings.notifications.dingtalk.test");
 /**
  * @file /api/settings/notifications/dingtalk/test
  * @description 钉钉机器人测试发送
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Failed to test DingTalk setting:", error);
+    log.error("Failed to test DingTalk setting:", error);
     return NextResponse.json(
       { error: "Failed to test DingTalk setting" },
       { status: 500 },

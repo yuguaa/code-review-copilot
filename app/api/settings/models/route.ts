@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.settings.models");
 /**
  * @file /api/settings/models
  * @description AI 模型配置管理 API
@@ -24,7 +27,7 @@ export async function GET() {
 
     return NextResponse.json(models)
   } catch (error) {
-    console.error('Failed to fetch AI models:', error)
+    log.error('Failed to fetch AI models:', error)
     return NextResponse.json(
       { error: 'Failed to fetch AI models' },
       { status: 500 }
@@ -51,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(model)
   } catch (error) {
-    console.error('Failed to create AI model:', error)
+    log.error('Failed to create AI model:', error)
     return NextResponse.json(
       { error: 'Failed to create AI model' },
       { status: 500 }
@@ -80,7 +83,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(model)
   } catch (error) {
-    console.error('Failed to update AI model:', error)
+    log.error('Failed to update AI model:', error)
     return NextResponse.json(
       { error: 'Failed to update AI model' },
       { status: 500 }
@@ -107,7 +110,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Failed to delete AI model:', error)
+    log.error('Failed to delete AI model:', error)
     return NextResponse.json(
       { error: 'Failed to delete AI model' },
       { status: 500 }

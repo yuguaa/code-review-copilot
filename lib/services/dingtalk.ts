@@ -6,6 +6,9 @@
 import crypto from "crypto";
 import type { ReviewLog } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { createLogger, logWarn } from "@/lib/logger";
+
+const log = createLogger("DingTalk");
 
 export interface DingTalkMarkdownMessage {
   msgtype: "markdown";
@@ -107,7 +110,7 @@ export async function sendReviewToDingTalk(params: {
   }
 
   if (!enabled || !webhookUrl) {
-    console.log("⏭️ [DingTalk] Notification disabled or webhook not configured, skip");
+    log.info("⏭️ [DingTalk] Notification disabled or webhook not configured, skip");
     return;
   }
 
@@ -151,11 +154,11 @@ export async function sendReviewToDingTalk(params: {
     });
 
     if (!result.ok) {
-      console.warn(`⚠️ [DingTalk] Failed to send message: ${result.status} ${result.text ?? ""}`);
+      log.warn("⚠️ [DingTalk] Failed to send message", { status: result.status, responseText: result.text });
     } else {
-      console.log("✅ [DingTalk] Notification sent");
+      log.info("✅ [DingTalk] Notification sent");
     }
   } catch (error) {
-    console.warn("⚠️ [DingTalk] Failed to send message", error);
+    logWarn(log, error, "⚠️ [DingTalk] Failed to send message");
   }
 }

@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.settings.gitlab.test");
 /**
  * @file /api/settings/gitlab/test
  * @description GitLab 连接测试 API
@@ -31,7 +34,7 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error('Failed to test GitLab connection:', error)
+    log.error('Failed to test GitLab connection:', error)
     return NextResponse.json(
       { error: 'Failed to test connection' },
       { status: 500 }

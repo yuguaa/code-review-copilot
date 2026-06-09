@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.settings.notifications.dingtalk");
 /**
  * @file /api/settings/notifications/dingtalk
  * @description 钉钉机器人配置 API（全局）
@@ -16,7 +19,7 @@ export async function GET() {
     });
     return NextResponse.json(setting ?? null);
   } catch (error) {
-    console.error("Failed to fetch DingTalk setting:", error);
+    log.error("Failed to fetch DingTalk setting:", error);
     return NextResponse.json(
       { error: "Failed to fetch DingTalk setting" },
       { status: 500 },
@@ -67,7 +70,7 @@ async function upsertSetting(request: NextRequest) {
 
     return NextResponse.json(setting);
   } catch (error) {
-    console.error("Failed to update DingTalk setting:", error);
+    log.error("Failed to update DingTalk setting:", error);
     return NextResponse.json(
       { error: "Failed to update DingTalk setting" },
       { status: 500 },

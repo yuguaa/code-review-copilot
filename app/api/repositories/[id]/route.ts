@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.repositories.[id]");
 /**
  * @file /api/repositories/[id]
  * @description 单个仓库详情 API
@@ -90,7 +93,7 @@ export async function GET(
 
     return NextResponse.json(repository)
   } catch (error) {
-    console.error('Failed to fetch repository:', error)
+    log.error('Failed to fetch repository:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch repository' },
       { status: 500 } // 标记为服务器内部错误

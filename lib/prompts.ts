@@ -340,31 +340,3 @@ ${params.description || ''}
 ${params.diffs}
 \`\`\``
 }
-
-/**
- * 构建批量审查提示词（用于审查大量文件时生成总结性评论）
- * @param params - 批量审查参数
- */
-export function buildBatchReviewPrompt(params: {
-  title: string
-  description?: string
-  files: Array<{ path: string; diff: string }>
-  fileCount: number
-}): string {
-  const fileSummary = params.files.map(f => `- ${f.path}`).join('\n')
-
-  return `请基于以下代码变更进行审查（${params.fileCount} 个文件）。请遵循系统提示词中的“总结优先 + 统计 + 仅展开严重问题”的输出要求。
-
-【变更主题】${params.title}
-${params.description ? `【描述】${params.description}\n` : ''}
-
-【变更文件列表】
-${fileSummary}
-
-【代码变更】
-${params.files.map(f => `
-### ${f.path}
-\`\`\`diff
-${f.diff}
-\`\`\``).join('\n')}`
-}

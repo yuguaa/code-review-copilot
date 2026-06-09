@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
 import { aiService } from "@/lib/services/ai";
 import { contextRetrieverService, type RetrievedAgentContext } from "@/lib/services/context-retriever";
 import { validateReviewFindingsWithReport } from "@/lib/review/finding-validation";
+import { buildFindingKey, toPrismaJsonInput } from "@/lib/review/utils";
 import {
   buildReviewAgentCriticPrompt,
   buildReviewAgentPlanPrompt,
@@ -18,10 +18,6 @@ const MEMORY_WRITE_CONFIDENCE = 0.85;
 const ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD = 1;
 const ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD = 1;
 const MAX_REPEATED_PROGRESS_SIGNATURES = 2;
-
-function toJsonInput(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
-}
 
 function toValidationDiff(diff: AgentLoopInput["diffs"][number]) {
   return {
@@ -180,13 +176,7 @@ function dedupeFindings(
       return Number.isFinite(confidence);
     })
     .filter((item) => {
-      const key = [
-        item.filePath,
-        item.lineNumber,
-        item.lineRangeEnd || "",
-        item.severity,
-        item.content.replace(/\s+/g, " ").trim(),
-      ].join("|");
+      const key = buildFindingKey(item);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -196,16 +186,6 @@ function dedupeFindings(
       ...item,
       confidence: Math.min(1, Math.max(0, item.confidence ?? 0.5)),
     }));
-}
-
-function findingKey(finding: ReviewComment): string {
-  return [
-    finding.filePath,
-    finding.lineNumber,
-    finding.lineRangeEnd || "",
-    finding.severity,
-    finding.content.replace(/\s+/g, " ").trim(),
-  ].join("|");
 }
 
 function buildProgressSignature(params: {
@@ -218,7 +198,7 @@ function buildProgressSignature(params: {
     requestedFiles: [...new Set(params.requestedFiles)].sort(),
     requestedTools: [...new Set(params.requestedTools)].sort(),
     contextFiles: [...new Set(params.contextFiles)].sort(),
-    findingKeys: params.findings.map(findingKey).sort(),
+    findingKeys: params.findings.map(buildFindingKey).sort(),
   });
 }
 
@@ -658,21 +638,21 @@ export class ReviewAgentLoopService {
           reviewLogId: input.reviewLogId,
           reviewBotRunId: input.reviewBotRunId,
           memorySnapshotId: input.memorySnapshotId || null,
-          loopIterationsJson: toJsonInput(loopIterations),
-          retrievedContextJson: toJsonInput(latestContext || {}),
-          finalPlanJson: toJsonInput(finalPlan),
-          criticJson: toJsonInput(latestCritic),
-          memoryUpdatesJson: toJsonInput(memoryUpdates),
+          loopIterationsJson: toPrismaJsonInput(loopIterations),
+          retrievedContextJson: toPrismaJsonInput(latestContext || {}),
+          finalPlanJson: toPrismaJsonInput(finalPlan),
+          criticJson: toPrismaJsonInput(latestCritic),
+          memoryUpdatesJson: toPrismaJsonInput(memoryUpdates),
         },
         create: {
           reviewLogId: input.reviewLogId,
           reviewBotRunId: input.reviewBotRunId,
           memorySnapshotId: input.memorySnapshotId || null,
-          loopIterationsJson: toJsonInput(loopIterations),
-          retrievedContextJson: toJsonInput(latestContext || {}),
-          finalPlanJson: toJsonInput(finalPlan),
-          criticJson: toJsonInput(latestCritic),
-          memoryUpdatesJson: toJsonInput(memoryUpdates),
+          loopIterationsJson: toPrismaJsonInput(loopIterations),
+          retrievedContextJson: toPrismaJsonInput(latestContext || {}),
+          finalPlanJson: toPrismaJsonInput(finalPlan),
+          criticJson: toPrismaJsonInput(latestCritic),
+          memoryUpdatesJson: toPrismaJsonInput(memoryUpdates),
         },
       }).then((trace) => {
         if (memoryUpdates.length === 0) return trace;

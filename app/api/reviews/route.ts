@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.reviews");
 
 type ReviewLogWithRelations = Prisma.ReviewLogGetPayload<{
   include: {
@@ -309,7 +312,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Failed to fetch reviews:', error)
+    log.error('Failed to fetch reviews:', error)
     return NextResponse.json(
       { error: 'Failed to fetch reviews' },
       { status: 500 }

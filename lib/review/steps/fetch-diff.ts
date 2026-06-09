@@ -12,6 +12,9 @@ import { prisma } from "@/lib/prisma";
 import { getReviewableDiffs } from "@/lib/review/finding-validation";
 import type { ReviewState } from "../types";
 import type { GitLabDiff, GitLabMergeRequest } from "@/lib/types";
+import { createLogger, logWarn } from "@/lib/logger";
+
+const log = createLogger("FetchDiffStep");
 
 function isValidCompareBaseSha(sha: string | null | undefined): sha is string {
   return Boolean(sha && !/^0+$/.test(sha));
@@ -49,9 +52,9 @@ function mergeDiffsByFile(diffs: GitLabDiff[]): GitLabDiff[] {
  * 获取 GitLab Diff
  */
 export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewState>> {
-  console.log(`🔍 [FetchDiffStep] Starting review for log: ${state.reviewLogId}`);
+  log.info(`🔍 [FetchDiffStep] Starting review for log: ${state.reviewLogId}`);
 
-  const reviewLog = await prisma.reviewLog.findUnique({
+  const reviewLog = state.reviewLog || await prisma.reviewLog.findUnique({
     where: { id: state.reviewLogId },
     include: {
       repository: {
@@ -63,24 +66,27 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
   });
 
   if (!reviewLog) {
-    console.error(`❌ [FetchDiffStep] Review log not found: ${state.reviewLogId}`);
+    log.error(`❌ [FetchDiffStep] Review log not found: ${state.reviewLogId}`);
     return {
       error: "Review log not found",
       completed: true,
     };
   }
 
-  console.log(`📋 [FetchDiffStep] Review: ${reviewLog.title}`);
-  console.log(
+  log.info(`📋 [FetchDiffStep] Review: ${reviewLog.title}`);
+  log.info(
     `📂 [FetchDiffStep] Branch: ${reviewLog.sourceBranch} → ${reviewLog.targetBranch || "N/A"}`,
   );
 
   // 更新状态为 pending
-  await prisma.reviewLog.update({
-    where: { id: state.reviewLogId },
+  await prisma.reviewLog.updateMany({
+    where: {
+      id: state.reviewLogId,
+      status: { not: "cancelled" },
+    },
     data: { status: "pending" },
   });
-  console.log(`🔄 [FetchDiffStep] Status updated to: pending`);
+  log.info(`🔄 [FetchDiffStep] Status updated to: pending`);
 
   const gitlabService = state.gitlabService;
   if (!gitlabService) {
@@ -97,7 +103,7 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
   let incrementalBaseSha: string | null = null;
 
   if (isPushEvent) {
-    console.log(
+    log.info(
       `📌 [FetchDiffStep] Processing Push event: ${reviewLog.baseCommitSha || "N/A"} -> ${reviewLog.commitSha}`,
     );
     if (isValidCompareBaseSha(reviewLog.baseCommitSha) && reviewLog.baseCommitSha !== reviewLog.commitSha) {
@@ -110,16 +116,16 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
         diffs = compareResult.diffs || [];
         reviewScope = "incremental";
         incrementalBaseSha = reviewLog.baseCommitSha;
-        console.log(`📌 [FetchDiffStep] Push range diff enabled: ${incrementalBaseSha} -> ${reviewLog.commitSha}, files=${diffs.length}`);
+        log.info(`📌 [FetchDiffStep] Push range diff enabled: ${incrementalBaseSha} -> ${reviewLog.commitSha}, files=${diffs.length}`);
       } catch (error) {
-        console.warn(`⚠️ [FetchDiffStep] Push range compare failed, fallback to head commit diff`, error);
+        logWarn(log, error, "⚠️ [FetchDiffStep] Push range compare failed, fallback to head commit diff");
       }
     }
 
     if (diffs.length === 0) {
       const pushCommitShas = readPushCommitShas(reviewLog.pushCommitShasJson);
       if (pushCommitShas.length > 0) {
-        console.log(`📌 [FetchDiffStep] Fetching push commit diffs, commits=${pushCommitShas.length}`);
+        log.info(`📌 [FetchDiffStep] Fetching push commit diffs, commits=${pushCommitShas.length}`);
         const commitDiffGroups = await Promise.all(
           pushCommitShas.map((sha) => gitlabService.getCommitDiff(reviewLog.repository.gitLabProjectId, sha)),
         );
@@ -128,7 +134,7 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
     }
 
     if (diffs.length === 0) {
-      console.log(`📌 [FetchDiffStep] Fallback to head commit diff: ${reviewLog.commitSha}`);
+      log.info(`📌 [FetchDiffStep] Fallback to head commit diff: ${reviewLog.commitSha}`);
       diffs = await gitlabService.getCommitDiff(reviewLog.repository.gitLabProjectId, reviewLog.commitSha);
     }
   } else {
@@ -137,27 +143,27 @@ export async function fetchDiffStep(state: ReviewState): Promise<Partial<ReviewS
       reviewLog.mergeRequestIid,
     );
 
-    console.log(`📌 [FetchDiffStep] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
+    log.info(`📌 [FetchDiffStep] Fetching all changes for MR !${reviewLog.mergeRequestIid}`);
     diffs = await gitlabService.getMergeRequestChanges(
       reviewLog.repository.gitLabProjectId,
       reviewLog.mergeRequestIid,
     );
 
     if (!diffs || diffs.length === 0) {
-      console.log(`⏭️ [FetchDiffStep] No changes found in MR`);
+      log.info(`⏭️ [FetchDiffStep] No changes found in MR`);
       return {
         error: "No changes found in merge request",
         completed: true,
       };
     }
 
-    console.log(`📌 [FetchDiffStep] Found ${diffs.length} files with changes in MR`);
+    log.info(`📌 [FetchDiffStep] Found ${diffs.length} files with changes in MR`);
   }
 
   diffs = mergeDiffsByFile(diffs);
   const relevantDiffs = getReviewableDiffs(diffs);
 
-  console.log(`📁 [FetchDiffStep] Total files changed: ${relevantDiffs.length}`);
+  log.info(`📁 [FetchDiffStep] Total files changed: ${relevantDiffs.length}`);
 
   // 更新文件总数
   await prisma.reviewLog.update({

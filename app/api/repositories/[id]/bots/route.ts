@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.repositories.[id].bots");
 /**
  * @file /api/repositories/[id]/bots
  * @description 仓库审查机器人管理 API
@@ -57,7 +60,7 @@ export function GET(
     }))
     .then((bots) => NextResponse.json(bots))
     .catch((error) => {
-      console.error("Failed to fetch repository review bots:", error);
+      log.error("Failed to fetch repository review bots:", error);
       return NextResponse.json({ error: "Failed to fetch repository review bots" }, { status: 500 });
     });
 }
@@ -100,7 +103,7 @@ export function POST(
       });
     })
     .catch((error) => {
-      console.error("Failed to create repository review bot:", error);
+      log.error("Failed to create repository review bot:", error);
       return NextResponse.json({ error: "Failed to create repository review bot" }, { status: 500 });
     });
 }
@@ -172,7 +175,7 @@ export function PUT(
       });
     })
     .catch((error) => {
-      console.error("Failed to update repository review bot:", error);
+      log.error("Failed to update repository review bot:", error);
       return NextResponse.json({ error: "Failed to update repository review bot" }, { status: 500 });
     });
 }
@@ -199,7 +202,7 @@ export function DELETE(
       });
     })
     .catch((error) => {
-      console.error("Failed to delete repository review bot:", error);
+      log.error("Failed to delete repository review bot:", error);
       return NextResponse.json({ error: "Failed to delete repository review bot" }, { status: 500 });
     });
 }

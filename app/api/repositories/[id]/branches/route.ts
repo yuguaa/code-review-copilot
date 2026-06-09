@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.repositories.[id].branches");
 /**
  * @file /api/repositories/[id]/branches
  * @description 获取仓库远端分支列表
@@ -41,7 +44,7 @@ export function GET(
       }));
     });
   }).catch((error) => {
-    console.error("Failed to fetch repository branches:", error);
+    log.error("Failed to fetch repository branches:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch repository branches" },
       { status: 500 },

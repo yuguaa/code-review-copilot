@@ -6,11 +6,11 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getReviewFilePath, validateReviewFindings } from "@/lib/review/finding-validation";
+import { buildFindingKey, generatePatch, toModelConfig } from "@/lib/review/utils";
 import { reviewAgentLoopService, type AdditionalReviewAgent } from "@/lib/services/review-agent-loop";
 import { normalizeAgentLoopBudget, totalFindingsBudget } from "@/lib/services/review-budget";
-import type { AIModelConfig, GitLabDiff, ReviewComment, ReviewCommentSource } from "@/lib/types";
+import type { ReviewComment, ReviewCommentSource } from "@/lib/types";
 import type { FileReviewResult, ReviewState } from "../types";
-
 type ReviewBotWithModel = Prisma.RepositoryReviewBotGetPayload<{
   include: { aiModel: true };
 }>;
@@ -27,45 +27,15 @@ type BotRunResult = {
   finalPlan?: Record<string, unknown>;
 };
 
-function generatePatch(diff: GitLabDiff): string {
-  return `--- a/${diff.old_path}
-+++ b/${diff.new_path}
-${diff.diff}`;
-}
-
-function toModelConfig(bot: ReviewBotWithModel): AIModelConfig {
-  return {
-    id: bot.aiModel.id,
-    name: bot.aiModel.modelId,
-    provider: bot.aiModel.provider as AIModelConfig["provider"],
-    modelId: bot.aiModel.modelId,
-    apiKey: bot.aiModel.apiKey,
-    apiEndpoint: bot.aiModel.apiEndpoint || undefined,
-    maxTokens: bot.aiModel.maxTokens || undefined,
-    temperature: bot.aiModel.temperature || undefined,
-    isActive: bot.aiModel.isActive,
-  };
-}
-
 function sourceFor(botRunId: string, botName: string, botModel: string, confidence?: number): ReviewCommentSource {
   return { reviewBotRunId: botRunId, botName, model: botModel, confidence };
-}
-
-function commentKey(comment: ReviewComment): string {
-  return [
-    comment.filePath,
-    comment.lineNumber,
-    comment.lineRangeEnd || "",
-    comment.severity,
-    comment.content.replace(/\s+/g, " ").trim(),
-  ].join("|");
 }
 
 function mergeComments(comments: ReviewComment[], maxFindings: number): ReviewComment[] {
   const map = new Map<string, ReviewComment>();
 
   for (const comment of comments) {
-    const key = commentKey(comment);
+    const key = buildFindingKey(comment);
     const existing = map.get(key);
     if (!existing) {
       map.set(key, {
@@ -114,7 +84,7 @@ function toAdditionalAgent(bot: ReviewBotWithModel): AdditionalReviewAgent {
     description: bot.description,
     prompt: bot.prompt,
     promptMode: bot.promptMode,
-    modelConfig: toModelConfig(bot),
+    modelConfig: toModelConfig(bot.aiModel),
     budget: normalizeAgentLoopBudget(bot),
   };
 }
@@ -123,7 +93,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
   const reviewLog = state.reviewLog;
   if (!reviewLog) return Promise.reject(new Error("Review log is required"));
 
-  const modelConfig = toModelConfig(bot);
+  const modelConfig = toModelConfig(bot.aiModel);
   if (!modelConfig.isActive) {
     return Promise.reject(new Error(`AI model is disabled: ${modelConfig.modelId}`));
   }

@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.code-graph.tree");
 /**
  * @file /api/code-graph/tree
  * @description Code Graph 浏览树：仓库 -> 分支 -> 快照
@@ -47,7 +50,7 @@ export function GET() {
         per_page: 100,
         max_pages: 5,
       }).catch((error) => {
-        console.error(`Failed to fetch branches for ${repository.name}:`, error);
+        log.error(`Failed to fetch branches for ${repository.name}:`, error);
         return [];
       }).then((remoteBranches) => {
         const branches = new Map<string, {
@@ -121,7 +124,7 @@ export function GET() {
   }).then((response) => {
     return response;
   }).catch((error) => {
-    console.error("Failed to fetch Code Graph tree:", error);
+    log.error("Failed to fetch Code Graph tree:", error);
     return NextResponse.json(
       { error: "Failed to fetch Code Graph tree" },
       { status: 500 },

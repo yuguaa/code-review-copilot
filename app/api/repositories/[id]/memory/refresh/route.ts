@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.repositories.[id].memory.refresh");
 /**
  * @file /api/repositories/[id]/memory/refresh
  * @description 手动刷新仓库 Code Graph
@@ -21,7 +24,7 @@ export function POST(
       forceRebuild: url.searchParams.get("force") === "true",
     });
   }).then((result) => NextResponse.json(result)).catch((error) => {
-    console.error("Failed to refresh repository memory:", error);
+    log.error("Failed to refresh repository memory:", error);
     const status = error instanceof CodeGraphRefreshError ? error.statusCode : 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to refresh repository memory" },

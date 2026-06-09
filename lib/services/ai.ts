@@ -11,6 +11,9 @@ import { streamText, generateText, Output } from 'ai'
 import OpenAI from 'openai'
 import type { AIModelConfig, ReviewSeverity } from '@/lib/types'
 import { SYSTEM_PROMPT } from '@/lib/prompts'
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("AIService");
 
 /**
  * 审查评论接口
@@ -77,6 +80,9 @@ type ReviewCodeOptions = {
   responseFormat?: 'text' | 'jsonObject'
 }
 
+// 业务建议上限：AI 单次调用最多等待 6000 秒。
+const AI_REQUEST_TIMEOUT_MS = 6000 * 1000
+
 /**
  * AI 服务类
  * 
@@ -123,10 +129,11 @@ export class AIService {
           { role: 'user', content: prompt },
         ],
         output: options.responseFormat === 'jsonObject' ? Output.json() : Output.text(),
+        timeout: { totalMs: AI_REQUEST_TIMEOUT_MS },
       })
 
-      console.log('AI Response type:', typeof response)
-      console.log('AI Response keys:', Object.keys(response))
+      log.info('AI Response type:', typeof response)
+      log.info('AI Response keys:', Object.keys(response))
 
       if (response.text) {
         return response.text
@@ -136,11 +143,11 @@ export class AIService {
         return JSON.stringify(response.output)
       }
 
-      console.error('Unexpected AI response format:', response)
+      log.error('Unexpected AI response format:', response)
       throw new Error('Unexpected AI response format')
     } catch (error) {
-      console.error('AI review failed:', error)
-      throw new Error('Failed to generate AI review')
+      log.error('AI review failed:', error)
+      throw new Error('Failed to generate AI review', { cause: error })
     }
   }
 
@@ -154,16 +161,16 @@ export class AIService {
     systemPrompt: string = SYSTEM_PROMPT,
     options: ReviewCodeOptions = {}
   ): Promise<string> {
-    console.log('🔧 Using custom API for model:', modelConfig.modelId)
-    console.log('🔧 API Endpoint:', modelConfig.apiEndpoint)
+    log.info('🔧 Using custom API for model:', modelConfig.modelId)
+    log.info('🔧 API Endpoint:', modelConfig.apiEndpoint)
 
     const isAnthropicFormat = modelConfig.apiEndpoint?.includes('anthropic')
 
     if (isAnthropicFormat) {
-      return await this.callAnthropicAPI(prompt, modelConfig, systemPrompt)
-    } else {
-      return await this.callOpenAIAPI(prompt, modelConfig, systemPrompt, options)
+      return this.callAnthropicAPI(prompt, modelConfig, systemPrompt)
     }
+
+    return this.callOpenAIAPI(prompt, modelConfig, systemPrompt, options)
   }
 
   /**
@@ -178,29 +185,36 @@ export class AIService {
     const client = new OpenAI({
       apiKey: modelConfig.apiKey,
       baseURL: modelConfig.apiEndpoint,
+      timeout: AI_REQUEST_TIMEOUT_MS,
     })
 
-    const response = await client.chat.completions.create({
-      model: modelConfig.modelId,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: modelConfig.maxTokens || 4096,
-      temperature: modelConfig.temperature || 0.3,
-      response_format: options.responseFormat === 'jsonObject' ? { type: 'json_object' } : undefined,
-    })
+    const response = await client.chat.completions.create(
+      {
+        model: modelConfig.modelId,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: modelConfig.maxTokens || 4096,
+        temperature: modelConfig.temperature || 0.3,
+        response_format: options.responseFormat === 'jsonObject' ? { type: 'json_object' } : undefined,
+      },
+      {
+        signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
+        timeout: AI_REQUEST_TIMEOUT_MS,
+      }
+    )
 
-    console.log('✅ OpenAI API Response received')
-    console.log('📊 Usage:', response.usage)
+    log.info('✅ OpenAI API Response received')
+    log.info('📊 Usage:', response.usage)
 
     const normalizedResponse = this.normalizeOpenAICompatibleResponse(response)
     const content = typeof normalizedResponse === 'string'
       ? normalizedResponse
       : this.extractOpenAICompatibleText(normalizedResponse)
     if (!content) {
-      console.error('Unexpected OpenAI-compatible response keys:', Object.keys(normalizedResponse as object))
-      console.error('Unexpected OpenAI-compatible response:', JSON.stringify(normalizedResponse, null, 2))
+      log.error('Unexpected OpenAI-compatible response keys:', Object.keys(normalizedResponse as object))
+      log.error('Unexpected OpenAI-compatible response:', JSON.stringify(normalizedResponse, null, 2))
       throw new Error('Unexpected OpenAI-compatible response format')
     }
 
@@ -299,7 +313,9 @@ export class AIService {
       apiUrl = `${apiUrl}/v1/messages`
     }
 
-    console.log('🔗 Anthropic API URL:', apiUrl)
+    log.info('🔗 Anthropic API URL:', apiUrl)
+
+    const timeoutSignal = AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -316,19 +332,20 @@ export class AIService {
             system: systemPrompt,
             messages: [{ role: 'user', content: prompt }],
           }),
+          signal: timeoutSignal,
         })
 
         if (!response.ok) {
           const errorText = await response.text()
-          console.error('Anthropic API error:', response.status, errorText)
+          log.error('Anthropic API error:', response.status, errorText)
           throw new Error(`Anthropic API error: ${response.status}`)
         }
 
         const data = await response.json()
 
-        console.log('✅ Anthropic API Response received')
-        console.log('📊 Usage:', data.usage)
-        console.log('📋 Response structure:', Object.keys(data))
+        log.info('✅ Anthropic API Response received')
+        log.info('📊 Usage:', data.usage)
+        log.info('📋 Response structure:', Object.keys(data))
 
         // Anthropic 响应格式: { content: [{ type: "text", text: "..." }] }
         if (data.content && Array.isArray(data.content) && data.content.length > 0) {
@@ -338,14 +355,18 @@ export class AIService {
           }
         }
 
-        console.error('Unexpected Anthropic response format:', JSON.stringify(data, null, 2))
+        log.error('Unexpected Anthropic response format:', JSON.stringify(data, null, 2))
         throw new Error('Unexpected Anthropic response format')
       } catch (error) {
-        console.error(`❌ Attempt ${attempt}/${retries} failed:`, error)
+        log.error(`❌ Attempt ${attempt}/${retries} failed:`, error)
+
+        if (timeoutSignal.aborted) {
+          throw error
+        }
 
         if (attempt < retries) {
           const delay = attempt * 2000
-          console.log(`⏳ Retrying in ${delay / 1000}s...`)
+          log.info(`⏳ Retrying in ${delay / 1000}s...`)
           await new Promise((resolve) => setTimeout(resolve, delay))
         } else {
           throw error
@@ -394,6 +415,7 @@ export class AIService {
       const result = await streamText({
         model,
         prompt,
+        timeout: { totalMs: AI_REQUEST_TIMEOUT_MS },
       })
 
       let fullText = ''
@@ -407,235 +429,9 @@ export class AIService {
       await result.text // 等待完成
       return fullText
     } catch (error) {
-      console.error('AI streaming review failed:', error)
+      log.error('AI streaming review failed:', error)
       throw new Error('Failed to stream AI review')
     }
-  }
-
-  /**
-   * 解析 AI 返回的审查评论
-   * 
-   * 支持格式：
-   * - `行号: [级别] 内容`
-   * - `行号-行号: [级别] 内容`
-   */
-  parseReviewComments(aiResponse: string, filePath: string): ReviewComment[] {
-    const comments: ReviewComment[] = []
-    const lines = aiResponse.split('\n')
-    let currentComment: Partial<ReviewComment> = {}
-    let currentContent: string[] = []
-    let inCodeBlock = false
-
-    const lineStartPattern = /^(\d+)(?:-(\d+))?:\s*(.*)$/
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      const lineMatch = line.match(lineStartPattern)
-
-      if (lineMatch) {
-        // 保存之前的评论
-        if (currentComment.lineNumber && currentContent.length > 0) {
-          const content = this.cleanCommentContent(currentContent.join('\n').trim())
-          if (content && content !== 'LGTM!') {
-            comments.push({
-              filePath,
-              lineNumber: currentComment.lineNumber,
-              lineRangeEnd: currentComment.lineRangeEnd,
-              severity: currentComment.severity || 'normal',
-              content,
-            } as ReviewComment)
-          }
-        }
-
-        const restOfLine = lineMatch[3] || ''
-        currentComment = {
-          lineNumber: parseInt(lineMatch[1]),
-          lineRangeEnd: lineMatch[2] ? parseInt(lineMatch[2]) : undefined,
-          severity: this.inferSeverity(restOfLine || line),
-        }
-        currentContent = []
-        inCodeBlock = false
-
-        if (restOfLine.trim()) {
-          currentContent.push(restOfLine)
-        }
-      } else if (currentComment.lineNumber) {
-        if (line.startsWith('```')) {
-          inCodeBlock = !inCodeBlock
-        }
-        currentContent.push(line)
-      }
-    }
-
-    // 保存最后一个评论
-    if (currentComment.lineNumber && currentContent.length > 0) {
-      const content = this.cleanCommentContent(currentContent.join('\n').trim())
-      if (content && content !== 'LGTM!') {
-        comments.push({
-          filePath,
-          lineNumber: currentComment.lineNumber,
-          lineRangeEnd: currentComment.lineRangeEnd,
-          severity: currentComment.severity || 'normal',
-          content,
-        } as ReviewComment)
-      }
-    }
-
-    return comments
-  }
-
-  /**
-   * 解析“总结优先”的审查输出：
-   * - 统计行（严格）：`统计: 严重=<n> 一般=<n> 建议=<n>`
-   * - 仅展开严重问题（可选）：`- path/to/file:12-15 问题描述`
-   *
-   * 为兼容旧输出，也会尝试从 `行号: [严重/一般/建议] ...` 中推断统计和严重项。
-   */
-  parseReviewSummary(
-    aiResponse: string,
-    options?: { defaultFilePath?: string; maxCriticalItems?: number; maxItems?: number }
-  ): {
-    counts: { critical: number; normal: number; suggestion: number }
-    commentItems: Array<{
-      filePath: string
-      lineNumber: number
-      lineRangeEnd?: number
-      severity: ReviewSeverity
-      content: string
-    }>
-    criticalItems: Array<{
-      filePath: string
-      lineNumber: number
-      lineRangeEnd?: number
-      content: string
-    }>
-  } {
-    const defaultFilePath = options?.defaultFilePath
-    const maxCriticalItems = options?.maxCriticalItems ?? 12
-    const maxItems = options?.maxItems ?? 24
-
-    const counts = { critical: 0, normal: 0, suggestion: 0 }
-    const commentItems: Array<{
-      filePath: string
-      lineNumber: number
-      lineRangeEnd?: number
-      severity: ReviewSeverity
-      content: string
-    }> = []
-    const criticalItems: Array<{
-      filePath: string
-      lineNumber: number
-      lineRangeEnd?: number
-      content: string
-    }> = []
-
-    const text = aiResponse || ''
-    const lines = text.split('\n')
-
-    // 1) Parse strict counts line
-    // Examples:
-    // - 统计: 严重=1 一般=2 建议=3
-    // - 统计：严重 1，一般 2，建议 3
-    // - Counts: Critical=1 Normal=2 Suggestion=3
-    const countsLine =
-      text.match(
-        /(?:^|\n)\s*(?:统计|Counts)\s*[:：]\s*([^\n]+)\n?/i
-      )?.[1] ?? ''
-    if (countsLine) {
-      const zh = countsLine.match(
-        /严重\s*=?\s*(\d+)[^\d]+一般\s*=?\s*(\d+)[^\d]+建议\s*=?\s*(\d+)/
-      )
-      const en = countsLine.match(
-        /critical\s*=?\s*(\d+)[^\d]+normal\s*=?\s*(\d+)[^\d]+suggestion\s*=?\s*(\d+)/i
-      )
-      const m = zh || en
-      if (m) {
-        counts.critical = Number(m[1] ?? 0)
-        counts.normal = Number(m[2] ?? 0)
-        counts.suggestion = Number(m[3] ?? 0)
-      }
-    }
-
-    // 2) Parse expanded critical list items
-    // Example: - apps/foo.ts:19-21 xxx
-    const itemPattern =
-      /^\s*(?:[-*]|\d+\.)\s*`?([^\s`:]+(?:\/[^\s`:]+)*)`?:(\d+)(?:-(\d+))?\s+(.+?)\s*$/
-    let currentSectionSeverity: ReviewSeverity | null = null
-
-    for (const line of lines) {
-      if (/^\s*严重问题/i.test(line)) currentSectionSeverity = 'critical'
-      if (/^\s*一般问题/i.test(line)) currentSectionSeverity = 'normal'
-      if (/^\s*建议问题/i.test(line)) currentSectionSeverity = 'suggestion'
-
-      if (commentItems.length >= maxItems && criticalItems.length >= maxCriticalItems) break
-      const m = line.match(itemPattern)
-      if (!m) continue
-      const filePath = m[1]
-      const lineNumber = Number(m[2])
-      const lineRangeEnd = m[3] ? Number(m[3]) : undefined
-      const rawContent = m[4].trim()
-      if (!filePath || !lineNumber || !rawContent) continue
-
-      const explicitSeverityMatch = rawContent.match(/^\[?(严重|一般|建议|critical|normal|suggestion)\]?[：:\s-]*/i)
-      const explicitSeverity = explicitSeverityMatch
-        ? this.inferSeverity(explicitSeverityMatch[0])
-        : null
-      const severity = explicitSeverity || currentSectionSeverity || this.inferSeverity(rawContent)
-      const content = this.cleanCommentContent(rawContent.replace(/^\[?(严重|一般|建议|critical|normal|suggestion)\]?[：:\s-]*/i, '').trim())
-
-      if (!content) continue
-
-      if (commentItems.length < maxItems) {
-        commentItems.push({ filePath, lineNumber, lineRangeEnd, severity, content })
-      }
-      if (severity === 'critical' && criticalItems.length < maxCriticalItems) {
-        criticalItems.push({ filePath, lineNumber, lineRangeEnd, content })
-      }
-    }
-
-    // 3) Fallback for old style output: file headings + `line: [严重/一般/建议] ...`
-    if ((!countsLine || (counts.critical === 0 && counts.normal === 0 && counts.suggestion === 0)) && commentItems.length === 0) {
-      let currentFile = defaultFilePath || ''
-      const fileHeadingPattern = /^\s*([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)\s*$/
-      const oldItemPattern = /^(\d+)(?:-(\d+))?:\s*(.*)$/
-
-      for (const rawLine of lines) {
-        const line = rawLine.trim()
-        if (!line) continue
-
-        const fileM = line.match(fileHeadingPattern)
-        if (fileM) {
-          currentFile = fileM[1]
-          continue
-        }
-
-        const itemM = line.match(oldItemPattern)
-        if (!itemM) continue
-        const rest = itemM[3] || ''
-        const severity = this.inferSeverity(rest || line)
-        const content = this.cleanCommentContent(rest).trim()
-        if (!content || content === 'LGTM!') continue
-
-        const lineNumber = Number(itemM[1])
-        const lineRangeEnd = itemM[2] ? Number(itemM[2]) : undefined
-        const filePath = currentFile || defaultFilePath || 'unknown'
-
-        if (commentItems.length < maxItems) {
-          commentItems.push({ filePath, lineNumber, lineRangeEnd, severity, content })
-        }
-        if (severity === 'critical' && criticalItems.length < maxCriticalItems) {
-          criticalItems.push({ filePath, lineNumber, lineRangeEnd, content })
-        }
-      }
-    }
-
-    if (!countsLine || (counts.critical === 0 && counts.normal === 0 && counts.suggestion === 0)) {
-      counts.critical = commentItems.filter((item) => item.severity === 'critical').length
-      counts.normal = commentItems.filter((item) => item.severity === 'normal').length
-      counts.suggestion = commentItems.filter((item) => item.severity === 'suggestion').length
-    }
-
-    return { counts, commentItems, criticalItems }
   }
 
   /**
@@ -735,56 +531,6 @@ export class AIService {
     return null
   }
 
-  /**
-   * 清理评论内容，移除级别标签前缀
-   */
-  private cleanCommentContent(content: string): string {
-    return content
-      .replace(/^\[严重\]\s*/i, '')
-      .replace(/^\[一般\]\s*/i, '')
-      .replace(/^\[建议\]\s*/i, '')
-      .replace(/^\[Critical\]\s*/i, '')
-      .replace(/^\[Normal\]\s*/i, '')
-      .replace(/^\[Suggestion\]\s*/i, '')
-      .trim()
-  }
-
-  /**
-   * 从评论内容推断严重级别
-   */
-  private inferSeverity(content: string): ReviewSeverity {
-    const lowerContent = content.toLowerCase()
-
-    // 匹配明确的标签
-    if (content.includes('[严重]') || content.includes('[Critical]')) return 'critical'
-    if (content.includes('[建议]') || content.includes('[Suggestion]')) return 'suggestion'
-    if (content.includes('[一般]') || content.includes('[Normal]')) return 'normal'
-
-    // 关键词匹配
-    if (
-      lowerContent.includes('严重') ||
-      lowerContent.includes('critical') ||
-      lowerContent.includes('security') ||
-      lowerContent.includes('vulnerability') ||
-      lowerContent.includes('bug') ||
-      lowerContent.includes('error') ||
-      lowerContent.includes('breaking')
-    ) {
-      return 'critical'
-    }
-
-    if (
-      lowerContent.includes('建议') ||
-      lowerContent.includes('suggestion') ||
-      lowerContent.includes('consider') ||
-      lowerContent.includes('could') ||
-      lowerContent.includes('might')
-    ) {
-      return 'suggestion'
-    }
-
-    return 'normal'
-  }
 }
 
 export const aiService = new AIService()

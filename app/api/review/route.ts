@@ -1,3 +1,6 @@
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("api.review");
 /**
  * @file /api/review
  * @description 手动触发代码审查 API
@@ -31,7 +34,7 @@ export async function POST(request: NextRequest) {
       message: 'Review started',
     })
   } catch (error) {
-    console.error('Failed to start review:', error)
+    log.error('Failed to start review:', error)
     return NextResponse.json({ error: 'Failed to start review' }, { status: 500 })
   }
 }
@@ -65,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(reviewLog)
   } catch (error) {
-    console.error('Failed to fetch review log:', error)
+    log.error('Failed to fetch review log:', error)
     return NextResponse.json(
       { error: 'Failed to fetch review log' },
       { status: 500 }
