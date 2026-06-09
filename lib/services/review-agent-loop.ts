@@ -69,8 +69,6 @@ interface AgentPlan {
   reviewStrategy?: string;
   needsMoreContext?: boolean;
   requestedTools?: string[];
-  requestedAgentNames?: string[];
-  additionalAgentTask?: string;
 }
 
 interface AgentCriticResult {
@@ -125,15 +123,16 @@ type AgentTraceEventInput = {
   detail?: string;
   durationMs?: number;
   metrics?: Record<string, unknown>;
+  parentNodeKey?: string;
 };
 
 const stageSequence: Record<AgentTraceEventStage, number> = {
   initializing: 0,
   context: 2,
   plan: 4,
-  tool: 8,
-  review: 10,
-  validation: 12,
+  review: 6,
+  validation: 8,
+  tool: 12,
   critic: 14,
   finish: 16,
   error: 18,
@@ -153,9 +152,9 @@ function workflowStageParentKey(botRunId: string, iteration: number, stage: Agen
   if (stage === "initializing") return `agent:${botRunId}`;
   if (stage === "context") return workflowStageNodeKey(botRunId, iteration, "initializing");
   if (stage === "plan") return workflowStageNodeKey(botRunId, iteration, "context");
-  if (stage === "tool") return workflowStageNodeKey(botRunId, iteration, "plan");
-  if (stage === "review") return workflowStageNodeKey(botRunId, iteration, "tool");
+  if (stage === "review") return workflowStageNodeKey(botRunId, iteration, "plan");
   if (stage === "validation") return workflowStageNodeKey(botRunId, iteration, "review");
+  if (stage === "tool") return workflowStageNodeKey(botRunId, iteration, "validation");
   if (stage === "critic") return workflowStageNodeKey(botRunId, iteration, "validation");
   if (stage === "finish") return workflowStageNodeKey(botRunId, iteration, "critic");
   return workflowStageNodeKey(botRunId, iteration, "critic");
@@ -190,8 +189,6 @@ function safePlan(value: unknown): AgentPlan {
     reviewStrategy: typeof data.reviewStrategy === "string" ? data.reviewStrategy : "file_then_global_critic",
     needsMoreContext: Boolean(data.needsMoreContext),
     requestedTools: Array.isArray(data.requestedTools) ? data.requestedTools.filter((item): item is string => typeof item === "string") : [],
-    requestedAgentNames: Array.isArray(data.requestedAgentNames) ? data.requestedAgentNames.filter((item): item is string => typeof item === "string") : [],
-    additionalAgentTask: typeof data.additionalAgentTask === "string" ? data.additionalAgentTask : "",
   };
 }
 
@@ -316,46 +313,6 @@ function modelName(modelConfig: AIModelConfig): string {
 
 function sourceFor(botRunId: string, botName: string, botModel: string, confidence?: number) {
   return { reviewBotRunId: botRunId, botName, model: botModel, confidence };
-}
-
-function selectAdditionalAgents(
-  plan: AgentPlan,
-  agents: AdditionalReviewAgent[],
-  executedAgentIds: Set<string>,
-): AdditionalReviewAgent[] {
-  if (!(plan.requestedTools || []).includes("run_additional_review_agents")) return [];
-  if (agents.length === 0) return [];
-
-  const requestedNames = plan.requestedAgentNames || [];
-  if (requestedNames.length === 0) {
-    throw new Error("主 Agent 请求 run_additional_review_agents 时必须指定 requestedAgentNames");
-  }
-  if (!plan.additionalAgentTask?.trim()) {
-    throw new Error("主 Agent 请求 run_additional_review_agents 时必须指定 additionalAgentTask");
-  }
-
-  const candidates = agents.filter((agent) => (
-    requestedNames.includes(agent.id) || requestedNames.includes(agent.name)
-  ));
-  const selected = candidates.filter((agent) => !executedAgentIds.has(agent.id));
-  const selectedKeys = new Set(selected.flatMap((agent) => [agent.id, agent.name]));
-  const missingNames = requestedNames.filter((name) => !selectedKeys.has(name));
-
-  if (missingNames.length > 0) {
-    throw new Error(`主 Agent 请求了不可用或已执行的辅助 Agent：${missingNames.join("、")}`);
-  }
-
-  return selected;
-}
-
-function canRunAdditionalAgents(
-  plan: AgentPlan,
-  agents: AdditionalReviewAgent[],
-): boolean {
-  return Boolean(
-    (plan.requestedTools || []).includes("run_additional_review_agents") &&
-    agents.length > 0,
-  );
 }
 
 function buildAdditionalAgentPrompt(agent: AdditionalReviewAgent, task?: string): string | null {
@@ -515,7 +472,7 @@ export class ReviewAgentLoopService {
       });
       target.events = events;
       const nodeKey = workflowStageNodeKey(input.reviewBotRunId, event.iteration, event.stage);
-      const parentNodeKey = workflowStageParentKey(input.reviewBotRunId, event.iteration, event.stage);
+      const parentNodeKey = event.parentNodeKey || workflowStageParentKey(input.reviewBotRunId, event.iteration, event.stage);
       const nodeInput = {
         reviewLogId: input.reviewLogId,
         reviewBotRunId: input.reviewBotRunId,
@@ -649,125 +606,7 @@ export class ReviewAgentLoopService {
           },
         });
 
-        const availableAdditionalAgents = input.availableAdditionalAgents || [];
-        const additionalAgents = selectAdditionalAgents(
-          finalPlan,
-          availableAdditionalAgents,
-          executedAdditionalAgentIds,
-        );
         let additionalAgentObservation = "";
-
-        const requestedAdditionalAgents = (finalPlan.requestedTools || []).includes("run_additional_review_agents");
-        const decisionNodeKey = `agent:${input.reviewBotRunId}:iteration:${iteration}:decision:additional_agents`;
-        await reviewWorkflowRecorder.upsertNode({
-          reviewLogId: input.reviewLogId,
-          reviewBotRunId: input.reviewBotRunId,
-          nodeKey: decisionNodeKey,
-          parentNodeKey: workflowStageNodeKey(input.reviewBotRunId, iteration, "plan"),
-          kind: "decision",
-          status: requestedAdditionalAgents ? "running" : "skipped",
-          title: "是否调用辅助 Agent",
-          summary: requestedAdditionalAgents ? "模型请求辅助 Agent" : "本轮未请求辅助 Agent",
-          detail: finalPlan.additionalAgentTask || null,
-          sequence: workflowStageSequence(iteration, "plan") + 1,
-          metrics: {
-            requestedAdditionalAgents,
-            requestedAgentNames: finalPlan.requestedAgentNames || [],
-            availableAgents: availableAdditionalAgents.length,
-          },
-          raw: finalPlan,
-        });
-        if (canRunAdditionalAgents(finalPlan, availableAdditionalAgents)) {
-          additionalAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
-          const toolStartedAt = Date.now();
-          await recordTraceEvent({
-            iteration,
-            stage: "tool",
-            status: "running",
-            title: "调用辅助 Agent",
-            detail: `准备调用：${additionalAgents.map((agent) => agent.name).join("、")}`,
-            metrics: {
-              agents: additionalAgents.map((agent) => agent.name),
-            },
-          });
-          const additionalAgentResults = await this.runAdditionalReviewAgents(
-            input,
-            additionalAgents,
-            findings,
-            finalPlan.additionalAgentTask || "",
-            workflowStageNodeKey(input.reviewBotRunId, iteration, "tool"),
-            workflowStageSequence(iteration, "tool") + 1,
-          );
-          const additionalFindings = additionalAgentResults.flatMap((result) => result.findings);
-          findings = dedupeFindings([...findings, ...additionalFindings], budget.maxFindings);
-          additionalAgentObservation = summarizeAdditionalAgentResults(additionalAgentResults);
-          toolCalls.push({
-            tool: "run_additional_review_agents",
-            status: additionalAgents.length > 0 ? "available" : "unavailable",
-            args: {
-              agents: additionalAgents.map((agent) => agent.name),
-              task: finalPlan.additionalAgentTask || "",
-            },
-            resultCount: additionalFindings.length,
-            observation: additionalAgentObservation,
-          });
-          await recordTraceEvent({
-            iteration,
-            stage: "tool",
-            status: "completed",
-            title: "辅助 Agent 完成",
-            detail: additionalAgentObservation,
-            durationMs: Date.now() - toolStartedAt,
-            metrics: {
-              agents: additionalAgents.length,
-              findings: additionalFindings.length,
-            },
-          });
-          await reviewWorkflowRecorder.completeNode({
-            reviewLogId: input.reviewLogId,
-            reviewBotRunId: input.reviewBotRunId,
-            nodeKey: decisionNodeKey,
-            kind: "decision",
-            status: "success",
-            title: "辅助 Agent 已调用",
-            summary: `调用 ${additionalAgents.length} 个辅助 Agent`,
-            detail: additionalAgentObservation,
-            sequence: workflowStageSequence(iteration, "plan") + 1,
-            metrics: {
-              agents: additionalAgents.map((agent) => agent.name),
-              findings: additionalFindings.length,
-            },
-          });
-        } else if (requestedAdditionalAgents) {
-          toolCalls.push({
-            tool: "run_additional_review_agents",
-            status: "unavailable",
-            args: {
-              agents: [],
-              task: finalPlan.additionalAgentTask || "",
-            },
-            resultCount: 0,
-            observation: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
-          });
-          await recordTraceEvent({
-            iteration,
-            stage: "tool",
-            status: "skipped",
-            title: "辅助 Agent 不可用",
-            detail: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
-          });
-          await reviewWorkflowRecorder.completeNode({
-            reviewLogId: input.reviewLogId,
-            reviewBotRunId: input.reviewBotRunId,
-            nodeKey: decisionNodeKey,
-            kind: "decision",
-            status: "warning",
-            title: "辅助 Agent 不可用",
-            summary: "请求了辅助 Agent，但没有可调用对象",
-            detail: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
-            sequence: workflowStageSequence(iteration, "plan") + 1,
-          });
-        }
 
         let contextSummary = [
           context.summary,
@@ -847,18 +686,53 @@ export class ReviewAgentLoopService {
           },
         });
 
+        const availableAdditionalAgents = input.availableAdditionalAgents || [];
+        const remainingAdditionalAgents = selectRemainingAdditionalAgents(
+          availableAdditionalAgents,
+          executedAdditionalAgentIds,
+        );
         const thresholdTrigger = getAdditionalAgentTrigger(findings);
         const shouldRunAdditionalAgentsByFindings = Boolean(
           thresholdTrigger.enabled &&
-          (input.availableAdditionalAgents || []).length > 0 &&
-          selectRemainingAdditionalAgents(input.availableAdditionalAgents || [], executedAdditionalAgentIds).length > 0
+          remainingAdditionalAgents.length > 0
         );
+        const decisionNodeKey = `agent:${input.reviewBotRunId}:iteration:${iteration}:decision:additional_agents`;
+        let criticParentNodeKey = workflowStageNodeKey(input.reviewBotRunId, iteration, "validation");
+
+        if (availableAdditionalAgents.length > 0) {
+          await reviewWorkflowRecorder.upsertNode({
+            reviewLogId: input.reviewLogId,
+            reviewBotRunId: input.reviewBotRunId,
+            nodeKey: decisionNodeKey,
+            parentNodeKey: workflowStageNodeKey(input.reviewBotRunId, iteration, "validation"),
+            kind: "decision",
+            status: shouldRunAdditionalAgentsByFindings ? "running" : "skipped",
+            title: "是否调用辅助 Agent",
+            summary: shouldRunAdditionalAgentsByFindings ? "主 Agent 触发辅助复核" : thresholdTrigger.reason,
+            detail: shouldRunAdditionalAgentsByFindings
+              ? buildFindingsThresholdTask(findings)
+              : "主 Agent 未发现需要辅助复核的问题，直接输出自身审查结果。",
+            sequence: workflowStageSequence(iteration, "validation") + 1,
+            metrics: {
+              trigger: thresholdTrigger,
+              availableAgents: availableAdditionalAgents.length,
+              remainingAgents: remainingAdditionalAgents.length,
+            },
+            raw: {
+              trigger: thresholdTrigger,
+              findings: findings.map((finding) => ({
+                filePath: finding.filePath,
+                lineNumber: finding.lineNumber,
+                severity: finding.severity,
+                confidence: finding.confidence,
+              })),
+            },
+          });
+          criticParentNodeKey = decisionNodeKey;
+        }
 
         if (shouldRunAdditionalAgentsByFindings) {
-          const thresholdAgents = selectRemainingAdditionalAgents(
-            input.availableAdditionalAgents || [],
-            executedAdditionalAgentIds,
-          );
+          const thresholdAgents = remainingAdditionalAgents;
           thresholdAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
           const thresholdTask = buildFindingsThresholdTask(findings);
           const toolStartedAt = Date.now();
@@ -868,6 +742,7 @@ export class ReviewAgentLoopService {
             status: "running",
             title: "问题阈值触发辅助 Agent",
             detail: thresholdTrigger.reason,
+            parentNodeKey: decisionNodeKey,
             metrics: {
               agents: thresholdAgents.map((agent) => agent.name),
               currentFindings: findings.length,
@@ -911,12 +786,31 @@ export class ReviewAgentLoopService {
             title: "问题阈值辅助 Agent 完成",
             detail: additionalAgentObservation,
             durationMs: Date.now() - toolStartedAt,
+            parentNodeKey: decisionNodeKey,
             metrics: {
               agents: thresholdAgents.length,
               findings: additionalFindings.length,
               totalFindings: findings.length,
             },
           });
+          await reviewWorkflowRecorder.completeNode({
+            reviewLogId: input.reviewLogId,
+            reviewBotRunId: input.reviewBotRunId,
+            nodeKey: decisionNodeKey,
+            kind: "decision",
+            status: "success",
+            title: "辅助 Agent 已调用",
+            summary: `调用 ${thresholdAgents.length} 个辅助 Agent`,
+            detail: additionalAgentObservation,
+            sequence: workflowStageSequence(iteration, "validation") + 1,
+            metrics: {
+              trigger: thresholdTrigger,
+              agents: thresholdAgents.map((agent) => agent.name),
+              findings: additionalFindings.length,
+              totalFindings: findings.length,
+            },
+          });
+          criticParentNodeKey = workflowStageNodeKey(input.reviewBotRunId, iteration, "tool");
         }
 
         const criticPrompt = buildReviewAgentCriticPrompt({
@@ -938,6 +832,7 @@ export class ReviewAgentLoopService {
           status: "running",
           title: "Critic 判断是否继续",
           detail: "正在评估是否需要更多上下文或下一轮审查",
+          parentNodeKey: criticParentNodeKey,
           metrics: {
             findings: findings.length,
             remainingIterations,
@@ -983,6 +878,7 @@ export class ReviewAgentLoopService {
           title: shouldContinue ? "Critic 要求继续" : "Critic 判定停止",
           detail: latestCritic.reason || stopReason,
           durationMs: Date.now() - criticStartedAt,
+          parentNodeKey: criticParentNodeKey,
           metrics: {
             stopReason,
             repeatedProgressCount,

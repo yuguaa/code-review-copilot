@@ -59,18 +59,54 @@ function edgeLabel(node: ReviewWorkflowNode) {
   return undefined;
 }
 
+function fallbackAgentParentKey(node: ReviewWorkflowNode, nodeKeys: Set<string>) {
+  if (!node.nodeKey.startsWith("agent:")) return null;
+  const parts = node.nodeKey.split(":");
+  const botRunId = parts[1];
+  if (!botRunId) return null;
+
+  const iterationIndex = parts.indexOf("iteration");
+  if (iterationIndex === -1) {
+    return nodeKeys.has("run_agents") ? "run_agents" : null;
+  }
+
+  const iteration = parts[iterationIndex + 1];
+  const stage = node.kind === "decision"
+    ? "decision"
+    : parts[iterationIndex + 2];
+  const stageKey = (candidate: string) => `agent:${botRunId}:iteration:${iteration}:${candidate}`;
+  const existingKey = (candidate: string) => nodeKeys.has(candidate) ? candidate : null;
+  const firstExisting = (candidates: string[]) => candidates.find((candidate) => nodeKeys.has(candidate)) || null;
+
+  if (stage === "initializing") return existingKey(`agent:${botRunId}`);
+  if (stage === "context") return existingKey(stageKey("initializing"));
+  if (stage === "plan") return existingKey(stageKey("context"));
+  if (stage === "review") return existingKey(stageKey("plan"));
+  if (stage === "validation") return existingKey(stageKey("review"));
+  if (stage === "decision") return firstExisting([stageKey("validation"), stageKey("plan")]);
+  if (stage === "tool") return firstExisting([stageKey("decision:additional_agents"), stageKey("validation")]);
+  if (stage === "critic") return firstExisting([stageKey("tool"), stageKey("decision:additional_agents"), stageKey("validation")]);
+  if (stage === "finish" || stage === "error") return firstExisting([stageKey("critic"), stageKey("validation")]);
+  return null;
+}
+
 export function buildWorkflowGraph(nodes: ReviewWorkflowNode[]) {
   const sorted = [...nodes].sort((left, right) => (
     left.sequence - right.sequence || left.createdAt.getTime() - right.createdAt.getTime()
   ));
   const nodeKeys = new Set(sorted.map((node) => node.nodeKey));
   const edgeMap = new Map<string, WorkflowGraphEdge>();
+  let previousMainNode: ReviewWorkflowNode | null = null;
 
-  sorted.forEach((node, index) => {
-    if (node.parentNodeKey && nodeKeys.has(node.parentNodeKey)) {
+  sorted.forEach((node) => {
+    const parentNodeKey = node.parentNodeKey && nodeKeys.has(node.parentNodeKey)
+      ? node.parentNodeKey
+      : fallbackAgentParentKey(node, nodeKeys);
+
+    if (parentNodeKey) {
       const edge: WorkflowGraphEdge = {
-        id: `${node.parentNodeKey}->${node.nodeKey}`,
-        source: node.parentNodeKey,
+        id: `${parentNodeKey}->${node.nodeKey}`,
+        source: parentNodeKey,
         target: node.nodeKey,
         label: edgeLabel(node),
         kind: node.kind === "iteration_stage" ? "loop" : "parent",
@@ -79,7 +115,9 @@ export function buildWorkflowGraph(nodes: ReviewWorkflowNode[]) {
       return;
     }
 
-    const previous = sorted[index - 1];
+    if (node.parentNodeKey || node.nodeKey.startsWith("agent:")) return;
+    const previous = previousMainNode;
+    previousMainNode = node;
     if (!previous) return;
     const edge: WorkflowGraphEdge = {
       id: `${previous.nodeKey}->${node.nodeKey}`,
