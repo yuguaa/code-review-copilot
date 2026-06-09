@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "@/lib/services/gitlab";
 import { reviewService } from "@/lib/services/review";
 import { REVIEW_CANCELLED_STATUS } from "@/lib/services/review-cancellation";
+import { reviewWorkflowRecorder } from "@/lib/services/review-workflow-recorder";
 import { createLogger, logError } from "@/lib/logger";
 
 const log = createLogger("ReviewTriggerService");
@@ -12,6 +13,33 @@ type RepositoryWithGitLab = Prisma.RepositoryGetPayload<{
 }>;
 
 export class ReviewTriggerService {
+  private createTriggerNode(reviewLog: ReviewLog, trigger: string, detail: string) {
+    return reviewWorkflowRecorder.upsertNode({
+      reviewLogId: reviewLog.id,
+      nodeKey: "trigger",
+      kind: "trigger",
+      status: "success",
+      title: `${trigger} 触发审查`,
+      summary: reviewLog.mergeRequestIid === 0
+        ? `Push ${reviewLog.commitShortId}`
+        : `MR !${reviewLog.mergeRequestIid} · ${reviewLog.commitShortId}`,
+      detail,
+      sequence: 10,
+      metrics: {
+        repositoryId: reviewLog.repositoryId,
+        mergeRequestIid: reviewLog.mergeRequestIid,
+        commitSha: reviewLog.commitSha,
+        sourceBranch: reviewLog.sourceBranch,
+        targetBranch: reviewLog.targetBranch,
+        author: reviewLog.author,
+      },
+      raw: {
+        title: reviewLog.title,
+        description: reviewLog.description,
+      },
+    }).then(() => reviewLog);
+  }
+
   startManualReview(params: { repositoryId: string; mergeRequestIid: number }) {
     return prisma.repository.findUnique({
       where: { id: params.repositoryId },
@@ -47,6 +75,12 @@ export class ReviewTriggerService {
             },
           });
         });
+    }).then((reviewLog) => {
+      return this.createTriggerNode(
+        reviewLog,
+        "Manual",
+        `手动触发 MR !${reviewLog.mergeRequestIid} 审查`,
+      );
     }).then((reviewLog) => {
       this.runAsync(reviewLog.id);
       return reviewLog;
@@ -86,6 +120,12 @@ export class ReviewTriggerService {
         status: "pending",
         totalFiles: 0,
       },
+    }).then((reviewLog) => {
+      return this.createTriggerNode(
+        reviewLog,
+        "Merge Request",
+        `GitLab MR webhook 触发：${reviewLog.sourceBranch} -> ${reviewLog.targetBranch}`,
+      );
     }).then((reviewLog) => {
       return this.createMergeRequestPlaceholder(params.repository, reviewLog)
         .then(() => reviewLog)
@@ -130,6 +170,12 @@ export class ReviewTriggerService {
         status: "pending",
         totalFiles: 0,
       },
+    }).then((reviewLog) => {
+      return this.createTriggerNode(
+        reviewLog,
+        "Push",
+        `GitLab Push webhook 触发：${reviewLog.sourceBranch} @ ${reviewLog.commitShortId}`,
+      );
     }).then((reviewLog) => {
       return this.createPushPlaceholder(params.repository, reviewLog)
         .then(() => reviewLog)
@@ -178,6 +224,12 @@ export class ReviewTriggerService {
           status: "pending",
           totalFiles: 0,
         },
+      }).then((reviewLog) => {
+        return this.createTriggerNode(
+          reviewLog,
+          "Retry",
+          `重新触发审查，来源 Log ${reviewId.slice(0, 8)}`,
+        );
       }).then((reviewLog) => {
         const placeholderPromise = reviewLog.mergeRequestIid === 0
           ? this.createPushPlaceholder(sourceReview.repository, reviewLog)
@@ -234,6 +286,13 @@ export class ReviewTriggerService {
           tx.reviewLog.findUniqueOrThrow({ where: { id: reviewId } }),
         ]).then(([, reviewLog]) => reviewLog);
       });
+    }).then((reviewLog) => {
+      return reviewWorkflowRecorder.cancelRunningNodes(reviewId)
+        .catch((error) => {
+          logError(log, error, "⚠️ [ReviewTriggerService] Failed to cancel workflow nodes:");
+          return null;
+        })
+        .then(() => reviewLog);
     });
   }
 

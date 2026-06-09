@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "@relation-graph/react/style.css";
+import "@xyflow/react/dist/style.css";
 import { AppShell } from "@/components/app-shell";
 import { Toaster } from "sonner";
 

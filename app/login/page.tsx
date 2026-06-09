@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bot, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { Bot, Loader2, LogIn, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {

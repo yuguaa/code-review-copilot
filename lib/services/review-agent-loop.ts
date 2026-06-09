@@ -13,6 +13,7 @@ import {
 } from "@/lib/prompts";
 import type { AIModelConfig, ReviewComment } from "@/lib/types";
 import { normalizeAgentLoopBudget, type AgentLoopBudget } from "@/lib/services/review-budget";
+import { reviewWorkflowRecorder } from "@/lib/services/review-workflow-recorder";
 
 const MEMORY_WRITE_CONFIDENCE = 0.85;
 const ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD = 1;
@@ -101,6 +102,67 @@ interface AdditionalAgentToolResult {
   status: "completed" | "failed";
   summary: string;
   findings: Array<ReviewComment & { confidence: number }>;
+}
+
+type AgentTraceEventStage =
+  | "initializing"
+  | "context"
+  | "plan"
+  | "tool"
+  | "review"
+  | "validation"
+  | "critic"
+  | "finish"
+  | "error";
+
+type AgentTraceEventStatus = "running" | "completed" | "failed" | "skipped";
+
+type AgentTraceEventInput = {
+  iteration: number;
+  stage: AgentTraceEventStage;
+  status: AgentTraceEventStatus;
+  title: string;
+  detail?: string;
+  durationMs?: number;
+  metrics?: Record<string, unknown>;
+};
+
+const stageSequence: Record<AgentTraceEventStage, number> = {
+  initializing: 0,
+  context: 2,
+  plan: 4,
+  tool: 8,
+  review: 10,
+  validation: 12,
+  critic: 14,
+  finish: 16,
+  error: 18,
+};
+
+function completedWorkflowStatus(status: Exclude<AgentTraceEventStatus, "running">) {
+  if (status === "failed") return "failed";
+  if (status === "skipped") return "skipped";
+  return "success";
+}
+
+function workflowStageNodeKey(botRunId: string, iteration: number, stage: AgentTraceEventStage) {
+  return `agent:${botRunId}:iteration:${iteration}:${stage}`;
+}
+
+function workflowStageParentKey(botRunId: string, iteration: number, stage: AgentTraceEventStage) {
+  if (stage === "initializing") return `agent:${botRunId}`;
+  if (stage === "context") return workflowStageNodeKey(botRunId, iteration, "initializing");
+  if (stage === "plan") return workflowStageNodeKey(botRunId, iteration, "context");
+  if (stage === "tool") return workflowStageNodeKey(botRunId, iteration, "plan");
+  if (stage === "review") return workflowStageNodeKey(botRunId, iteration, "tool");
+  if (stage === "validation") return workflowStageNodeKey(botRunId, iteration, "review");
+  if (stage === "critic") return workflowStageNodeKey(botRunId, iteration, "validation");
+  if (stage === "finish") return workflowStageNodeKey(botRunId, iteration, "critic");
+  return workflowStageNodeKey(botRunId, iteration, "critic");
+}
+
+function workflowStageSequence(iteration: number, stage: AgentTraceEventStage) {
+  return 420 + iteration * 30 + stageSequence[stage];
 }
 
 export interface AgentLoopResult {
@@ -320,6 +382,37 @@ function selectRemainingAdditionalAgents(
   return agents.filter((agent) => !executedAgentIds.has(agent.id));
 }
 
+function ensureLoopIteration(
+  loopIterations: Array<Record<string, unknown>>,
+  iteration: number,
+): Record<string, unknown> {
+  const existing = loopIterations.find((item) => Number(item.iteration) === iteration);
+  if (existing) {
+    if (!Array.isArray(existing.events)) {
+      existing.events = [];
+    }
+    return existing;
+  }
+
+  const nextIteration: Record<string, unknown> = {
+    iteration,
+    events: [],
+  };
+  loopIterations.push(nextIteration);
+  return nextIteration;
+}
+
+function mergeLoopIterationSnapshot(
+  loopIterations: Array<Record<string, unknown>>,
+  iteration: number,
+  snapshot: Record<string, unknown>,
+) {
+  const target = ensureLoopIteration(loopIterations, iteration);
+  const events = Array.isArray(target.events) ? target.events : [];
+  Object.assign(target, snapshot);
+  target.events = events;
+}
+
 function getAdditionalAgentTrigger(findings: Array<ReviewComment & { confidence: number }>): {
   enabled: boolean;
   criticalCount: number;
@@ -384,238 +477,558 @@ export class ReviewAgentLoopService {
     let iteration = 1;
     const executedAdditionalAgentIds = new Set<string>();
     const progressSignatures = new Map<string, number>();
-
-    while (true) {
-      const remainingIterations = budget.maxIterations - iteration;
-      const context = await contextRetrieverService.getContext({
-        repositoryId: input.repositoryId,
-        branch: input.branch,
-        commitSha: input.commitSha,
-        changedFiles: requestedFiles.length ? requestedFiles : input.changedFiles,
-        maxFiles: budget.maxContextFiles,
-        maxDepth: budget.maxCallGraphDepth,
+    let eventSequence = 0;
+    const persistTraceProgress = (memoryUpdates: unknown[] = []) => {
+      return prisma.reviewAgentTrace.upsert({
+        where: { reviewBotRunId: input.reviewBotRunId },
+        update: {
+          reviewLogId: input.reviewLogId,
+          reviewBotRunId: input.reviewBotRunId,
+          memorySnapshotId: input.memorySnapshotId || null,
+          loopIterationsJson: toPrismaJsonInput(loopIterations),
+          retrievedContextJson: toPrismaJsonInput(latestContext || {}),
+          finalPlanJson: toPrismaJsonInput(finalPlan),
+          criticJson: toPrismaJsonInput(latestCritic),
+          memoryUpdatesJson: toPrismaJsonInput(memoryUpdates),
+        },
+        create: {
+          reviewLogId: input.reviewLogId,
+          reviewBotRunId: input.reviewBotRunId,
+          memorySnapshotId: input.memorySnapshotId || null,
+          loopIterationsJson: toPrismaJsonInput(loopIterations),
+          retrievedContextJson: toPrismaJsonInput(latestContext || {}),
+          finalPlanJson: toPrismaJsonInput(finalPlan),
+          criticJson: toPrismaJsonInput(latestCritic),
+          memoryUpdatesJson: toPrismaJsonInput(memoryUpdates),
+        },
+      }).then(() => undefined);
+    };
+    const recordTraceEvent = (event: AgentTraceEventInput) => {
+      const target = ensureLoopIteration(loopIterations, event.iteration);
+      const events = Array.isArray(target.events)
+        ? target.events as Array<Record<string, unknown>>
+        : [];
+      events.push({
+        id: `${input.reviewBotRunId}-${++eventSequence}`,
+        at: new Date().toISOString(),
+        ...event,
       });
-      latestContext = context;
-      const toolCalls = summarizeToolCalls(context, requestedFiles, budget.maxCallGraphDepth);
-      const planPrompt = buildReviewAgentPlanPrompt({
-        title: input.title,
-        description: input.description,
-        changedFiles: input.changedFiles,
-        architectureSummary: context.architectureSummary,
-        toolCatalog: context.tools,
-        codeGraph: context.codeGraph,
-        contextSummary: context.summary,
-        existingFindingsCount: findings.length,
-        remainingIterations,
-        botName: input.botName,
-        botPrompt: input.botPrompt,
-        botPromptMode: input.botPromptMode,
-        availableAdditionalAgents: input.availableAdditionalAgents || [],
+      target.events = events;
+      const nodeKey = workflowStageNodeKey(input.reviewBotRunId, event.iteration, event.stage);
+      const parentNodeKey = workflowStageParentKey(input.reviewBotRunId, event.iteration, event.stage);
+      const nodeInput = {
+        reviewLogId: input.reviewLogId,
+        reviewBotRunId: input.reviewBotRunId,
+        nodeKey,
+        parentNodeKey,
+        kind: "iteration_stage" as const,
+        title: event.title,
+        summary: `${input.botName || "Agent"} · 第 ${event.iteration} 轮`,
+        detail: event.detail || null,
+        sequence: workflowStageSequence(event.iteration, event.stage),
+        metrics: event.metrics,
+        raw: event,
+      };
+
+      const workflowPromise = event.status === "running"
+        ? reviewWorkflowRecorder.startNode(nodeInput)
+        : reviewWorkflowRecorder.completeNode({
+          ...nodeInput,
+          status: completedWorkflowStatus(event.status),
+          completedAt: new Date(),
+          durationMs: event.durationMs,
+        });
+
+      return Promise.all([
+        persistTraceProgress(),
+        workflowPromise,
+      ]).then(() => undefined);
+    };
+
+    try {
+      await recordTraceEvent({
+        iteration,
+        stage: "initializing",
+        status: "completed",
+        title: "Agent Loop 初始化",
+        detail: `${input.botName || "Agent"} 使用 ${modelName(input.modelConfig)} 开始审查`,
+        metrics: {
+          changedFiles: input.changedFiles.length,
+          maxIterations: budget.maxIterations,
+          maxContextFiles: budget.maxContextFiles,
+          maxFindings: budget.maxFindings,
+        },
       });
 
-      const planResponse = await aiService.reviewCode(
-        planPrompt,
-        input.modelConfig,
-        REVIEW_AGENT_PLAN_SYSTEM_PROMPT,
-        { responseFormat: "jsonObject" },
-      );
-      finalPlan = safePlan(aiService.parseJsonObject<AgentPlan>(planResponse));
-      const availableAdditionalAgents = input.availableAdditionalAgents || [];
-      const additionalAgents = selectAdditionalAgents(
-        finalPlan,
-        availableAdditionalAgents,
-        executedAdditionalAgentIds,
-      );
-      let additionalAgentObservation = "";
+      while (true) {
+        const remainingIterations = budget.maxIterations - iteration;
+        const contextStartedAt = Date.now();
+        await recordTraceEvent({
+          iteration,
+          stage: "context",
+          status: "running",
+          title: "获取代码上下文",
+          detail: `准备检索 ${requestedFiles.length || input.changedFiles.length} 个文件的上下文`,
+          metrics: {
+            requestedFiles: requestedFiles.length,
+            maxDepth: budget.maxCallGraphDepth,
+          },
+        });
+        const context = await contextRetrieverService.getContext({
+          repositoryId: input.repositoryId,
+          branch: input.branch,
+          commitSha: input.commitSha,
+          changedFiles: requestedFiles.length ? requestedFiles : input.changedFiles,
+          maxFiles: budget.maxContextFiles,
+          maxDepth: budget.maxCallGraphDepth,
+        });
+        latestContext = context;
+        const toolCalls = summarizeToolCalls(context, requestedFiles, budget.maxCallGraphDepth);
+        await recordTraceEvent({
+          iteration,
+          stage: "context",
+          status: "completed",
+          title: "上下文获取完成",
+          detail: context.summary || "已完成上下文检索",
+          durationMs: Date.now() - contextStartedAt,
+          metrics: {
+            selectedFiles: context.metrics.selectedFilesCount,
+            fileContexts: context.metrics.fileContextCount,
+            graphNeighbors: context.metrics.graphNeighborCount,
+            relatedReviews: context.metrics.relatedReviewCount,
+          },
+        });
 
-      const requestedAdditionalAgents = (finalPlan.requestedTools || []).includes("run_additional_review_agents");
-      if (canRunAdditionalAgents(finalPlan, availableAdditionalAgents)) {
-        additionalAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
-        const additionalAgentResults = await this.runAdditionalReviewAgents(
-          input,
-          additionalAgents,
-          findings,
-          finalPlan.additionalAgentTask || "",
+        const planPrompt = buildReviewAgentPlanPrompt({
+          title: input.title,
+          description: input.description,
+          changedFiles: input.changedFiles,
+          architectureSummary: context.architectureSummary,
+          toolCatalog: context.tools,
+          codeGraph: context.codeGraph,
+          contextSummary: context.summary,
+          existingFindingsCount: findings.length,
+          remainingIterations,
+          botName: input.botName,
+          botPrompt: input.botPrompt,
+          botPromptMode: input.botPromptMode,
+          availableAdditionalAgents: input.availableAdditionalAgents || [],
+        });
+
+        const planStartedAt = Date.now();
+        await recordTraceEvent({
+          iteration,
+          stage: "plan",
+          status: "running",
+          title: "生成审查计划",
+          detail: "正在请求模型判断风险、焦点文件和工具需求",
+          metrics: {
+            existingFindings: findings.length,
+            remainingIterations,
+          },
+        });
+        const planResponse = await aiService.reviewCode(
+          planPrompt,
+          input.modelConfig,
+          REVIEW_AGENT_PLAN_SYSTEM_PROMPT,
+          { responseFormat: "jsonObject" },
         );
-        const additionalFindings = additionalAgentResults.flatMap((result) => result.findings);
-        findings = dedupeFindings([...findings, ...additionalFindings], budget.maxFindings);
-        additionalAgentObservation = summarizeAdditionalAgentResults(additionalAgentResults);
-        toolCalls.push({
-          tool: "run_additional_review_agents",
-          status: additionalAgents.length > 0 ? "available" : "unavailable",
-          args: {
-            agents: additionalAgents.map((agent) => agent.name),
-            task: finalPlan.additionalAgentTask || "",
+        finalPlan = safePlan(aiService.parseJsonObject<AgentPlan>(planResponse));
+        await recordTraceEvent({
+          iteration,
+          stage: "plan",
+          status: "completed",
+          title: "审查计划完成",
+          detail: finalPlan.reviewStrategy || finalPlan.changeType || "已生成审查计划",
+          durationMs: Date.now() - planStartedAt,
+          metrics: {
+            riskLevel: finalPlan.riskLevel,
+            focusAreas: finalPlan.focusAreas?.length || 0,
+            contextFiles: finalPlan.contextFiles?.length || 0,
+            requestedTools: finalPlan.requestedTools || [],
           },
-          resultCount: additionalFindings.length,
-          observation: additionalAgentObservation,
         });
-      } else if (requestedAdditionalAgents) {
-        toolCalls.push({
-          tool: "run_additional_review_agents",
-          status: "unavailable",
-          args: {
-            agents: [],
-            task: finalPlan.additionalAgentTask || "",
-          },
-          resultCount: 0,
-          observation: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
-        });
-      }
 
-      let contextSummary = [
-        context.summary,
-        additionalAgentObservation ? `辅助 Agent 工具结果：${additionalAgentObservation}` : "",
-      ].filter(Boolean).join("\n");
-      const reviewPrompt = buildReviewAgentReviewPrompt({
-        title: input.title,
-        description: input.description,
-        changedFiles: input.changedFiles,
-        diffs: input.diffs,
-        plan: finalPlan as Record<string, unknown>,
-        contextSummary,
-        existingFindings: findings,
-        botName: input.botName,
-        botPrompt: input.botPrompt,
-        botPromptMode: input.botPromptMode,
-      });
-
-      const reviewResponse = await aiService.reviewCode(
-        reviewPrompt,
-        input.modelConfig,
-        REVIEW_AGENT_REVIEW_SYSTEM_PROMPT,
-        { responseFormat: "jsonObject" },
-      );
-      const parsedReview = aiService.parseStructuredReview(reviewResponse, {
-        maxItems: Math.max(budget.maxFindings - findings.length, 0),
-      });
-      const validationReport = validateReviewFindingsWithReport(parsedReview.commentItems, input.diffs.map(toValidationDiff));
-      const previousCount = findings.length;
-      findings = dedupeFindings([
-        ...findings,
-        ...validationReport.accepted,
-      ], budget.maxFindings);
-      const newFindings = findings.length - previousCount;
-
-      const thresholdTrigger = getAdditionalAgentTrigger(findings);
-      const shouldRunAdditionalAgentsByFindings = Boolean(
-        thresholdTrigger.enabled &&
-        (input.availableAdditionalAgents || []).length > 0 &&
-        selectRemainingAdditionalAgents(input.availableAdditionalAgents || [], executedAdditionalAgentIds).length > 0
-      );
-
-      if (shouldRunAdditionalAgentsByFindings) {
-        const thresholdAgents = selectRemainingAdditionalAgents(
-          input.availableAdditionalAgents || [],
+        const availableAdditionalAgents = input.availableAdditionalAgents || [];
+        const additionalAgents = selectAdditionalAgents(
+          finalPlan,
+          availableAdditionalAgents,
           executedAdditionalAgentIds,
         );
-        thresholdAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
-        const thresholdTask = buildFindingsThresholdTask(findings);
-        const additionalAgentResults = await this.runAdditionalReviewAgents(
-          input,
-          thresholdAgents,
-          findings,
-          thresholdTask,
-        );
-        const additionalFindings = additionalAgentResults.flatMap((result) => result.findings);
-        findings = dedupeFindings([...findings, ...additionalFindings], budget.maxFindings);
-        additionalAgentObservation = summarizeAdditionalAgentResults(additionalAgentResults);
-        contextSummary = [
-          context.summary,
-          `辅助 Agent 工具结果：${additionalAgentObservation}`,
-        ].filter(Boolean).join("\n");
-        toolCalls.push({
-          tool: "run_additional_review_agents",
-          status: thresholdAgents.length > 0 ? "available" : "unavailable",
-          args: {
-            trigger: "findings_threshold",
-            threshold: {
-              critical: ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD,
-              actionable: ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD,
-            },
-            reason: thresholdTrigger.reason,
-            agents: thresholdAgents.map((agent) => agent.name),
-            task: thresholdTask,
+        let additionalAgentObservation = "";
+
+        const requestedAdditionalAgents = (finalPlan.requestedTools || []).includes("run_additional_review_agents");
+        const decisionNodeKey = `agent:${input.reviewBotRunId}:iteration:${iteration}:decision:additional_agents`;
+        await reviewWorkflowRecorder.upsertNode({
+          reviewLogId: input.reviewLogId,
+          reviewBotRunId: input.reviewBotRunId,
+          nodeKey: decisionNodeKey,
+          parentNodeKey: workflowStageNodeKey(input.reviewBotRunId, iteration, "plan"),
+          kind: "decision",
+          status: requestedAdditionalAgents ? "running" : "skipped",
+          title: "是否调用辅助 Agent",
+          summary: requestedAdditionalAgents ? "模型请求辅助 Agent" : "本轮未请求辅助 Agent",
+          detail: finalPlan.additionalAgentTask || null,
+          sequence: workflowStageSequence(iteration, "plan") + 1,
+          metrics: {
+            requestedAdditionalAgents,
+            requestedAgentNames: finalPlan.requestedAgentNames || [],
+            availableAgents: availableAdditionalAgents.length,
           },
-          resultCount: additionalFindings.length,
-          observation: additionalAgentObservation,
+          raw: finalPlan,
         });
-      }
+        if (canRunAdditionalAgents(finalPlan, availableAdditionalAgents)) {
+          additionalAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
+          const toolStartedAt = Date.now();
+          await recordTraceEvent({
+            iteration,
+            stage: "tool",
+            status: "running",
+            title: "调用辅助 Agent",
+            detail: `准备调用：${additionalAgents.map((agent) => agent.name).join("、")}`,
+            metrics: {
+              agents: additionalAgents.map((agent) => agent.name),
+            },
+          });
+          const additionalAgentResults = await this.runAdditionalReviewAgents(
+            input,
+            additionalAgents,
+            findings,
+            finalPlan.additionalAgentTask || "",
+            workflowStageNodeKey(input.reviewBotRunId, iteration, "tool"),
+            workflowStageSequence(iteration, "tool") + 1,
+          );
+          const additionalFindings = additionalAgentResults.flatMap((result) => result.findings);
+          findings = dedupeFindings([...findings, ...additionalFindings], budget.maxFindings);
+          additionalAgentObservation = summarizeAdditionalAgentResults(additionalAgentResults);
+          toolCalls.push({
+            tool: "run_additional_review_agents",
+            status: additionalAgents.length > 0 ? "available" : "unavailable",
+            args: {
+              agents: additionalAgents.map((agent) => agent.name),
+              task: finalPlan.additionalAgentTask || "",
+            },
+            resultCount: additionalFindings.length,
+            observation: additionalAgentObservation,
+          });
+          await recordTraceEvent({
+            iteration,
+            stage: "tool",
+            status: "completed",
+            title: "辅助 Agent 完成",
+            detail: additionalAgentObservation,
+            durationMs: Date.now() - toolStartedAt,
+            metrics: {
+              agents: additionalAgents.length,
+              findings: additionalFindings.length,
+            },
+          });
+          await reviewWorkflowRecorder.completeNode({
+            reviewLogId: input.reviewLogId,
+            reviewBotRunId: input.reviewBotRunId,
+            nodeKey: decisionNodeKey,
+            kind: "decision",
+            status: "success",
+            title: "辅助 Agent 已调用",
+            summary: `调用 ${additionalAgents.length} 个辅助 Agent`,
+            detail: additionalAgentObservation,
+            sequence: workflowStageSequence(iteration, "plan") + 1,
+            metrics: {
+              agents: additionalAgents.map((agent) => agent.name),
+              findings: additionalFindings.length,
+            },
+          });
+        } else if (requestedAdditionalAgents) {
+          toolCalls.push({
+            tool: "run_additional_review_agents",
+            status: "unavailable",
+            args: {
+              agents: [],
+              task: finalPlan.additionalAgentTask || "",
+            },
+            resultCount: 0,
+            observation: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
+          });
+          await recordTraceEvent({
+            iteration,
+            stage: "tool",
+            status: "skipped",
+            title: "辅助 Agent 不可用",
+            detail: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
+          });
+          await reviewWorkflowRecorder.completeNode({
+            reviewLogId: input.reviewLogId,
+            reviewBotRunId: input.reviewBotRunId,
+            nodeKey: decisionNodeKey,
+            kind: "decision",
+            status: "warning",
+            title: "辅助 Agent 不可用",
+            summary: "请求了辅助 Agent，但没有可调用对象",
+            detail: "当前 Agent 没有可调用的辅助 Agent，已跳过该工具请求。",
+            sequence: workflowStageSequence(iteration, "plan") + 1,
+          });
+        }
 
-      const criticPrompt = buildReviewAgentCriticPrompt({
-        findings: findings.map((item) => ({
-          filePath: item.filePath,
-          lineNumber: item.lineNumber,
-          severity: item.severity,
-          content: item.content,
-          confidence: item.confidence,
-        })),
-        contextSummary,
-        remainingIterations,
-      });
+        let contextSummary = [
+          context.summary,
+          additionalAgentObservation ? `辅助 Agent 工具结果：${additionalAgentObservation}` : "",
+        ].filter(Boolean).join("\n");
+        const reviewPrompt = buildReviewAgentReviewPrompt({
+          title: input.title,
+          description: input.description,
+          changedFiles: input.changedFiles,
+          diffs: input.diffs,
+          plan: finalPlan as Record<string, unknown>,
+          contextSummary,
+          existingFindings: findings,
+          botName: input.botName,
+          botPrompt: input.botPrompt,
+          botPromptMode: input.botPromptMode,
+        });
 
-      const criticResponse = await aiService.reviewCode(
-        criticPrompt,
-        input.modelConfig,
-        REVIEW_AGENT_CRITIC_SYSTEM_PROMPT,
-        { responseFormat: "jsonObject" },
-      );
-      latestCritic = safeCritic(aiService.parseJsonObject<AgentCriticResult>(criticResponse));
+        const reviewStartedAt = Date.now();
+        await recordTraceEvent({
+          iteration,
+          stage: "review",
+          status: "running",
+          title: "生成审查结果",
+          detail: "正在请求模型输出可定位 Finding",
+          metrics: {
+            currentFindings: findings.length,
+            remainingFindingBudget: Math.max(budget.maxFindings - findings.length, 0),
+          },
+        });
+        const reviewResponse = await aiService.reviewCode(
+          reviewPrompt,
+          input.modelConfig,
+          REVIEW_AGENT_REVIEW_SYSTEM_PROMPT,
+          { responseFormat: "jsonObject" },
+        );
+        await recordTraceEvent({
+          iteration,
+          stage: "review",
+          status: "completed",
+          title: "模型审查完成",
+          detail: "已收到模型审查结果，准备解析和校验",
+          durationMs: Date.now() - reviewStartedAt,
+        });
 
-      const hasBudget = iteration < budget.maxIterations;
-      const hasFindingBudget = findings.length < budget.maxFindings;
-      const requestedTools = finalPlan.requestedTools || [];
-      const nextFiles = finalPlan.contextFiles?.filter((file) => !requestedFiles.includes(file)) || [];
-      const progressSignature = buildProgressSignature({
-        requestedFiles,
-        requestedTools,
-        contextFiles: finalPlan.contextFiles || [],
-        findings,
-      });
-      const repeatedProgressCount = (progressSignatures.get(progressSignature) || 0) + 1;
-      progressSignatures.set(progressSignature, repeatedProgressCount);
-      const stopReason = resolveStopReason({
-        hasBudget,
-        hasFindingBudget,
-        critic: latestCritic,
-        newFindings,
-        needsMoreContext: finalPlan.needsMoreContext,
-        requestedTools,
-        nextFiles,
-        repeatedProgressCount,
-      });
-      const shouldContinue = Boolean(
-        stopReason === "continue"
-      );
+        const validationStartedAt = Date.now();
+        await recordTraceEvent({
+          iteration,
+          stage: "validation",
+          status: "running",
+          title: "校验 Finding",
+          detail: "正在过滤非 Diff 文件、无效行号和低置信结果",
+        });
+        const parsedReview = aiService.parseStructuredReview(reviewResponse, {
+          maxItems: Math.max(budget.maxFindings - findings.length, 0),
+        });
+        const validationReport = validateReviewFindingsWithReport(parsedReview.commentItems, input.diffs.map(toValidationDiff));
+        const previousCount = findings.length;
+        findings = dedupeFindings([
+          ...findings,
+          ...validationReport.accepted,
+        ], budget.maxFindings);
+        const newFindings = findings.length - previousCount;
+        await recordTraceEvent({
+          iteration,
+          stage: "validation",
+          status: "completed",
+          title: "Finding 校验完成",
+          detail: `接受 ${validationReport.accepted.length} 条，丢弃 ${validationReport.rejected.length} 条`,
+          durationMs: Date.now() - validationStartedAt,
+          metrics: {
+            rawFindings: parsedReview.commentItems.length,
+            acceptedFindings: validationReport.accepted.length,
+            rejectedFindings: validationReport.rejected.length,
+            newFindings,
+            totalFindings: findings.length,
+          },
+        });
 
-      loopIterations.push({
-        iteration,
-        budget,
-        requestedFiles,
-        toolCalls,
-        plan: finalPlan,
-        review: {
-          rawFindings: parsedReview.commentItems.length,
-          acceptedFindings: validationReport.accepted.length,
-          rejectedFindings: validationReport.rejected.length,
-          rejectionCounts: validationReport.counts,
+        const thresholdTrigger = getAdditionalAgentTrigger(findings);
+        const shouldRunAdditionalAgentsByFindings = Boolean(
+          thresholdTrigger.enabled &&
+          (input.availableAdditionalAgents || []).length > 0 &&
+          selectRemainingAdditionalAgents(input.availableAdditionalAgents || [], executedAdditionalAgentIds).length > 0
+        );
+
+        if (shouldRunAdditionalAgentsByFindings) {
+          const thresholdAgents = selectRemainingAdditionalAgents(
+            input.availableAdditionalAgents || [],
+            executedAdditionalAgentIds,
+          );
+          thresholdAgents.forEach((agent) => executedAdditionalAgentIds.add(agent.id));
+          const thresholdTask = buildFindingsThresholdTask(findings);
+          const toolStartedAt = Date.now();
+          await recordTraceEvent({
+            iteration,
+            stage: "tool",
+            status: "running",
+            title: "问题阈值触发辅助 Agent",
+            detail: thresholdTrigger.reason,
+            metrics: {
+              agents: thresholdAgents.map((agent) => agent.name),
+              currentFindings: findings.length,
+            },
+          });
+          const additionalAgentResults = await this.runAdditionalReviewAgents(
+            input,
+            thresholdAgents,
+            findings,
+            thresholdTask,
+            workflowStageNodeKey(input.reviewBotRunId, iteration, "tool"),
+            workflowStageSequence(iteration, "tool") + 1,
+          );
+          const additionalFindings = additionalAgentResults.flatMap((result) => result.findings);
+          findings = dedupeFindings([...findings, ...additionalFindings], budget.maxFindings);
+          additionalAgentObservation = summarizeAdditionalAgentResults(additionalAgentResults);
+          contextSummary = [
+            context.summary,
+            `辅助 Agent 工具结果：${additionalAgentObservation}`,
+          ].filter(Boolean).join("\n");
+          toolCalls.push({
+            tool: "run_additional_review_agents",
+            status: thresholdAgents.length > 0 ? "available" : "unavailable",
+            args: {
+              trigger: "findings_threshold",
+              threshold: {
+                critical: ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD,
+                actionable: ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD,
+              },
+              reason: thresholdTrigger.reason,
+              agents: thresholdAgents.map((agent) => agent.name),
+              task: thresholdTask,
+            },
+            resultCount: additionalFindings.length,
+            observation: additionalAgentObservation,
+          });
+          await recordTraceEvent({
+            iteration,
+            stage: "tool",
+            status: "completed",
+            title: "问题阈值辅助 Agent 完成",
+            detail: additionalAgentObservation,
+            durationMs: Date.now() - toolStartedAt,
+            metrics: {
+              agents: thresholdAgents.length,
+              findings: additionalFindings.length,
+              totalFindings: findings.length,
+            },
+          });
+        }
+
+        const criticPrompt = buildReviewAgentCriticPrompt({
+          findings: findings.map((item) => ({
+            filePath: item.filePath,
+            lineNumber: item.lineNumber,
+            severity: item.severity,
+            content: item.content,
+            confidence: item.confidence,
+          })),
+          contextSummary,
+          remainingIterations,
+        });
+
+        const criticStartedAt = Date.now();
+        await recordTraceEvent({
+          iteration,
+          stage: "critic",
+          status: "running",
+          title: "Critic 判断是否继续",
+          detail: "正在评估是否需要更多上下文或下一轮审查",
+          metrics: {
+            findings: findings.length,
+            remainingIterations,
+          },
+        });
+        const criticResponse = await aiService.reviewCode(
+          criticPrompt,
+          input.modelConfig,
+          REVIEW_AGENT_CRITIC_SYSTEM_PROMPT,
+          { responseFormat: "jsonObject" },
+        );
+        latestCritic = safeCritic(aiService.parseJsonObject<AgentCriticResult>(criticResponse));
+
+        const hasBudget = iteration < budget.maxIterations;
+        const hasFindingBudget = findings.length < budget.maxFindings;
+        const requestedTools = finalPlan.requestedTools || [];
+        const nextFiles = finalPlan.contextFiles?.filter((file) => !requestedFiles.includes(file)) || [];
+        const progressSignature = buildProgressSignature({
+          requestedFiles,
+          requestedTools,
+          contextFiles: finalPlan.contextFiles || [],
+          findings,
+        });
+        const repeatedProgressCount = (progressSignatures.get(progressSignature) || 0) + 1;
+        progressSignatures.set(progressSignature, repeatedProgressCount);
+        const stopReason = resolveStopReason({
+          hasBudget,
+          hasFindingBudget,
+          critic: latestCritic,
           newFindings,
-          totalFindings: findings.length,
-          response: reviewResponse,
-        },
-        contextMetrics: context.metrics,
-        progress: {
-          signature: progressSignature,
-          repeatedCount: repeatedProgressCount,
-          stopReason,
-        },
-        critic: latestCritic,
-        contextSummary,
-      });
+          needsMoreContext: finalPlan.needsMoreContext,
+          requestedTools,
+          nextFiles,
+          repeatedProgressCount,
+        });
+        const shouldContinue = Boolean(
+          stopReason === "continue"
+        );
+        await recordTraceEvent({
+          iteration,
+          stage: "critic",
+          status: "completed",
+          title: shouldContinue ? "Critic 要求继续" : "Critic 判定停止",
+          detail: latestCritic.reason || stopReason,
+          durationMs: Date.now() - criticStartedAt,
+          metrics: {
+            stopReason,
+            repeatedProgressCount,
+            shouldContinue,
+          },
+        });
 
-      if (!shouldContinue) break;
-      requestedFiles = [...new Set([...requestedFiles, ...nextFiles])];
-      iteration += 1;
+        mergeLoopIterationSnapshot(loopIterations, iteration, {
+          iteration,
+          budget,
+          requestedFiles,
+          toolCalls,
+          plan: finalPlan,
+          review: {
+            rawFindings: parsedReview.commentItems.length,
+            acceptedFindings: validationReport.accepted.length,
+            rejectedFindings: validationReport.rejected.length,
+            rejectionCounts: validationReport.counts,
+            newFindings,
+            totalFindings: findings.length,
+            response: reviewResponse,
+          },
+          contextMetrics: context.metrics,
+          progress: {
+            signature: progressSignature,
+            repeatedCount: repeatedProgressCount,
+            stopReason,
+          },
+          critic: latestCritic,
+          contextSummary,
+        });
+        await persistTraceProgress();
+
+        if (!shouldContinue) break;
+        requestedFiles = [...new Set([...requestedFiles, ...nextFiles])];
+        iteration += 1;
+      }
+    } catch (error) {
+      await recordTraceEvent({
+        iteration,
+        stage: "error",
+        status: "failed",
+        title: "Agent Loop 异常中断",
+        detail: error instanceof Error ? error.message : "Unknown agent loop error",
+      });
+      throw error;
     }
 
     const memoryUpdates = (latestCritic.memoryFacts || [])
@@ -629,6 +1042,17 @@ export class ReviewAgentLoopService {
         existing.severity === finding.severity &&
         existing.content === finding.content
       ));
+    });
+    await recordTraceEvent({
+      iteration,
+      stage: "finish",
+      status: "completed",
+      title: "Agent Loop 完成",
+      detail: `最终新增 ${agentFindings.length} 条 Finding，记忆更新 ${memoryUpdates.length} 条`,
+      metrics: {
+        findings: agentFindings.length,
+        memoryUpdates: memoryUpdates.length,
+      },
     });
 
     return prisma.$transaction((tx) => {
@@ -685,6 +1109,8 @@ export class ReviewAgentLoopService {
     agents: AdditionalReviewAgent[],
     existingFindings: Array<ReviewComment & { confidence: number }>,
     task: string,
+    parentNodeKey?: string,
+    sequenceBase = 560,
   ): Promise<AdditionalAgentToolResult[]> {
     if (agents.length === 0) return Promise.resolve([]);
 
@@ -722,7 +1148,23 @@ export class ReviewAgentLoopService {
           promptMode: agent.promptMode || "extend",
         },
       }).then((botRun) => {
-        return this.run({
+        const agentNodeKey = `agent:${botRun.id}`;
+        return reviewWorkflowRecorder.startNode({
+          reviewLogId: input.reviewLogId,
+          reviewBotRunId: botRun.id,
+          nodeKey: agentNodeKey,
+          parentNodeKey: parentNodeKey || `agent:${input.reviewBotRunId}`,
+          kind: "agent",
+          title: `辅助 Agent：${agent.name}`,
+          summary: botModel,
+          detail: task,
+          sequence: sequenceBase,
+          metrics: {
+            delegatedBy: input.reviewBotRunId,
+            maxIterations: agentBudget.maxIterations,
+            maxFindings: agentBudget.maxFindings,
+          },
+        }).then(() => this.run({
           ...input,
           reviewBotRunId: botRun.id,
           modelConfig: agent.modelConfig,
@@ -732,7 +1174,7 @@ export class ReviewAgentLoopService {
           botPromptMode: agent.promptMode,
           existingFindings,
           availableAdditionalAgents: [],
-        }).then((result) => {
+        })).then((result) => {
           const findings = result.agentFindings.map((item) => ({
             ...item,
             reviewBotRunId: botRun.id,
@@ -751,7 +1193,20 @@ export class ReviewAgentLoopService {
               ].join("; "),
               completedAt: new Date(),
             },
-          }).then(() => ({
+          }).then(() => reviewWorkflowRecorder.completeNode({
+            reviewLogId: input.reviewLogId,
+            reviewBotRunId: botRun.id,
+            nodeKey: agentNodeKey,
+            kind: "agent",
+            title: `辅助 Agent：${agent.name}`,
+            summary: `新增 ${findings.length} 条问题`,
+            detail: result.critic.reason || result.finalPlan.reviewStrategy || "辅助 Agent 完成",
+            sequence: sequenceBase,
+            metrics: {
+              findings: findings.length,
+              delegatedBy: input.reviewBotRunId,
+            },
+          })).then(() => ({
             agentId: agent.id,
             agentName: agent.name,
             status: "completed" as const,
@@ -766,7 +1221,16 @@ export class ReviewAgentLoopService {
               error: error instanceof Error ? error.message : "辅助 Agent 执行失败",
               completedAt: new Date(),
             },
-          }).then(() => ({
+          }).then(() => reviewWorkflowRecorder.failNode({
+            reviewLogId: input.reviewLogId,
+            reviewBotRunId: botRun.id,
+            nodeKey: agentNodeKey,
+            kind: "agent",
+            title: `辅助 Agent：${agent.name}`,
+            summary: "辅助 Agent 执行失败",
+            detail: error instanceof Error ? error.message : "辅助 Agent 执行失败",
+            sequence: sequenceBase,
+          })).then(() => ({
             agentId: agent.id,
             agentName: agent.name,
             status: "failed" as const,

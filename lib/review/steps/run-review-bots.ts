@@ -9,6 +9,7 @@ import { getReviewFilePath, validateReviewFindings } from "@/lib/review/finding-
 import { buildFindingKey, generatePatch, toModelConfig } from "@/lib/review/utils";
 import { reviewAgentLoopService, type AdditionalReviewAgent } from "@/lib/services/review-agent-loop";
 import { normalizeAgentLoopBudget, totalFindingsBudget } from "@/lib/services/review-budget";
+import { reviewWorkflowRecorder } from "@/lib/services/review-workflow-recorder";
 import type { ReviewComment, ReviewCommentSource } from "@/lib/types";
 import type { FileReviewResult, ReviewState } from "../types";
 type ReviewBotWithModel = Prisma.RepositoryReviewBotGetPayload<{
@@ -137,7 +138,24 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
       promptMode: bot.promptMode,
     },
   }).then((botRun) => {
-    return reviewAgentLoopService.run({
+    return reviewWorkflowRecorder.startNode({
+      reviewLogId: state.reviewLogId,
+      reviewBotRunId: botRun.id,
+      nodeKey: `agent:${botRun.id}`,
+      parentNodeKey: "run_agents",
+      kind: "agent",
+      title: `主 Agent：${bot.name}`,
+      summary: botModel,
+      detail: bot.description || bot.prompt || null,
+      sequence: 410,
+      metrics: {
+        maxIterations: budget.maxIterations,
+        maxContextFiles: budget.maxContextFiles,
+        maxCallGraphDepth: budget.maxCallGraphDepth,
+        maxFindings: budget.maxFindings,
+        assistantAgents: availableAdditionalAgents.length,
+      },
+    }).then(() => reviewAgentLoopService.run({
       reviewLogId: state.reviewLogId,
       reviewBotRunId: botRun.id,
       repositoryId: reviewLog.repositoryId,
@@ -155,7 +173,7 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
       botPrompt: bot.prompt,
       botPromptMode: bot.promptMode,
       availableAdditionalAgents,
-    }).then((agentResult) => {
+    })).then((agentResult) => {
       const validatedFindings = validateReviewFindings(agentResult.agentFindings, state.relevantDiffs);
       const comments = mergeComments(validatedFindings.map((item) => ({
         ...item,
@@ -203,7 +221,22 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
           ].join("; "),
           completedAt: new Date(),
         },
-      }).then(() => ({
+      }).then(() => reviewWorkflowRecorder.completeNode({
+        reviewLogId: state.reviewLogId,
+        reviewBotRunId: botRun.id,
+        nodeKey: `agent:${botRun.id}`,
+        kind: "agent",
+        title: `主 Agent：${bot.name}`,
+        summary: `新增 ${comments.length} 条问题`,
+        detail: agentResult.critic.reason || agentResult.finalPlan.reviewStrategy || null,
+        sequence: 410,
+        metrics: {
+          findings: comments.length,
+          critical: counts.critical,
+          normal: counts.normal,
+          suggestion: counts.suggestion,
+        },
+      })).then(() => ({
         botRunId: botRun.id,
         botName: bot.name,
         botModel,
@@ -230,7 +263,16 @@ function runBot(state: ReviewState, bot: ReviewBotWithModel, availableAdditional
           error: error instanceof Error ? error.message : "Unknown bot run error",
           completedAt: new Date(),
         },
-      }).then(() => Promise.reject(error));
+      }).then(() => reviewWorkflowRecorder.failNode({
+        reviewLogId: state.reviewLogId,
+        reviewBotRunId: botRun.id,
+        nodeKey: `agent:${botRun.id}`,
+        kind: "agent",
+        title: `主 Agent：${bot.name}`,
+        summary: "主 Agent 执行失败",
+        detail: error instanceof Error ? error.message : "Unknown bot run error",
+        sequence: 410,
+      })).then(() => Promise.reject(error));
     });
   });
 }

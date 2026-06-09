@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -12,6 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ReviewWorkflowTab } from './review-workflow-tab'
 import {
   Dialog,
   DialogClose,
@@ -30,6 +32,7 @@ import {
   GitMerge,
   Gitlab,
   ListChecks,
+  Loader2,
   RefreshCw,
   Copy,
   Check,
@@ -103,6 +106,7 @@ interface Review {
       criticJson: unknown
       memoryUpdatesJson: unknown
       createdAt: string
+      updatedAt: string
     } | null
   }>
   comments: Array<{
@@ -132,6 +136,28 @@ interface ReviewGroup {
   latestReview: Review | null
   attempts: Review[]
 }
+
+const findReviewById = (groups: ReviewGroup[], reviewId: string) => {
+  for (const group of groups) {
+    const matched = group.attempts.find((review) => review.id === reviewId)
+    if (matched) return matched
+  }
+  return null
+}
+
+const findReviewGroup = (groups: ReviewGroup[], groupId: string) => (
+  groups.find((group) => group.id === groupId) || null
+)
+
+const mergeReviewSummaryIntoDetail = (detail: Review, summary: Review): Review => ({
+  ...detail,
+  ...summary,
+  aiSummary: detail.aiSummary,
+  aiResponse: detail.aiResponse,
+  reviewPrompts: detail.reviewPrompts,
+  botRuns: detail.botRuns,
+  comments: detail.comments,
+})
 
 const agentLoopStopReasonLabels: Record<string, string> = {
   continue: '继续',
@@ -169,12 +195,28 @@ interface ReviewProcessStage {
   detail: string
 }
 
+type AgentTraceEventStatus = 'running' | 'completed' | 'failed' | 'skipped'
+
+interface AgentTraceEvent {
+  id?: string
+  at?: string
+  iteration: number
+  stage: string
+  status: AgentTraceEventStatus
+  title: string
+  detail?: string
+  durationMs?: number
+  metrics?: Record<string, unknown>
+}
+
 export default function ReviewsPage() {
   const [reviewGroups, setReviewGroups] = useState<ReviewGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedReviewGroup, setSelectedReviewGroup] = useState<ReviewGroup | null>(null)
   const [selectedReview, setSelectedReview] = useState<Review | null>(null)
+  const [focusedCommentId, setFocusedCommentId] = useState<string | null>(null)
+  const [loadingReviewId, setLoadingReviewId] = useState<string | null>(null)
   const [retryingReviewId, setRetryingReviewId] = useState<string | null>(null)
   const [stoppingReviewId, setStoppingReviewId] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
@@ -185,29 +227,51 @@ export default function ReviewsPage() {
   const pageSize = 20
 
   // 获取审查记录
-  const fetchReviews = async (page = 1) => {
-    try {
+  const fetchReviews = useCallback((page = 1, options: { silent?: boolean } = {}) => {
+    if (!options.silent) {
       setLoading(true)
-      setError(null)
-      const response = await fetch(`/api/reviews?page=${page}&limit=${pageSize}`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch reviews')
-      }
-      const data = await response.json()
-      setReviewGroups(data.reviewGroups || [])
-      // 更新分页信息
-      if (data.pagination) {
-        setCurrentPage(data.pagination.page)
-        setTotalPages(data.pagination.totalPages)
-        setTotal(data.pagination.total)
-      }
-    } catch (err) {
-      console.error('Failed to fetch reviews:', err)
-      setError('加载审查记录失败')
-    } finally {
-      setLoading(false)
     }
-  }
+    if (!options.silent) {
+      setError(null)
+    }
+    return fetch(`/api/reviews?page=${page}&limit=${pageSize}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Failed to fetch reviews')
+        }
+        return response.json()
+      })
+      .then((data) => {
+        const nextGroups = data.reviewGroups || []
+        setReviewGroups(nextGroups)
+        setSelectedReview((current) => {
+          if (!current) return current
+          const matchedSummary = findReviewById(nextGroups, current.id)
+          return matchedSummary ? mergeReviewSummaryIntoDetail(current, matchedSummary) : current
+        })
+        setSelectedReviewGroup((current) => {
+          if (!current) return current
+          return findReviewGroup(nextGroups, current.id) || current
+        })
+        // 更新分页信息
+        if (data.pagination) {
+          setCurrentPage(data.pagination.page)
+          setTotalPages(data.pagination.totalPages)
+          setTotal(data.pagination.total)
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch reviews:', err)
+        if (!options.silent) {
+          setError('加载审查记录失败')
+        }
+      })
+      .finally(() => {
+        if (!options.silent) {
+          setLoading(false)
+        }
+      })
+  }, [])
 
   // 重新触发审查
   const retryReview = async (reviewId: string, event: React.MouseEvent) => {
@@ -285,7 +349,27 @@ export default function ReviewsPage() {
   }
 
   const openReviewDialog = (review: Review) => {
-    setSelectedReview(review)
+    setLoadingReviewId(review.id)
+    return fetch(`/api/reviews/${review.id}`)
+      .then((response) => {
+        if (!response.ok) {
+          return response.json().catch(() => ({})).then((body) => {
+            throw new Error(body.error || '加载审查详情失败')
+          })
+        }
+        return response.json()
+      })
+      .then((data) => {
+        setSelectedReview(data.review || review)
+      })
+      .catch((err) => {
+        console.error('Failed to load review detail:', err)
+        alert(err instanceof Error ? err.message : '加载审查详情失败')
+        setSelectedReview(review)
+      })
+      .finally(() => {
+        setLoadingReviewId(null)
+      })
   }
 
   // 解析 AI 回复 JSON
@@ -441,6 +525,101 @@ export default function ReviewsPage() {
     return Array.isArray(botRun.trace?.loopIterationsJson)
       ? botRun.trace?.loopIterationsJson as Array<Record<string, unknown>>
       : []
+  }
+
+  const getBotTraceEvents = (botRun: Review['botRuns'][number]) => {
+    return getBotIterations(botRun)
+      .flatMap((iteration, iterationIndex) => {
+        const events = Array.isArray(iteration.events) ? iteration.events : []
+        return events
+          .filter((event): event is Record<string, unknown> => Boolean(event && typeof event === 'object'))
+          .map((event, eventIndex): AgentTraceEvent => ({
+            id: typeof event.id === 'string' ? event.id : `${botRun.id}-${iterationIndex}-${eventIndex}`,
+            at: typeof event.at === 'string' ? event.at : undefined,
+            iteration: Number(event.iteration || iteration.iteration || iterationIndex + 1),
+            stage: typeof event.stage === 'string' ? event.stage : 'unknown',
+            status: event.status === 'running' || event.status === 'completed' || event.status === 'failed' || event.status === 'skipped'
+              ? event.status
+              : 'completed',
+            title: typeof event.title === 'string' ? event.title : '未命名步骤',
+            detail: typeof event.detail === 'string' ? event.detail : undefined,
+            durationMs: typeof event.durationMs === 'number' ? event.durationMs : undefined,
+            metrics: event.metrics && typeof event.metrics === 'object' && !Array.isArray(event.metrics)
+              ? event.metrics as Record<string, unknown>
+              : undefined,
+          }))
+      })
+      .sort((left, right) => {
+        if (!left.at || !right.at) return 0
+        return new Date(left.at).getTime() - new Date(right.at).getTime()
+      })
+  }
+
+  const getCurrentTraceEvent = (botRun: Review['botRuns'][number]) => {
+    const events = getBotTraceEvents(botRun)
+    return events.at(-1) || null
+  }
+
+  const formatTraceEventTime = (event: AgentTraceEvent) => {
+    if (!event.at) return '时间未知'
+    return new Date(event.at).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  }
+
+  const formatTraceEventDuration = (durationMs?: number) => {
+    if (!durationMs || durationMs < 0) return ''
+    if (durationMs < 1000) return `${durationMs}ms`
+    const seconds = Math.round(durationMs / 100) / 10
+    if (seconds < 60) return `${seconds}s`
+    return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
+  }
+
+  const getTraceEventStatusClass = (status: AgentTraceEventStatus) => {
+    switch (status) {
+      case 'running':
+        return 'border-primary/30 bg-primary/10 text-primary'
+      case 'completed':
+        return 'border-emerald-600/20 bg-emerald-500/10 text-emerald-800'
+      case 'failed':
+        return 'border-destructive/30 bg-destructive/5 text-destructive'
+      case 'skipped':
+        return 'border-amber-500/30 bg-amber-500/10 text-amber-800'
+      default:
+        return 'border-border bg-muted text-muted-foreground'
+    }
+  }
+
+  const getTraceEventStatusLabel = (status: AgentTraceEventStatus) => {
+    switch (status) {
+      case 'running':
+        return '进行中'
+      case 'completed':
+        return '完成'
+      case 'failed':
+        return '失败'
+      case 'skipped':
+        return '跳过'
+      default:
+        return status
+    }
+  }
+
+  const getTraceEventStageLabel = (stage: string) => {
+    const labels: Record<string, string> = {
+      initializing: '初始化',
+      context: '上下文',
+      plan: '计划',
+      tool: '工具',
+      review: '审查',
+      validation: '校验',
+      critic: '决策',
+      finish: '完成',
+      error: '异常',
+    }
+    return labels[stage] || stage
   }
 
   const formatReviewAttempt = (review: Pick<Review, 'attemptNumber' | 'totalAttempts'>) => {
@@ -657,6 +836,46 @@ export default function ReviewsPage() {
     )
   }
 
+  const renderTraceEvent = (event: AgentTraceEvent) => {
+    const duration = formatTraceEventDuration(event.durationMs)
+    return (
+      <li key={event.id || `${event.iteration}-${event.stage}-${event.at}`} className="relative pl-7">
+        <span className={`absolute left-0 top-1.5 flex h-4 w-4 items-center justify-center rounded-full border ${getTraceEventStatusClass(event.status)}`}>
+          {event.status === 'running' ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : event.status === 'failed' ? (
+            <AlertCircle className="h-3 w-3" />
+          ) : (
+            <Check className="h-3 w-3" />
+          )}
+        </span>
+        <div className="rounded-lg bg-background/70 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">第 {event.iteration} 轮</Badge>
+            <Badge className={getTraceEventStatusClass(event.status)}>
+              {getTraceEventStatusLabel(event.status)}
+            </Badge>
+            <span className="text-xs text-muted-foreground">{getTraceEventStageLabel(event.stage)}</span>
+            <span className="text-xs font-mono text-muted-foreground">{formatTraceEventTime(event)}</span>
+            {duration && <span className="text-xs font-mono text-muted-foreground">{duration}</span>}
+          </div>
+          <p className="mt-2 text-sm font-medium text-foreground">{event.title}</p>
+          {event.detail && (
+            <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">{event.detail}</p>
+          )}
+          {event.metrics && Object.keys(event.metrics).length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-muted-foreground">查看指标</summary>
+              <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-sidebar/50 p-2 text-[11px] text-muted-foreground whitespace-pre-wrap">
+                {formatJson(event.metrics)}
+              </pre>
+            </details>
+          )}
+        </div>
+      </li>
+    )
+  }
+
   const formatCommentSource = (comment: Review['comments'][number]) => {
     if (Array.isArray(comment.sourceBotsJson) && comment.sourceBotsJson.length > 0) {
       return comment.sourceBotsJson
@@ -671,9 +890,51 @@ export default function ReviewsPage() {
     return `${comment.sourceBotName || '默认审查机器人'} / ${comment.sourceBotModel || 'unknown'}`
   }
 
+  const openIssueFromWorkflow = (issueId: string) => {
+    setFocusedCommentId(issueId)
+    window.setTimeout(() => {
+      document.getElementById(`comment-${issueId}`)?.scrollIntoView({
+        block: 'start',
+        behavior: 'smooth',
+      })
+    }, 50)
+    window.setTimeout(() => {
+      setFocusedCommentId((current) => current === issueId ? null : current)
+    }, 2800)
+  }
+
+  const getWorkflowIssues = (review: Review) => {
+    return (review.comments || []).map((comment) => ({
+      id: comment.id,
+      reviewBotRunId: comment.reviewBotRunId,
+      filePath: comment.filePath,
+      lineNumber: comment.lineNumber,
+      lineRangeEnd: comment.lineRangeEnd,
+      severity: getSeverityLabel(comment.severity),
+      content: comment.content,
+      gitlabDiffUrl: comment.gitlabDiffUrl || getGitlabFileLink(review, comment.filePath, comment.lineNumber, comment.lineRangeEnd),
+    }))
+  }
+
   useEffect(() => {
     fetchReviews()
-  }, [])
+  }, [fetchReviews])
+
+  useEffect(() => {
+    const hasPendingReview = reviewGroups.some((group) => (
+      group.latestReview?.status === 'pending' ||
+      group.attempts.some((review) => review.status === 'pending')
+    ))
+    const shouldPoll = hasPendingReview || selectedReview?.status === 'pending'
+
+    if (!shouldPoll) return
+
+    const timer = window.setInterval(() => {
+      fetchReviews(currentPage, { silent: true })
+    }, 3000)
+
+    return () => window.clearInterval(timer)
+  }, [currentPage, fetchReviews, reviewGroups, selectedReview?.status])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -943,6 +1204,12 @@ export default function ReviewsPage() {
                             <span className="text-sm font-semibold text-foreground">{formatReviewAttempt(review)}</span>
                             {getStatusBadge(review.status)}
                             <Badge variant="outline">Log {review.id.slice(0, 8)}</Badge>
+                            {loadingReviewId === review.id && (
+                              <Badge variant="outline">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                加载详情
+                              </Badge>
+                            )}
                           </div>
                           <p className="mt-2 text-xs text-muted-foreground">
                             开始：{new Date(review.startedAt).toLocaleString('zh-CN')}
@@ -1069,6 +1336,10 @@ export default function ReviewsPage() {
                     <section className="rounded-xl border border-border/60 bg-background/80 p-4">
                       <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Review Index</p>
                       <div className="mt-3 space-y-2 text-sm">
+                        <a href="#review-workflow" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
+                          <span>过程图</span>
+                          <Badge variant="outline">Flow</Badge>
+                        </a>
                         <a href="#review-issues" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
                           <span>问题详情</span>
                           <Badge variant="outline">{selectedReview.comments?.length || 0}</Badge>
@@ -1114,19 +1385,37 @@ export default function ReviewsPage() {
                     <section className="rounded-xl border border-border/60 bg-background/80 p-4">
                       <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Agent 时间线</p>
                       <div className="mt-3 space-y-3">
-                        {selectedReview.botRuns?.length ? selectedReview.botRuns.map((botRun) => (
-                          <div key={botRun.id} className="rounded-lg border border-border/50 bg-card/60 p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-medium text-foreground">{botRun.botName}</p>
-                              {getStatusBadge(botRun.status)}
+                        {selectedReview.botRuns?.length ? selectedReview.botRuns.map((botRun) => {
+                          const currentEvent = getCurrentTraceEvent(botRun)
+                          const traceEvents = getBotTraceEvents(botRun)
+                          return (
+                            <div key={botRun.id} className="rounded-lg border border-border/50 bg-card/60 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-medium text-foreground">{botRun.botName}</p>
+                                {getStatusBadge(botRun.status)}
+                              </div>
+                              <p className="mt-1 truncate text-xs text-muted-foreground">{botRun.aiModelName}</p>
+                              {currentEvent ? (
+                                <div className="mt-3 rounded-lg bg-background/70 p-2">
+                                  <div className="flex items-center gap-2">
+                                    {currentEvent.status === 'running' && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                                    <span className="text-xs font-medium text-foreground">{currentEvent.title}</span>
+                                  </div>
+                                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                                    第 {currentEvent.iteration} 轮 · {getTraceEventStageLabel(currentEvent.stage)} · {getTraceEventStatusLabel(currentEvent.status)}
+                                  </p>
+                                </div>
+                              ) : (
+                                <p className="mt-3 rounded-lg bg-muted p-2 text-xs text-muted-foreground">暂无实时步骤。</p>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge variant="outline">问题 {botRun.comments.length}</Badge>
+                                <Badge variant="outline">轮次 {getBotIterations(botRun).length}</Badge>
+                                <Badge variant="outline">日志 {traceEvents.length}</Badge>
+                              </div>
                             </div>
-                            <p className="mt-1 truncate text-xs text-muted-foreground">{botRun.aiModelName}</p>
-                            <div className="mt-2 flex gap-2">
-                              <Badge variant="outline">问题 {botRun.comments.length}</Badge>
-                              <Badge variant="outline">轮次 {getBotIterations(botRun).length}</Badge>
-                            </div>
-                          </div>
-                        )) : (
+                          )
+                        }) : (
                           <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">暂无 Agent 运行记录。</p>
                         )}
                       </div>
@@ -1136,6 +1425,46 @@ export default function ReviewsPage() {
 
                 <main className="min-h-0 overflow-y-auto p-5">
                   <div className="mx-auto max-w-6xl space-y-5">
+                    <Tabs defaultValue="workflow" className="sticky top-0 z-10 rounded-xl border border-border/60 bg-background/95 p-2 shadow-sm backdrop-blur">
+                      <TabsList variant="line" className="w-full justify-start overflow-x-auto">
+                        <TabsTrigger value="workflow" asChild>
+                          <a href="#review-workflow">过程图</a>
+                        </TabsTrigger>
+                        <TabsTrigger value="issues" asChild>
+                          <a href="#review-issues">问题</a>
+                        </TabsTrigger>
+                        <TabsTrigger value="summary" asChild>
+                          <a href="#review-summary">摘要</a>
+                        </TabsTrigger>
+                        <TabsTrigger value="agents" asChild>
+                          <a href="#review-agents">Agent</a>
+                        </TabsTrigger>
+                        <TabsTrigger value="raw" asChild>
+                          <a href="#review-raw">原始材料</a>
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+
+                    <section id="review-workflow" className="scroll-mt-20 rounded-2xl border border-border/60 bg-background p-5">
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Dynamic Workflow</p>
+                          <h2 className="mt-1 text-xl font-semibold">审查过程图</h2>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline">2 秒轮询</Badge>
+                          <Badge variant="outline">{selectedReview.status === 'pending' ? '运行中' : '最终快照'}</Badge>
+                        </div>
+                      </div>
+                      <ReviewWorkflowTab
+                        key={selectedReview.id}
+                        reviewId={selectedReview.id}
+                        reviewStatus={selectedReview.status}
+                        issues={getWorkflowIssues(selectedReview)}
+                        onOpenIssue={openIssueFromWorkflow}
+                      />
+                    </section>
+
                     <section id="review-issues" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -1157,7 +1486,11 @@ export default function ReviewsPage() {
                               <article
                                 id={`comment-${comment.id}`}
                                 key={comment.id}
-                                className={`scroll-mt-4 rounded-xl border border-border/60 p-4 ${getSeverityStyle(comment.severity)}`}
+                                className={`scroll-mt-20 rounded-xl border p-4 transition-shadow ${getSeverityStyle(comment.severity)} ${
+                                  focusedCommentId === comment.id
+                                    ? 'border-primary shadow-[0_0_0_3px_rgba(204,120,92,0.22)]'
+                                    : 'border-border/60'
+                                }`}
                               >
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                   <div className="min-w-0">
@@ -1227,6 +1560,8 @@ export default function ReviewsPage() {
                           {selectedReview.botRuns.map((botRun) => {
                             const rawReview = extractLastReviewResponse(botRun)
                             const iterations = getBotIterations(botRun)
+                            const traceEvents = getBotTraceEvents(botRun)
+                            const currentEvent = getCurrentTraceEvent(botRun)
                             return (
                               <article key={botRun.id} className="rounded-xl border border-border/60 bg-card/60 p-4">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1241,8 +1576,27 @@ export default function ReviewsPage() {
                                   <div className="flex flex-wrap gap-2">
                                     <Badge variant="outline">问题 {botRun.comments.length}</Badge>
                                     <Badge variant="outline">Loop {iterations.length}</Badge>
+                                    <Badge variant="outline">日志 {traceEvents.length}</Badge>
                                   </div>
                                 </div>
+
+                                {currentEvent && (
+                                  <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {currentEvent.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                                      <p className="text-sm font-semibold text-foreground">当前步骤：{currentEvent.title}</p>
+                                      <Badge className={getTraceEventStatusClass(currentEvent.status)}>
+                                        {getTraceEventStatusLabel(currentEvent.status)}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      第 {currentEvent.iteration} 轮 · {getTraceEventStageLabel(currentEvent.stage)} · {formatTraceEventTime(currentEvent)}
+                                    </p>
+                                    {currentEvent.detail && (
+                                      <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{currentEvent.detail}</p>
+                                    )}
+                                  </div>
+                                )}
 
                                 {botRun.summary && (
                                   <p className="mt-3 rounded-lg bg-background/70 p-3 text-sm leading-6 text-foreground">{botRun.summary}</p>
@@ -1252,6 +1606,19 @@ export default function ReviewsPage() {
                                 )}
 
                                 <div className="mt-4 grid gap-3">
+                                  <details className="group rounded-lg border border-border/50 bg-background/70 p-3" open>
+                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
+                                      实时执行日志
+                                    </summary>
+                                    {traceEvents.length > 0 ? (
+                                      <ol className="mt-3 space-y-2 border-l border-border/60 pl-3">
+                                        {traceEvents.map(renderTraceEvent)}
+                                      </ol>
+                                    ) : (
+                                      <p className="mt-3 text-sm text-muted-foreground">暂无实时执行日志。新审查开始后会逐步写入。</p>
+                                    )}
+                                  </details>
+
                                   <details className="group rounded-lg border border-border/50 bg-background/70 p-3" open>
                                     <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
                                       审查过程可视化

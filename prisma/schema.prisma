@@ -114,6 +114,7 @@ model ReviewLog {
   botRuns           ReviewBotRun[]
   comments          ReviewComment[] // 关联的审查评论
   agentTraces       ReviewAgentTrace[]
+  workflowNodes     ReviewWorkflowNode[]
 
   @@index([repositoryId, mergeRequestIid, commitSha])
   @@map("review_logs")
@@ -164,6 +165,7 @@ model ReviewBotRun {
   completedAt       DateTime?
   comments          ReviewComment[]
   agentTrace        ReviewAgentTrace?
+  workflowNodes     ReviewWorkflowNode[]
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -353,4 +355,34 @@ model ReviewAgentTrace {
   @@index([reviewLogId])
   @@index([memorySnapshotId])
   @@map("review_agent_traces")
+}
+
+// 动态审查过程图节点
+model ReviewWorkflowNode {
+  id              String        @id @default(cuid())
+  reviewLogId     String
+  reviewLog       ReviewLog     @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
+  reviewBotRunId  String?
+  reviewBotRun    ReviewBotRun? @relation(fields: [reviewBotRunId], references: [id], onDelete: Cascade)
+  nodeKey         String
+  parentNodeKey   String?
+  kind            String
+  status          String
+  title           String
+  summary         String?
+  detail          String?
+  sequence        Int
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationMs      Int?
+  metricsJson     Json?
+  rawJson         Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([reviewLogId, nodeKey])
+  @@index([reviewLogId, sequence])
+  @@index([reviewLogId, status])
+  @@index([reviewBotRunId])
+  @@map("review_workflow_nodes")
 }
