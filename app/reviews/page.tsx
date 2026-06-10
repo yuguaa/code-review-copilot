@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -25,19 +25,14 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
-  Brain,
-  FileSearch,
   GitCommit,
   GitMerge,
   Gitlab,
-  ListChecks,
   Loader2,
   RefreshCw,
   Copy,
   Check,
-  ShieldCheck,
   Square,
-  Wrench,
   X
 } from 'lucide-react'
 
@@ -157,42 +152,6 @@ const mergeReviewSummaryIntoDetail = (detail: Review, summary: Review): Review =
   botRuns: detail.botRuns,
   comments: detail.comments,
 })
-
-const agentLoopStopReasonLabels: Record<string, string> = {
-  continue: '继续',
-  max_iterations: '达到最大轮次',
-  max_findings: '达到问题上限',
-  critic_stop: 'Critic 判定停止',
-  no_new_findings: '无新增问题',
-  no_more_context: '无更多上下文',
-  no_requested_tools: '无工具请求',
-  no_progress: '重复无进展',
-}
-
-const processStageClassNames = {
-  done: 'border-emerald-600/20 bg-emerald-500/10 text-emerald-900',
-  active: 'border-primary/30 bg-primary/10 text-primary',
-  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-800',
-  idle: 'border-border/50 bg-background/70 text-muted-foreground',
-} as const
-
-const processStageIconClassNames = {
-  done: 'bg-emerald-600 text-white',
-  active: 'bg-primary text-primary-foreground',
-  warning: 'bg-amber-500 text-white',
-  idle: 'bg-muted text-muted-foreground',
-} as const
-
-type ProcessStageStatus = keyof typeof processStageClassNames
-
-interface ReviewProcessStage {
-  key: string
-  label: string
-  status: ProcessStageStatus
-  icon: React.ComponentType<{ className?: string }>
-  summary: string
-  detail: string
-}
 
 type AgentTraceEventStatus = 'running' | 'completed' | 'failed' | 'skipped'
 
@@ -624,215 +583,6 @@ export default function ReviewsPage() {
   const formatReviewAttempt = (review: Pick<Review, 'attemptNumber' | 'totalAttempts'>) => {
     if (review.totalAttempts <= 1) return '首次审查'
     return `第 ${review.attemptNumber} / ${review.totalAttempts} 次`
-  }
-
-  const getIterationProgress = (iteration: Record<string, unknown>) => {
-    const progress = iteration.progress && typeof iteration.progress === 'object'
-      ? iteration.progress as { stopReason?: unknown; repeatedCount?: unknown }
-      : null
-    return {
-      stopReason: typeof progress?.stopReason === 'string' ? progress.stopReason : null,
-      repeatedCount: Number(progress?.repeatedCount || 0),
-    }
-  }
-
-  const getIterationReviewMetrics = (iteration: Record<string, unknown>) => {
-    return iteration.review && typeof iteration.review === 'object'
-      ? iteration.review as {
-          rawFindings?: unknown
-          acceptedFindings?: unknown
-          rejectedFindings?: unknown
-          newFindings?: unknown
-          totalFindings?: unknown
-          rejectionCounts?: unknown
-        }
-      : null
-  }
-
-  const getIterationContextMetrics = (iteration: Record<string, unknown>) => {
-    return iteration.contextMetrics && typeof iteration.contextMetrics === 'object'
-      ? iteration.contextMetrics as {
-          requestedFilesCount?: unknown
-          selectedFilesCount?: unknown
-          fileContextCount?: unknown
-          graphNeighborCount?: unknown
-          relatedReviewCount?: unknown
-          missingSelectedFiles?: unknown
-        }
-      : null
-  }
-
-  const getIterationTools = (iteration: Record<string, unknown>) => {
-    return Array.isArray(iteration.toolCalls)
-      ? iteration.toolCalls as Array<{ tool?: unknown; status?: unknown; resultCount?: unknown }>
-      : []
-  }
-
-  const getIterationPlan = (iteration: Record<string, unknown>) => {
-    return iteration.plan && typeof iteration.plan === 'object'
-      ? iteration.plan as { needsMoreContext?: unknown; contextFiles?: unknown; requestedTools?: unknown }
-      : null
-  }
-
-  const getIterationToolSummary = (iteration: Record<string, unknown>) => {
-    const tools = getIterationTools(iteration)
-    if (tools.length === 0) return '无工具调用'
-    return tools
-      .map((tool) => `${String(tool.tool || 'unknown')}(${String(tool.status || 'unknown')}, ${String(tool.resultCount ?? 0)})`)
-      .join('、')
-  }
-
-  const getIterationDecisionSummary = (iteration: Record<string, unknown>) => {
-    const progress = getIterationProgress(iteration)
-    if (!progress.stopReason) return '决策：旧 Trace 未记录'
-
-    return `决策：${agentLoopStopReasonLabels[progress.stopReason] || progress.stopReason}${progress.repeatedCount > 1 ? `，重复 ${progress.repeatedCount} 次` : ''}`
-  }
-
-  const getIterationFindingRejectionParts = (iteration: Record<string, unknown>) => {
-    const review = getIterationReviewMetrics(iteration)
-    const counts = review?.rejectionCounts && typeof review.rejectionCounts === 'object'
-      ? review.rejectionCounts as Record<string, unknown>
-      : {}
-    return [
-      Number(counts.low_confidence || 0) > 0 ? `低置信 ${Number(counts.low_confidence)}` : '',
-      Number(counts.file_not_in_diff || 0) > 0 ? `非 Diff 文件 ${Number(counts.file_not_in_diff)}` : '',
-      Number(counts.invalid_line_range || 0) > 0 ? `无效行号 ${Number(counts.invalid_line_range)}` : '',
-    ].filter(Boolean)
-  }
-
-  const getIterationFindingSummary = (iteration: Record<string, unknown>) => {
-    const review = getIterationReviewMetrics(iteration)
-    if (!review) return 'Finding：旧 Trace 未记录'
-
-    const rejectionParts = getIterationFindingRejectionParts(iteration)
-    const rejectedText = rejectionParts.length > 0 ? `（${rejectionParts.join('、')}）` : ''
-
-    return [
-      `Finding：原始 ${String(review.rawFindings ?? '未知')}`,
-      `接受 ${String(review.acceptedFindings ?? '未知')}`,
-      `丢弃 ${String(review.rejectedFindings ?? 0)}${rejectedText}`,
-      `新增 ${String(review.newFindings ?? '未知')}`,
-      `累计 ${String(review.totalFindings ?? '未知')}`,
-    ].join(' · ')
-  }
-
-  const getIterationContextSummary = (iteration: Record<string, unknown>) => {
-    const metrics = getIterationContextMetrics(iteration)
-    if (!metrics) return '上下文：旧 Trace 未记录'
-
-    const missingCount = Array.isArray(metrics.missingSelectedFiles) ? metrics.missingSelectedFiles.length : 0
-    return [
-      `上下文：请求 ${String(metrics.requestedFilesCount ?? 0)}`,
-      `选择 ${String(metrics.selectedFilesCount ?? 0)}`,
-      `文件命中 ${String(metrics.fileContextCount ?? 0)}`,
-      `关系 ${String(metrics.graphNeighborCount ?? 0)}`,
-      `历史 ${String(metrics.relatedReviewCount ?? 0)}`,
-      `缺失 ${missingCount}`,
-    ].join(' · ')
-  }
-
-  const buildReviewProcessStages = (iteration: Record<string, unknown>): ReviewProcessStage[] => {
-    const plan = getIterationPlan(iteration)
-    const tools = getIterationTools(iteration)
-    const review = getIterationReviewMetrics(iteration)
-    const metrics = getIterationContextMetrics(iteration)
-    const progress = getIterationProgress(iteration)
-    const requestedTools = Array.isArray(plan?.requestedTools) ? plan.requestedTools : []
-    const contextFiles = Array.isArray(plan?.contextFiles) ? plan.contextFiles : []
-    const toolResultCount = tools.reduce((total, tool) => total + Number(tool.resultCount || 0), 0)
-    const unavailableToolCount = tools.filter((tool) => String(tool.status || '') === 'unavailable').length
-    const missingCount = Array.isArray(metrics?.missingSelectedFiles) ? metrics.missingSelectedFiles.length : 0
-    const rejectedCount = Number(review?.rejectedFindings || 0)
-    const acceptedCount = Number(review?.acceptedFindings || 0)
-    const stopReason = progress.stopReason
-    const decisionStatus: ProcessStageStatus = stopReason === 'continue'
-      ? 'active'
-      : stopReason === 'no_progress' || stopReason === 'no_requested_tools' || stopReason === 'max_iterations'
-        ? 'warning'
-        : 'done'
-
-    return [
-      {
-        key: 'plan',
-        label: '计划',
-        status: plan ? 'done' : 'idle',
-        icon: Brain,
-        summary: plan
-          ? `${plan.needsMoreContext ? '需要更多上下文' : '上下文足够'} · 工具 ${requestedTools.length}`
-          : '旧 Trace 未记录计划',
-        detail: contextFiles.length > 0
-          ? `目标文件：${contextFiles.slice(0, 3).map(String).join('、')}${contextFiles.length > 3 ? ` 等 ${contextFiles.length} 个` : ''}`
-          : '没有追加目标文件',
-      },
-      {
-        key: 'context',
-        label: '上下文',
-        status: metrics ? (missingCount > 0 ? 'warning' : 'done') : 'idle',
-        icon: FileSearch,
-        summary: metrics
-          ? `文件 ${String(metrics.fileContextCount ?? 0)}/${String(metrics.selectedFilesCount ?? 0)} · 关系 ${String(metrics.graphNeighborCount ?? 0)}`
-          : '旧 Trace 未记录上下文指标',
-        detail: metrics
-          ? `请求 ${String(metrics.requestedFilesCount ?? 0)} · 历史 ${String(metrics.relatedReviewCount ?? 0)} · 缺失 ${missingCount}`
-          : '无法判断检索命中',
-      },
-      {
-        key: 'tools',
-        label: '工具',
-        status: tools.length === 0 ? 'idle' : unavailableToolCount > 0 ? 'warning' : 'done',
-        icon: Wrench,
-        summary: tools.length > 0
-          ? `${tools.length} 次调用 · 产出 ${toolResultCount}`
-          : '无工具调用',
-        detail: tools.length > 0
-          ? tools.map((tool) => `${String(tool.tool || 'unknown')}=${String(tool.status || 'unknown')}`).join('、')
-          : '本轮没有请求外部工具',
-      },
-      {
-        key: 'findings',
-        label: 'Finding',
-        status: review ? (rejectedCount > 0 ? 'warning' : 'done') : 'idle',
-        icon: ListChecks,
-        summary: review
-          ? `原始 ${String(review.rawFindings ?? 0)} · 接受 ${acceptedCount} · 丢弃 ${rejectedCount}`
-          : '旧 Trace 未记录 Finding',
-        detail: review
-          ? `新增 ${String(review.newFindings ?? 0)} · 累计 ${String(review.totalFindings ?? 0)}${rejectedCount > 0 ? ` · ${getIterationFindingRejectionParts(iteration).join('、')}` : ''}`
-          : '无法判断模型输出是否通过校验',
-      },
-      {
-        key: 'critic',
-        label: 'Critic',
-        status: stopReason ? decisionStatus : 'idle',
-        icon: ShieldCheck,
-        summary: stopReason ? (agentLoopStopReasonLabels[stopReason] || stopReason) : '旧 Trace 未记录决策',
-        detail: progress.repeatedCount > 1 ? `进展指纹重复 ${progress.repeatedCount} 次` : '已记录本轮停止/继续原因',
-      },
-    ]
-  }
-
-  const renderReviewProcessStage = (stage: ReviewProcessStage, index: number, isLast: boolean) => {
-    const Icon = stage.icon
-    return (
-      <div key={stage.key} className="relative min-w-0">
-        {!isLast && (
-          <div className="absolute left-[1.125rem] top-9 hidden h-px w-[calc(100%_-_0.75rem)] bg-border/70 md:block" />
-        )}
-        <div className={`relative h-full rounded-lg border p-3 ${processStageClassNames[stage.status]}`}>
-          <div className="flex items-center gap-2">
-            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${processStageIconClassNames[stage.status]}`}>
-              <Icon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-muted-foreground">0{index + 1} · {stage.label}</p>
-              <p className="mt-0.5 truncate text-sm font-semibold text-foreground">{stage.summary}</p>
-            </div>
-          </div>
-          <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">{stage.detail}</p>
-        </div>
-      </div>
-    )
   }
 
   const renderTraceEvent = (event: AgentTraceEvent) => {
@@ -1538,7 +1288,6 @@ export default function ReviewsPage() {
                         <div className="mt-4 space-y-4">
                           {selectedReview.botRuns.map((botRun) => {
                             const rawReview = extractLastReviewResponse(botRun)
-                            const iterations = getBotIterations(botRun)
                             const traceEvents = getBotTraceEvents(botRun)
                             const currentEvent = getCurrentTraceEvent(botRun)
                             return (
@@ -1554,7 +1303,7 @@ export default function ReviewsPage() {
                                   </div>
                                   <div className="flex flex-wrap gap-2">
                                     <Badge variant="outline">问题 {botRun.comments.length}</Badge>
-                                    <Badge variant="outline">Loop {iterations.length}</Badge>
+                                    <Badge variant="outline">Loop {getBotIterations(botRun).length}</Badge>
                                     <Badge variant="outline">日志 {traceEvents.length}</Badge>
                                   </div>
                                 </div>
@@ -1596,34 +1345,6 @@ export default function ReviewsPage() {
                                     ) : (
                                       <p className="mt-3 text-sm text-muted-foreground">暂无实时执行日志。新审查开始后会逐步写入。</p>
                                     )}
-                                  </details>
-
-                                  <details className="group rounded-lg border border-border/50 bg-background/70 p-3" open>
-                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
-                                      审查过程可视化
-                                    </summary>
-                                    <div className="mt-3 space-y-4">
-                                      {iterations.length > 0 ? iterations.map((iteration, index) => (
-                                        <div key={`${botRun.id}-iteration-${index}`} className="rounded-lg bg-sidebar/35 p-3 text-xs">
-                                          <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <p className="font-medium text-foreground">第 {String(iteration.iteration || index + 1)} 轮</p>
-                                            <Badge variant="outline">{getIterationDecisionSummary(iteration).replace(/^决策：/, '')}</Badge>
-                                          </div>
-                                          <div className="mt-3 grid gap-2 md:grid-cols-5">
-                                            {buildReviewProcessStages(iteration).map((stage, stageIndex, stages) => (
-                                              renderReviewProcessStage(stage, stageIndex, stageIndex === stages.length - 1)
-                                            ))}
-                                          </div>
-                                          <div className="mt-3 grid gap-2 lg:grid-cols-3">
-                                            <p className="rounded-md bg-background/70 p-2 text-muted-foreground">{getIterationToolSummary(iteration)}</p>
-                                            <p className="rounded-md bg-background/70 p-2 text-muted-foreground">{getIterationFindingSummary(iteration)}</p>
-                                            <p className="rounded-md bg-background/70 p-2 text-muted-foreground">{getIterationContextSummary(iteration)}</p>
-                                          </div>
-                                        </div>
-                                      )) : (
-                                        <p className="text-sm text-muted-foreground">暂无 Loop Trace。</p>
-                                      )}
-                                    </div>
                                   </details>
 
                                   <details className="group rounded-lg border border-border/50 bg-background/70 p-3">
