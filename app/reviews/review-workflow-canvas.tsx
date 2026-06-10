@@ -49,12 +49,13 @@ const statusLabels: Record<string, string> = {
 }
 
 const nodeWidth = 226
+const nodeHeight = 102
 const mainLaneX = 44
 const loopLaneX = 340
 const topOffset = 36
-const mainGapY = 112
+const mainGapY = 132
 const loopGapX = 286
-const loopGapY = 92
+const loopGapY = 126
 
 const loopStageOrder: Record<string, number> = {
   agent: 0,
@@ -209,12 +210,13 @@ function toReactFlowNodes(
       className: selected ? 'shadow-[0_0_0_3px_rgba(204,120,92,0.22)]' : undefined,
       style: {
         width: nodeWidth,
-        minHeight: 78,
+        height: nodeHeight,
         borderRadius: 8,
         border: `1.5px solid ${style.border}`,
         background: style.background,
         color: style.color,
         padding: 10,
+        overflow: 'hidden',
       },
     }
   })
