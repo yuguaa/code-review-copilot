@@ -19,6 +19,7 @@ const MEMORY_WRITE_CONFIDENCE = 0.85;
 const ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD = 1;
 const ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD = 1;
 const MAX_REPEATED_PROGRESS_SIGNATURES = 2;
+const REVIEW_STREAM_PERSIST_INTERVAL_MS = 1000;
 
 function toValidationDiff(diff: AgentLoopInput["diffs"][number]) {
   return {
@@ -121,6 +122,7 @@ type AgentTraceEventInput = {
   status: AgentTraceEventStatus;
   title: string;
   detail?: string;
+  workflowDetail?: string;
   durationMs?: number;
   metrics?: Record<string, unknown>;
   parentNodeKey?: string;
@@ -461,6 +463,7 @@ export class ReviewAgentLoopService {
       }).then(() => undefined);
     };
     const recordTraceEvent = (event: AgentTraceEventInput) => {
+      const { workflowDetail, ...traceEvent } = event;
       const target = ensureLoopIteration(loopIterations, event.iteration);
       const events = Array.isArray(target.events)
         ? target.events as Array<Record<string, unknown>>
@@ -468,7 +471,7 @@ export class ReviewAgentLoopService {
       events.push({
         id: `${input.reviewBotRunId}-${++eventSequence}`,
         at: new Date().toISOString(),
-        ...event,
+        ...traceEvent,
       });
       target.events = events;
       const nodeKey = workflowStageNodeKey(input.reviewBotRunId, event.iteration, event.stage);
@@ -481,7 +484,7 @@ export class ReviewAgentLoopService {
         kind: "iteration_stage" as const,
         title: event.title,
         summary: `${input.botName || "Agent"} · 第 ${event.iteration} 轮`,
-        detail: event.detail || null,
+        detail: workflowDetail || event.detail || null,
         sequence: workflowStageSequence(event.iteration, event.stage),
         metrics: event.metrics,
         raw: event,
@@ -500,6 +503,43 @@ export class ReviewAgentLoopService {
         persistTraceProgress(),
         workflowPromise,
       ]).then(() => undefined);
+    };
+    const createReviewStreamPersister = (targetIteration: number, metrics: Record<string, unknown>) => {
+      const nodeKey = workflowStageNodeKey(input.reviewBotRunId, targetIteration, "review");
+      let lastPersistedAt = 0;
+      let latestText = "";
+      let pendingPersist = Promise.resolve();
+
+      return (fullText: string, force = false) => {
+        latestText = fullText;
+        const now = Date.now();
+        if (!force && now - lastPersistedAt < REVIEW_STREAM_PERSIST_INTERVAL_MS) {
+          return pendingPersist;
+        }
+        lastPersistedAt = now;
+
+        pendingPersist = pendingPersist.catch(() => undefined).then(() => (
+          reviewWorkflowRecorder.upsertNode({
+            reviewLogId: input.reviewLogId,
+            reviewBotRunId: input.reviewBotRunId,
+            nodeKey,
+            parentNodeKey: workflowStageParentKey(input.reviewBotRunId, targetIteration, "review"),
+            kind: "iteration_stage",
+            status: "running",
+            title: "生成审查结果",
+            summary: `${input.botName || "Agent"} · 第 ${targetIteration} 轮`,
+            detail: latestText,
+            sequence: workflowStageSequence(targetIteration, "review"),
+            metrics: {
+              ...metrics,
+              streamingChars: latestText.length,
+              streamingUpdatedAt: new Date().toISOString(),
+            },
+          }).then(() => undefined)
+        ));
+
+        return pendingPersist;
+      };
     };
 
     try {
@@ -626,30 +666,41 @@ export class ReviewAgentLoopService {
         });
 
         const reviewStartedAt = Date.now();
+        const reviewMetrics = {
+          currentFindings: findings.length,
+          remainingFindingBudget: Math.max(budget.maxFindings - findings.length, 0),
+        };
+        const persistReviewStream = createReviewStreamPersister(iteration, reviewMetrics);
         await recordTraceEvent({
           iteration,
           stage: "review",
           status: "running",
           title: "生成审查结果",
           detail: "正在请求模型输出可定位 Finding",
-          metrics: {
-            currentFindings: findings.length,
-            remainingFindingBudget: Math.max(budget.maxFindings - findings.length, 0),
-          },
+          metrics: reviewMetrics,
         });
         const reviewResponse = await aiService.reviewCode(
           reviewPrompt,
           input.modelConfig,
           REVIEW_AGENT_REVIEW_SYSTEM_PROMPT,
-          { responseFormat: "jsonObject" },
+          {
+            responseFormat: "jsonObject",
+            onChunk: (_chunk, fullText) => persistReviewStream(fullText),
+          },
         );
+        await persistReviewStream(reviewResponse, true);
         await recordTraceEvent({
           iteration,
           stage: "review",
           status: "completed",
           title: "模型审查完成",
           detail: "已收到模型审查结果，准备解析和校验",
+          workflowDetail: reviewResponse,
           durationMs: Date.now() - reviewStartedAt,
+          metrics: {
+            ...reviewMetrics,
+            streamingChars: reviewResponse.length,
+          },
         });
 
         const validationStartedAt = Date.now();

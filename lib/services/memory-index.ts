@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import path from "path";
-import type { Prisma } from "@prisma/client";
+import type { CodeFileNode, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toPrismaJsonInput } from "@/lib/review/utils";
 import type { GitLabDiff, GitLabRepositoryTreeItem } from "@/lib/types";
@@ -10,8 +10,8 @@ const MAX_INDEXED_FILES = 260;
 const MAX_FILE_BYTES = 180_000;
 const MAX_RELATION_EDGES = 2_000;
 const FILE_FETCH_CONCURRENCY = 8;
-const CODE_GRAPH_TRANSACTION_MAX_WAIT_MS = 10_000;
-const CODE_GRAPH_TRANSACTION_TIMEOUT_MS = 60_000;
+const CODE_GRAPH_DB_WRITE_CONCURRENCY = 8;
+const CODE_GRAPH_CREATE_BATCH_SIZE = 500;
 
 const INDEXABLE_EXTENSIONS = new Set([
   ".ts",
@@ -82,6 +82,10 @@ type ProjectIndex = {
   baseSnapshotBranch?: string | null;
   baseSnapshotCommitSha?: string | null;
 };
+
+type BaseCodeFileNode = Prisma.CodeFileNodeGetPayload<{
+  include: { symbols: true };
+}>;
 
 type CodeGraphDbFile = {
   path: string;
@@ -515,6 +519,14 @@ function mapWithConcurrency<T, R>(
   });
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
 function codeGraphFileNodeId(filePath: string): string {
   return `file:${filePath}`;
 }
@@ -769,285 +781,430 @@ function mergeCodeGraphDb(input: {
 export class MemoryIndexService {
   refreshRepositoryMemory(input: MemoryIndexInput) {
     return this.resolveProjectIndex(input).then((projectIndex) => {
-      return prisma.$transaction((tx) => {
-        const targetCommitSha = input.commitSha;
-        const baseSnapshotBranch = projectIndex.baseSnapshotBranch || input.branch;
-        const baseSnapshotCommitSha = projectIndex.baseSnapshotCommitSha;
-        return tx.repositoryMemorySnapshot.upsert({
-          where: {
-            repositoryId_branch_commitSha: {
-              repositoryId: input.repositoryId,
-              branch: input.branch,
-              commitSha: targetCommitSha,
-            },
-          },
-          update: {
-            status: "ready",
-            architectureSummary: projectIndex.architectureSummary,
-            memoryJson: toPrismaJsonInput(projectIndex.memory),
-            entrypointsJson: toPrismaJsonInput(projectIndex.entrypoints),
-            layersJson: toPrismaJsonInput(projectIndex.layers),
-            conventionsJson: toPrismaJsonInput({
-              reviewMode: "agent_loop",
-              graphSource: "gitlab_repository_tree",
-              maxIndexedFiles: MAX_INDEXED_FILES,
-              maxFileBytes: MAX_FILE_BYTES,
-              confidenceThreshold: 0.6,
-            }),
-            risksJson: toPrismaJsonInput(projectIndex.risks),
-            confidence: 0.82,
-            lastIndexedAt: new Date(),
-            error: null,
-          },
-          create: {
-            repositoryId: input.repositoryId,
-            branch: input.branch,
-            commitSha: targetCommitSha,
-            status: "ready",
-            architectureSummary: projectIndex.architectureSummary,
-            memoryJson: toPrismaJsonInput(projectIndex.memory),
-            entrypointsJson: toPrismaJsonInput(projectIndex.entrypoints),
-            layersJson: toPrismaJsonInput(projectIndex.layers),
-            conventionsJson: toPrismaJsonInput({
-              reviewMode: "agent_loop",
-              graphSource: "gitlab_repository_tree",
-              maxIndexedFiles: MAX_INDEXED_FILES,
-              maxFileBytes: MAX_FILE_BYTES,
-              confidenceThreshold: 0.6,
-            }),
-            risksJson: toPrismaJsonInput(projectIndex.risks),
-            confidence: 0.82,
-          },
-        }).then((snapshot) => {
+      const targetCommitSha = input.commitSha;
+      const baseSnapshotBranch = projectIndex.baseSnapshotBranch || input.branch;
+      const baseSnapshotCommitSha = projectIndex.baseSnapshotCommitSha;
+
+      return this.upsertIndexingSnapshot(input, projectIndex)
+        .then((snapshot) => {
           if (!baseSnapshotCommitSha && projectIndex.files.length === 0) {
-            return snapshot;
+            return this.markSnapshotReady(snapshot.id, projectIndex);
           }
 
           const baseNodesPromise = baseSnapshotCommitSha
-            ? tx.codeFileNode.findMany({
-              where: {
-                repositoryId: input.repositoryId,
-                branch: baseSnapshotBranch,
-                commitSha: baseSnapshotCommitSha,
-                filePath: {
-                  notIn: [
-                    ...projectIndex.files.map((file) => file.filePath),
-                    ...projectIndex.removedFilePaths,
-                  ],
-                },
-              },
-              include: {
-                symbols: true,
-                outgoingRelations: true,
-              },
+            ? this.loadReusableBaseFileNodes({
+              repositoryId: input.repositoryId,
+              baseSnapshotBranch,
+              baseSnapshotCommitSha,
+              changedFilePaths: projectIndex.files.map((file) => file.filePath),
+              removedFilePaths: projectIndex.removedFilePaths,
             })
             : Promise.resolve([]);
 
-          return baseNodesPromise.then((baseNodes) => Promise.all(baseNodes.map((baseNode) => {
-            return tx.codeFileNode.upsert({
-              where: {
-                repositoryId_branch_commitSha_filePath: {
-                  repositoryId: input.repositoryId,
-                  branch: input.branch,
-                  commitSha: targetCommitSha,
-                  filePath: baseNode.filePath,
-                },
-              },
-              update: {
-                contentHash: baseNode.contentHash,
-                language: baseNode.language,
-                role: baseNode.role,
-                summary: baseNode.summary,
-                importsJson: baseNode.importsJson ?? undefined,
-                exportsJson: baseNode.exportsJson ?? undefined,
-                lastIndexedAt: new Date(),
-              },
-              create: {
-                repositoryId: input.repositoryId,
-                branch: input.branch,
-                commitSha: targetCommitSha,
-                filePath: baseNode.filePath,
-                contentHash: baseNode.contentHash,
-                language: baseNode.language,
-                role: baseNode.role,
-                summary: baseNode.summary,
-                importsJson: baseNode.importsJson ?? undefined,
-                exportsJson: baseNode.exportsJson ?? undefined,
-              },
-            }).then((copiedNode) => {
-              return tx.codeSymbolNode.deleteMany({ where: { fileNodeId: copiedNode.id } })
-                .then(() => baseNode.symbols.length > 0
-                  ? tx.codeSymbolNode.createMany({
-                    data: baseNode.symbols.map((symbol) => ({
-                      fileNodeId: copiedNode.id,
-                      name: symbol.name,
-                      kind: symbol.kind,
-                      signature: symbol.signature,
-                      startLine: symbol.startLine,
-                      endLine: symbol.endLine,
-                      summary: symbol.summary,
-                    })),
-                  })
-                  : null)
-                .then(() => copiedNode);
-            });
-          }))).then(() => snapshot);
-        }).then((snapshot) => {
-          return Promise.all(projectIndex.files.map((file) => tx.codeFileNode.upsert({
-              where: {
-                repositoryId_branch_commitSha_filePath: {
-                  repositoryId: input.repositoryId,
-                  branch: input.branch,
-                  commitSha: targetCommitSha,
-                  filePath: file.filePath,
-                },
-              },
-              update: {
-                contentHash: file.contentHash,
-                language: file.language,
-                role: file.role,
-                summary: file.summary,
-                importsJson: toPrismaJsonInput(file.imports),
-                exportsJson: toPrismaJsonInput(file.exports),
-                lastIndexedAt: new Date(),
-              },
-              create: {
-                repositoryId: input.repositoryId,
-                branch: input.branch,
-                commitSha: targetCommitSha,
-                filePath: file.filePath,
-                contentHash: file.contentHash,
-                language: file.language,
-                role: file.role,
-                summary: file.summary,
-                importsJson: toPrismaJsonInput(file.imports),
-                exportsJson: toPrismaJsonInput(file.exports),
-              },
-            }))).then((fileNodes) => {
-              return tx.codeFileNode.findMany({
-                where: {
-                  repositoryId: input.repositoryId,
-                  branch: input.branch,
-                  commitSha: targetCommitSha,
-                },
-              }).then((allFileNodes) => {
-              const fileNodeByPath = new Map(allFileNodes.map((node) => [node.filePath, node]));
-              const copyBaseRelations = () => baseSnapshotCommitSha
-                ? tx.codeRelationEdge.findMany({
-                  where: {
-                    repositoryId: input.repositoryId,
-                    branch: baseSnapshotBranch,
-                    fromFileNode: { commitSha: baseSnapshotCommitSha },
-                  },
-                  include: {
-                    fromFileNode: { select: { filePath: true } },
-                    toFileNode: { select: { filePath: true } },
-                  },
-                }).then((baseRelations) => {
-                  const changedFilePaths = new Set(projectIndex.files.map((file) => file.filePath));
-                  const removedFilePaths = new Set(projectIndex.removedFilePaths);
-                  const relationData = baseRelations.flatMap((relation) => {
-                    if (removedFilePaths.has(relation.fromFileNode.filePath)) return [];
-                    if (relation.toFileNode?.filePath && removedFilePaths.has(relation.toFileNode.filePath)) return [];
-                    if (changedFilePaths.has(relation.fromFileNode.filePath)) return [];
-                    if (
-                      relation.toFileNode?.filePath &&
-                      changedFilePaths.has(relation.toFileNode.filePath) &&
-                      relation.relationType !== "imports"
-                    ) return [];
-                    const fromNode = fileNodeByPath.get(relation.fromFileNode.filePath);
-                    const toNode = relation.toFileNode?.filePath ? fileNodeByPath.get(relation.toFileNode.filePath) : null;
-                    if (!fromNode) return [];
-                    return [{
-                      repositoryId: input.repositoryId,
-                      branch: input.branch,
-                      fromFileNodeId: fromNode.id,
-                      toFileNodeId: toNode?.id,
-                      relationType: relation.relationType,
-                      confidence: relation.confidence,
-                      evidence: relation.evidence,
-                    }];
-                  }).slice(0, MAX_RELATION_EDGES);
-                  return relationData.length > 0 ? tx.codeRelationEdge.createMany({ data: relationData }) : null;
-                })
-                : Promise.resolve(null);
-
-              return tx.codeRelationEdge.deleteMany({
-                where: {
-                  repositoryId: input.repositoryId,
-                  branch: input.branch,
-                  fromFileNode: { commitSha: targetCommitSha },
-                },
-              }).then(() => copyBaseRelations()).then(() => Promise.all(fileNodes.map((fileNode, index) => {
-                const file = projectIndex.files[index];
-                return tx.codeSymbolNode.deleteMany({ where: { fileNodeId: fileNode.id } })
-                  .then(() => {
-                    if (file.symbols.length === 0) return null;
-                    return tx.codeSymbolNode.createMany({
-                      data: file.symbols.map((symbol) => ({
-                        fileNodeId: fileNode.id,
-                        name: symbol.name,
-                        kind: symbol.kind,
-                        signature: symbol.signature,
-                        startLine: symbol.startLine,
-                        endLine: symbol.endLine,
-                        summary: `${symbol.kind} ${symbol.name} 来自 ${file.filePath}`,
-                      })),
-                    });
-                  });
-              }))).then(() => tx.codeSymbolNode.findMany({
-                where: { fileNodeId: { in: fileNodes.map((node) => node.id) } },
-              })).then((symbols) => {
-                const symbolByFileAndName = new Map(symbols.map((symbol) => [`${symbol.fileNodeId}:${symbol.name}`, symbol]));
-                const relationData = projectIndex.importEdges.flatMap((edge) => {
-                  const fromNode = fileNodeByPath.get(edge.fromPath);
-                  const toNode = edge.toPath ? fileNodeByPath.get(edge.toPath) : null;
-                  if (!fromNode) return [];
-
-                  const baseRelation = {
-                    repositoryId: input.repositoryId,
-                    branch: input.branch,
-                    fromFileNodeId: fromNode.id,
-                    toFileNodeId: toNode?.id,
-                    relationType: "imports",
-                    confidence: toNode ? 0.88 : 0.55,
-                    evidence: `${edge.fromPath} imports ${edge.importPath}`,
-                  };
-
-                  const symbolRelations = toNode
-                    ? edge.importedNames
-                      .slice(0, 6)
-                      .map((name) => {
-                        const targetSymbol = symbolByFileAndName.get(`${toNode.id}:${name}`);
-                        if (!targetSymbol) return null;
-                        return {
-                          repositoryId: input.repositoryId,
-                          branch: input.branch,
-                          fromFileNodeId: fromNode.id,
-                          toFileNodeId: toNode.id,
-                          toSymbolNodeId: targetSymbol.id,
-                          relationType: "uses_symbol",
-                          confidence: 0.78,
-                          evidence: `${edge.fromPath} imports symbol ${name} from ${edge.importPath}`,
-                        };
-                      })
-                      .filter((item): item is NonNullable<typeof item> => Boolean(item))
-                    : [];
-
-                  return [baseRelation, ...symbolRelations];
-                }).slice(0, MAX_RELATION_EDGES);
-
-                if (relationData.length === 0) return snapshot;
-                return tx.codeRelationEdge.createMany({ data: relationData }).then(() => snapshot);
-              });
-              });
-            });
+          return baseNodesPromise
+            .then((baseNodes) => this.copyBaseFileNodes(input, targetCommitSha, baseNodes))
+            .then(() => this.upsertIndexedFileNodes(input, targetCommitSha, projectIndex.files))
+            .then((changedFileNodes) => this.rebuildCodeGraphRelations({
+              input,
+              projectIndex,
+              targetCommitSha,
+              baseSnapshotBranch,
+              baseSnapshotCommitSha,
+              changedFileNodes,
+            }))
+            .then(() => this.markSnapshotReady(snapshot.id, projectIndex));
         });
-      }, {
-        maxWait: CODE_GRAPH_TRANSACTION_MAX_WAIT_MS,
-        timeout: CODE_GRAPH_TRANSACTION_TIMEOUT_MS,
-      });
     });
+  }
+
+  private upsertIndexingSnapshot(input: MemoryIndexInput, projectIndex: ProjectIndex) {
+    const snapshotData = {
+      architectureSummary: projectIndex.architectureSummary,
+      memoryJson: toPrismaJsonInput(projectIndex.memory),
+      entrypointsJson: toPrismaJsonInput(projectIndex.entrypoints),
+      layersJson: toPrismaJsonInput(projectIndex.layers),
+      conventionsJson: toPrismaJsonInput(this.buildSnapshotConventions()),
+      risksJson: toPrismaJsonInput(projectIndex.risks),
+      confidence: 0.82,
+    };
+
+    return prisma.repositoryMemorySnapshot.upsert({
+      where: {
+        repositoryId_branch_commitSha: {
+          repositoryId: input.repositoryId,
+          branch: input.branch,
+          commitSha: input.commitSha,
+        },
+      },
+      update: {
+        ...snapshotData,
+        status: "indexing",
+        lastIndexedAt: new Date(),
+        error: null,
+      },
+      create: {
+        repositoryId: input.repositoryId,
+        branch: input.branch,
+        commitSha: input.commitSha,
+        ...snapshotData,
+        status: "indexing",
+      },
+    });
+  }
+
+  private markSnapshotReady(snapshotId: string, projectIndex: ProjectIndex) {
+    return prisma.repositoryMemorySnapshot.update({
+      where: { id: snapshotId },
+      data: {
+        status: "ready",
+        architectureSummary: projectIndex.architectureSummary,
+        memoryJson: toPrismaJsonInput(projectIndex.memory),
+        entrypointsJson: toPrismaJsonInput(projectIndex.entrypoints),
+        layersJson: toPrismaJsonInput(projectIndex.layers),
+        conventionsJson: toPrismaJsonInput(this.buildSnapshotConventions()),
+        risksJson: toPrismaJsonInput(projectIndex.risks),
+        confidence: 0.82,
+        lastIndexedAt: new Date(),
+        error: null,
+      },
+    });
+  }
+
+  private buildSnapshotConventions() {
+    return {
+      reviewMode: "agent_loop",
+      graphSource: "gitlab_repository_tree",
+      maxIndexedFiles: MAX_INDEXED_FILES,
+      maxFileBytes: MAX_FILE_BYTES,
+      confidenceThreshold: 0.6,
+    };
+  }
+
+  private loadReusableBaseFileNodes(input: {
+    repositoryId: string;
+    baseSnapshotBranch: string;
+    baseSnapshotCommitSha: string;
+    changedFilePaths: string[];
+    removedFilePaths: string[];
+  }) {
+    return prisma.codeFileNode.findMany({
+      where: {
+        repositoryId: input.repositoryId,
+        branch: input.baseSnapshotBranch,
+        commitSha: input.baseSnapshotCommitSha,
+        filePath: {
+          notIn: [
+            ...input.changedFilePaths,
+            ...input.removedFilePaths,
+          ],
+        },
+      },
+      include: {
+        symbols: true,
+      },
+    });
+  }
+
+  private copyBaseFileNodes(
+    input: MemoryIndexInput,
+    targetCommitSha: string,
+    baseNodes: BaseCodeFileNode[],
+  ): Promise<CodeFileNode[]> {
+    return mapWithConcurrency(baseNodes, CODE_GRAPH_DB_WRITE_CONCURRENCY, (baseNode) => {
+      return this.upsertCodeFileNode(input, targetCommitSha, {
+        filePath: baseNode.filePath,
+        contentHash: baseNode.contentHash,
+        language: baseNode.language,
+        role: baseNode.role,
+        summary: baseNode.summary,
+        importsJson: baseNode.importsJson ?? undefined,
+        exportsJson: baseNode.exportsJson ?? undefined,
+      });
+    }).then((copiedNodes) => {
+      const symbolData = copiedNodes.flatMap((copiedNode, index) => {
+        const baseNode = baseNodes[index];
+        if (!baseNode) return [];
+        return baseNode.symbols.map((symbol) => ({
+          fileNodeId: copiedNode.id,
+          name: symbol.name,
+          kind: symbol.kind,
+          signature: symbol.signature,
+          startLine: symbol.startLine,
+          endLine: symbol.endLine,
+          summary: symbol.summary,
+        }));
+      });
+
+      return this.replaceSymbolsForFileNodes(
+        copiedNodes.map((node) => node.id),
+        symbolData,
+      ).then(() => copiedNodes);
+    });
+  }
+
+  private upsertIndexedFileNodes(
+    input: MemoryIndexInput,
+    targetCommitSha: string,
+    files: IndexedFile[],
+  ): Promise<CodeFileNode[]> {
+    return mapWithConcurrency(files, CODE_GRAPH_DB_WRITE_CONCURRENCY, (file) => {
+      return this.upsertCodeFileNode(input, targetCommitSha, {
+        filePath: file.filePath,
+        contentHash: file.contentHash,
+        language: file.language,
+        role: file.role,
+        summary: file.summary,
+        importsJson: toPrismaJsonInput(file.imports),
+        exportsJson: toPrismaJsonInput(file.exports),
+      });
+    }).then((fileNodes) => {
+      const symbolData = fileNodes.flatMap((fileNode, index) => {
+        const file = files[index];
+        if (!file) return [];
+        return file.symbols.map((symbol) => ({
+          fileNodeId: fileNode.id,
+          name: symbol.name,
+          kind: symbol.kind,
+          signature: symbol.signature,
+          startLine: symbol.startLine,
+          endLine: symbol.endLine,
+          summary: `${symbol.kind} ${symbol.name} 来自 ${file.filePath}`,
+        }));
+      });
+
+      return this.replaceSymbolsForFileNodes(
+        fileNodes.map((node) => node.id),
+        symbolData,
+      ).then(() => fileNodes);
+    });
+  }
+
+  private upsertCodeFileNode(
+    input: MemoryIndexInput,
+    targetCommitSha: string,
+    file: {
+      filePath: string;
+      contentHash: string;
+      language: string;
+      role: string;
+      summary: string;
+      importsJson?: Prisma.InputJsonValue;
+      exportsJson?: Prisma.InputJsonValue;
+    },
+  ) {
+    return prisma.codeFileNode.upsert({
+      where: {
+        repositoryId_branch_commitSha_filePath: {
+          repositoryId: input.repositoryId,
+          branch: input.branch,
+          commitSha: targetCommitSha,
+          filePath: file.filePath,
+        },
+      },
+      update: {
+        contentHash: file.contentHash,
+        language: file.language,
+        role: file.role,
+        summary: file.summary,
+        importsJson: file.importsJson,
+        exportsJson: file.exportsJson,
+        lastIndexedAt: new Date(),
+      },
+      create: {
+        repositoryId: input.repositoryId,
+        branch: input.branch,
+        commitSha: targetCommitSha,
+        filePath: file.filePath,
+        contentHash: file.contentHash,
+        language: file.language,
+        role: file.role,
+        summary: file.summary,
+        importsJson: file.importsJson,
+        exportsJson: file.exportsJson,
+      },
+    });
+  }
+
+  private replaceSymbolsForFileNodes(
+    fileNodeIds: string[],
+    symbolData: Prisma.CodeSymbolNodeCreateManyInput[],
+  ) {
+    if (fileNodeIds.length === 0) return Promise.resolve();
+
+    return prisma.codeSymbolNode.deleteMany({
+      where: { fileNodeId: { in: fileNodeIds } },
+    }).then(() => {
+      if (symbolData.length === 0) return Promise.resolve();
+      return this.createSymbolNodesInBatches(symbolData);
+    });
+  }
+
+  private rebuildCodeGraphRelations(input: {
+    input: MemoryIndexInput;
+    projectIndex: ProjectIndex;
+    targetCommitSha: string;
+    baseSnapshotBranch: string;
+    baseSnapshotCommitSha?: string | null;
+    changedFileNodes: CodeFileNode[];
+  }) {
+    return prisma.codeFileNode.findMany({
+      where: {
+        repositoryId: input.input.repositoryId,
+        branch: input.input.branch,
+        commitSha: input.targetCommitSha,
+      },
+    }).then((allFileNodes) => {
+      const fileNodeByPath = new Map(allFileNodes.map((node) => [node.filePath, node]));
+      return prisma.codeRelationEdge.deleteMany({
+        where: {
+          repositoryId: input.input.repositoryId,
+          branch: input.input.branch,
+          fromFileNode: { commitSha: input.targetCommitSha },
+        },
+      }).then(() => {
+        return input.baseSnapshotCommitSha
+          ? this.copyBaseRelations({
+            input: input.input,
+            projectIndex: input.projectIndex,
+            baseSnapshotBranch: input.baseSnapshotBranch,
+            baseSnapshotCommitSha: input.baseSnapshotCommitSha,
+            fileNodeByPath,
+          })
+          : Promise.resolve();
+      }).then(() => this.createCurrentImportRelations({
+        input: input.input,
+        projectIndex: input.projectIndex,
+        changedFileNodes: input.changedFileNodes,
+        fileNodeByPath,
+      }));
+    });
+  }
+
+  private copyBaseRelations(input: {
+    input: MemoryIndexInput;
+    projectIndex: ProjectIndex;
+    baseSnapshotBranch: string;
+    baseSnapshotCommitSha: string;
+    fileNodeByPath: Map<string, CodeFileNode>;
+  }) {
+    return prisma.codeRelationEdge.findMany({
+      where: {
+        repositoryId: input.input.repositoryId,
+        branch: input.baseSnapshotBranch,
+        fromFileNode: { commitSha: input.baseSnapshotCommitSha },
+      },
+      include: {
+        fromFileNode: { select: { filePath: true } },
+        toFileNode: { select: { filePath: true } },
+      },
+    }).then((baseRelations) => {
+      const changedFilePaths = new Set(input.projectIndex.files.map((file) => file.filePath));
+      const removedFilePaths = new Set(input.projectIndex.removedFilePaths);
+      const relationData = baseRelations.flatMap((relation) => {
+        if (removedFilePaths.has(relation.fromFileNode.filePath)) return [];
+        if (relation.toFileNode?.filePath && removedFilePaths.has(relation.toFileNode.filePath)) return [];
+        if (changedFilePaths.has(relation.fromFileNode.filePath)) return [];
+        if (
+          relation.toFileNode?.filePath &&
+          changedFilePaths.has(relation.toFileNode.filePath) &&
+          relation.relationType !== "imports"
+        ) return [];
+
+        const fromNode = input.fileNodeByPath.get(relation.fromFileNode.filePath);
+        const toNode = relation.toFileNode?.filePath
+          ? input.fileNodeByPath.get(relation.toFileNode.filePath)
+          : null;
+        if (!fromNode) return [];
+
+        return [{
+          repositoryId: input.input.repositoryId,
+          branch: input.input.branch,
+          fromFileNodeId: fromNode.id,
+          toFileNodeId: toNode?.id,
+          relationType: relation.relationType,
+          confidence: relation.confidence,
+          evidence: relation.evidence,
+        }];
+      }).slice(0, MAX_RELATION_EDGES);
+
+      return this.createRelationEdgesInBatches(relationData);
+    });
+  }
+
+  private createCurrentImportRelations(input: {
+    input: MemoryIndexInput;
+    projectIndex: ProjectIndex;
+    changedFileNodes: CodeFileNode[];
+    fileNodeByPath: Map<string, CodeFileNode>;
+  }) {
+    return prisma.codeSymbolNode.findMany({
+      where: { fileNodeId: { in: input.changedFileNodes.map((node) => node.id) } },
+    }).then((symbols) => {
+      const symbolByFileAndName = new Map(symbols.map((symbol) => [`${symbol.fileNodeId}:${symbol.name}`, symbol]));
+      const relationData = input.projectIndex.importEdges.flatMap((edge) => {
+        const fromNode = input.fileNodeByPath.get(edge.fromPath);
+        const toNode = edge.toPath ? input.fileNodeByPath.get(edge.toPath) : null;
+        if (!fromNode) return [];
+
+        const baseRelation = {
+          repositoryId: input.input.repositoryId,
+          branch: input.input.branch,
+          fromFileNodeId: fromNode.id,
+          toFileNodeId: toNode?.id,
+          relationType: "imports",
+          confidence: toNode ? 0.88 : 0.55,
+          evidence: `${edge.fromPath} imports ${edge.importPath}`,
+        };
+
+        const symbolRelations = toNode
+          ? edge.importedNames
+            .slice(0, 6)
+            .map((name) => {
+              const targetSymbol = symbolByFileAndName.get(`${toNode.id}:${name}`);
+              if (!targetSymbol) return null;
+              return {
+                repositoryId: input.input.repositoryId,
+                branch: input.input.branch,
+                fromFileNodeId: fromNode.id,
+                toFileNodeId: toNode.id,
+                toSymbolNodeId: targetSymbol.id,
+                relationType: "uses_symbol",
+                confidence: 0.78,
+                evidence: `${edge.fromPath} imports symbol ${name} from ${edge.importPath}`,
+              };
+            })
+            .filter((item): item is NonNullable<typeof item> => Boolean(item))
+          : [];
+
+        return [baseRelation, ...symbolRelations];
+      }).slice(0, MAX_RELATION_EDGES);
+
+      return this.createRelationEdgesInBatches(relationData);
+    });
+  }
+
+  private createSymbolNodesInBatches(data: Prisma.CodeSymbolNodeCreateManyInput[]) {
+    return this.createManyInBatches(data, (batch) => (
+      prisma.codeSymbolNode.createMany({ data: batch }).then(() => undefined)
+    ));
+  }
+
+  private createRelationEdgesInBatches(data: Prisma.CodeRelationEdgeCreateManyInput[]) {
+    return this.createManyInBatches(data, (batch) => (
+      prisma.codeRelationEdge.createMany({ data: batch }).then(() => undefined)
+    ));
+  }
+
+  private createManyInBatches<T>(
+    data: T[],
+    createMany: (batch: T[]) => Promise<void>,
+  ): Promise<void> {
+    return chunkArray(data, CODE_GRAPH_CREATE_BATCH_SIZE).reduce<Promise<void>>((promise, batch) => {
+      return promise.then(() => {
+        if (batch.length === 0) return Promise.resolve();
+        return createMany(batch);
+      });
+    }, Promise.resolve());
   }
 
   private buildProjectIndex(input: MemoryIndexInput): Promise<ProjectIndex> {

@@ -78,6 +78,7 @@ type OpenAICompatibleResponse = {
 
 type ReviewCodeOptions = {
   responseFormat?: 'text' | 'jsonObject'
+  onChunk?: (chunk: string, fullText: string) => void | Promise<void>
 }
 
 // 业务建议上限：AI 单次调用最多等待 6000 秒。
@@ -102,6 +103,10 @@ export class AIService {
     options: ReviewCodeOptions = {}
   ): Promise<string> {
     try {
+      if (options.onChunk) {
+        return await this.reviewCodeStreaming(prompt, modelConfig, systemPrompt, options)
+      }
+
       // 自定义模型使用 OpenAI SDK 直接调用，避免 Vercel AI SDK 兼容性问题
       if (modelConfig.provider === 'custom') {
         return await this.reviewCodeWithOpenAISDK(prompt, modelConfig, systemPrompt, options)
@@ -151,6 +156,54 @@ export class AIService {
     }
   }
 
+  private async reviewCodeStreaming(
+    prompt: string,
+    modelConfig: AIModelConfig,
+    systemPrompt: string,
+    options: ReviewCodeOptions
+  ): Promise<string> {
+    if (modelConfig.provider === 'custom') {
+      return this.reviewCodeWithOpenAISDKStreaming(prompt, modelConfig, systemPrompt, options)
+    }
+
+    let model
+
+    switch (modelConfig.provider) {
+      case 'openai':
+        const openaiClient = createOpenAI({ apiKey: modelConfig.apiKey })
+        model = openaiClient(modelConfig.modelId)
+        break
+      case 'claude':
+        const anthropicClient = createAnthropic({ apiKey: modelConfig.apiKey })
+        model = anthropicClient(modelConfig.modelId)
+        break
+      default:
+        throw new Error(`Unsupported AI provider: ${modelConfig.provider}`)
+    }
+
+    let fullText = ''
+    const response = streamText({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      output: options.responseFormat === 'jsonObject' ? Output.json() : Output.text(),
+      timeout: { totalMs: AI_REQUEST_TIMEOUT_MS },
+      onChunk: ({ chunk }) => {
+        if (chunk.type !== 'text-delta') return
+        fullText += chunk.text
+        return options.onChunk?.(chunk.text, fullText)
+      },
+    })
+
+    if (options.responseFormat === 'jsonObject') {
+      return JSON.stringify(await response.output)
+    }
+
+    return response.text.then((text) => text || fullText)
+  }
+
   /**
    * 使用 OpenAI SDK 调用自定义模型
    * 根据 API 端点自动判断使用 OpenAI 还是 Anthropic 格式
@@ -171,6 +224,20 @@ export class AIService {
     }
 
     return this.callOpenAIAPI(prompt, modelConfig, systemPrompt, options)
+  }
+
+  private reviewCodeWithOpenAISDKStreaming(
+    prompt: string,
+    modelConfig: AIModelConfig,
+    systemPrompt: string = SYSTEM_PROMPT,
+    options: ReviewCodeOptions = {}
+  ): Promise<string> {
+    const isAnthropicFormat = modelConfig.apiEndpoint?.includes('anthropic')
+    if (isAnthropicFormat) {
+      return this.callAnthropicAPIStreaming(prompt, modelConfig, systemPrompt, options)
+    }
+
+    return this.callOpenAIAPIStreaming(prompt, modelConfig, systemPrompt, options)
   }
 
   /**
@@ -219,6 +286,51 @@ export class AIService {
     }
 
     return content
+  }
+
+  private async callOpenAIAPIStreaming(
+    prompt: string,
+    modelConfig: AIModelConfig,
+    systemPrompt: string = SYSTEM_PROMPT,
+    options: ReviewCodeOptions = {}
+  ): Promise<string> {
+    const client = new OpenAI({
+      apiKey: modelConfig.apiKey,
+      baseURL: modelConfig.apiEndpoint,
+      timeout: AI_REQUEST_TIMEOUT_MS,
+    })
+
+    const stream = await client.chat.completions.create(
+      {
+        model: modelConfig.modelId,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: modelConfig.maxTokens || 4096,
+        temperature: modelConfig.temperature || 0.3,
+        response_format: options.responseFormat === 'jsonObject' ? { type: 'json_object' } : undefined,
+        stream: true,
+      },
+      {
+        signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
+        timeout: AI_REQUEST_TIMEOUT_MS,
+      }
+    )
+
+    let fullText = ''
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content || ''
+      if (!text) continue
+      fullText += text
+      await options.onChunk?.(text, fullText)
+    }
+
+    if (!fullText.trim()) {
+      throw new Error('Unexpected OpenAI-compatible streaming response format')
+    }
+
+    return fullText
   }
 
   private normalizeOpenAICompatibleResponse(response: unknown): OpenAICompatibleResponse | string {
@@ -377,6 +489,117 @@ export class AIService {
     throw new Error('All retry attempts failed')
   }
 
+  private async callAnthropicAPIStreaming(
+    prompt: string,
+    modelConfig: AIModelConfig,
+    systemPrompt: string = SYSTEM_PROMPT,
+    options: ReviewCodeOptions = {},
+    retries = 3
+  ): Promise<string> {
+    let apiUrl = modelConfig.apiEndpoint || ''
+    if (!apiUrl.endsWith('/v1/messages')) {
+      apiUrl = apiUrl.replace(/\/$/, '')
+      apiUrl = `${apiUrl}/v1/messages`
+    }
+
+    const timeoutSignal = AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': modelConfig.apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: modelConfig.modelId,
+            max_tokens: modelConfig.maxTokens || 4096,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: prompt }],
+            stream: true,
+          }),
+          signal: timeoutSignal,
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          log.error('Anthropic streaming API error:', response.status, errorText)
+          throw new Error(`Anthropic API error: ${response.status}`)
+        }
+
+        if (!response.body) {
+          throw new Error('Anthropic streaming response body is empty')
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let fullText = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parts = buffer.split('\n\n')
+          buffer = parts.pop() || ''
+
+          for (const part of parts) {
+            const text = this.extractAnthropicStreamText(part)
+            if (!text) continue
+            fullText += text
+            await options.onChunk?.(text, fullText)
+          }
+        }
+
+        const finalText = this.extractAnthropicStreamText(buffer)
+        if (finalText) {
+          fullText += finalText
+          await options.onChunk?.(finalText, fullText)
+        }
+
+        if (!fullText.trim()) {
+          throw new Error('Unexpected Anthropic streaming response format')
+        }
+
+        return fullText
+      } catch (error) {
+        log.error(`❌ Streaming attempt ${attempt}/${retries} failed:`, error)
+
+        if (timeoutSignal.aborted) {
+          throw error
+        }
+
+        if (attempt < retries) {
+          const delay = attempt * 2000
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        } else {
+          throw error
+        }
+      }
+    }
+
+    throw new Error('All streaming retry attempts failed')
+  }
+
+  private extractAnthropicStreamText(part: string) {
+    return part.split('\n').reduce((text, line) => {
+      if (!line.startsWith('data:')) return text
+      const data = line.slice(5).trim()
+      if (!data || data === '[DONE]') return text
+      try {
+        const parsed = JSON.parse(data) as { type?: unknown; delta?: { text?: unknown } }
+        if (parsed.type === 'content_block_delta' && typeof parsed.delta?.text === 'string') {
+          return text + parsed.delta.text
+        }
+      } catch {
+        return text
+      }
+      return text
+    }, '')
+  }
+
   /**
    * 流式代码审查（用于实时显示）
    */
@@ -422,7 +645,7 @@ export class AIService {
       for await (const chunk of result.textStream) {
         fullText += chunk
         if (onChunk) {
-          onChunk(chunk)
+          await onChunk(chunk)
         }
       }
 

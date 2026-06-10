@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Activity, AlertCircle, ExternalLink, Gitlab, Loader2, RefreshCw, Route } from 'lucide-react'
+import { Activity, AlertCircle, ExternalLink, Gitlab, Loader2, MessageSquareText, RefreshCw, Route } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type {
@@ -10,7 +10,11 @@ import type {
   ReviewWorkflowSnapshot,
   WorkflowIssue,
 } from './review-workflow-types'
-import { reviewWorkflowKindLabels } from './review-workflow-types'
+import {
+  compactWorkflowText,
+  getWorkflowNodeMessage,
+  reviewWorkflowKindLabels,
+} from './review-workflow-types'
 
 const WorkflowCanvas = dynamic(
   () => import('./review-workflow-canvas').then((mod) => mod.ReviewWorkflowCanvas),
@@ -120,19 +124,46 @@ function nodeTimestamp(node: ReviewWorkflowNode) {
 }
 
 function nodeConsoleMessage(node: ReviewWorkflowNode) {
-  if (node.status === 'failed') {
-    return node.detail || node.summary || '步骤执行失败'
-  }
-  if (node.status === 'running') {
-    return node.detail || node.summary || '正在执行'
-  }
-  return node.summary || node.detail || '状态已更新'
+  return compactWorkflowText(getWorkflowNodeMessage(node), 180)
+}
+
+function isStreamingReviewNode(node: ReviewWorkflowNode) {
+  return node.kind === 'iteration_stage' && node.nodeKey.includes(':review') && node.status === 'running'
 }
 
 function issueMatchesNode(issue: WorkflowIssue, node: ReviewWorkflowNode | null) {
   if (!node) return false
   if (!node.reviewBotRunId) return node.kind === 'aggregate' || node.kind === 'publish' || node.kind === 'finish'
   return issue.reviewBotRunId === node.reviewBotRunId
+}
+
+function AgentStreamingOutput({
+  node,
+}: {
+  node: ReviewWorkflowNode | null
+}) {
+  if (!node?.detail) return null
+
+  return (
+    <section className="rounded-xl border border-primary/20 bg-primary/5">
+      <div className="flex items-center justify-between gap-3 border-b border-primary/10 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <MessageSquareText className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold text-foreground">Agent 流式输出</p>
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{node.title}</p>
+        </div>
+        <Badge className={statusClassNames.running}>
+          <Loader2 className="h-3 w-3 animate-spin" />
+          生成中
+        </Badge>
+      </div>
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-xs leading-5 text-foreground/85">
+        {node.detail}
+      </pre>
+    </section>
+  )
 }
 
 function WorkflowMetric({
@@ -167,6 +198,8 @@ function NodeInspector({
     )
   }
 
+  const nodeMessage = compactWorkflowText(getWorkflowNodeMessage(node), node.status === 'failed' ? 180 : 320)
+
   return (
     <section className="rounded-xl border border-border/60 bg-card/90 p-4 shadow-[0_8px_18px_rgba(20,20,19,0.04)]">
       <div className="flex flex-wrap items-center gap-2">
@@ -178,11 +211,11 @@ function NodeInspector({
       </div>
 
       <h3 className="mt-3 text-base font-semibold leading-6 text-card-foreground">{node.title}</h3>
-      {node.summary && (
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">{node.summary}</p>
+      {nodeMessage && (
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">{nodeMessage}</p>
       )}
       {node.detail && (
-        <p className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/35 p-3 text-xs leading-5 text-foreground/80">
+        <p className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/35 p-3 font-mono text-xs leading-5 text-foreground/80">
           {node.detail}
         </p>
       )}
@@ -355,6 +388,8 @@ export function ReviewWorkflowTab({
         setWorkflow(data)
         setSelectedNodeKey((current) => {
           if (current && data.nodes.some((node) => node.nodeKey === current)) return current
+          const streamingReviewNode = data.nodes.find(isStreamingReviewNode)
+          if (streamingReviewNode) return streamingReviewNode.nodeKey
           return data.nodes.at(-1)?.nodeKey || null
         })
       })
@@ -415,6 +450,10 @@ export function ReviewWorkflowTab({
 
   const runningNode = useMemo(() => (
     workflow?.nodes.find((node) => node.status === 'running') || null
+  ), [workflow])
+
+  const streamingReviewNode = useMemo(() => (
+    workflow?.nodes.find(isStreamingReviewNode) || null
   ), [workflow])
 
   useEffect(() => {
@@ -483,6 +522,7 @@ export function ReviewWorkflowTab({
       </section>
 
       <aside className="flex min-h-0 flex-col gap-4">
+        <AgentStreamingOutput node={streamingReviewNode} />
         <NodeInspector
           node={selectedNode}
           relatedIssues={relatedIssues}

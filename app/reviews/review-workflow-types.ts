@@ -56,3 +56,20 @@ export const reviewWorkflowKindLabels: Record<string, string> = {
   publish: '发布',
   finish: '结束',
 }
+
+export function compactWorkflowText(value: string | null | undefined, maxLength: number) {
+  const normalized = value?.replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
+export function getWorkflowNodeMessage(node: ReviewWorkflowNode) {
+  if (node.status === 'failed') {
+    return node.summary || '步骤执行失败'
+  }
+  if (node.status === 'running') {
+    return node.summary || node.detail || '正在执行'
+  }
+  return node.summary || node.detail || '状态已更新'
+}

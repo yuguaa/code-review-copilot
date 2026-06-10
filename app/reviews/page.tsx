@@ -12,7 +12,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ReviewWorkflowTab } from './review-workflow-tab'
 import {
   Dialog,
@@ -1425,27 +1424,7 @@ export default function ReviewsPage() {
 
                 <main className="min-h-0 overflow-y-auto p-5">
                   <div className="mx-auto max-w-6xl space-y-5">
-                    <Tabs defaultValue="workflow" className="sticky top-0 z-10 rounded-xl border border-border/60 bg-background/95 p-2 shadow-sm backdrop-blur">
-                      <TabsList variant="line" className="w-full justify-start overflow-x-auto">
-                        <TabsTrigger value="workflow" asChild>
-                          <a href="#review-workflow">过程图</a>
-                        </TabsTrigger>
-                        <TabsTrigger value="issues" asChild>
-                          <a href="#review-issues">问题</a>
-                        </TabsTrigger>
-                        <TabsTrigger value="summary" asChild>
-                          <a href="#review-summary">摘要</a>
-                        </TabsTrigger>
-                        <TabsTrigger value="agents" asChild>
-                          <a href="#review-agents">Agent</a>
-                        </TabsTrigger>
-                        <TabsTrigger value="raw" asChild>
-                          <a href="#review-raw">原始材料</a>
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-
-                    <section id="review-workflow" className="scroll-mt-20 rounded-2xl border border-border/60 bg-background p-5">
+                    <section id="review-workflow" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
                       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Dynamic Workflow</p>

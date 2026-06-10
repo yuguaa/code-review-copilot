@@ -16,7 +16,11 @@ import type {
   ReviewWorkflowNode,
   ReviewWorkflowSnapshot,
 } from './review-workflow-types'
-import { reviewWorkflowKindLabels } from './review-workflow-types'
+import {
+  compactWorkflowText,
+  getWorkflowNodeMessage,
+  reviewWorkflowKindLabels,
+} from './review-workflow-types'
 
 type ReviewWorkflowCanvasProps = {
   workflow: ReviewWorkflowSnapshot
@@ -76,6 +80,7 @@ function formatDuration(durationMs: number | null) {
 
 function nodeLabel(node: ReviewWorkflowNode) {
   const duration = formatDuration(node.durationMs)
+  const message = compactWorkflowText(getWorkflowNodeMessage(node), 54)
   return (
     <div className="w-[210px] text-left">
       <div className="flex items-center justify-between gap-2">
@@ -87,8 +92,8 @@ function nodeLabel(node: ReviewWorkflowNode) {
         </span>
       </div>
       <div className="mt-1.5 truncate text-sm font-semibold">{node.title}</div>
-      {node.summary && (
-        <div className="mt-1 line-clamp-1 text-xs leading-4 opacity-80">{node.summary}</div>
+      {message && (
+        <div className="mt-1 truncate text-xs leading-4 opacity-80">{message}</div>
       )}
       {duration && (
         <div className="mt-2 font-mono text-[10px] opacity-60">{duration}</div>
