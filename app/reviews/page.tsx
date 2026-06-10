@@ -986,14 +986,14 @@ export default function ReviewsPage() {
 
       {/* 审查详情弹窗 */}
       <Dialog open={!!selectedReview} onOpenChange={() => setSelectedReview(null)}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-y-auto border-border/60 p-0 shadow-2xl sm:max-w-none" showCloseButton={false}>
+        <DialogContent className="max-h-[min(84dvh,900px)] w-[calc(100vw-2rem)] max-w-6xl overflow-hidden border-border/60 p-0 shadow-xl sm:max-w-6xl" showCloseButton={false}>
           {selectedReview && (
-            <div className="flex min-w-0 flex-col bg-background">
-              <DialogHeader className="border-b border-border/50 bg-[linear-gradient(135deg,var(--sidebar)_0%,var(--background)_55%,color-mix(in_srgb,var(--primary)_10%,var(--background))_100%)] px-6 py-5">
+            <div className="flex max-h-[min(84dvh,900px)] min-w-0 flex-col overflow-hidden bg-background">
+              <DialogHeader className="shrink-0 border-b border-border/50 bg-[linear-gradient(135deg,var(--sidebar)_0%,var(--background)_55%,color-mix(in_srgb,var(--primary)_10%,var(--background))_100%)] px-5 py-4">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <DialogTitle className="text-2xl font-semibold tracking-tight">
+                      <DialogTitle className="text-xl font-semibold tracking-tight">
                         {getReviewVerdict(selectedReview)}
                       </DialogTitle>
                       {getStatusBadge(selectedReview.status)}
@@ -1052,24 +1052,24 @@ export default function ReviewsPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                  <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+                <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
+                  <div className="rounded-xl border border-border/60 bg-background/70 p-2.5">
                     <p className="text-xs text-muted-foreground">问题总数</p>
-                    <p className="mt-1 text-2xl font-semibold">{issueCount(selectedReview)}</p>
+                    <p className="mt-1 text-xl font-semibold">{issueCount(selectedReview)}</p>
                   </div>
-                  <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3">
+                  <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-2.5">
                     <p className="text-xs text-muted-foreground">严重</p>
-                    <p className="mt-1 text-2xl font-semibold text-destructive">{selectedReview.criticalIssues}</p>
+                    <p className="mt-1 text-xl font-semibold text-destructive">{selectedReview.criticalIssues}</p>
                   </div>
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-2.5">
                     <p className="text-xs text-muted-foreground">一般</p>
-                    <p className="mt-1 text-2xl font-semibold text-amber-700">{selectedReview.normalIssues}</p>
+                    <p className="mt-1 text-xl font-semibold text-amber-700">{selectedReview.normalIssues}</p>
                   </div>
-                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-2.5">
                     <p className="text-xs text-muted-foreground">建议</p>
-                    <p className="mt-1 text-2xl font-semibold text-blue-700">{selectedReview.suggestions}</p>
+                    <p className="mt-1 text-xl font-semibold text-blue-700">{selectedReview.suggestions}</p>
                   </div>
-                  <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+                  <div className="rounded-xl border border-border/60 bg-background/70 p-2.5">
                     <p className="text-xs text-muted-foreground">用时 / 文件</p>
                     <p className="mt-1 text-sm font-medium text-foreground">
                       {formatDuration(selectedReview.startedAt, selectedReview.completedAt) || '进行中'} · {selectedReview.reviewedFiles}/{selectedReview.totalFiles}
@@ -1079,7 +1079,7 @@ export default function ReviewsPage() {
                 </div>
               </DialogHeader>
 
-              <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)]">
+              <div className="grid min-h-0 grid-cols-1 overflow-y-auto xl:grid-cols-[280px_minmax(0,1fr)]">
                 <aside className="border-b border-border/50 bg-sidebar/25 p-4 lg:border-b-0 lg:border-r">
                   <div className="space-y-4">
                     <section className="rounded-xl border border-border/60 bg-background/80 p-4">
