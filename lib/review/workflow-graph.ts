@@ -28,6 +28,9 @@ export type WorkflowGraphEdge = {
   kind: "main" | "parent" | "agent" | "loop";
 };
 
+const RUN_AGENTS_NODE_KEY = "run_agents";
+const AGGREGATE_NODE_KEY = "aggregate";
+
 function toGraphNode(node: ReviewWorkflowNode): WorkflowGraphNode {
   return {
     id: node.nodeKey,
@@ -67,7 +70,7 @@ function fallbackAgentParentKey(node: ReviewWorkflowNode, nodeKeys: Set<string>)
 
   const iterationIndex = parts.indexOf("iteration");
   if (iterationIndex === -1) {
-    return nodeKeys.has("run_agents") ? "run_agents" : null;
+    return nodeKeys.has(RUN_AGENTS_NODE_KEY) ? RUN_AGENTS_NODE_KEY : null;
   }
 
   const iteration = parts[iterationIndex + 1];
@@ -90,18 +93,75 @@ function fallbackAgentParentKey(node: ReviewWorkflowNode, nodeKeys: Set<string>)
   return null;
 }
 
+function resolveParentNodeKey(node: ReviewWorkflowNode, nodeKeys: Set<string>) {
+  return node.parentNodeKey && nodeKeys.has(node.parentNodeKey)
+    ? node.parentNodeKey
+    : fallbackAgentParentKey(node, nodeKeys);
+}
+
+function agentBotRunId(node: ReviewWorkflowNode) {
+  if (!node.nodeKey.startsWith("agent:")) return null;
+  return node.nodeKey.split(":")[1] || null;
+}
+
+function agentLoopStage(node: ReviewWorkflowNode) {
+  if (!node.nodeKey.startsWith("agent:")) return null;
+  const parts = node.nodeKey.split(":");
+  const iterationIndex = parts.indexOf("iteration");
+  if (iterationIndex === -1) return null;
+  if (node.kind === "decision") return "decision";
+  return parts[iterationIndex + 2] || null;
+}
+
+function isAgentRootNode(node: ReviewWorkflowNode) {
+  return node.nodeKey.startsWith("agent:") && !node.nodeKey.includes(":iteration:");
+}
+
+function isAgentLoopTerminalNode(node: ReviewWorkflowNode) {
+  const stage = agentLoopStage(node);
+  return stage === "finish" || stage === "error";
+}
+
+function latestNode(left: ReviewWorkflowNode, right: ReviewWorkflowNode) {
+  if (left.sequence !== right.sequence) return left.sequence > right.sequence ? left : right;
+  return left.createdAt > right.createdAt ? left : right;
+}
+
+function aggregateBridgeSources(sorted: ReviewWorkflowNode[], nodeKeys: Set<string>) {
+  const primaryAgentRoots = sorted.filter((node) => (
+    isAgentRootNode(node) && resolveParentNodeKey(node, nodeKeys) === RUN_AGENTS_NODE_KEY
+  ));
+  const primaryBotRunIds = new Set(primaryAgentRoots.map(agentBotRunId).filter(Boolean));
+  if (primaryBotRunIds.size === 0) return [];
+
+  const terminalByBotRunId = new Map<string, ReviewWorkflowNode>();
+  sorted.forEach((node) => {
+    const botRunId = agentBotRunId(node);
+    if (!botRunId || !primaryBotRunIds.has(botRunId) || !isAgentLoopTerminalNode(node)) return;
+    const current = terminalByBotRunId.get(botRunId);
+    terminalByBotRunId.set(botRunId, current ? latestNode(current, node) : node);
+  });
+
+  if (terminalByBotRunId.size > 0) {
+    return [...terminalByBotRunId.values()].sort((left, right) => (
+      left.sequence - right.sequence || left.createdAt.getTime() - right.createdAt.getTime()
+    ));
+  }
+
+  return primaryAgentRoots;
+}
+
 export function buildWorkflowGraph(nodes: ReviewWorkflowNode[]) {
   const sorted = [...nodes].sort((left, right) => (
     left.sequence - right.sequence || left.createdAt.getTime() - right.createdAt.getTime()
   ));
   const nodeKeys = new Set(sorted.map((node) => node.nodeKey));
   const edgeMap = new Map<string, WorkflowGraphEdge>();
+  const bridgeSources = aggregateBridgeSources(sorted, nodeKeys);
   let previousMainNode: ReviewWorkflowNode | null = null;
 
   sorted.forEach((node) => {
-    const parentNodeKey = node.parentNodeKey && nodeKeys.has(node.parentNodeKey)
-      ? node.parentNodeKey
-      : fallbackAgentParentKey(node, nodeKeys);
+    const parentNodeKey = resolveParentNodeKey(node, nodeKeys);
 
     if (parentNodeKey) {
       const edge: WorkflowGraphEdge = {
@@ -116,6 +176,22 @@ export function buildWorkflowGraph(nodes: ReviewWorkflowNode[]) {
     }
 
     if (node.parentNodeKey || node.nodeKey.startsWith("agent:")) return;
+
+    if (node.nodeKey === AGGREGATE_NODE_KEY && bridgeSources.length > 0) {
+      bridgeSources.forEach((sourceNode) => {
+        const edge: WorkflowGraphEdge = {
+          id: `${sourceNode.nodeKey}->${node.nodeKey}`,
+          source: sourceNode.nodeKey,
+          target: node.nodeKey,
+          label: edgeLabel(node),
+          kind: "main",
+        };
+        edgeMap.set(edge.id, edge);
+      });
+      previousMainNode = node;
+      return;
+    }
+
     const previous = previousMainNode;
     previousMainNode = node;
     if (!previous) return;
