@@ -1236,9 +1236,9 @@ export default function ReviewsPage() {
 
       {/* 审查详情弹窗 */}
       <Dialog open={!!selectedReview} onOpenChange={() => setSelectedReview(null)}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-none sm:max-w-[1500px] max-h-[92vh] overflow-hidden p-0 border-border/60 shadow-2xl min-w-0" showCloseButton={false}>
+        <DialogContent className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-hidden border-border/60 p-0 shadow-2xl sm:max-w-none" showCloseButton={false}>
           {selectedReview && (
-            <div className="flex h-[90vh] min-w-0 flex-col bg-background">
+            <div className="flex h-full min-w-0 flex-col bg-background">
               <DialogHeader className="border-b border-border/50 bg-[linear-gradient(135deg,var(--sidebar)_0%,var(--background)_55%,color-mix(in_srgb,var(--primary)_10%,var(--background))_100%)] px-6 py-5">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
@@ -1329,7 +1329,7 @@ export default function ReviewsPage() {
                 </div>
               </DialogHeader>
 
-              <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[360px_minmax(0,1fr)]">
+              <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)]">
                 <aside className="min-h-0 overflow-y-auto border-b border-border/50 bg-sidebar/25 p-4 lg:border-b-0 lg:border-r">
                   <div className="space-y-4">
                     <section className="rounded-xl border border-border/60 bg-background/80 p-4">
@@ -1422,8 +1422,8 @@ export default function ReviewsPage() {
                   </div>
                 </aside>
 
-                <main className="min-h-0 overflow-y-auto p-5">
-                  <div className="mx-auto max-w-6xl space-y-5">
+                <main className="min-h-0 overflow-y-auto p-4 xl:p-5">
+                  <div className="mx-auto w-full max-w-none space-y-5">
                     <section id="review-workflow" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
                       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>

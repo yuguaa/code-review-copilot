@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Activity, AlertCircle, ExternalLink, Gitlab, Loader2, MessageSquareText, RefreshCw, Route } from 'lucide-react'
+import { Activity, AlertCircle, ExternalLink, Gitlab, Loader2, RefreshCw, Route } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type {
@@ -21,7 +21,7 @@ const WorkflowCanvas = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[560px] items-center justify-center rounded-lg border border-border/60 bg-muted/30 text-sm text-muted-foreground">
+      <div className="flex h-[min(70vh,780px)] min-h-[640px] items-center justify-center rounded-lg border border-border/60 bg-muted/30 text-sm text-muted-foreground">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         加载过程图...
       </div>
@@ -137,32 +137,162 @@ function issueMatchesNode(issue: WorkflowIssue, node: ReviewWorkflowNode | null)
   return issue.reviewBotRunId === node.reviewBotRunId
 }
 
-function AgentStreamingOutput({
-  node,
+function asRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function stringValue(value: unknown) {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return ''
+}
+
+function metricValue(metrics: Record<string, unknown> | null, key: string) {
+  return stringValue(metrics?.[key])
+}
+
+function getWorkflowStageLabel(node: ReviewWorkflowNode) {
+  if (!node.nodeKey.startsWith('agent:')) return reviewWorkflowKindLabels[node.kind] || node.kind
+
+  const parts = node.nodeKey.split(':')
+  const iterationIndex = parts.indexOf('iteration')
+  if (iterationIndex === -1) return 'Agent'
+
+  const stage = node.kind === 'decision'
+    ? parts.slice(iterationIndex + 2).join(':') || 'decision'
+    : parts[iterationIndex + 2] || node.kind
+  const labels: Record<string, string> = {
+    initializing: '初始化',
+    context: '上下文检索',
+    plan: '审查计划',
+    review: '模型审查',
+    validation: 'Finding 校验',
+    'decision:additional_agents': '辅助 Agent 决策',
+    agent: 'Agent',
+    tool: '辅助 Agent',
+    critic: 'Critic 决策',
+    finish: '完成',
+    error: '异常',
+  }
+
+  return labels[stage] || stage
+}
+
+function getWorkflowIterationLabel(node: ReviewWorkflowNode) {
+  const parts = node.nodeKey.split(':')
+  const iterationIndex = parts.indexOf('iteration')
+  if (iterationIndex === -1) return getAgentRoleLabel(node)
+  return `${getAgentRoleLabel(node)} · 第 ${parts[iterationIndex + 1] || '1'} 轮`
+}
+
+function getNodeInputFacts(node: ReviewWorkflowNode) {
+  const metrics = asRecord(node.metricsJson)
+  const facts: Array<{ label: string; value: string }> = []
+  const pushFact = (label: string, value: string) => {
+    if (value) facts.push({ label, value })
+  }
+
+  pushFact('标题', metricValue(metrics, 'inputTitle'))
+
+  const changedFiles = metricValue(metrics, 'inputChangedFiles')
+  const diffCount = metricValue(metrics, 'inputDiffs')
+  if (changedFiles || diffCount) {
+    pushFact('变更范围', `文件 ${changedFiles || '0'} · Diff ${diffCount || '0'}`)
+  }
+
+  const existingFindings = metricValue(metrics, 'inputExistingFindings') || metricValue(metrics, 'currentFindings')
+  const remainingBudget = metricValue(metrics, 'remainingFindingBudget')
+  if (existingFindings || remainingBudget) {
+    pushFact('Finding', `已有 ${existingFindings || '0'} · 剩余 ${remainingBudget || '0'}`)
+  }
+
+  const promptChars = metricValue(metrics, 'inputPromptChars')
+  const contextChars = metricValue(metrics, 'inputContextSummaryChars')
+  if (promptChars || contextChars) {
+    pushFact('输入规模', `Prompt ${promptChars || '0'} 字符 · 上下文 ${contextChars || '0'} 字符`)
+  }
+
+  const selectedFiles = metricValue(metrics, 'selectedFiles')
+  const fileContexts = metricValue(metrics, 'fileContexts')
+  const graphNeighbors = metricValue(metrics, 'graphNeighbors')
+  if (selectedFiles || fileContexts || graphNeighbors) {
+    pushFact('上下文命中', `选择 ${selectedFiles || '0'} · 文件 ${fileContexts || '0'} · 关系 ${graphNeighbors || '0'}`)
+  }
+
+  const requestedFiles = metricValue(metrics, 'requestedFiles')
+  const maxDepth = metricValue(metrics, 'maxDepth')
+  if (requestedFiles || maxDepth) {
+    pushFact('检索参数', `请求文件 ${requestedFiles || '0'} · 调用深度 ${maxDepth || '0'}`)
+  }
+
+  const requestedTools = metrics?.requestedTools
+  if (Array.isArray(requestedTools)) {
+    pushFact('工具请求', requestedTools.length > 0 ? requestedTools.map(String).join('、') : '无')
+  }
+
+  return facts
+}
+
+function getNodeInputText(node: ReviewWorkflowNode) {
+  const metrics = asRecord(node.metricsJson)
+  const inputPreview = metricValue(metrics, 'inputPreview')
+  if (inputPreview) return inputPreview
+
+  const raw = asRecord(node.rawJson)
+  const rawDetail = metricValue(raw, 'detail')
+  if (node.status === 'running' && rawDetail) return rawDetail
+
+  return '该节点未记录独立输入。可展开“指标”和“原始节点”查看底层 Trace。'
+}
+
+function getNodeOutputText(node: ReviewWorkflowNode) {
+  if (node.detail) return node.detail
+  return getWorkflowNodeMessage(node) || '暂无输出。'
+}
+
+function getOutputLabel(node: ReviewWorkflowNode) {
+  if (isStreamingReviewNode(node)) return '输出（生成中）'
+  if (node.status === 'running') return '输出（进行中）'
+  return '输出'
+}
+
+function WorkflowTextBlock({
+  label,
+  value,
+  accent,
 }: {
-  node: ReviewWorkflowNode | null
+  label: string
+  value: string
+  accent?: boolean
 }) {
-  if (!node?.detail) return null
+  return (
+    <div className={`min-w-0 rounded-lg border p-3 ${accent ? 'border-primary/20 bg-primary/5' : 'border-border/60 bg-background/70'}`}>
+      <p className="text-xs font-medium text-foreground">{label}</p>
+      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground/85">
+        {value}
+      </pre>
+    </div>
+  )
+}
+
+function WorkflowFactList({
+  facts,
+}: {
+  facts: Array<{ label: string; value: string }>
+}) {
+  if (facts.length === 0) return null
 
   return (
-    <section className="rounded-xl border border-primary/20 bg-primary/5">
-      <div className="flex items-center justify-between gap-3 border-b border-primary/10 px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <MessageSquareText className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold text-foreground">Agent 流式输出</p>
-          </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{node.title}</p>
+    <div className="mt-3 grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
+      {facts.map((fact) => (
+        <div key={`${fact.label}-${fact.value}`} className="min-w-0 rounded-lg border border-border/60 bg-background/70 px-3 py-2">
+          <p className="text-[11px] text-muted-foreground">{fact.label}</p>
+          <p className="mt-1 truncate text-xs font-medium text-foreground">{fact.value}</p>
         </div>
-        <Badge className={statusClassNames.running}>
-          <Loader2 className="h-3 w-3 animate-spin" />
-          生成中
-        </Badge>
-      </div>
-      <pre className="max-h-64 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-xs leading-5 text-foreground/85">
-        {node.detail}
-      </pre>
-    </section>
+      ))}
+    </div>
   )
 }
 
@@ -185,45 +315,55 @@ function NodeInspector({
   node,
   relatedIssues,
   onOpenIssue,
+  runningNodeKey,
 }: {
   node: ReviewWorkflowNode | null
   relatedIssues: WorkflowIssue[]
   onOpenIssue: (issueId: string) => void
+  runningNodeKey: string | null
 }) {
   if (!node) {
     return (
       <div className="rounded-xl border border-border/60 bg-card/80 p-4 text-sm text-muted-foreground">
-        选择一个流程节点查看状态、耗时、关联问题和原始指标。
+        选择一个流程节点查看执行位置、输入、输出和原始指标。
       </div>
     )
   }
 
-  const nodeMessage = compactWorkflowText(getWorkflowNodeMessage(node), node.status === 'failed' ? 180 : 320)
+  const nodeInputFacts = getNodeInputFacts(node)
+  const isRunningNode = node.nodeKey === runningNodeKey
 
   return (
     <section className="rounded-xl border border-border/60 bg-card/90 p-4 shadow-[0_8px_18px_rgba(20,20,19,0.04)]">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge className={statusClassNames[node.status] || statusClassNames.idle}>
-          {getStatusLabel(node.status)}
-        </Badge>
-        <Badge variant="outline">{reviewWorkflowKindLabels[node.kind] || node.kind}</Badge>
-        <Badge variant="secondary">{getAgentRoleLabel(node)}</Badge>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {isRunningNode && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            <p className="text-sm font-semibold text-foreground">执行节点</p>
+            <Badge className={statusClassNames[node.status] || statusClassNames.idle}>
+              {isRunningNode ? '当前执行' : getStatusLabel(node.status)}
+            </Badge>
+          </div>
+          <h3 className="mt-2 text-base font-semibold leading-6 text-card-foreground">{node.title}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">{getWorkflowIterationLabel(node)}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{getWorkflowStageLabel(node)}</Badge>
+          <Badge variant="secondary">{getAgentRoleLabel(node)}</Badge>
+        </div>
       </div>
-
-      <h3 className="mt-3 text-base font-semibold leading-6 text-card-foreground">{node.title}</h3>
-      {nodeMessage && (
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">{nodeMessage}</p>
-      )}
-      {node.detail && (
-        <p className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/35 p-3 font-mono text-xs leading-5 text-foreground/80">
-          {node.detail}
-        </p>
-      )}
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         <WorkflowMetric label="开始" value={formatTime(node.startedAt)} />
         <WorkflowMetric label="完成" value={formatTime(node.completedAt)} />
         <WorkflowMetric label="耗时" value={formatDuration(node.durationMs)} />
+      </div>
+
+      <WorkflowFactList facts={nodeInputFacts} />
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2 2xl:grid-cols-1">
+        <WorkflowTextBlock label="输入" value={getNodeInputText(node)} />
+        <WorkflowTextBlock label={getOutputLabel(node)} value={getNodeOutputText(node)} accent={isRunningNode} />
       </div>
 
       <div className="mt-5">
@@ -452,10 +592,6 @@ export function ReviewWorkflowTab({
     workflow?.nodes.find((node) => node.status === 'running') || null
   ), [workflow])
 
-  const streamingReviewNode = useMemo(() => (
-    workflow?.nodes.find(isStreamingReviewNode) || null
-  ), [workflow])
-
   useEffect(() => {
     if (!eventRef.current) return
     eventRef.current.scrollTop = eventRef.current.scrollHeight
@@ -488,7 +624,7 @@ export function ReviewWorkflowTab({
   if (!workflow) return null
 
   return (
-    <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid min-h-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="min-w-0 rounded-xl border border-border/60 bg-card/70 p-3">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -522,11 +658,11 @@ export function ReviewWorkflowTab({
       </section>
 
       <aside className="flex min-h-0 flex-col gap-4">
-        <AgentStreamingOutput node={streamingReviewNode} />
         <NodeInspector
           node={selectedNode}
           relatedIssues={relatedIssues}
           onOpenIssue={onOpenIssue}
+          runningNodeKey={runningNode?.nodeKey || null}
         />
         <WorkflowEventStream
           logs={eventLogs}

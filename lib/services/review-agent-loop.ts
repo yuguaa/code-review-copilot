@@ -20,6 +20,13 @@ const ADDITIONAL_AGENT_CRITICAL_FINDINGS_THRESHOLD = 1;
 const ADDITIONAL_AGENT_ACTIONABLE_FINDINGS_THRESHOLD = 1;
 const MAX_REPEATED_PROGRESS_SIGNATURES = 2;
 const REVIEW_STREAM_PERSIST_INTERVAL_MS = 1000;
+const WORKFLOW_INPUT_PREVIEW_LENGTH = 900;
+
+function compactInputText(value: string, maxLength = WORKFLOW_INPUT_PREVIEW_LENGTH) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
 
 function toValidationDiff(diff: AgentLoopInput["diffs"][number]) {
   return {
@@ -669,6 +676,13 @@ export class ReviewAgentLoopService {
         const reviewMetrics = {
           currentFindings: findings.length,
           remainingFindingBudget: Math.max(budget.maxFindings - findings.length, 0),
+          inputTitle: input.title,
+          inputChangedFiles: input.changedFiles.length,
+          inputDiffs: input.diffs.length,
+          inputExistingFindings: findings.length,
+          inputPromptChars: reviewPrompt.length,
+          inputContextSummaryChars: contextSummary.length,
+          inputPreview: compactInputText(reviewPrompt),
         };
         const persistReviewStream = createReviewStreamPersister(iteration, reviewMetrics);
         await recordTraceEvent({

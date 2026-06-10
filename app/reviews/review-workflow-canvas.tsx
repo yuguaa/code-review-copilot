@@ -269,7 +269,7 @@ export function ReviewWorkflowCanvas({
   const nodeMap = useMemo(() => new Map(workflow.nodes.map((node) => [node.nodeKey, node])), [workflow.nodes])
 
   return (
-    <div className="h-[560px] min-h-0 overflow-hidden rounded-lg border border-border/60 bg-background">
+    <div className="h-[min(70vh,780px)] min-h-[640px] overflow-hidden rounded-lg border border-border/60 bg-background">
       <ReactFlow
         nodes={nodes}
         edges={edges}
