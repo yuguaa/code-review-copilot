@@ -26,6 +26,7 @@ type ReviewWorkflowCanvasProps = {
   workflow: ReviewWorkflowSnapshot
   selectedNodeKey: string | null
   onSelectNode: (node: ReviewWorkflowNode) => void
+  compact?: boolean
 }
 
 const statusStyles: Record<string, { background: string; border: string; color: string }> = {
@@ -257,6 +258,7 @@ export function ReviewWorkflowCanvas({
   workflow,
   selectedNodeKey,
   onSelectNode,
+  compact = false,
 }: ReviewWorkflowCanvasProps) {
   const nodes = useMemo(
     () => toReactFlowNodes(workflow.nodes, selectedNodeKey),
@@ -269,7 +271,7 @@ export function ReviewWorkflowCanvas({
   const nodeMap = useMemo(() => new Map(workflow.nodes.map((node) => [node.nodeKey, node])), [workflow.nodes])
 
   return (
-    <div className="h-[min(70vh,780px)] min-h-[640px] overflow-hidden rounded-lg border border-border/60 bg-background">
+    <div className={`${compact ? 'h-72' : 'h-[min(70vh,780px)] min-h-[640px]'} overflow-hidden rounded-lg border border-border/60 bg-background`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

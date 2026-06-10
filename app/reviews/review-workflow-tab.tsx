@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Activity, AlertCircle, ExternalLink, Gitlab, Loader2, RefreshCw, Route } from 'lucide-react'
+import { AlertCircle, ExternalLink, Gitlab, Loader2, RefreshCw, Route, Terminal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type {
@@ -21,7 +21,7 @@ const WorkflowCanvas = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[min(70vh,780px)] min-h-[640px] items-center justify-center rounded-lg border border-border/60 bg-muted/30 text-sm text-muted-foreground">
+      <div className="flex h-72 items-center justify-center rounded-lg border border-border/60 bg-muted/30 text-sm text-muted-foreground">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         加载过程图...
       </div>
@@ -153,6 +153,23 @@ function metricValue(metrics: Record<string, unknown> | null, key: string) {
   return stringValue(metrics?.[key])
 }
 
+function rawValue(node: ReviewWorkflowNode, key: string) {
+  return stringValue(asRecord(node.rawJson)?.[key])
+}
+
+function getDefaultSelectedNodeKey(nodes: ReviewWorkflowNode[]) {
+  const streamingReviewNode = nodes.find(isStreamingReviewNode)
+  if (streamingReviewNode) return streamingReviewNode.nodeKey
+
+  const reversedNodes = [...nodes].reverse()
+  return (
+    reversedNodes.find((node) => node.kind === 'iteration_stage' && node.nodeKey.includes(':review'))?.nodeKey ||
+    reversedNodes.find((node) => node.kind === 'iteration_stage')?.nodeKey ||
+    nodes.at(-1)?.nodeKey ||
+    null
+  )
+}
+
 function getWorkflowStageLabel(node: ReviewWorkflowNode) {
   if (!node.nodeKey.startsWith('agent:')) return reviewWorkflowKindLabels[node.kind] || node.kind
 
@@ -232,10 +249,19 @@ function getNodeInputFacts(node: ReviewWorkflowNode) {
     pushFact('工具请求', requestedTools.length > 0 ? requestedTools.map(String).join('、') : '无')
   }
 
+  const inputChars = metricValue(metrics, 'inputChars')
+  const outputChars = metricValue(metrics, 'outputChars') || metricValue(metrics, 'streamingChars')
+  if (inputChars || outputChars) {
+    pushFact('IO 字符', `输入 ${inputChars || '0'} · 输出 ${outputChars || '0'}`)
+  }
+
   return facts
 }
 
 function getNodeInputText(node: ReviewWorkflowNode) {
+  const workflowInput = rawValue(node, 'workflowInput')
+  if (workflowInput) return workflowInput
+
   const metrics = asRecord(node.metricsJson)
   const inputPreview = metricValue(metrics, 'inputPreview')
   if (inputPreview) return inputPreview
@@ -248,6 +274,9 @@ function getNodeInputText(node: ReviewWorkflowNode) {
 }
 
 function getNodeOutputText(node: ReviewWorkflowNode) {
+  const workflowOutput = rawValue(node, 'workflowOutput')
+  if (workflowOutput) return workflowOutput
+
   if (node.detail) return node.detail
   return getWorkflowNodeMessage(node) || '暂无输出。'
 }
@@ -270,7 +299,7 @@ function WorkflowTextBlock({
   return (
     <div className={`min-w-0 rounded-lg border p-3 ${accent ? 'border-primary/20 bg-primary/5' : 'border-border/60 bg-background/70'}`}>
       <p className="text-xs font-medium text-foreground">{label}</p>
-      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground/85">
+      <pre className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground/85">
         {value}
       </pre>
     </div>
@@ -311,6 +340,87 @@ function WorkflowMetric({
   )
 }
 
+function WorkflowStepList({
+  logs,
+  selectedNodeKey,
+  runningNode,
+  updatedAt,
+  eventRef,
+  onSelectNode,
+}: {
+  logs: Array<{
+    node: ReviewWorkflowNode
+    level: keyof typeof eventLevelClassNames
+    timestamp: string
+    message: string
+  }>
+  selectedNodeKey: string | null
+  runningNode: ReviewWorkflowNode | null
+  updatedAt: string
+  eventRef: RefObject<HTMLDivElement | null>
+  onSelectNode: (nodeKey: string) => void
+}) {
+  return (
+    <section className="rounded-xl border border-border/60 bg-card/80">
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-primary" />
+            <p className="text-sm font-semibold text-foreground">Agent 执行控制台</p>
+          </div>
+          <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+            {runningNode ? `running: ${runningNode.title}` : `snapshot: ${formatTime(updatedAt)}`}
+          </p>
+        </div>
+        <Badge className={runningNode ? statusClassNames.running : statusClassNames.success}>
+          {runningNode ? '实时' : '完成'}
+        </Badge>
+      </div>
+
+      <div ref={eventRef} className="max-h-[560px] overflow-y-auto p-2">
+        <div className="space-y-1 font-mono">
+          {logs.map(({ node, level, timestamp, message }, index) => {
+            const selected = selectedNodeKey === node.nodeKey
+            const duration = node.durationMs === null ? '' : formatDuration(node.durationMs)
+            return (
+              <button
+                key={node.nodeKey}
+                type="button"
+                className={`grid w-full grid-cols-[56px_minmax(0,1fr)] gap-3 rounded-lg border px-3 py-2 text-left transition-[background-color,border-color,transform] active:scale-[0.99] ${
+                  selected
+                    ? 'border-primary/40 bg-primary/10'
+                    : 'border-transparent hover:border-border/80 hover:bg-muted/35'
+                }`}
+                onClick={() => onSelectNode(node.nodeKey)}
+              >
+                <span className="text-[11px] text-muted-foreground">
+                  {String(index + 1).padStart(2, '0')} {formatTime(timestamp)}
+                </span>
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className={`h-2 w-2 rounded-full ${eventDotClassNames[level]}`} />
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${eventLevelClassNames[level]}`}>
+                      {getStatusLabel(node.status)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{getWorkflowStageLabel(node)}</span>
+                    {duration && <span className="text-[11px] text-muted-foreground">{duration}</span>}
+                  </span>
+                  <span className="mt-1 block truncate text-[13px] font-medium text-foreground">
+                    $ {node.title}
+                  </span>
+                  <span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-muted-foreground">
+                    {message}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function NodeInspector({
   node,
   relatedIssues,
@@ -345,7 +455,9 @@ function NodeInspector({
             </Badge>
           </div>
           <h3 className="mt-2 text-base font-semibold leading-6 text-card-foreground">{node.title}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{getWorkflowIterationLabel(node)}</p>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">
+            {getWorkflowIterationLabel(node)} / {node.nodeKey}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{getWorkflowStageLabel(node)}</Badge>
@@ -361,7 +473,7 @@ function NodeInspector({
 
       <WorkflowFactList facts={nodeInputFacts} />
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-2 2xl:grid-cols-1">
+      <div className="mt-4 grid gap-3 xl:grid-cols-2">
         <WorkflowTextBlock label="输入" value={getNodeInputText(node)} />
         <WorkflowTextBlock label={getOutputLabel(node)} value={getNodeOutputText(node)} accent={isRunningNode} />
       </div>
@@ -406,7 +518,7 @@ function NodeInspector({
         )}
       </div>
 
-      <div className="mt-4 grid gap-2">
+      <div className="mt-4 grid gap-2 xl:grid-cols-2">
         <details className="rounded-lg border border-border/60 bg-background/70 p-3">
           <summary className="cursor-pointer text-sm font-medium text-foreground">指标</summary>
           <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
@@ -420,81 +532,6 @@ function NodeInspector({
             {formatJson(node.rawJson || node)}
           </pre>
         </details>
-      </div>
-    </section>
-  )
-}
-
-function WorkflowEventStream({
-  logs,
-  selectedNodeKey,
-  runningNode,
-  updatedAt,
-  eventRef,
-  onSelectNode,
-}: {
-  logs: Array<{
-    node: ReviewWorkflowNode
-    level: keyof typeof eventLevelClassNames
-    timestamp: string
-    message: string
-  }>
-  selectedNodeKey: string | null
-  runningNode: ReviewWorkflowNode | null
-  updatedAt: string
-  eventRef: RefObject<HTMLDivElement | null>
-  onSelectNode: (nodeKey: string) => void
-}) {
-  return (
-    <section className="min-h-0 rounded-xl border border-border/60 bg-card/70">
-      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold text-foreground">事件流</p>
-          </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {runningNode ? `当前：${runningNode.title}` : `快照：${formatTime(updatedAt)}`}
-          </p>
-        </div>
-        <Badge className={runningNode ? statusClassNames.running : statusClassNames.success}>
-          {runningNode ? '实时更新' : '最终快照'}
-        </Badge>
-      </div>
-
-      <div ref={eventRef} className="max-h-[300px] min-h-[220px] overflow-y-auto p-2">
-        <div className="space-y-1">
-          {logs.map(({ node, level, timestamp, message }) => {
-            const selected = selectedNodeKey === node.nodeKey
-            const duration = node.durationMs === null ? '' : formatDuration(node.durationMs)
-            return (
-              <button
-                key={node.nodeKey}
-                type="button"
-                className={`grid w-full grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-lg border px-3 py-2 text-left transition-[background-color,border-color,transform] active:scale-[0.99] ${
-                  selected
-                    ? 'border-primary/40 bg-primary/10'
-                    : 'border-transparent hover:border-border/80 hover:bg-muted/35'
-                }`}
-                onClick={() => onSelectNode(node.nodeKey)}
-              >
-                <span className={`mt-2 h-2 w-2 rounded-full ${eventDotClassNames[level]}`} />
-                <span className="min-w-0">
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-mono text-[11px] text-muted-foreground">{formatTime(timestamp)}</span>
-                    <span className={`rounded-full border px-1.5 py-0.5 text-[10px] leading-none ${eventLevelClassNames[level]}`}>
-                      {getStatusLabel(node.status)}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">{reviewWorkflowKindLabels[node.kind] || node.kind}</span>
-                    {duration && <span className="font-mono text-[11px] text-muted-foreground">{duration}</span>}
-                  </span>
-                  <span className="mt-1 block truncate text-[13px] font-medium text-foreground">{node.title}</span>
-                  <span className="mt-0.5 block line-clamp-2 text-xs leading-5 text-muted-foreground">{message}</span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
       </div>
     </section>
   )
@@ -528,9 +565,7 @@ export function ReviewWorkflowTab({
         setWorkflow(data)
         setSelectedNodeKey((current) => {
           if (current && data.nodes.some((node) => node.nodeKey === current)) return current
-          const streamingReviewNode = data.nodes.find(isStreamingReviewNode)
-          if (streamingReviewNode) return streamingReviewNode.nodeKey
-          return data.nodes.at(-1)?.nodeKey || null
+          return getDefaultSelectedNodeKey(data.nodes)
         })
       })
       .catch((err) => {
@@ -624,47 +659,23 @@ export function ReviewWorkflowTab({
   if (!workflow) return null
 
   return (
-    <div className="grid min-h-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="min-w-0 rounded-xl border border-border/60 bg-card/70 p-3">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+    <div className="grid gap-4 2xl:grid-cols-[minmax(360px,0.42fr)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-card/70 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">节点 {workflow.nodes.length}</Badge>
-            <Badge variant="outline">边 {workflow.edges.length}</Badge>
             <Badge className={runningNode ? statusClassNames.running : statusClassNames.success}>
-              {runningNode ? '动态更新中' : '当前快照'}
+              {runningNode ? '运行中' : '最终快照'}
             </Badge>
+            <Badge variant="outline">步骤 {workflow.nodes.length}</Badge>
+            <Badge variant="outline">更新 {formatTime(workflow.updatedAt)}</Badge>
           </div>
           <Button variant="outline" size="sm" onClick={() => loadWorkflow()}>
             <RefreshCw className="h-4 w-4" />
-            刷新过程图
+            刷新
           </Button>
         </div>
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5 text-foreground">
-            <Route className="h-3.5 w-3.5 text-primary" />
-            链路
-          </span>
-          <span className="h-px w-8 bg-stone-600" />
-          <span>主流程</span>
-          <span className="h-px w-8 bg-stone-300" />
-          <span>Agent 内部步骤</span>
-          <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5">节点内显示状态文字</span>
-        </div>
-        <WorkflowCanvas
-          workflow={workflow}
-          selectedNodeKey={selectedNode?.nodeKey || null}
-          onSelectNode={(node) => setSelectedNodeKey(node.nodeKey)}
-        />
-      </section>
 
-      <aside className="flex min-h-0 flex-col gap-4">
-        <NodeInspector
-          node={selectedNode}
-          relatedIssues={relatedIssues}
-          onOpenIssue={onOpenIssue}
-          runningNodeKey={runningNode?.nodeKey || null}
-        />
-        <WorkflowEventStream
+        <WorkflowStepList
           logs={eventLogs}
           selectedNodeKey={selectedNode?.nodeKey || null}
           runningNode={runningNode}
@@ -672,7 +683,29 @@ export function ReviewWorkflowTab({
           eventRef={eventRef}
           onSelectNode={setSelectedNodeKey}
         />
-      </aside>
+
+        <section className="rounded-xl border border-border/60 bg-card/70 p-3">
+          <div className="mb-3 flex items-center gap-2 px-1 text-sm font-semibold text-foreground">
+            <Route className="h-4 w-4 text-primary" />
+            流程拓扑
+          </div>
+          <WorkflowCanvas
+            workflow={workflow}
+            selectedNodeKey={selectedNode?.nodeKey || null}
+            onSelectNode={(node) => setSelectedNodeKey(node.nodeKey)}
+            compact
+          />
+        </section>
+      </div>
+
+      <div className="min-w-0">
+        <NodeInspector
+          node={selectedNode}
+          relatedIssues={relatedIssues}
+          onOpenIssue={onOpenIssue}
+          runningNodeKey={runningNode?.nodeKey || null}
+        />
+      </div>
     </div>
   )
 }

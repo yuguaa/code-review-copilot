@@ -129,6 +129,8 @@ type AgentTraceEventInput = {
   status: AgentTraceEventStatus;
   title: string;
   detail?: string;
+  workflowInput?: string;
+  workflowOutput?: string;
   workflowDetail?: string;
   durationMs?: number;
   metrics?: Record<string, unknown>;
@@ -171,6 +173,33 @@ function workflowStageParentKey(botRunId: string, iteration: number, stage: Agen
 
 function workflowStageSequence(iteration: number, stage: AgentTraceEventStage) {
   return 420 + iteration * 30 + stageSequence[stage];
+}
+
+function formatWorkflowPayload(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatAiWorkflowInput(params: {
+  modelConfig: AIModelConfig;
+  systemPrompt: string;
+  userPrompt: string;
+  responseFormat: "jsonObject" | "text";
+}) {
+  return formatWorkflowPayload({
+    model: {
+      provider: params.modelConfig.provider,
+      modelId: params.modelConfig.modelId,
+      maxTokens: params.modelConfig.maxTokens,
+      temperature: params.modelConfig.temperature,
+    },
+    responseFormat: params.responseFormat,
+    systemPrompt: params.systemPrompt,
+    userPrompt: params.userPrompt,
+  });
 }
 
 export interface AgentLoopResult {
@@ -470,7 +499,7 @@ export class ReviewAgentLoopService {
       }).then(() => undefined);
     };
     const recordTraceEvent = (event: AgentTraceEventInput) => {
-      const { workflowDetail, ...traceEvent } = event;
+      const { workflowDetail, workflowInput, workflowOutput, ...traceEvent } = event;
       const target = ensureLoopIteration(loopIterations, event.iteration);
       const events = Array.isArray(target.events)
         ? target.events as Array<Record<string, unknown>>
@@ -491,10 +520,19 @@ export class ReviewAgentLoopService {
         kind: "iteration_stage" as const,
         title: event.title,
         summary: `${input.botName || "Agent"} · 第 ${event.iteration} 轮`,
-        detail: workflowDetail || event.detail || null,
+        detail: workflowDetail || workflowOutput || event.detail || null,
         sequence: workflowStageSequence(event.iteration, event.stage),
-        metrics: event.metrics,
-        raw: event,
+        metrics: {
+          ...event.metrics,
+          inputPreview: workflowInput ? compactInputText(workflowInput) : event.metrics?.inputPreview,
+          inputChars: workflowInput?.length,
+          outputChars: workflowOutput?.length || workflowDetail?.length,
+        },
+        raw: {
+          ...event,
+          workflowInput,
+          workflowOutput: workflowOutput || workflowDetail,
+        },
       };
 
       const workflowPromise = event.status === "running"
@@ -573,6 +611,14 @@ export class ReviewAgentLoopService {
           status: "running",
           title: "获取代码上下文",
           detail: `准备检索 ${requestedFiles.length || input.changedFiles.length} 个文件的上下文`,
+          workflowInput: formatWorkflowPayload({
+            repositoryId: input.repositoryId,
+            branch: input.branch,
+            commitSha: input.commitSha,
+            changedFiles: requestedFiles.length ? requestedFiles : input.changedFiles,
+            maxFiles: budget.maxContextFiles,
+            maxDepth: budget.maxCallGraphDepth,
+          }),
           metrics: {
             requestedFiles: requestedFiles.length,
             maxDepth: budget.maxCallGraphDepth,
@@ -594,6 +640,16 @@ export class ReviewAgentLoopService {
           status: "completed",
           title: "上下文获取完成",
           detail: context.summary || "已完成上下文检索",
+          workflowOutput: formatWorkflowPayload({
+            summary: context.summary,
+            metrics: context.metrics,
+            tools: context.tools,
+            architectureSummary: context.architectureSummary,
+            codeGraph: context.codeGraph,
+            selectedFiles: context.fileContexts.map((file) => file.filePath),
+            graphNeighborCount: context.graphNeighbors.length,
+            relatedReviewCount: context.relatedReviews.length,
+          }),
           durationMs: Date.now() - contextStartedAt,
           metrics: {
             selectedFiles: context.metrics.selectedFilesCount,
@@ -618,6 +674,12 @@ export class ReviewAgentLoopService {
           botPromptMode: input.botPromptMode,
           availableAdditionalAgents: input.availableAdditionalAgents || [],
         });
+        const planWorkflowInput = formatAiWorkflowInput({
+          modelConfig: input.modelConfig,
+          systemPrompt: REVIEW_AGENT_PLAN_SYSTEM_PROMPT,
+          userPrompt: planPrompt,
+          responseFormat: "jsonObject",
+        });
 
         const planStartedAt = Date.now();
         await recordTraceEvent({
@@ -626,6 +688,7 @@ export class ReviewAgentLoopService {
           status: "running",
           title: "生成审查计划",
           detail: "正在请求模型判断风险、焦点文件和工具需求",
+          workflowInput: planWorkflowInput,
           metrics: {
             existingFindings: findings.length,
             remainingIterations,
@@ -644,6 +707,8 @@ export class ReviewAgentLoopService {
           status: "completed",
           title: "审查计划完成",
           detail: finalPlan.reviewStrategy || finalPlan.changeType || "已生成审查计划",
+          workflowInput: planWorkflowInput,
+          workflowOutput: planResponse,
           durationMs: Date.now() - planStartedAt,
           metrics: {
             riskLevel: finalPlan.riskLevel,
@@ -671,6 +736,12 @@ export class ReviewAgentLoopService {
           botPrompt: input.botPrompt,
           botPromptMode: input.botPromptMode,
         });
+        const reviewWorkflowInput = formatAiWorkflowInput({
+          modelConfig: input.modelConfig,
+          systemPrompt: REVIEW_AGENT_REVIEW_SYSTEM_PROMPT,
+          userPrompt: reviewPrompt,
+          responseFormat: "jsonObject",
+        });
 
         const reviewStartedAt = Date.now();
         const reviewMetrics = {
@@ -691,6 +762,7 @@ export class ReviewAgentLoopService {
           status: "running",
           title: "生成审查结果",
           detail: "正在请求模型输出可定位 Finding",
+          workflowInput: reviewWorkflowInput,
           metrics: reviewMetrics,
         });
         const reviewResponse = await aiService.reviewCode(
@@ -709,6 +781,8 @@ export class ReviewAgentLoopService {
           status: "completed",
           title: "模型审查完成",
           detail: "已收到模型审查结果，准备解析和校验",
+          workflowInput: reviewWorkflowInput,
+          workflowOutput: reviewResponse,
           workflowDetail: reviewResponse,
           durationMs: Date.now() - reviewStartedAt,
           metrics: {
@@ -724,6 +798,7 @@ export class ReviewAgentLoopService {
           status: "running",
           title: "校验 Finding",
           detail: "正在过滤非 Diff 文件、无效行号和低置信结果",
+          workflowInput: reviewResponse,
         });
         const parsedReview = aiService.parseStructuredReview(reviewResponse, {
           maxItems: Math.max(budget.maxFindings - findings.length, 0),
@@ -741,6 +816,15 @@ export class ReviewAgentLoopService {
           status: "completed",
           title: "Finding 校验完成",
           detail: `接受 ${validationReport.accepted.length} 条，丢弃 ${validationReport.rejected.length} 条`,
+          workflowInput: reviewResponse,
+          workflowOutput: formatWorkflowPayload({
+            rawFindings: parsedReview.commentItems.length,
+            accepted: validationReport.accepted,
+            rejected: validationReport.rejected,
+            rejectionCounts: validationReport.counts,
+            newFindings,
+            totalFindings: findings.length,
+          }),
           durationMs: Date.now() - validationStartedAt,
           metrics: {
             rawFindings: parsedReview.commentItems.length,
@@ -889,6 +973,12 @@ export class ReviewAgentLoopService {
           contextSummary,
           remainingIterations,
         });
+        const criticWorkflowInput = formatAiWorkflowInput({
+          modelConfig: input.modelConfig,
+          systemPrompt: REVIEW_AGENT_CRITIC_SYSTEM_PROMPT,
+          userPrompt: criticPrompt,
+          responseFormat: "jsonObject",
+        });
 
         const criticStartedAt = Date.now();
         await recordTraceEvent({
@@ -898,6 +988,7 @@ export class ReviewAgentLoopService {
           title: "Critic 判断是否继续",
           detail: "正在评估是否需要更多上下文或下一轮审查",
           parentNodeKey: criticParentNodeKey,
+          workflowInput: criticWorkflowInput,
           metrics: {
             findings: findings.length,
             remainingIterations,
@@ -942,6 +1033,8 @@ export class ReviewAgentLoopService {
           status: "completed",
           title: shouldContinue ? "Critic 要求继续" : "Critic 判定停止",
           detail: latestCritic.reason || stopReason,
+          workflowInput: criticWorkflowInput,
+          workflowOutput: criticResponse,
           durationMs: Date.now() - criticStartedAt,
           parentNodeKey: criticParentNodeKey,
           metrics: {
