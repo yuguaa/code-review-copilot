@@ -5,7 +5,6 @@ import {
   Background,
   Controls,
   MarkerType,
-  MiniMap,
   Position,
   ReactFlow,
   type Edge,
@@ -285,7 +284,6 @@ export function ReviewWorkflowCanvas({
           if (matched) onSelectNode(matched)
         }}
       >
-        <MiniMap zoomable pannable />
         <Controls />
         <Background />
       </ReactFlow>
