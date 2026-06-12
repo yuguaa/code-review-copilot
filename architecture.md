@@ -12,6 +12,7 @@ MR / Push 事件转换为可追溯、可复用 sandbox、可发布到 GitLab 和
 - 同仓库并发 review 共享 VM，但使用独立 `git worktree`、独立 Pi 进程和独立 `ReviewSandboxSession`。
 - 应用不挂载 Docker socket，不直接管理宿主机容器，只调用 OpenSandbox API。
 - PostgreSQL 是运行数据库，Prisma 是唯一 ORM。
+- 健康检查和 Prometheus 指标是旁路观测能力，不参与 review 主链路。
 
 ## 非目标
 
@@ -21,6 +22,7 @@ MR / Push 事件转换为可追溯、可复用 sandbox、可发布到 GitLab 和
 - 不在 app 容器中运行 Docker runtime。
 - 不在一个 review 完成后删除仓库 sandbox。
 - 不支持 Pi 自定义模型 endpoint；配置了 endpoint 时快速失败。
+- 不把 Grafana / Prometheus 做成业务依赖；监控栈故障不影响审查运行。
 
 ## 总体链路
 
@@ -46,6 +48,47 @@ PostgreSQL + GitLab 终态总评 + 钉钉终态通知
 `ReviewService.performReview` 是主编排。步骤函数位于 `lib/review/steps/`，
 共享状态类型位于 `lib/review/types.ts`。过程可视化统一写入 `ReviewWorkflowNode`。
 触发阶段只创建 `ReviewLog` 和过程节点，不向 GitLab 发送评论。
+
+## 健康检查与监控
+
+系统提供两个监控入口：
+
+- `GET /api/health`：检查 PostgreSQL、OpenSandbox 和 Pi Runtime 配置。
+- `GET /api/health?scope=liveness`：轻量存活检查，供 Docker healthcheck 使用。
+- `GET /api/metrics`：Prometheus 文本格式业务指标。
+
+`/api/health` 和 `/api/metrics` 不要求登录 Cookie，也不走页面 IP 白名单。
+设置 `MONITORING_TOKEN` 后，`/api/metrics` 和完整 `/api/health` 需要
+`Authorization: Bearer <token>` 或 `?token=<token>`；`/api/health?scope=liveness`
+保留为 Docker healthcheck 使用的轻量存活检查。
+
+监控栈使用独立 compose 扩展文件：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+```
+
+组件职责：
+
+```text
+prometheus        -> 拉取 app / postgres / node / container 指标
+grafana           -> 展示 Code Review Copilot Overview 看板
+cadvisor          -> Docker 容器 CPU、内存和网络指标
+node-exporter     -> 宿主机 CPU、内存、磁盘和网络指标
+postgres-exporter -> PostgreSQL 指标
+```
+
+核心业务指标包括：
+
+- `code_review_review_logs{status=...}`
+- `code_review_pending_reviews`
+- `code_review_stale_pending_reviews_30m`
+- `code_review_pi_runs{status=...}`
+- `code_review_sandbox_bindings{status=...}`
+- `code_review_sandbox_sessions{status=...}`
+- `code_review_stale_sandbox_sessions_30m`
+- `code_review_comments{severity=...}`
+- `code_review_review_duration_seconds_avg_last_100`
 
 ## 认证边界
 
@@ -260,6 +303,11 @@ GitLabAccount
 - `GET /api/reviews`
 - `GET /api/reviews/[id]`
 - `GET /api/reviews/[id]/workflow`
+
+### 监控入口
+
+- `GET /api/health`
+- `GET /api/metrics`
 
 审查详情页展示：
 

@@ -9,14 +9,23 @@ import {
   verifyAuthSession,
 } from "@/lib/auth";
 
-const PUBLIC_API_PREFIXES = [
+const EXTERNAL_CALLBACK_API_PREFIXES = [
   "/api/webhook/gitlab",
+];
+
+const MONITORING_API_PREFIXES = [
+  "/api/health",
+  "/api/metrics",
 ];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isExternalCallbackPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (isMonitoringPath(pathname)) {
     return NextResponse.next();
   }
 
@@ -58,7 +67,13 @@ function isPublicPath(pathname: string): boolean {
 }
 
 function isExternalCallbackPath(pathname: string): boolean {
-  return PUBLIC_API_PREFIXES.some(
+  return EXTERNAL_CALLBACK_API_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function isMonitoringPath(pathname: string): boolean {
+  return MONITORING_API_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }

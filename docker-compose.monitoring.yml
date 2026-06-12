@@ -1,0 +1,95 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.7.3
+    container_name: code-review-copilot-prometheus
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -n "$${MONITORING_TOKEN:-}" ]; then
+          printf '%s' "$${MONITORING_TOKEN}" > /etc/prometheus/monitoring-token
+        else
+          : > /etc/prometheus/monitoring-token
+        fi
+        exec /bin/prometheus "$$@"
+      - prometheus
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    environment:
+      MONITORING_TOKEN: ${MONITORING_TOKEN:-}
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    container_name: code-review-copilot-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_PORT: "3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.53.0
+    container_name: code-review-copilot-cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    ports:
+      - "8081:8080"
+
+  node-exporter:
+    image: prom/node-exporter:v1.10.2
+    container_name: code-review-copilot-node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.18.1
+    container_name: code-review-copilot-postgres-exporter
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: "postgresql://code_review:code_review@postgres:5432/code_review_copilot?sslmode=disable"
+    ports:
+      - "9187:9187"
+
+volumes:
+  prometheus_data:
+  grafana_data:

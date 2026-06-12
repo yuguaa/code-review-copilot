@@ -156,7 +156,7 @@ function signValue(value: string, secret: string): Promise<string> {
     .then((signature) => base64UrlEncodeBytes(new Uint8Array(signature)));
 }
 
-function constantTimeEqual(left: string, right: string): boolean {
+export function constantTimeEqual(left: string, right: string): boolean {
   const maxLength = Math.max(left.length, right.length);
   let diff = left.length ^ right.length;
 

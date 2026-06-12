@@ -16,6 +16,7 @@ Docker sandbox 中。
 - **三级问题分类**：严重 / 一般 / 建议。
 - **审查历史**：保存 ReviewLog、PiReviewRun、ReviewComment、Workflow 和 sandbox session。
 - **终态通知**：审查完成、失败或停止后，发布一条 GitLab 总评并发送钉钉通知。
+- **健康检查与监控**：提供 `/api/health`、`/api/metrics`，可叠加 Prometheus + Grafana 监控栈。
 
 ### UI 特性
 
@@ -52,6 +53,30 @@ APP_AUTH_SESSION_SECRET="replace-with-long-random-session-secret"
 访问 http://localhost:3000。
 
 应用容器启动时会执行 `prisma migrate deploy`，然后启动 Next.js。
+
+### 1.1 启动监控栈
+
+可选叠加 Prometheus、Grafana、cAdvisor、node_exporter 和 postgres_exporter：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+```
+
+访问：
+
+- App：http://localhost:3000
+- Grafana：http://localhost:3001
+- Prometheus：http://localhost:9090
+- cAdvisor：http://localhost:8081
+
+Grafana 默认账号密码来自环境变量：
+
+```env
+GRAFANA_ADMIN_USER="admin"
+GRAFANA_ADMIN_PASSWORD="admin"
+```
+
+建议部署后立即改掉默认密码。
 
 ### 2. 单机部署 OpenSandbox + Pi
 
@@ -233,6 +258,8 @@ APP_AUTH_SECRET="change-me-login-secret"
 APP_AUTH_SESSION_SECRET="change-me-session-signing-secret"
 APP_AUTH_IP_WHITELIST="127.0.0.1,::1"
 
+MONITORING_TOKEN=""
+
 OPEN_SANDBOX_DOMAIN="host.docker.internal:8080"
 OPEN_SANDBOX_PROTOCOL="http"
 OPEN_SANDBOX_API_KEY=""
@@ -246,8 +273,11 @@ DINGTALK_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOK
 DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
 ```
 
-`/api/webhook/gitlab` 是外部回调入口，不要求登录 Cookie。除登录接口和外部入口外，
-页面和业务 API 都会经过登录校验。
+`/api/webhook/gitlab` 是外部回调入口，不要求登录 Cookie。`/api/health` 和
+`/api/metrics` 是监控入口，不要求登录 Cookie，也不走页面 IP 白名单。
+设置 `MONITORING_TOKEN` 后，`/api/metrics` 和完整 `/api/health` 需要
+`Authorization: Bearer <token>` 或 `?token=<token>`；`/api/health?scope=liveness`
+保留为轻量存活检查。
 
 ## SQLite 历史数据迁移
 
@@ -305,6 +335,12 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 ### Webhook
 
 - `POST /api/webhook/gitlab`
+
+### 监控
+
+- `GET /api/health`
+- `GET /api/health?scope=liveness`
+- `GET /api/metrics`
 
 ## 审查流程
 
