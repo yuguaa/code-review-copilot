@@ -1,9 +1,9 @@
 /**
  * 代码审查服务模块
  *
- * 核心审查逻辑，协调 GitLab 和 AI 服务完成：
+ * 核心审查逻辑，协调 GitLab 和 Pi Runtime 完成：
  * - 获取 MR/Commit 的代码变更
- * - 调用 AI 进行代码审查
+ * - 调用 Pi + OpenSandbox Runtime 进行代码审查
  * - 解析审查结果并发布评论
  */
 
@@ -14,7 +14,7 @@ import { fetchDiffStep } from "@/lib/review/steps/fetch-diff";
 import { generateSummaryStep } from "@/lib/review/steps/generate-summary";
 import { publishCommentStep } from "@/lib/review/steps/publish-comment";
 import { refreshMemoryStep } from "@/lib/review/steps/refresh-memory";
-import { runReviewBotsStep } from "@/lib/review/steps/run-review-bots";
+import { runPiRuntimeStep } from "@/lib/review/steps/run-pi-runtime";
 import { createInitialReviewState, type ReviewState } from "@/lib/review/types";
 import { assertStateReviewNotCancelled, isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
 import { reviewWorkflowRecorder, type ReviewWorkflowNodeKind } from "@/lib/services/review-workflow-recorder";
@@ -59,7 +59,7 @@ function summarizePatch(step: string, patch: Partial<ReviewState>): { summary?: 
       metrics: { summaryLength: patch.summary?.length || 0 },
     };
   }
-  if (step === "run_agents") {
+  if (step === "run_pi_runtime") {
     return {
       summary: `发现 ${patch.reviewComments?.length || 0} 条候选问题`,
       metrics: {
@@ -118,6 +118,19 @@ export class ReviewService {
         metrics: summary.metrics,
       }).then(() => patch);
     }).catch((error) => {
+      if (error instanceof ReviewCancelledError) {
+        return reviewWorkflowRecorder.completeNode({
+          reviewLogId: state.reviewLogId,
+          nodeKey: workflow.nodeKey,
+          kind: workflow.kind,
+          title: workflow.title,
+          status: "cancelled",
+          summary: "步骤已停止",
+          detail: error.message,
+          sequence: workflow.sequence,
+        }).then(() => Promise.reject(error));
+      }
+
       return reviewWorkflowRecorder.failNode({
         reviewLogId: state.reviewLogId,
         nodeKey: workflow.nodeKey,
@@ -211,11 +224,11 @@ export class ReviewService {
       if (!state.error && state.relevantDiffs.length > 0) {
         await assertStateReviewNotCancelled(state);
         state = mergeState(state, await this.runStep(state, {
-          nodeKey: "run_agents",
-          kind: "agent",
-          title: "运行 Review Agent",
+          nodeKey: "run_pi_runtime",
+          kind: "runtime",
+          title: "运行 Pi Runtime",
           sequence: 400,
-        }, runReviewBotsStep));
+        }, runPiRuntimeStep));
       }
 
       await assertStateReviewNotCancelled(state);

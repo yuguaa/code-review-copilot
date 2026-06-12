@@ -1,14 +1,14 @@
 import { createLogger } from "@/lib/logger";
 
-const log = createLogger("api.repositories.[id].bots");
+const log = createLogger("api.repositories.[id].pi-profiles");
 /**
- * @file /api/repositories/[id]/bots
- * @description 仓库审查机器人管理 API
+ * @file /api/repositories/[id]/pi-profiles
+ * @description 仓库 Pi Profile 管理 API
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeAgentLoopBudget } from "@/lib/services/review-budget";
+import { normalizePiReviewLimits } from "@/lib/services/review-budget";
 
 function normalizePromptMode(value: unknown) {
   return value === "replace" ? "replace" : "extend";
@@ -19,7 +19,7 @@ function normalizeSortOrder(value: unknown) {
   return Number.isFinite(numberValue) ? Math.trunc(numberValue) : 0;
 }
 
-function selectBotInclude() {
+function selectPiProfileInclude() {
   return {
     aiModel: {
       select: {
@@ -32,10 +32,10 @@ function selectBotInclude() {
   };
 }
 
-function findOwnedBot(repositoryId: string, botId: string) {
-  return prisma.repositoryReviewBot.findFirst({
+function findOwnedPiProfile(repositoryId: string, profileId: string) {
+  return prisma.repositoryPiProfile.findFirst({
     where: {
-      id: botId,
+      id: profileId,
       repositoryId,
     },
     select: {
@@ -53,15 +53,15 @@ export function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   return params
-    .then(({ id }) => prisma.repositoryReviewBot.findMany({
+    .then(({ id }) => prisma.repositoryPiProfile.findMany({
       where: { repositoryId: id },
-      include: selectBotInclude(),
+      include: selectPiProfileInclude(),
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     }))
-    .then((bots) => NextResponse.json(bots))
+    .then((profiles) => NextResponse.json(profiles))
     .catch((error) => {
-      log.error("Failed to fetch repository review bots:", error);
-      return NextResponse.json({ error: "Failed to fetch repository review bots" }, { status: 500 });
+      log.error("Failed to fetch repository pi profiles:", error);
+      return NextResponse.json({ error: "Failed to fetch repository pi profiles" }, { status: 500 });
     });
 }
 
@@ -75,7 +75,7 @@ export function POST(
       const aiModelId = typeof body.aiModelId === "string" ? body.aiModelId.trim() : "";
 
       if (!name || !aiModelId) {
-        return Promise.resolve(errorResponse("Bot name and AI model are required", 400));
+        return Promise.resolve(errorResponse("Pi profile name and AI model are required", 400));
       }
 
       return prisma.aIModel.findUnique({
@@ -86,7 +86,7 @@ export function POST(
           return Promise.resolve(errorResponse("AI model not found", 404));
         }
 
-        return prisma.repositoryReviewBot.create({
+        return prisma.repositoryPiProfile.create({
           data: {
             repositoryId: id,
             aiModelId,
@@ -96,15 +96,15 @@ export function POST(
             promptMode: normalizePromptMode(body.promptMode),
             isActive: body.isActive !== false,
             sortOrder: normalizeSortOrder(body.sortOrder),
-            ...normalizeAgentLoopBudget(body),
+            ...normalizePiReviewLimits(body),
           },
-          include: selectBotInclude(),
-        }).then((bot) => NextResponse.json(bot));
+          include: selectPiProfileInclude(),
+        }).then((profile) => NextResponse.json(profile));
       });
     })
     .catch((error) => {
-      log.error("Failed to create repository review bot:", error);
-      return NextResponse.json({ error: "Failed to create repository review bot" }, { status: 500 });
+      log.error("Failed to create repository pi profile:", error);
+      return NextResponse.json({ error: "Failed to create repository pi profile" }, { status: 500 });
     });
 }
 
@@ -114,9 +114,9 @@ export function PUT(
 ) {
   return Promise.all([params, request.json()])
     .then(([{ id }, body]) => {
-      const botId = typeof body.id === "string" ? body.id.trim() : "";
-      if (!botId) {
-        return Promise.resolve(errorResponse("Bot ID is required", 400));
+      const profileId = typeof body.id === "string" ? body.id.trim() : "";
+      if (!profileId) {
+        return Promise.resolve(errorResponse("Pi profile ID is required", 400));
       }
 
       const nextName = body.name === undefined
@@ -131,7 +131,7 @@ export function PUT(
           : "";
 
       if (nextName === "") {
-        return Promise.resolve(errorResponse("Bot name cannot be empty", 400));
+        return Promise.resolve(errorResponse("Pi profile name cannot be empty", 400));
       }
 
       if (nextAIModelId === "") {
@@ -139,24 +139,24 @@ export function PUT(
       }
 
       return Promise.all([
-        findOwnedBot(id, botId),
+        findOwnedPiProfile(id, profileId),
         nextAIModelId === undefined
           ? Promise.resolve({ id: undefined })
           : prisma.aIModel.findUnique({
             where: { id: nextAIModelId },
             select: { id: true },
           }),
-      ]).then(([bot, aiModel]) => {
-        if (!bot) {
-          return Promise.resolve(errorResponse("Review bot not found", 404));
+      ]).then(([profile, aiModel]) => {
+        if (!profile) {
+          return Promise.resolve(errorResponse("Pi profile not found", 404));
         }
 
         if (!aiModel) {
           return Promise.resolve(errorResponse("AI model not found", 404));
         }
 
-        return prisma.repositoryReviewBot.update({
-          where: { id: botId },
+        return prisma.repositoryPiProfile.update({
+          where: { id: profileId },
           data: {
             aiModelId: nextAIModelId,
             name: nextName,
@@ -165,18 +165,15 @@ export function PUT(
             promptMode: body.promptMode === undefined ? undefined : normalizePromptMode(body.promptMode),
             isActive: body.isActive,
             sortOrder: body.sortOrder === undefined ? undefined : normalizeSortOrder(body.sortOrder),
-            ...(body.maxIterations === undefined ? {} : { maxIterations: normalizeAgentLoopBudget(body).maxIterations }),
-            ...(body.maxContextFiles === undefined ? {} : { maxContextFiles: normalizeAgentLoopBudget(body).maxContextFiles }),
-            ...(body.maxCallGraphDepth === undefined ? {} : { maxCallGraphDepth: normalizeAgentLoopBudget(body).maxCallGraphDepth }),
-            ...(body.maxFindings === undefined ? {} : { maxFindings: normalizeAgentLoopBudget(body).maxFindings }),
+            ...(body.maxFindings === undefined ? {} : { maxFindings: normalizePiReviewLimits(body).maxFindings }),
           },
-          include: selectBotInclude(),
-        }).then((updatedBot) => NextResponse.json(updatedBot));
+          include: selectPiProfileInclude(),
+        }).then((updatedProfile) => NextResponse.json(updatedProfile));
       });
     })
     .catch((error) => {
-      log.error("Failed to update repository review bot:", error);
-      return NextResponse.json({ error: "Failed to update repository review bot" }, { status: 500 });
+      log.error("Failed to update repository pi profile:", error);
+      return NextResponse.json({ error: "Failed to update repository pi profile" }, { status: 500 });
     });
 }
 
@@ -186,23 +183,23 @@ export function DELETE(
 ) {
   return params
     .then(({ id }) => {
-      const botId = new URL(request.url).searchParams.get("id");
-      if (!botId) {
-        return Promise.resolve(errorResponse("Bot ID is required", 400));
+      const profileId = new URL(request.url).searchParams.get("id");
+      if (!profileId) {
+        return Promise.resolve(errorResponse("Pi profile ID is required", 400));
       }
 
-      return findOwnedBot(id, botId).then((bot) => {
-        if (!bot) {
-          return Promise.resolve(errorResponse("Review bot not found", 404));
+      return findOwnedPiProfile(id, profileId).then((profile) => {
+        if (!profile) {
+          return Promise.resolve(errorResponse("Pi profile not found", 404));
         }
 
-        return prisma.repositoryReviewBot.delete({
-          where: { id: botId },
+        return prisma.repositoryPiProfile.delete({
+          where: { id: profileId },
         }).then(() => NextResponse.json({ success: true }));
       });
     })
     .catch((error) => {
-      log.error("Failed to delete repository review bot:", error);
-      return NextResponse.json({ error: "Failed to delete repository review bot" }, { status: 500 });
+      log.error("Failed to delete repository pi profile:", error);
+      return NextResponse.json({ error: "Failed to delete repository pi profile" }, { status: 500 });
     });
 }

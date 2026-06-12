@@ -1,9 +1,21 @@
 'use client'
 
-import { useCallback, useState, useEffect, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { ArrowDown, ArrowLeft, ArrowUp, GitFork, Loader2, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -13,18 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { ArrowDown, ArrowLeft, ArrowUp, Bot, GitFork, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
 
 type AIModel = {
   id: string
@@ -52,7 +53,7 @@ type Repository = {
 
 type PromptMode = 'extend' | 'replace'
 
-type ReviewBot = {
+type PiProfile = {
   id: string
   name: string
   description: string | null
@@ -62,13 +63,10 @@ type ReviewBot = {
   promptMode: PromptMode
   isActive: boolean
   sortOrder: number
-  maxIterations: number
-  maxContextFiles: number
-  maxCallGraphDepth: number
   maxFindings: number
 }
 
-type BotFormState = {
+type PiProfileFormState = {
   id: string | null
   name: string
   description: string
@@ -77,13 +75,10 @@ type BotFormState = {
   promptMode: PromptMode
   isActive: boolean
   sortOrder: number
-  maxIterations: number
-  maxContextFiles: number
-  maxCallGraphDepth: number
   maxFindings: number
 }
 
-const emptyBotForm: BotFormState = {
+const emptyPiProfileForm: PiProfileFormState = {
   id: null,
   name: '',
   description: '',
@@ -92,13 +87,37 @@ const emptyBotForm: BotFormState = {
   promptMode: 'extend',
   isActive: true,
   sortOrder: 0,
-  maxIterations: 5,
-  maxContextFiles: 12,
-  maxCallGraphDepth: 2,
   maxFindings: 50,
 }
 
-// 获取模型显示名称
+const defaultProfilePrompts = [
+  {
+    name: '全面审查',
+    prompt: '请全面审查此代码，重点关注安全、正确性、可维护性、性能和测试风险。请输出可定位、可行动的问题。',
+  },
+  {
+    name: '安全优先',
+    prompt: '请重点关注权限、输入校验、敏感数据、注入、鉴权绕过和依赖安全风险。低置信问题也可以保留，但必须标注原因。',
+  },
+  {
+    name: '性能优先',
+    prompt: '请重点关注 N+1 查询、重复 IO、缓存失效、算法复杂度、渲染性能和资源泄漏风险。',
+  },
+  {
+    name: '架构守护',
+    prompt: '请重点关注跨文件调用链、模块边界、职责泄漏、抽象倒置和与 Code Graph 中项目架构约定冲突的问题。',
+  },
+]
+
+const commonBranches = [
+  { name: '所有分支', value: '*' },
+  { name: '主分支', value: 'main,master' },
+  { name: '开发分支', value: 'develop,dev' },
+  { name: '功能分支', value: 'feature/*' },
+  { name: '修复分支', value: 'hotfix/*,bugfix/*' },
+  { name: '发布分支', value: 'release/*' },
+]
+
 const getModelDisplayName = (model: AIModel) => {
   if (model.provider === 'custom') {
     return model.modelId
@@ -116,8 +135,8 @@ const getModelDisplayName = (model: AIModel) => {
   return suggestionNames[model.modelId] || model.modelId
 }
 
-const sortBots = (bots: ReviewBot[]) => {
-  return [...bots].sort((left, right) => left.sortOrder - right.sortOrder)
+const sortPiProfiles = (profiles: PiProfile[]) => {
+  return [...profiles].sort((left, right) => left.sortOrder - right.sortOrder)
 }
 
 const toErrorMessage = (error: unknown, fallback: string) => {
@@ -129,39 +148,32 @@ const toPositiveInteger = (value: unknown, fallback: number) => {
   return Number.isFinite(numberValue) ? Math.max(1, Math.trunc(numberValue)) : fallback
 }
 
-const toNonNegativeInteger = (value: unknown, fallback: number) => {
-  const numberValue = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(numberValue) ? Math.max(0, Math.trunc(numberValue)) : fallback
-}
-
-export default function RepositoryDetailPage() { // 仓库详情页组件
-  const params = useParams() // 读取路由参数
-  const router = useRouter() // 获取路由实例
-  const repositoryId = Array.isArray(params.id) ? params.id[0] : (params.id as string | undefined) // 兼容数组与空值的路由参数
+export default function RepositoryDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const repositoryId = Array.isArray(params.id) ? params.id[0] : (params.id as string | undefined)
 
   const [repository, setRepository] = useState<Repository | null>(null)
   const [aiModels, setAiModels] = useState<AIModel[]>([])
-  const [reviewBots, setReviewBots] = useState<ReviewBot[]>([])
+  const [piProfiles, setPiProfiles] = useState<PiProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [loadingBots, setLoadingBots] = useState(false)
-  const [savingBot, setSavingBot] = useState(false)
-  const [botDialogOpen, setBotDialogOpen] = useState(false)
-  const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm)
+  const [loadingPiProfiles, setLoadingPiProfiles] = useState(false)
+  const [savingPiProfile, setSavingPiProfile] = useState(false)
+  const [piProfileDialogOpen, setPiProfileDialogOpen] = useState(false)
+  const [piProfileForm, setPiProfileForm] = useState<PiProfileFormState>(emptyPiProfileForm)
+  const [config, setConfig] = useState({ watchBranches: '' })
 
-  // 配置表单状态
-  const [config, setConfig] = useState({
-    watchBranches: '',
-  })
+  const piProfilesUrl = repositoryId ? `/api/repositories/${repositoryId}/pi-profiles` : ''
 
-  // 加载仓库数据
-  const loadRepository = useCallback(() => { // 加载仓库详情数据
-    if (!repositoryId) { // 当缺少仓库 ID
-      setLoading(false) // 结束加载态
-      toast.error('仓库 ID 无效') // 提示无效 ID
-      router.push('/repositories') // 跳回列表页
-      return // 终止后续请求
-    } // 结束 ID 校验
+  const loadRepository = useCallback(() => {
+    if (!repositoryId) {
+      setLoading(false)
+      toast.error('仓库 ID 无效')
+      router.push('/repositories')
+      return Promise.resolve()
+    }
+
     return fetch(`/api/repositories/${repositoryId}`)
       .then((response) => {
         if (!response.ok) {
@@ -171,18 +183,15 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       })
       .then((data: Repository) => {
         setRepository(data)
-        setConfig({
-          watchBranches: data.watchBranches || '',
-        })
+        setConfig({ watchBranches: data.watchBranches || '' })
       })
       .catch(() => {
         toast.error('加载仓库信息失败')
         router.push('/repositories')
       })
       .finally(() => setLoading(false))
-  }, [repositoryId, router]) // 结束 loadRepository
+  }, [repositoryId, router])
 
-  // 加载 AI 模型
   const loadAIModels = useCallback(() => {
     return fetch('/api/settings/models')
       .then((response) => response.json())
@@ -196,37 +205,68 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       })
   }, [])
 
-  const loadReviewBots = useCallback(() => {
-    if (!repositoryId) return
-    setLoadingBots(true)
-    return fetch(`/api/repositories/${repositoryId}/bots`)
+  const loadPiProfiles = useCallback(() => {
+    if (!piProfilesUrl) return Promise.resolve()
+
+    setLoadingPiProfiles(true)
+    return fetch(piProfilesUrl)
       .then((response) => {
         if (!response.ok) {
-          throw new Error('加载审查机器人失败')
+          throw new Error('加载 Pi Profile 失败')
         }
         return response.json()
       })
       .then((data) => {
-        setReviewBots(Array.isArray(data) ? sortBots(data as ReviewBot[]) : [])
+        setPiProfiles(Array.isArray(data) ? sortPiProfiles(data as PiProfile[]) : [])
       })
       .catch((error) => {
-        toast.error(toErrorMessage(error, '加载审查机器人失败'))
+        toast.error(toErrorMessage(error, '加载 Pi Profile 失败'))
       })
-      .finally(() => setLoadingBots(false))
-  }, [repositoryId])
+      .finally(() => setLoadingPiProfiles(false))
+  }, [piProfilesUrl])
 
-  useEffect(() => { // 监听仓库 ID 变化
-    if (!repositoryId) { // 当仓库 ID 不存在
-      return // 直接返回避免请求
-    } // 结束 ID 校验
-    void Promise.resolve().then(() => {
-      loadRepository() // 加载仓库详情
-      loadAIModels() // 加载 AI 模型
-      loadReviewBots() // 加载审查机器人
+  useEffect(() => {
+    if (!repositoryId) return
+
+    void Promise.resolve().then(() => Promise.all([
+      loadRepository(),
+      loadAIModels(),
+      loadPiProfiles(),
+    ]))
+  }, [loadAIModels, loadPiProfiles, loadRepository, repositoryId])
+
+  const resetPiProfileForm = () => {
+    setPiProfileForm({
+      ...emptyPiProfileForm,
+      aiModelId: aiModels[0]?.id || '',
+      sortOrder: piProfiles.length,
     })
-  }, [loadAIModels, loadRepository, loadReviewBots, repositoryId]) // 依赖仓库 ID
+  }
 
-  // 保存配置
+  const openCreatePiProfileDialog = () => {
+    setPiProfileForm({
+      ...emptyPiProfileForm,
+      aiModelId: aiModels[0]?.id || '',
+      sortOrder: piProfiles.length,
+    })
+    setPiProfileDialogOpen(true)
+  }
+
+  const openEditPiProfileDialog = (profile: PiProfile) => {
+    setPiProfileForm({
+      id: profile.id,
+      name: profile.name,
+      description: profile.description || '',
+      aiModelId: profile.aiModelId,
+      prompt: profile.prompt || '',
+      promptMode: profile.promptMode || 'extend',
+      isActive: profile.isActive,
+      sortOrder: profile.sortOrder,
+      maxFindings: toPositiveInteger(profile.maxFindings, 50),
+    })
+    setPiProfileDialogOpen(true)
+  }
+
   const saveConfig = () => {
     setSaving(true)
     return fetch('/api/repositories', {
@@ -247,9 +287,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       })
       .then((updated: Repository) => {
         setRepository(updated)
-        setConfig({
-          watchBranches: updated.watchBranches || '',
-        })
+        setConfig({ watchBranches: updated.watchBranches || '' })
         toast.success('仓库配置已保存')
       })
       .catch((error) => {
@@ -258,123 +296,93 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       .finally(() => setSaving(false))
   }
 
-  const resetBotForm = () => {
-    setBotForm({
-      ...emptyBotForm,
-      aiModelId: aiModels[0]?.id || '',
-      sortOrder: reviewBots.length,
-    })
-  }
-
-  const openCreateBotDialog = () => {
-    setBotForm({
-      ...emptyBotForm,
-      aiModelId: aiModels[0]?.id || '',
-      sortOrder: reviewBots.length,
-    })
-    setBotDialogOpen(true)
-  }
-
-  const openEditBotDialog = (bot: ReviewBot) => {
-    setBotForm({
-      id: bot.id,
-      name: bot.name,
-      description: bot.description || '',
-      aiModelId: bot.aiModelId,
-      prompt: bot.prompt || '',
-      promptMode: bot.promptMode || 'extend',
-      isActive: bot.isActive,
-      sortOrder: bot.sortOrder,
-      maxIterations: toPositiveInteger(bot.maxIterations, 5),
-      maxContextFiles: toPositiveInteger(bot.maxContextFiles, 12),
-      maxCallGraphDepth: toNonNegativeInteger(bot.maxCallGraphDepth, 2),
-      maxFindings: toPositiveInteger(bot.maxFindings, 50),
-    })
-    setBotDialogOpen(true)
-  }
-
-  const saveBot = (event: FormEvent<HTMLFormElement>) => {
+  const savePiProfile = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!botForm.name.trim()) {
-      toast.error('请填写机器人名称')
+    if (!piProfileForm.name.trim()) {
+      toast.error('请填写 Profile 名称')
       return
     }
 
-    if (!botForm.aiModelId) {
-      toast.error('请选择机器人使用的 AI 模型')
+    if (!piProfileForm.aiModelId) {
+      toast.error('请选择 Pi Profile 使用的 AI 模型')
       return
     }
 
-    setSavingBot(true)
+    if (!piProfilesUrl) {
+      toast.error('仓库 ID 无效')
+      return
+    }
 
-    return fetch(`/api/repositories/${repositoryId}/bots`, {
-      method: botForm.id ? 'PUT' : 'POST',
+    setSavingPiProfile(true)
+
+    return fetch(piProfilesUrl, {
+      method: piProfileForm.id ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ...(botForm.id ? { id: botForm.id } : {}),
-        name: botForm.name.trim(),
-        description: botForm.description.trim() || null,
-        aiModelId: botForm.aiModelId,
-        prompt: botForm.prompt.trim() || null,
-        promptMode: botForm.promptMode,
-        isActive: botForm.isActive,
-        sortOrder: botForm.sortOrder,
-        maxIterations: botForm.maxIterations,
-        maxContextFiles: botForm.maxContextFiles,
-        maxCallGraphDepth: botForm.maxCallGraphDepth,
-        maxFindings: botForm.maxFindings,
+        ...(piProfileForm.id ? { id: piProfileForm.id } : {}),
+        name: piProfileForm.name.trim(),
+        description: piProfileForm.description.trim() || null,
+        aiModelId: piProfileForm.aiModelId,
+        prompt: piProfileForm.prompt.trim() || null,
+        promptMode: piProfileForm.promptMode,
+        isActive: piProfileForm.isActive,
+        sortOrder: piProfileForm.sortOrder,
+        maxFindings: piProfileForm.maxFindings,
       }),
     })
       .then((response) => {
         if (!response.ok) {
           return response.json().then((error) => {
-            throw new Error(error.error || '保存审查机器人失败')
+            throw new Error(error.error || '保存 Pi Profile 失败')
           })
         }
         return response.json()
       })
-      .then((savedBot: ReviewBot) => {
-        setReviewBots((currentBots) => {
-          const nextBots = botForm.id
-            ? currentBots.map((bot) => bot.id === savedBot.id ? savedBot : bot)
-            : [...currentBots, savedBot]
-          return sortBots(nextBots)
+      .then((savedProfile: PiProfile) => {
+        setPiProfiles((currentProfiles) => {
+          const nextProfiles = piProfileForm.id
+            ? currentProfiles.map((profile) => profile.id === savedProfile.id ? savedProfile : profile)
+            : [...currentProfiles, savedProfile]
+          return sortPiProfiles(nextProfiles)
         })
-        setBotDialogOpen(false)
-        resetBotForm()
-        toast.success(botForm.id ? '审查机器人已更新' : '审查机器人已创建')
+        setPiProfileDialogOpen(false)
+        resetPiProfileForm()
+        toast.success(piProfileForm.id ? 'Pi Profile 已更新' : 'Pi Profile 已创建')
       })
       .catch((error) => {
-        toast.error(toErrorMessage(error, '保存审查机器人失败'))
+        toast.error(toErrorMessage(error, '保存 Pi Profile 失败'))
       })
-      .finally(() => setSavingBot(false))
+      .finally(() => setSavingPiProfile(false))
   }
 
-  const updateBot = (bot: ReviewBot, changes: Partial<ReviewBot>) => {
-    return fetch(`/api/repositories/${repositoryId}/bots`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: bot.id,
-          ...changes,
-        }),
-      })
+  const updatePiProfile = (profile: PiProfile, changes: Partial<PiProfile>) => {
+    if (!piProfilesUrl) return Promise.reject(new Error('仓库 ID 无效'))
+
+    return fetch(piProfilesUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: profile.id,
+        ...changes,
+      }),
+    })
       .then((response) => {
         if (!response.ok) {
           return response.json().then((error) => {
-            throw new Error(error.error || '更新审查机器人失败')
+            throw new Error(error.error || '更新 Pi Profile 失败')
           })
         }
         return response.json()
       })
-      .then((updatedBot: ReviewBot) => {
-        setReviewBots((currentBots) => sortBots(currentBots.map((item) => item.id === updatedBot.id ? updatedBot : item)))
-        return updatedBot
+      .then((updatedProfile: PiProfile) => {
+        setPiProfiles((currentProfiles) => {
+          return sortPiProfiles(currentProfiles.map((item) => item.id === updatedProfile.id ? updatedProfile : item))
+        })
+        return updatedProfile
       })
   }
 
-  // 切换自动审查
   const toggleAutoReview = () => {
     if (!repository) return
 
@@ -399,91 +407,68 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
       })
   }
 
-  const toggleBotActive = (bot: ReviewBot) => {
-    return updateBot(bot, { isActive: !bot.isActive })
-      .then((updatedBot) => {
-        toast.success(`${updatedBot.name} 已${updatedBot.isActive ? '启用' : '禁用'}`)
+  const togglePiProfileActive = (profile: PiProfile) => {
+    return updatePiProfile(profile, { isActive: !profile.isActive })
+      .then((updatedProfile) => {
+        toast.success(`${updatedProfile.name} 已${updatedProfile.isActive ? '启用' : '停用'}`)
       })
       .catch((error) => {
-        toast.error(toErrorMessage(error, '更新审查机器人失败'))
+        toast.error(toErrorMessage(error, '更新 Pi Profile 失败'))
       })
   }
 
-  const deleteBot = (bot: ReviewBot) => {
-    return fetch(`/api/repositories/${repositoryId}/bots?id=${encodeURIComponent(bot.id)}`, {
+  const deletePiProfile = (profile: PiProfile) => {
+    if (!piProfilesUrl) {
+      toast.error('仓库 ID 无效')
+      return
+    }
+
+    return fetch(`${piProfilesUrl}?id=${encodeURIComponent(profile.id)}`, {
       method: 'DELETE',
     })
       .then((response) => {
         if (!response.ok) {
           return response.json().then((error) => {
-            throw new Error(error.error || '删除审查机器人失败')
+            throw new Error(error.error || '删除 Pi Profile 失败')
           })
         }
         return response.json()
       })
       .then(() => {
-        setReviewBots((currentBots) => currentBots.filter((item) => item.id !== bot.id))
-        toast.success('审查机器人已删除')
+        setPiProfiles((currentProfiles) => currentProfiles.filter((item) => item.id !== profile.id))
+        toast.success('Pi Profile 已删除')
       })
       .catch((error) => {
-        toast.error(toErrorMessage(error, '删除审查机器人失败'))
+        toast.error(toErrorMessage(error, '删除 Pi Profile 失败'))
       })
   }
 
-  const moveBot = (bot: ReviewBot, direction: 'up' | 'down') => {
-    const orderedBots = sortBots(reviewBots)
-    const currentIndex = orderedBots.findIndex((item) => item.id === bot.id)
+  const movePiProfile = (profile: PiProfile, direction: 'up' | 'down') => {
+    const orderedProfiles = sortPiProfiles(piProfiles)
+    const currentIndex = orderedProfiles.findIndex((item) => item.id === profile.id)
     const nextIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
-    const targetBot = orderedBots[nextIndex]
+    const targetProfile = orderedProfiles[nextIndex]
 
-    if (currentIndex < 0 || !targetBot) return
+    if (currentIndex < 0 || !targetProfile) return
 
     return Promise.all([
-      updateBot(bot, { sortOrder: nextIndex }),
-      updateBot(targetBot, { sortOrder: currentIndex }),
+      updatePiProfile(profile, { sortOrder: nextIndex }),
+      updatePiProfile(targetProfile, { sortOrder: currentIndex }),
     ])
       .then(() => {
-        setReviewBots((currentBots) => sortBots(currentBots.map((item) => {
-          if (item.id === bot.id) return { ...item, sortOrder: nextIndex }
-          if (item.id === targetBot.id) return { ...item, sortOrder: currentIndex }
-          return item
-        })))
+        setPiProfiles((currentProfiles) => {
+          return sortPiProfiles(currentProfiles.map((item) => {
+            if (item.id === profile.id) return { ...item, sortOrder: nextIndex }
+            if (item.id === targetProfile.id) return { ...item, sortOrder: currentIndex }
+            return item
+          }))
+        })
       })
       .catch((error) => {
         toast.error(toErrorMessage(error, '调整排序失败'))
-        loadReviewBots()
+        loadPiProfiles()
       })
   }
-
-  // 默认系统 Prompt 模板
-  const defaultPrompts = [
-    {
-      name: '全面审查',
-      prompt: '请全面审查此代码，重点关注安全、正确性、可维护性、性能和测试风险。请输出可定位、可行动的问题。',
-    },
-    {
-      name: '安全优先',
-      prompt: '请重点关注权限、输入校验、敏感数据、注入、鉴权绕过和依赖安全风险。低置信问题也可以保留，但必须标注原因。',
-    },
-    {
-      name: '性能优先',
-      prompt: '请重点关注 N+1 查询、重复 IO、缓存失效、算法复杂度、渲染性能和资源泄漏风险。',
-    },
-    {
-      name: '架构守护',
-      prompt: '请重点关注跨文件调用链、模块边界、职责泄漏、抽象倒置和与 Code Graph 中项目架构约定冲突的问题。',
-    },
-  ]
-
-  // 常用分支配置
-  const commonBranches = [
-    { name: '所有分支', value: '*' },
-    { name: '主分支', value: 'main,master' },
-    { name: '开发分支', value: 'develop,dev' },
-    { name: '功能分支', value: 'feature/*' },
-    { name: '修复分支', value: 'hotfix/*,bugfix/*' },
-    { name: '发布分支', value: 'release/*' },
-  ]
 
   if (loading) {
     return (
@@ -501,12 +486,11 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
     )
   }
 
-  const orderedReviewBots = sortBots(reviewBots)
-  const activeReviewBotCount = orderedReviewBots.filter((bot) => bot.isActive).length
+  const orderedPiProfiles = sortPiProfiles(piProfiles)
+  const activePiProfileCount = orderedPiProfiles.filter((profile) => profile.isActive).length
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
-      {/* 返回按钮 */}
       <div className="mb-6">
         <Button
           variant="ghost"
@@ -519,7 +503,6 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         </Button>
       </div>
 
-      {/* 仓库信息 */}
       <Card className="mb-6">
         <CardHeader>
           <div className="flex items-start justify-between">
@@ -533,14 +516,14 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
-              <Badge variant={repository.isActive ? "default" : "secondary"}>
+              <Badge variant={repository.isActive ? 'default' : 'secondary'}>
                 {repository.isActive ? '活跃' : '未激活'}
               </Badge>
               <Badge variant="outline">
                 {repository._count?.reviewLogs || 0} 次审查
               </Badge>
               <Button
-                variant={repository.autoReview ? "default" : "outline"}
+                variant={repository.autoReview ? 'default' : 'outline'}
                 size="sm"
                 onClick={toggleAutoReview}
               >
@@ -560,17 +543,16 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         <CardHeader>
           <CardTitle>仓库配置</CardTitle>
           <CardDescription>
-            这里仅保留仓库级触发配置。审查运行配置已迁移到下方“审查机器人”。
+            这里仅保留仓库级触发配置。审查运行配置由下方 Pi Profile 决定。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* 监听分支 */}
           <div className="space-y-2">
             <Label>监听分支</Label>
             <Input
               placeholder="例如: main,develop,feature/* 或留空监听所有分支"
               value={config.watchBranches}
-              onChange={(e) => setConfig({ ...config, watchBranches: e.target.value })}
+              onChange={(event) => setConfig({ ...config, watchBranches: event.target.value })}
             />
             <p className="text-xs text-muted-foreground">
               支持通配符 * 匹配，多个分支用逗号分隔。留空则监听所有分支。
@@ -591,7 +573,6 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </div>
           </div>
 
-          {/* 保存按钮 */}
           <div className="flex justify-end pt-4 border-t">
             <Button onClick={saveConfig} disabled={saving}>
               {saving ? (
@@ -612,80 +593,77 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
           <div className="flex items-start justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-3">
-                <Bot className="h-5 w-5" />
-                审查机器人
+                <Settings2 className="h-5 w-5" />
+                Pi Profile
               </CardTitle>
               <CardDescription>
-                排序第一的启用机器人作为主 Agent，其余启用机器人会作为条件辅助 Agent 参与复核。
+                排序第一的启用 Profile 会作为本次 Pi 审查的模型和 Prompt 配置来源。
               </CardDescription>
             </div>
-            <Button onClick={openCreateBotDialog} disabled={aiModels.length === 0}>
+            <Button onClick={openCreatePiProfileDialog} disabled={aiModels.length === 0}>
               <Plus className="h-4 w-4 mr-2" />
-              新增机器人
+              新增 Profile
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2 text-xs">
-            <Badge variant="outline">总数：{orderedReviewBots.length}</Badge>
-            <Badge variant={activeReviewBotCount > 0 ? 'default' : 'secondary'}>
-              启用：{activeReviewBotCount}
+            <Badge variant="outline">总数：{orderedPiProfiles.length}</Badge>
+            <Badge variant={activePiProfileCount > 0 ? 'default' : 'secondary'}>
+              启用：{activePiProfileCount}
             </Badge>
             <Badge variant="outline">可用模型：{aiModels.length}</Badge>
           </div>
 
           {aiModels.length === 0 && (
             <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-              暂无可用 AIModel。请先在系统设置中启用模型，机器人只引用已有模型，不单独保存 API Key。
+              暂无可用 AI 模型。请先在系统设置中启用模型，Pi Profile 只引用已有模型，不单独保存 API Key。
             </div>
           )}
 
-          {loadingBots ? (
+          {loadingPiProfiles ? (
             <div className="flex items-center justify-center rounded-md border p-6 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              正在加载审查机器人...
+              正在加载 Pi Profile...
             </div>
-          ) : orderedReviewBots.length === 0 ? (
+          ) : orderedPiProfiles.length === 0 ? (
             <div className="rounded-md border border-dashed p-6 text-center">
-              <p className="text-sm font-medium">还没有审查机器人</p>
+              <p className="text-sm font-medium">还没有 Pi Profile</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                新增至少一个启用机器人后，手动审查、Webhook 和 Retry 才会进入 Agent 审查流程。
+                新增至少一个启用 Profile 后，手动审查、Webhook 和 Retry 才会进入 Pi 审查流程。
               </p>
-              <Button className="mt-4" variant="outline" onClick={openCreateBotDialog} disabled={aiModels.length === 0}>
+              <Button className="mt-4" variant="outline" onClick={openCreatePiProfileDialog} disabled={aiModels.length === 0}>
                 <Plus className="h-4 w-4 mr-2" />
-                创建第一个机器人
+                创建第一个 Profile
               </Button>
             </div>
           ) : (
             <div className="space-y-3">
-              {orderedReviewBots.map((bot, index) => (
-                <div key={bot.id} className="rounded-lg border bg-card p-4">
+              {orderedPiProfiles.map((profile, index) => (
+                <div key={profile.id} className="rounded-lg border bg-card p-4">
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{bot.name}</p>
-                        <Badge variant={bot.isActive ? 'default' : 'secondary'}>
-                          {bot.isActive ? '启用' : '停用'}
+                        <p className="font-medium">{profile.name}</p>
+                        <Badge variant={profile.isActive ? 'default' : 'secondary'}>
+                          {profile.isActive ? '启用' : '停用'}
                         </Badge>
                         <Badge variant="outline">
-                          {bot.aiModel ? getModelDisplayName(bot.aiModel) : '模型缺失'}
+                          {profile.aiModel ? getModelDisplayName(profile.aiModel) : '模型缺失'}
                         </Badge>
                         <Badge variant="outline">
-                          {bot.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}
+                          {profile.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}
                         </Badge>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <Badge variant="secondary">轮次 {bot.maxIterations}</Badge>
-                        <Badge variant="secondary">上下文文件 {bot.maxContextFiles}</Badge>
-                        <Badge variant="secondary">调用深度 {bot.maxCallGraphDepth}</Badge>
-                        <Badge variant="secondary">输出限制 {bot.maxFindings}</Badge>
+                        <Badge variant="secondary">输出限制 {profile.maxFindings}</Badge>
                       </div>
-                      {bot.description && (
-                        <p className="mt-2 text-sm text-muted-foreground">{bot.description}</p>
+                      {profile.description && (
+                        <p className="mt-2 text-sm text-muted-foreground">{profile.description}</p>
                       )}
-                      {bot.prompt ? (
+                      {profile.prompt ? (
                         <p className="mt-3 max-h-24 overflow-y-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
-                          {bot.prompt}
+                          {profile.prompt}
                         </p>
                       ) : (
                         <p className="mt-3 text-xs text-muted-foreground">
@@ -698,7 +676,7 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                       <Button
                         variant="outline"
                         size="icon-xs"
-                        onClick={() => moveBot(bot, 'up')}
+                        onClick={() => movePiProfile(profile, 'up')}
                         disabled={index === 0}
                         title="上移"
                       >
@@ -707,19 +685,19 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                       <Button
                         variant="outline"
                         size="icon-xs"
-                        onClick={() => moveBot(bot, 'down')}
-                        disabled={index === orderedReviewBots.length - 1}
+                        onClick={() => movePiProfile(profile, 'down')}
+                        disabled={index === orderedPiProfiles.length - 1}
                         title="下移"
                       >
                         <ArrowDown className="h-3 w-3" />
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => toggleBotActive(bot)}>
-                        {bot.isActive ? '停用' : '启用'}
+                      <Button variant="outline" size="sm" onClick={() => togglePiProfileActive(profile)}>
+                        {profile.isActive ? '停用' : '启用'}
                       </Button>
-                      <Button variant="outline" size="icon-sm" onClick={() => openEditBotDialog(bot)} title="编辑">
+                      <Button variant="outline" size="icon-sm" onClick={() => openEditPiProfileDialog(profile)} title="编辑">
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="icon-sm" onClick={() => deleteBot(bot)} title="删除">
+                      <Button variant="outline" size="icon-sm" onClick={() => deletePiProfile(profile)} title="删除">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -731,34 +709,34 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
         </CardContent>
       </Card>
 
-      <Dialog open={botDialogOpen} onOpenChange={(open) => {
-        setBotDialogOpen(open)
-        if (!open) resetBotForm()
+      <Dialog open={piProfileDialogOpen} onOpenChange={(open) => {
+        setPiProfileDialogOpen(open)
+        if (!open) resetPiProfileForm()
       }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <form onSubmit={saveBot} className="space-y-5">
+          <form onSubmit={savePiProfile} className="space-y-5">
             <DialogHeader>
-              <DialogTitle>{botForm.id ? '编辑审查机器人' : '新增审查机器人'}</DialogTitle>
+              <DialogTitle>{piProfileForm.id ? '编辑 Pi Profile' : '新增 Pi Profile'}</DialogTitle>
               <DialogDescription>
-                主 Agent 会使用自己的模型和 Prompt 执行 Agent Loop，辅助 Agent 被条件调用时会标注来源。
+                Pi 会在仓库绑定的 OpenSandbox VM 内运行，使用该 Profile 的模型、Prompt 和输出限制。
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="bot-name">机器人名称</Label>
+                <Label htmlFor="pi-profile-name">Profile 名称</Label>
                 <Input
-                  id="bot-name"
-                  value={botForm.name}
-                  placeholder="例如：安全审查机器人"
-                  onChange={(event) => setBotForm({ ...botForm, name: event.target.value })}
+                  id="pi-profile-name"
+                  value={piProfileForm.name}
+                  placeholder="例如：安全 Profile"
+                  onChange={(event) => setPiProfileForm({ ...piProfileForm, name: event.target.value })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>AI 模型</Label>
                 <Select
-                  value={botForm.aiModelId}
-                  onValueChange={(value) => setBotForm({ ...botForm, aiModelId: value })}
+                  value={piProfileForm.aiModelId}
+                  onValueChange={(value) => setPiProfileForm({ ...piProfileForm, aiModelId: value })}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="选择 AI 模型" />
@@ -775,12 +753,12 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="bot-description">描述</Label>
+              <Label htmlFor="pi-profile-description">描述</Label>
               <Input
-                id="bot-description"
-                value={botForm.description}
-                placeholder="说明这个机器人关注的审查方向"
-                onChange={(event) => setBotForm({ ...botForm, description: event.target.value })}
+                id="pi-profile-description"
+                value={piProfileForm.description}
+                placeholder="说明这个 Profile 关注的审查方向"
+                onChange={(event) => setPiProfileForm({ ...piProfileForm, description: event.target.value })}
               />
             </div>
 
@@ -788,8 +766,8 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               <div className="space-y-2">
                 <Label>Prompt 模式</Label>
                 <Select
-                  value={botForm.promptMode}
-                  onValueChange={(value: PromptMode) => setBotForm({ ...botForm, promptMode: value })}
+                  value={piProfileForm.promptMode}
+                  onValueChange={(value: PromptMode) => setPiProfileForm({ ...piProfileForm, promptMode: value })}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -806,8 +784,8 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
               <div className="space-y-2">
                 <Label>启停状态</Label>
                 <Select
-                  value={botForm.isActive ? 'active' : 'inactive'}
-                  onValueChange={(value) => setBotForm({ ...botForm, isActive: value === 'active' })}
+                  value={piProfileForm.isActive ? 'active' : 'inactive'}
+                  onValueChange={(value) => setPiProfileForm({ ...piProfileForm, isActive: value === 'active' })}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -818,74 +796,29 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  只有启用机器人会参与下一次 Agent 审查。
+                  只有启用 Profile 会参与下一次 Pi 审查；排序第一的启用 Profile 会被执行。
                 </p>
               </div>
             </div>
 
             <div className="rounded-lg border bg-muted/20 p-4">
               <div className="mb-4">
-                <p className="text-sm font-medium">Agent Loop 预算</p>
+                <p className="text-sm font-medium">Pi 输出限制</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  控制单次审查读取多少上下文。大仓库建议只给少数深扫机器人调高预算。
+                  控制单次审查最多保留多少条可定位问题，超出后会按去重结果截断。
                 </p>
               </div>
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="bot-max-iterations">最大轮次</Label>
+                  <Label htmlFor="pi-profile-max-findings">输出条数限制</Label>
                   <Input
-                    id="bot-max-iterations"
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={botForm.maxIterations}
-                    onChange={(event) => setBotForm({
-                      ...botForm,
-                      maxIterations: toPositiveInteger(event.target.value, 5),
-                    })}
-                  />
-                  <p className="text-xs text-muted-foreground">1-10，默认 5。</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bot-max-context-files">上下文文件</Label>
-                  <Input
-                    id="bot-max-context-files"
+                    id="pi-profile-max-findings"
                     type="number"
                     min={1}
                     max={200}
-                    value={botForm.maxContextFiles}
-                    onChange={(event) => setBotForm({
-                      ...botForm,
-                      maxContextFiles: toPositiveInteger(event.target.value, 12),
-                    })}
-                  />
-                  <p className="text-xs text-muted-foreground">1-200，默认 12。</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bot-max-call-graph-depth">调用深度</Label>
-                  <Input
-                    id="bot-max-call-graph-depth"
-                    type="number"
-                    min={0}
-                    max={4}
-                    value={botForm.maxCallGraphDepth}
-                    onChange={(event) => setBotForm({
-                      ...botForm,
-                      maxCallGraphDepth: toNonNegativeInteger(event.target.value, 2),
-                    })}
-                  />
-                  <p className="text-xs text-muted-foreground">0-4，默认 2。</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bot-max-findings">输出条数限制</Label>
-                  <Input
-                    id="bot-max-findings"
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={botForm.maxFindings}
-                    onChange={(event) => setBotForm({
-                      ...botForm,
+                    value={piProfileForm.maxFindings}
+                    onChange={(event) => setPiProfileForm({
+                      ...piProfileForm,
                       maxFindings: toPositiveInteger(event.target.value, 50),
                     })}
                   />
@@ -895,24 +828,24 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="bot-prompt">机器人 Prompt</Label>
+              <Label htmlFor="pi-profile-prompt">Profile Prompt</Label>
               <Textarea
-                id="bot-prompt"
+                id="pi-profile-prompt"
                 rows={8}
-                value={botForm.prompt}
-                placeholder="输入这个机器人的专属审查提示词，留空则使用内置 Prompt..."
-                onChange={(event) => setBotForm({ ...botForm, prompt: event.target.value })}
+                value={piProfileForm.prompt}
+                placeholder="输入这个 Profile 的专属审查提示词，留空则使用内置 Prompt..."
+                onChange={(event) => setPiProfileForm({ ...piProfileForm, prompt: event.target.value })}
               />
               <div className="flex flex-wrap gap-2">
                 <span className="text-xs text-muted-foreground">快捷模板：</span>
-                {defaultPrompts.map((template) => (
+                {defaultProfilePrompts.map((template) => (
                   <Button
                     key={template.name}
                     type="button"
                     variant="outline"
                     size="xs"
                     className="h-6 text-xs"
-                    onClick={() => setBotForm({ ...botForm, prompt: template.prompt })}
+                    onClick={() => setPiProfileForm({ ...piProfileForm, prompt: template.prompt })}
                   >
                     {template.name}
                   </Button>
@@ -921,17 +854,17 @@ export default function RepositoryDetailPage() { // 仓库详情页组件
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setBotDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setPiProfileDialogOpen(false)}>
                 取消
               </Button>
-              <Button type="submit" disabled={savingBot}>
-                {savingBot ? (
+              <Button type="submit" disabled={savingPiProfile}>
+                {savingPiProfile ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     保存中...
                   </>
                 ) : (
-                  '保存机器人'
+                  '保存 Profile'
                 )}
               </Button>
             </DialogFooter>

@@ -74,11 +74,10 @@ const statusLabels: Record<string, string> = {
   idle: '等待',
 }
 
-function getAgentRoleLabel(node: ReviewWorkflowNode | null) {
-  if (!node?.nodeKey.startsWith('agent:')) return '主链路'
-  if (node.title.includes('辅助 Agent')) return '辅助 Agent'
-  if (node.title.includes('主 Agent')) return '主 Agent'
-  return 'Agent 内部步骤'
+function getRuntimeRoleLabel(node: ReviewWorkflowNode | null) {
+  if (!node) return '主链路'
+  if (node.nodeKey.startsWith('pi:')) return 'Pi Runtime'
+  return '主链路'
 }
 
 function formatJson(value: unknown) {
@@ -133,8 +132,8 @@ function isStreamingReviewNode(node: ReviewWorkflowNode) {
 
 function issueMatchesNode(issue: WorkflowIssue, node: ReviewWorkflowNode | null) {
   if (!node) return false
-  if (!node.reviewBotRunId) return node.kind === 'aggregate' || node.kind === 'publish' || node.kind === 'finish'
-  return issue.reviewBotRunId === node.reviewBotRunId
+  if (!node.piReviewRunId) return node.kind === 'aggregate' || node.kind === 'publish' || node.kind === 'finish'
+  return issue.piReviewRunId === node.piReviewRunId
 }
 
 function asRecord(value: unknown) {
@@ -171,37 +170,13 @@ function getDefaultSelectedNodeKey(nodes: ReviewWorkflowNode[]) {
 }
 
 function getWorkflowStageLabel(node: ReviewWorkflowNode) {
-  if (!node.nodeKey.startsWith('agent:')) return reviewWorkflowKindLabels[node.kind] || node.kind
-
-  const parts = node.nodeKey.split(':')
-  const iterationIndex = parts.indexOf('iteration')
-  if (iterationIndex === -1) return 'Agent'
-
-  const stage = node.kind === 'decision'
-    ? parts.slice(iterationIndex + 2).join(':') || 'decision'
-    : parts[iterationIndex + 2] || node.kind
-  const labels: Record<string, string> = {
-    initializing: '初始化',
-    context: '上下文检索',
-    plan: '审查计划',
-    review: '模型审查',
-    validation: 'Finding 校验',
-    'decision:additional_agents': '辅助 Agent 决策',
-    agent: 'Agent',
-    tool: '辅助 Agent',
-    critic: 'Critic 决策',
-    finish: '完成',
-    error: '异常',
-  }
-
-  return labels[stage] || stage
+  if (node.nodeKey.startsWith('pi:')) return 'Pi Review'
+  return reviewWorkflowKindLabels[node.kind] || node.kind
 }
 
 function getWorkflowIterationLabel(node: ReviewWorkflowNode) {
-  const parts = node.nodeKey.split(':')
-  const iterationIndex = parts.indexOf('iteration')
-  if (iterationIndex === -1) return getAgentRoleLabel(node)
-  return `${getAgentRoleLabel(node)} · 第 ${parts[iterationIndex + 1] || '1'} 轮`
+  if (!node.nodeKey.startsWith('pi:')) return getRuntimeRoleLabel(node)
+  return getRuntimeRoleLabel(node)
 }
 
 function getNodeInputFacts(node: ReviewWorkflowNode) {
@@ -270,7 +245,7 @@ function getNodeInputText(node: ReviewWorkflowNode) {
   const rawDetail = metricValue(raw, 'detail')
   if (node.status === 'running' && rawDetail) return rawDetail
 
-  return '该节点未记录独立输入。可展开“指标”和“原始节点”查看底层 Trace。'
+  return '该节点未记录独立输入。可展开“指标”和“原始节点”查看底层运行数据。'
 }
 
 function getNodeOutputText(node: ReviewWorkflowNode) {
@@ -366,7 +341,7 @@ function WorkflowStepList({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Terminal className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold text-foreground">Agent 执行控制台</p>
+            <p className="text-sm font-semibold text-foreground">Runtime 执行控制台</p>
           </div>
           <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
             {runningNode ? `running: ${runningNode.title}` : `snapshot: ${formatTime(updatedAt)}`}
@@ -461,7 +436,7 @@ function NodeInspector({
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{getWorkflowStageLabel(node)}</Badge>
-          <Badge variant="secondary">{getAgentRoleLabel(node)}</Badge>
+          <Badge variant="secondary">{getRuntimeRoleLabel(node)}</Badge>
         </div>
       </div>
 

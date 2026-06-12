@@ -109,7 +109,7 @@ const roleColors: Record<string, string> = {
   page: '#ea580c',
   component: '#0891b2',
   service: '#2563eb',
-  agent_step: '#7c3aed',
+  runtime_step: '#7c3aed',
   review_step: '#9333ea',
   review_core: '#a855f7',
   data_model: '#16a34a',

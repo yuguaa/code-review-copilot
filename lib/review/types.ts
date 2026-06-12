@@ -4,7 +4,7 @@
  */
 
 import type { Prisma } from "@prisma/client";
-import type { GitLabDiff, AIModelConfig, ReviewComment, ReviewCommentSource, GitLabMergeRequest, GitLabRepositoryTreeItem, GitLabBranch } from "@/lib/types";
+import type { GitLabDiff, ReviewComment, ReviewCommentSource, GitLabMergeRequest, GitLabRepositoryTreeItem, GitLabBranch } from "@/lib/types";
 
 export type ReviewLogWithRepository = Prisma.ReviewLogGetPayload<{
   include: {
@@ -26,7 +26,7 @@ export interface FileReviewInput {
 /** 单个文件审查结果 */
 export interface FileReviewResult {
   filePath: string;
-  aiResponse: string;
+  piRawOutput: string;
   prompt: string;
   counts: {
     critical: number;
@@ -46,10 +46,10 @@ export interface FileReviewResult {
     severity: "critical" | "normal" | "suggestion";
     content: string;
     confidence?: number;
-    reviewBotRunId?: string;
-    sourceBotName?: string;
-    sourceBotModel?: string;
-    sourceBots?: ReviewCommentSource[];
+    piReviewRunId?: string;
+    sourceProfileName?: string;
+    sourceProfileModel?: string;
+    sourceProfiles?: ReviewCommentSource[];
   }>;
 }
 
@@ -115,19 +115,11 @@ export interface GitLabServiceInstance {
   }) => Promise<Array<{ id: string; short_id: string; title: string; message: string; author_name: string; author_email: string; created_at: string }>>;
 }
 
-/** 仓库配置信息 */
-export interface RepositoryConfig {
-  customPrompt?: string | null;
-  customPromptMode?: "extend" | "replace";
-}
-
 /** 代码审查执行状态 */
 export interface ReviewState {
   reviewLogId: string;
-  reviewBotRunId: string | null;
+  piReviewRunId: string | null;
   gitlabService: GitLabServiceInstance | null;
-  repositoryConfig: RepositoryConfig;
-  modelConfig: AIModelConfig;
   mrInfo: GitLabMergeRequest | null;
   reviewLog: ReviewLogWithRepository | null;
   diffs: GitLabDiff[];
@@ -137,17 +129,14 @@ export interface ReviewState {
   summary: string;
   memorySnapshotId: string | null;
   architectureSummary: string;
-  agentContextSummary: string;
-  agentPlan: Record<string, unknown>;
-  agentTraceId: string | null;
   currentFileIndex: number;
   currentFile: FileReviewInput | null;
   fileResults: FileReviewResult[];
   statistics: ReviewStatistics;
   criticalComments: ReviewComment[];
   reviewComments: ReviewComment[];
-  aiResponsesByFile: Record<string, string>;
-  reviewPromptsByFile: Record<string, string>;
+  piRawOutputsByFile: Record<string, string>;
+  piPromptsByFile: Record<string, string>;
   completed: boolean;
   error: string | null;
 }
@@ -155,17 +144,8 @@ export interface ReviewState {
 export function createInitialReviewState(input: Partial<ReviewState>): ReviewState {
   return {
     reviewLogId: "",
-    reviewBotRunId: null,
+    piReviewRunId: null,
     gitlabService: null,
-    repositoryConfig: {},
-    modelConfig: {
-      id: "default",
-      name: "Default",
-      provider: "openai",
-      modelId: "gpt-4o",
-      apiKey: "",
-      isActive: true,
-    },
     mrInfo: null,
     reviewLog: null,
     diffs: [],
@@ -175,17 +155,14 @@ export function createInitialReviewState(input: Partial<ReviewState>): ReviewSta
     summary: "",
     memorySnapshotId: null,
     architectureSummary: "",
-    agentContextSummary: "",
-    agentPlan: {},
-    agentTraceId: null,
     currentFileIndex: 0,
     currentFile: null,
     fileResults: [],
     statistics: { critical: 0, normal: 0, suggestion: 0, total: 0 },
     criticalComments: [],
     reviewComments: [],
-    aiResponsesByFile: {},
-    reviewPromptsByFile: {},
+    piRawOutputsByFile: {},
+    piPromptsByFile: {},
     completed: false,
     error: null,
     ...input,

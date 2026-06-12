@@ -1,6 +1,7 @@
 import { Prisma, type ReviewLog } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "@/lib/services/gitlab";
+import { interruptRunningPiCommand } from "@/lib/services/pi-runtime-command-registry";
 import { reviewService } from "@/lib/services/review";
 import { REVIEW_CANCELLED_STATUS } from "@/lib/services/review-cancellation";
 import { reviewWorkflowRecorder } from "@/lib/services/review-workflow-recorder";
@@ -249,6 +250,7 @@ export class ReviewTriggerService {
 
   stopReview(reviewId: string) {
     const stoppedAt = new Date();
+    let shouldInterruptRuntime = false;
 
     return prisma.$transaction((tx) => {
       return tx.reviewLog.updateMany({
@@ -266,13 +268,17 @@ export class ReviewTriggerService {
           return tx.reviewLog.findUnique({ where: { id: reviewId } })
             .then((reviewLog) => {
               if (!reviewLog) throw new Error("Review log not found");
-              if (reviewLog.status === REVIEW_CANCELLED_STATUS) return reviewLog;
+              if (reviewLog.status === REVIEW_CANCELLED_STATUS) {
+                shouldInterruptRuntime = true;
+                return reviewLog;
+              }
               throw new Error("Only pending reviews can be stopped");
             });
         }
 
+        shouldInterruptRuntime = true;
         return Promise.all([
-          tx.reviewBotRun.updateMany({
+          tx.piReviewRun.updateMany({
             where: {
               reviewLogId: reviewId,
               status: { in: ["pending", "running"] },
@@ -283,14 +289,31 @@ export class ReviewTriggerService {
               completedAt: stoppedAt,
             },
           }),
+          tx.reviewSandboxSession.updateMany({
+            where: {
+              reviewLogId: reviewId,
+              status: "running",
+            },
+            data: {
+              status: "cancelling",
+              error: "手动停止",
+            },
+          }),
           tx.reviewLog.findUniqueOrThrow({ where: { id: reviewId } }),
-        ]).then(([, reviewLog]) => reviewLog);
+        ]).then(([, , reviewLog]) => reviewLog);
       });
     }).then((reviewLog) => {
-      return reviewWorkflowRecorder.cancelRunningNodes(reviewId)
+      const interruptPromise = shouldInterruptRuntime
+        ? interruptRunningPiCommand(reviewId)
+        : Promise.resolve();
+
+      return interruptPromise
+        .catch((error) => {
+          logError(log, error, "⚠️ [ReviewTriggerService] Failed to stop running Pi command:");
+        })
+        .then(() => reviewWorkflowRecorder.cancelRunningNodes(reviewId))
         .catch((error) => {
           logError(log, error, "⚠️ [ReviewTriggerService] Failed to cancel workflow nodes:");
-          return null;
         })
         .then(() => reviewLog);
     });
@@ -301,7 +324,7 @@ export class ReviewTriggerService {
       repository.gitLabAccount.url,
       repository.gitLabAccount.accessToken,
     );
-    const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`;
+    const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🖥️ Pi Runtime 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`;
 
     return gitlabService.createMergeRequestComment(
       repository.gitLabProjectId,
@@ -330,7 +353,7 @@ export class ReviewTriggerService {
       repository.gitLabAccount.accessToken,
     );
     const pushMarker = `CRC_PUSH_PLACEHOLDER:${reviewLog.id}`;
-    const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🤖 AI 正在审查中\n\n<!-- ${pushMarker} -->\n<sub>⏱️ 开始时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`;
+    const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🖥️ Pi Runtime 正在审查中\n\n<!-- ${pushMarker} -->\n<sub>⏱️ 开始时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`;
 
     return gitlabService.createCommitComment(
       repository.gitLabProjectId,

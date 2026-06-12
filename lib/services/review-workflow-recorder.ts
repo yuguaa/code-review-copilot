@@ -16,7 +16,7 @@ export type ReviewWorkflowNodeKind =
   | "diff"
   | "memory"
   | "summary"
-  | "agent"
+  | "runtime"
   | "decision"
   | "iteration_stage"
   | "aggregate"
@@ -25,7 +25,7 @@ export type ReviewWorkflowNodeKind =
 
 type WorkflowNodeInput = {
   reviewLogId: string;
-  reviewBotRunId?: string | null;
+  piReviewRunId?: string | null;
   nodeKey: string;
   parentNodeKey?: string | null;
   kind: ReviewWorkflowNodeKind;
@@ -62,7 +62,7 @@ export class ReviewWorkflowRecorder {
   upsertNode(input: WorkflowNodeInput) {
     const data = {
       reviewLogId: input.reviewLogId,
-      reviewBotRunId: input.reviewBotRunId || null,
+      piReviewRunId: input.piReviewRunId || null,
       nodeKey: input.nodeKey,
       parentNodeKey: input.parentNodeKey || null,
       kind: input.kind,
@@ -97,7 +97,7 @@ export class ReviewWorkflowRecorder {
         },
       },
       update: {
-        reviewBotRunId: input.reviewBotRunId || null,
+        piReviewRunId: input.piReviewRunId || null,
         parentNodeKey: input.parentNodeKey || null,
         kind: input.kind,
         status: "running",
@@ -113,7 +113,7 @@ export class ReviewWorkflowRecorder {
       },
       create: {
         reviewLogId: input.reviewLogId,
-        reviewBotRunId: input.reviewBotRunId || null,
+        piReviewRunId: input.piReviewRunId || null,
         nodeKey: input.nodeKey,
         parentNodeKey: input.parentNodeKey || null,
         kind: input.kind,
@@ -142,7 +142,7 @@ export class ReviewWorkflowRecorder {
       if (!node) {
         return this.upsertNode({
           reviewLogId: input.reviewLogId,
-          reviewBotRunId: input.reviewBotRunId,
+          piReviewRunId: input.piReviewRunId,
           nodeKey: input.nodeKey,
           parentNodeKey: input.parentNodeKey,
           kind: input.kind || "finish",
@@ -157,7 +157,7 @@ export class ReviewWorkflowRecorder {
       }
 
       const updateData: Prisma.ReviewWorkflowNodeUncheckedUpdateInput = {
-        reviewBotRunId: input.reviewBotRunId === undefined ? node.reviewBotRunId : input.reviewBotRunId,
+        piReviewRunId: input.piReviewRunId === undefined ? node.piReviewRunId : input.piReviewRunId,
         parentNodeKey: input.parentNodeKey === undefined ? node.parentNodeKey : input.parentNodeKey,
         kind: input.kind || node.kind,
         status: input.status || "success",

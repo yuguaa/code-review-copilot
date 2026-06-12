@@ -13,20 +13,42 @@ import { sendReviewToDingTalk } from "@/lib/services/dingtalk";
 import type { ReviewComment, ReviewLog } from "@prisma/client";
 import type { ReviewState } from "../types";
 import { createLogger, logError, logWarn } from "@/lib/logger";
+import { REVIEW_CANCELLED_STATUS, ReviewCancelledError } from "@/lib/services/review-cancellation";
 
 const log = createLogger("PublishCommentStep");
 
-type BotRunForSummary = {
+type PiRunForSummary = {
   status: string;
   summary: string | null;
-  aiModelName: string;
-  reviewBot: { name: string } | null;
-  agentTrace: {
-    loopIterationsJson: unknown;
-    finalPlanJson: unknown;
-    criticJson: unknown;
-  } | null;
+  modelName: string;
+  piProfile: { name: string } | null;
 };
+
+function markReviewCompleted(reviewLogId: string): Promise<void> {
+  return prisma.reviewLog.updateMany({
+    where: {
+      id: reviewLogId,
+      status: "pending",
+    },
+    data: {
+      status: "completed",
+      completedAt: new Date(),
+      error: null,
+    },
+  }).then((result) => {
+    if (result.count > 0) return undefined;
+
+    return prisma.reviewLog.findUnique({
+      where: { id: reviewLogId },
+      select: { status: true },
+    }).then((reviewLog) => {
+      if (reviewLog?.status === REVIEW_CANCELLED_STATUS) {
+        throw new ReviewCancelledError(reviewLogId);
+      }
+      throw new Error("Review log is no longer pending");
+    });
+  });
+}
 
 /**
  * 发布评论
@@ -55,17 +77,10 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
         where: { isPosted: false },
         orderBy: { createdAt: "asc" },
       },
-      botRuns: {
+      piRuns: {
         orderBy: { startedAt: "asc" },
         include: {
-          reviewBot: { select: { name: true } },
-          agentTrace: {
-            select: {
-              loopIterationsJson: true,
-              finalPlanJson: true,
-              criticJson: true,
-            },
-          },
+          piProfile: { select: { name: true } },
         },
       },
     },
@@ -89,7 +104,7 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
     state.summary || "",
     state.fileResults,
     reviewLog.comments,
-    reviewLog.botRuns,
+    reviewLog.piRuns,
     state.reviewScope,
     state.incrementalBaseSha
   );
@@ -210,6 +225,10 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
     publishError = error instanceof Error ? error.message : "Failed to publish summary comment";
   }
 
+  if (!publishError) {
+    await markReviewCompleted(state.reviewLogId);
+  }
+
   // 发送钉钉机器人通知（不影响主流程）
   await sendReviewToDingTalk({
     reviewLog,
@@ -233,7 +252,7 @@ function formatSummaryComment(
   summary: string,
   fileResults: Array<{ filePath: string; counts: { critical: number; normal: number; suggestion: number } }>,
   postedComments: ReviewComment[],
-  botRuns: BotRunForSummary[],
+  piRuns: PiRunForSummary[],
   reviewScope: "full" | "incremental",
   incrementalBaseSha: string | null
 ): string {
@@ -269,7 +288,7 @@ function formatSummaryComment(
   }
   lines.push(`- 审查文件：${reviewedFiles}/${totalFiles}（其中 ${filesWithIssues} 个文件存在问题）`);
   lines.push(`- 问题统计：🔴 严重 ${critical} / ⚠️ 一般 ${normal} / 💡 建议 ${suggestion}`);
-  lines.push(`- 审查机器人：${botRuns.length} 个`);
+  lines.push(`- Pi Profile：${piRuns.length} 个`);
 
   lines.push("");
   const actionableCount = criticalComments.length + normalComments.length;
@@ -338,13 +357,13 @@ function formatSummaryComment(
   }
 
   lines.push("");
-  lines.push("### 审查机器人结果");
-  if (botRuns.length === 0) {
-    lines.push("- 未记录机器人执行结果。");
+  lines.push("### Pi Profile 结果");
+  if (piRuns.length === 0) {
+    lines.push("- 未记录 Pi Profile 执行结果。");
   } else {
-    botRuns.forEach((botRun) => {
-      const botName = botRun.reviewBot?.name || "未知机器人";
-      lines.push(`- **${botName}** / \`${botRun.aiModelName}\`：${formatBotRunStatus(botRun.status)}${botRun.summary ? `，${botRun.summary}` : ""}`);
+    piRuns.forEach((piRun) => {
+      const profileName = piRun.piProfile?.name || "未知 Profile";
+      lines.push(`- **${profileName}** / \`${piRun.modelName}\`：${formatPiRunStatus(piRun.status)}${piRun.summary ? `，${piRun.summary}` : ""}`);
     });
   }
 
@@ -401,7 +420,7 @@ function buildFileRiskRank(comments: ReviewComment[]): Array<{ filePath: string;
     .slice(0, 5);
 }
 
-function formatBotRunStatus(status: string): string {
+function formatPiRunStatus(status: string): string {
   if (status === "completed") return "已完成";
   if (status === "running") return "运行中";
   if (status === "failed") return "失败";
@@ -410,19 +429,19 @@ function formatBotRunStatus(status: string): string {
 }
 
 function formatCommentSources(comment: ReviewComment): string {
-  const sourceBots = Array.isArray(comment.sourceBotsJson)
-    ? comment.sourceBotsJson as Array<{ botName?: string; model?: string; confidence?: number }>
+  const sourceProfiles = Array.isArray(comment.sourceProfilesJson)
+    ? comment.sourceProfilesJson as Array<{ profileName?: string; model?: string; confidence?: number }>
     : [];
 
-  if (sourceBots.length > 0) {
-    return sourceBots
+  if (sourceProfiles.length > 0) {
+    return sourceProfiles
       .map((source) => {
-        return `${source.botName || "未知机器人"} / ${source.model || "unknown"}`;
+        return `${source.profileName || "未知 Profile"} / ${source.model || "unknown"}`;
       })
       .join("；");
   }
 
-  return `${comment.sourceBotName || "默认审查机器人"} / ${comment.sourceBotModel || "unknown"}`;
+  return `${comment.sourceProfileName || "默认 Pi Profile"} / ${comment.sourceProfileModel || "unknown"}`;
 }
 
 function getReviewConclusion(critical: number, normal: number, suggestion: number): string {

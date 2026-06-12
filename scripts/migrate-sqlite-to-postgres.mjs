@@ -21,7 +21,7 @@ const REQUIRED_TABLES = [
 ];
 
 const ADDITIONAL_TARGET_MODELS = [
-  "repositoryReviewBot",
+  "repositoryPiProfile",
 ];
 
 const MIGRATION_TABLES = [
@@ -112,16 +112,7 @@ const MIGRATION_TABLES = [
       gitLabAccountId: row.gitLabAccountId,
       isActive: toBoolean(row.isActive),
       autoReview: toBoolean(row.autoReview),
-      defaultAIModelId: row.defaultAIModelId,
       watchBranches: row.watchBranches,
-      customPrompt: row.customPrompt,
-      customPromptMode: row.customPromptMode ?? "extend",
-      customProvider: row.customProvider,
-      customModelId: row.customModelId,
-      customApiKey: row.customApiKey,
-      customApiEndpoint: row.customApiEndpoint,
-      customMaxTokens: toNullableNumber(row.customMaxTokens),
-      customTemperature: toNullableNumber(row.customTemperature),
       createdAt: toDate(row.createdAt),
       updatedAt: toDate(row.updatedAt),
     }),
@@ -180,11 +171,9 @@ const MIGRATION_TABLES = [
       criticalIssues: Number(row.criticalIssues ?? 0),
       normalIssues: Number(row.normalIssues ?? 0),
       suggestions: Number(row.suggestions ?? 0),
-      aiSummary: row.aiSummary,
-      aiResponse: row.aiResponse,
-      reviewPrompts: row.reviewPrompts,
-      aiModelProvider: row.aiModelProvider,
-      aiModelId: row.aiModelId,
+      changeSummary: row.aiSummary,
+      piRawOutputs: row.aiResponse,
+      piPrompts: row.reviewPrompts,
       gitlabDiscussionId: row.gitlabDiscussionId,
       gitlabNoteId: toNullableNumber(row.gitlabNoteId),
       startedAt: toDate(row.startedAt),
@@ -284,12 +273,12 @@ validateSourceSchema(sourceSchema);
 
 const sourceCounts = await loadSourceCounts(sourcePath);
 sourceCounts.MigratedCustomAIModel = await countCustomAIModelsToCreate(sourcePath);
-sourceCounts.RepositoryReviewBot = await countDefaultBotsToCreate(sourcePath);
-sourceCounts.RepositoryWithoutBotModel = await countRepositoriesWithoutBotModel(sourcePath);
+sourceCounts.RepositoryPiProfile = await countDefaultPiProfilesToCreate(sourcePath);
+sourceCounts.RepositoryWithoutPiProfileModel = await countRepositoriesWithoutPiProfileModel(sourcePath);
 printCounts("源库记录数", sourceCounts);
 
-if (sourceCounts.RepositoryWithoutBotModel > 0) {
-  fail(`有 ${sourceCounts.RepositoryWithoutBotModel} 个仓库缺少可迁移的 AI 模型配置，无法创建默认审查机器人。`);
+if (sourceCounts.RepositoryWithoutPiProfileModel > 0) {
+  fail(`有 ${sourceCounts.RepositoryWithoutPiProfileModel} 个仓库缺少可迁移的 AI 模型配置，无法创建默认 Pi Profile。`);
 }
 
 if (dryRun) {
@@ -453,7 +442,7 @@ async function assertTargetSchema(prisma) {
   }
 
   await prisma.$queryRaw`SELECT 1`;
-  await prisma.repositoryReviewBot.count();
+  await prisma.repositoryPiProfile.count();
 }
 
 async function migrate(prisma, sqlitePath) {
@@ -486,7 +475,7 @@ async function migrate(prisma, sqlitePath) {
     console.log(`${table.name}: inserted=${inserted}, skipped=${skipped}`);
   }
 
-  await createDefaultReviewBots(prisma, sqlitePath);
+  await createDefaultPiProfiles(prisma, sqlitePath);
 }
 
 async function loadTargetCounts(prisma) {
@@ -496,12 +485,12 @@ async function loadTargetCounts(prisma) {
     counts[table.name] = await prisma[table.targetModel].count();
   }
 
-  counts.RepositoryReviewBot = await prisma.repositoryReviewBot.count();
+  counts.RepositoryPiProfile = await prisma.repositoryPiProfile.count();
 
   return counts;
 }
 
-async function countDefaultBotsToCreate(sqlitePath) {
+async function countDefaultPiProfilesToCreate(sqlitePath) {
   const rows = await sqliteJson(
     sqlitePath,
     `SELECT COUNT(*) AS count FROM repositories
@@ -527,7 +516,7 @@ async function countCustomAIModelsToCreate(sqlitePath) {
   return Number(rows[0]?.count ?? 0);
 }
 
-async function countRepositoriesWithoutBotModel(sqlitePath) {
+async function countRepositoriesWithoutPiProfileModel(sqlitePath) {
   const rows = await sqliteJson(
     sqlitePath,
     `SELECT COUNT(*) AS count FROM repositories
@@ -541,14 +530,14 @@ async function countRepositoriesWithoutBotModel(sqlitePath) {
   return Number(rows[0]?.count ?? 0);
 }
 
-async function createDefaultReviewBots(prisma, sqlitePath) {
-  const repositories = await sqliteJson(sqlitePath, "SELECT * FROM repositories ORDER BY id");
+async function createDefaultPiProfiles(prisma, sqlitePath) {
+  const legacyRepositories = await sqliteJson(sqlitePath, "SELECT * FROM repositories ORDER BY id");
   let inserted = 0;
   let skipped = 0;
 
-  for (const repository of repositories) {
-    const exists = await prisma.repositoryReviewBot.findFirst({
-      where: { repositoryId: repository.id },
+  for (const legacyRepository of legacyRepositories) {
+    const exists = await prisma.repositoryPiProfile.findFirst({
+      where: { repositoryId: legacyRepository.id },
       select: { id: true },
     });
 
@@ -557,78 +546,75 @@ async function createDefaultReviewBots(prisma, sqlitePath) {
       continue;
     }
 
-    const aiModelId = await resolveDefaultBotAIModelId(prisma, repository);
+    const aiModelId = await resolveLegacyPiProfileAIModelId(prisma, legacyRepository);
 
-    await prisma.repositoryReviewBot.create({
+    await prisma.repositoryPiProfile.create({
       data: {
-        repositoryId: repository.id,
+        repositoryId: legacyRepository.id,
         aiModelId,
-        name: "默认审查机器人",
+        name: "默认 Pi Profile",
         description: "由 SQLite 历史仓库配置迁移生成",
-        prompt: repository.customPrompt || null,
-        promptMode: repository.customPromptMode || "extend",
+        prompt: legacyRepository.customPrompt || null,
+        promptMode: legacyRepository.customPromptMode || "extend",
         isActive: true,
         sortOrder: 0,
-        maxIterations: 5,
-        maxContextFiles: 12,
-        maxCallGraphDepth: 2,
         maxFindings: 50,
       },
     });
     inserted += 1;
   }
 
-  console.log(`RepositoryReviewBot: inserted=${inserted}, skipped=${skipped}`);
+  console.log(`RepositoryPiProfile: inserted=${inserted}, skipped=${skipped}`);
 }
 
-async function resolveDefaultBotAIModelId(prisma, repository) {
-  if (hasText(repository.defaultAIModelId)) {
-    return repository.defaultAIModelId;
+async function resolveLegacyPiProfileAIModelId(prisma, legacyRepository) {
+  if (hasText(legacyRepository.defaultAIModelId)) {
+    return legacyRepository.defaultAIModelId;
   }
 
-  if (hasCompleteCustomAIModelConfig(repository)) {
-    return ensureMigratedCustomAIModel(prisma, repository);
+  if (hasCompleteLegacyCustomAIModelConfig(legacyRepository)) {
+    return ensureMigratedLegacyCustomAIModel(prisma, legacyRepository);
   }
 
-  fail(`仓库 ${repository.path || repository.id} 缺少可迁移的 AI 模型配置，无法创建默认审查机器人。`);
+  fail(`仓库 ${legacyRepository.path || legacyRepository.id} 缺少可迁移的 AI 模型配置，无法创建默认 Pi Profile。`);
 }
 
-function hasCompleteCustomAIModelConfig(repository) {
-  return hasText(repository.customProvider)
-    && hasText(repository.customModelId)
-    && hasText(repository.customApiKey);
+function hasCompleteLegacyCustomAIModelConfig(legacyRepository) {
+  return hasText(legacyRepository.customProvider)
+    && hasText(legacyRepository.customModelId)
+    && hasText(legacyRepository.customApiKey);
 }
 
 function hasText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-async function ensureMigratedCustomAIModel(prisma, repository) {
-  const aiModelId = buildMigratedCustomAIModelId(repository.id);
+async function ensureMigratedLegacyCustomAIModel(prisma, legacyRepository) {
+  const aiModelId = buildMigratedCustomAIModelId(legacyRepository.id);
 
   await prisma.aIModel.upsert({
     where: { id: aiModelId },
     update: {
-      provider: repository.customProvider.trim(),
-      modelId: repository.customModelId.trim(),
-      apiKey: repository.customApiKey,
-      apiEndpoint: repository.customApiEndpoint || null,
-      maxTokens: toNullableNumber(repository.customMaxTokens),
-      temperature: toNullableNumber(repository.customTemperature),
+      provider: legacyRepository.customProvider.trim(),
+      modelId: legacyRepository.customModelId.trim(),
+      apiKey: legacyRepository.customApiKey,
+      apiEndpoint: legacyRepository.customApiEndpoint || null,
+      maxTokens: toNullableNumber(legacyRepository.customMaxTokens),
+      temperature: toNullableNumber(legacyRepository.customTemperature),
       isActive: true,
-      updatedAt: toDate(repository.updatedAt),
+      updatedAt: toDate(legacyRepository.updatedAt),
     },
     create: {
       id: aiModelId,
-      provider: repository.customProvider.trim(),
-      modelId: repository.customModelId.trim(),
-      apiKey: repository.customApiKey,
-      apiEndpoint: repository.customApiEndpoint || null,
-      maxTokens: toNullableNumber(repository.customMaxTokens),
-      temperature: toNullableNumber(repository.customTemperature),
+      provider: legacyRepository.customProvider.trim(),
+      modelId: legacyRepository.customModelId.trim(),
+      apiKey: legacyRepository.customApiKey,
+      apiEndpoint: legacyRepository.customApiEndpoint || null,
+      maxTokens: toNullableNumber(legacyRepository.customMaxTokens),
+      temperature: toNullableNumber(legacyRepository.customTemperature),
       isActive: true,
-      createdAt: toDate(repository.createdAt),
-      updatedAt: toDate(repository.updatedAt),
+      createdAt: toDate(legacyRepository.createdAt),
+      updatedAt: toDate(legacyRepository.updatedAt),
     },
   });
 

@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bot, Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { Loader2, LogIn, ShieldCheck, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,7 +65,7 @@ function LoginForm() {
       <div className="w-full max-w-[420px]">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-[#181715] text-[#faf9f5] shadow-[0_14px_30px_rgba(24,23,21,0.22)]">
-            <Bot className="size-5" />
+            <Terminal className="size-5" />
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Code Review Copilot</p>

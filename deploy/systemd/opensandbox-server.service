@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenSandbox Server for Code Review Copilot
+Documentation=https://github.com/Alibaba-NLP/opensandbox
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+ExecStart=/usr/bin/env uvx opensandbox-server --config /etc/opensandbox/sandbox.toml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

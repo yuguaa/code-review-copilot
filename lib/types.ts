@@ -2,10 +2,10 @@
  * @file types.ts
  * @description 项目全局类型定义
  *
- * 包含 AI 服务、GitLab API、代码审查等相关的 TypeScript 类型定义。
+ * 包含模型凭据、GitLab API、Pi 审查等相关的 TypeScript 类型定义。
  */
 
-/** AI 服务提供商类型 */
+/** Pi 可用模型提供商类型 */
 export type AIProvider = 'openai' | 'claude' | 'custom'
 
 /** 审查问题严重程度 */
@@ -110,7 +110,7 @@ export interface GitLabBranch {
   commit: GitLabCommit
 }
 
-/** AI 模型配置 */
+/** 供 Pi Profile 引用的模型凭据配置 */
 export interface AIModelConfig {
   id: string
   name: string
@@ -132,16 +132,16 @@ export interface ReviewComment {
   content: string
   diffHunk?: string
   confidence?: number
-  reviewBotRunId?: string
-  sourceBotName?: string
-  sourceBotModel?: string
-  sourceBots?: ReviewCommentSource[]
+  piReviewRunId?: string
+  sourceProfileName?: string
+  sourceProfileModel?: string
+  sourceProfiles?: ReviewCommentSource[]
 }
 
-/** 审查评论来源机器人 */
+/** 审查评论来源 Profile */
 export interface ReviewCommentSource {
-  reviewBotRunId: string
-  botName: string
+  piReviewRunId: string
+  profileName: string
   model: string
   confidence?: number
 }

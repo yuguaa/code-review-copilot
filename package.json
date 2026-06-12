@@ -13,12 +13,10 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.35",
-    "@ai-sdk/openai": "^3.0.25",
+    "@alibaba-group/opensandbox": "^0.1.8",
     "@prisma/client": "^6.19.2",
     "@relation-graph/react": "^3.0.13",
     "@xyflow/react": "^12.11.0",
-    "ai": "^6.0.67",
     "axios": "^1.13.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

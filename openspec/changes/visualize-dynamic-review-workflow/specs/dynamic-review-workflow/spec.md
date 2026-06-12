@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Dynamic workflow nodes
-The system SHALL persist dynamic workflow nodes for a review as the review progresses, starting with a trigger node and then adding or updating nodes for each main review step and Agent Loop stage.
+The system SHALL persist dynamic workflow nodes for a review as the review progresses, starting with a trigger node and then adding or updating nodes for each main review step and Pi Runtime step.
 
 #### Scenario: Trigger node is created first
 - **WHEN** a manual, retry, MR webhook, or Push webhook review log is created
@@ -12,27 +12,27 @@ The system SHALL persist dynamic workflow nodes for a review as the review progr
 - **THEN** the system SHALL first mark that step node as running and later update the same node to success with completion time and metrics
 
 #### Scenario: Review fails during a step
-- **WHEN** a main review step or Agent Loop stage throws an error
+- **WHEN** a main review step or Pi Runtime step throws an error
 - **THEN** the system SHALL mark the active workflow node as failed and create a failed finish node without inventing fallback paths
 
 #### Scenario: Review is stopped
 - **WHEN** a pending review is manually stopped
 - **THEN** the system SHALL mark all running workflow nodes for that review as cancelled and create a cancelled finish node
 
-### Requirement: Agent workflow visibility
-The system SHALL expose Agent Loop stages as workflow nodes that dynamically reflect context, plan, tool, review, validation, critic, finish, and error progress.
+### Requirement: Pi Runtime workflow visibility
+The system SHALL expose Pi Runtime progress as workflow nodes and sandbox session data that dynamically reflect review execution, completion, failure, and errors.
 
-#### Scenario: Agent stage event becomes node
-- **WHEN** the Agent Loop records a trace event for a stage
-- **THEN** the system SHALL upsert a workflow node for that bot run, iteration, and stage with matching status, title, detail, duration, and metrics
+#### Scenario: Pi review becomes node
+- **WHEN** Pi review starts, completes, or fails
+- **THEN** the system SHALL upsert a workflow node for that Pi Review Run with matching status, title, detail, duration, and metrics
 
-#### Scenario: Auxiliary Agent appears only when called
-- **WHEN** the primary Agent actually invokes additional review agents
-- **THEN** the system SHALL create auxiliary Agent workflow nodes and connect them to the primary Agent tool stage
+#### Scenario: Sandbox session appears in detail
+- **WHEN** a review has a `ReviewSandboxSession`
+- **THEN** the review detail API SHALL return sandbox id, VM status, image, worktree path, Pi mount, times, and errors
 
-#### Scenario: Auxiliary Agent is not called
-- **WHEN** no additional review agent is invoked
-- **THEN** the system SHALL NOT create workflow nodes for inactive auxiliary agent configurations
+#### Scenario: Inactive Pi Profiles do not create runtime nodes
+- **WHEN** only the first enabled Pi Profile is selected for Pi review
+- **THEN** the system SHALL NOT create workflow nodes for inactive or unselected Pi Profiles
 
 ### Requirement: Workflow API
 The system SHALL provide a workflow API that returns the current workflow snapshot for a single review.
@@ -73,7 +73,7 @@ The system SHALL separate review list summary data from detail and workflow data
 
 #### Scenario: Review list uses summary payload
 - **WHEN** the reviews list loads
-- **THEN** it SHALL receive only list and attempt summary fields, not raw prompts, raw AI responses, or full Agent trace payloads
+- **THEN** it SHALL receive only list and attempt summary fields, not raw prompts, raw AI responses, or sandbox session detail payloads
 
 #### Scenario: Review detail loads on demand
 - **WHEN** a user opens a specific review attempt

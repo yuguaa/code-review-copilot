@@ -18,38 +18,27 @@ export type ReviewDetailRecord = Prisma.ReviewLogGetPayload<{
     comments: {
       select: {
         id: true;
-        reviewBotRunId: true;
+        piReviewRunId: true;
         filePath: true;
         lineNumber: true;
         lineRangeEnd: true;
         severity: true;
         content: true;
         confidence: true;
-        sourceBotName: true;
-        sourceBotModel: true;
-        sourceBotsJson: true;
+        sourceProfileName: true;
+        sourceProfileModel: true;
+        sourceProfilesJson: true;
         isPosted: true;
       };
     };
-    botRuns: {
+    piRuns: {
       orderBy: { startedAt: "asc" };
       include: {
-        reviewBot: {
+        piProfile: {
           select: {
             id: true;
             name: true;
             description: true;
-          };
-        };
-        agentTrace: {
-          select: {
-            id: true;
-            loopIterationsJson: true;
-            finalPlanJson: true;
-            criticJson: true;
-            memoryUpdatesJson: true;
-            createdAt: true;
-            updatedAt: true;
           };
         };
         comments: {
@@ -61,6 +50,21 @@ export type ReviewDetailRecord = Prisma.ReviewLogGetPayload<{
             severity: true;
             content: true;
             confidence: true;
+          };
+        };
+      };
+    };
+    sandboxSession: {
+      include: {
+        repositorySandboxBinding: {
+          select: {
+            sandboxId: true;
+            status: true;
+            image: true;
+            piSandboxMountPath: true;
+            lastUsedAt: true;
+            pausedAt: true;
+            error: true;
           };
         };
       };
@@ -82,17 +86,17 @@ export type ReviewSummaryRecord = Prisma.ReviewLogGetPayload<{
         };
       };
     };
-    botRuns: {
+    piRuns: {
       orderBy: { startedAt: "asc" };
       select: {
         id: true;
         status: true;
         error: true;
         summary: true;
-        aiModelName: true;
+        modelName: true;
         startedAt: true;
         completedAt: true;
-        reviewBot: {
+        piProfile: {
           select: {
             id: true;
             name: true;
@@ -174,29 +178,26 @@ function baseReviewFields(review: ReviewDetailRecord | ReviewSummaryRecord, atte
 export function formatReviewSummary(review: ReviewSummaryRecord, attempt: Attempt) {
   return {
     ...baseReviewFields(review, attempt),
-    aiSummary: null,
-    aiResponse: null,
-    reviewPrompts: null,
-    aiModelProvider: null,
-    aiModelId: null,
+    changeSummary: null,
+    piRawOutputs: null,
+    piPrompts: null,
     commentsCount: review._count.comments,
-    botRuns: review.botRuns.map((botRun) => ({
-      id: botRun.id,
-      botName: botRun.reviewBot?.name || "未知机器人",
-      botDescription: botRun.reviewBot?.description || null,
-      status: botRun.status,
-      error: botRun.error,
-      summary: botRun.summary,
-      aiModelProvider: null,
-      aiModelId: null,
-      aiModelName: botRun.aiModelName,
+    piRuns: review.piRuns.map((piRun) => ({
+      id: piRun.id,
+      profileName: piRun.piProfile?.name || "未知 Profile",
+      profileDescription: piRun.piProfile?.description || null,
+      status: piRun.status,
+      error: piRun.error,
+      summary: piRun.summary,
+      modelProvider: null,
+      modelId: null,
+      modelName: piRun.modelName,
       promptSnapshot: null,
       promptMode: "extend",
-      startedAt: botRun.startedAt,
-      completedAt: botRun.completedAt,
-      commentsCount: botRun._count.comments,
+      startedAt: piRun.startedAt,
+      completedAt: piRun.completedAt,
+      commentsCount: piRun._count.comments,
       comments: [],
-      trace: null,
     })),
     comments: [],
   };
@@ -205,28 +206,36 @@ export function formatReviewSummary(review: ReviewSummaryRecord, attempt: Attemp
 export function formatReviewDetail(review: ReviewDetailRecord, attempt: Attempt) {
   return {
     ...baseReviewFields(review, attempt),
-    aiSummary: review.aiSummary,
-    aiResponse: review.aiResponse,
-    reviewPrompts: review.reviewPrompts,
-    aiModelProvider: review.aiModelProvider,
-    aiModelId: review.aiModelId,
-    botRuns: review.botRuns.map((botRun) => ({
-      id: botRun.id,
-      botName: botRun.reviewBot?.name || "未知机器人",
-      botDescription: botRun.reviewBot?.description || null,
-      status: botRun.status,
-      error: botRun.error,
-      summary: botRun.summary,
-      aiModelProvider: botRun.aiModelProvider,
-      aiModelId: botRun.aiModelId,
-      aiModelName: botRun.aiModelName,
-      promptSnapshot: botRun.promptSnapshot,
-      promptMode: botRun.promptMode,
-      startedAt: botRun.startedAt,
-      completedAt: botRun.completedAt,
-      comments: botRun.comments,
-      trace: botRun.agentTrace,
+    changeSummary: review.changeSummary,
+    piRawOutputs: review.piRawOutputs,
+    piPrompts: review.piPrompts,
+    piRuns: review.piRuns.map((piRun) => ({
+      id: piRun.id,
+      profileName: piRun.piProfile?.name || "未知 Profile",
+      profileDescription: piRun.piProfile?.description || null,
+      status: piRun.status,
+      error: piRun.error,
+      summary: piRun.summary,
+      modelProvider: piRun.modelProvider,
+      modelId: piRun.modelId,
+      modelName: piRun.modelName,
+      promptSnapshot: piRun.promptSnapshot,
+      promptMode: piRun.promptMode,
+      startedAt: piRun.startedAt,
+      completedAt: piRun.completedAt,
+      comments: piRun.comments,
     })),
+    sandboxSession: review.sandboxSession ? {
+      id: review.sandboxSession.id,
+      sandboxId: review.sandboxSession.sandboxId,
+      piCommandId: review.sandboxSession.piCommandId,
+      worktreePath: review.sandboxSession.worktreePath,
+      status: review.sandboxSession.status,
+      error: review.sandboxSession.error,
+      startedAt: review.sandboxSession.startedAt,
+      completedAt: review.sandboxSession.completedAt,
+      binding: review.sandboxSession.repositorySandboxBinding,
+    } : null,
     comments: review.comments.map((comment) => ({
       ...comment,
       gitlabDiffUrl: getGitlabDiffUrl(review, comment.filePath, comment.lineNumber, comment.lineRangeEnd),
@@ -250,38 +259,27 @@ export const reviewDetailInclude = {
   comments: {
     select: {
       id: true,
-      reviewBotRunId: true,
+      piReviewRunId: true,
       filePath: true,
       lineNumber: true,
       lineRangeEnd: true,
       severity: true,
       content: true,
       confidence: true,
-      sourceBotName: true,
-      sourceBotModel: true,
-      sourceBotsJson: true,
+      sourceProfileName: true,
+      sourceProfileModel: true,
+      sourceProfilesJson: true,
       isPosted: true,
     },
   },
-  botRuns: {
+  piRuns: {
     orderBy: { startedAt: "asc" },
     include: {
-      reviewBot: {
+      piProfile: {
         select: {
           id: true,
           name: true,
           description: true,
-        },
-      },
-      agentTrace: {
-        select: {
-          id: true,
-          loopIterationsJson: true,
-          finalPlanJson: true,
-          criticJson: true,
-          memoryUpdatesJson: true,
-          createdAt: true,
-          updatedAt: true,
         },
       },
       comments: {
@@ -293,6 +291,21 @@ export const reviewDetailInclude = {
           severity: true,
           content: true,
           confidence: true,
+        },
+      },
+    },
+  },
+  sandboxSession: {
+    include: {
+      repositorySandboxBinding: {
+        select: {
+          sandboxId: true,
+          status: true,
+          image: true,
+          piSandboxMountPath: true,
+          lastUsedAt: true,
+          pausedAt: true,
+          error: true,
         },
       },
     },
@@ -312,17 +325,17 @@ export const reviewSummaryInclude = {
       },
     },
   },
-  botRuns: {
+  piRuns: {
     orderBy: { startedAt: "asc" },
     select: {
       id: true,
       status: true,
       error: true,
       summary: true,
-      aiModelName: true,
+      modelName: true,
       startedAt: true,
       completedAt: true,
-      reviewBot: {
+      piProfile: {
         select: {
           id: true,
           name: true,

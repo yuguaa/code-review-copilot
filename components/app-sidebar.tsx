@@ -8,7 +8,7 @@ import {
   GitFork,
   Settings,
   HelpCircle,
-  Bot,
+  Terminal,
   Clock,
   PanelLeftClose,
   PanelLeftOpen,
@@ -98,11 +98,11 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
               <SidebarMenuButton size="lg" asChild>
                 <Link href="/">
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-[#181715] text-[#faf9f5] shadow-[0_10px_24px_rgba(24,23,21,0.20)]">
-                    <Bot className="size-4" />
+                    <Terminal className="size-4" />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold tracking-tight">Code Review</span>
-                    <span className="truncate text-xs text-muted-foreground">Memory Agent</span>
+                    <span className="truncate text-xs text-muted-foreground">Pi Runtime</span>
                   </div>
                 </Link>
               </SidebarMenuButton>

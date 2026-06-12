@@ -16,7 +16,7 @@ export async function GET() {
       include: {
         _count: {
           select: {
-            repositories: true,
+            piProfiles: true,
           },
         },
       },

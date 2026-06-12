@@ -77,11 +77,11 @@ function compactText(input: string, maxLen: number): string {
 export function sanitizeDingTalkReviewMarkdown(markdown: string): string {
   return markdown
     // 钉钉群通知保留问题详情和审查来源，原始模型 JSON/追溯材料留在 GitLab 详情里。
-    .replace(/(?:^|\n)###\s*各机器人原始评价[\s\S]*?(?=\n<sub>|$)/g, "")
+    .replace(/(?:^|\n)###\s*各 Profile 原始评价[\s\S]*?(?=\n<sub>|$)/g, "")
     .replace(/<details>[\s\S]*?<\/details>/g, "")
     .replace(/<sub>([\s\S]*?)<\/sub>/g, "$1")
     .replace(/###\s*全部问题清单/g, "### 问题详情（含审查来源）")
-    .replace(/###\s*审查机器人结果/g, "### 审查来源汇总")
+    .replace(/###\s*Pi Profile 结果/g, "### 审查来源汇总")
     .replace(/Actionable comments posted:\s*\*\*(\d+)\*\*/g, "需处理评论：$1")
     .replace(/Nitpick comments:\s*\*\*(\d+)\*\*/g, "建议类评论：$1")
     .replace(/\n{3,}/g, "\n\n")

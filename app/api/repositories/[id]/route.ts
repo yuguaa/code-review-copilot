@@ -34,31 +34,14 @@ export async function GET(
         gitLabAccountId: true,
         isActive: true,
         autoReview: true,
-        defaultAIModelId: true,
         watchBranches: true,
-        customPrompt: true,
-        customPromptMode: true,
-        customProvider: true,
-        customModelId: true,
-        customApiKey: true,
-        customApiEndpoint: true,
-        customMaxTokens: true,
-        customTemperature: true,
         gitLabAccount: {
           select: {
             id: true,
             url: true,
           },
         },
-        defaultAIModel: {
-          select: {
-            id: true,
-            provider: true,
-            modelId: true,
-            isActive: true,
-          },
-        },
-        reviewBots: {
+        piProfiles: {
           include: {
             aiModel: {
               select: {

@@ -15,7 +15,7 @@ export type WorkflowGraphNode = {
   durationMs: number | null;
   metricsJson: unknown;
   rawJson: unknown;
-  reviewBotRunId: string | null;
+  piReviewRunId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -25,10 +25,10 @@ export type WorkflowGraphEdge = {
   source: string;
   target: string;
   label?: string;
-  kind: "main" | "parent" | "agent" | "loop";
+  kind: "main" | "parent" | "runtime" | "loop";
 };
 
-const RUN_AGENTS_NODE_KEY = "run_agents";
+const RUN_PI_RUNTIME_NODE_KEY = "run_pi_runtime";
 const AGGREGATE_NODE_KEY = "aggregate";
 
 function toGraphNode(node: ReviewWorkflowNode): WorkflowGraphNode {
@@ -47,7 +47,7 @@ function toGraphNode(node: ReviewWorkflowNode): WorkflowGraphNode {
     durationMs: node.durationMs,
     metricsJson: node.metricsJson,
     rawJson: node.rawJson,
-    reviewBotRunId: node.reviewBotRunId,
+    piReviewRunId: node.piReviewRunId,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };
@@ -62,93 +62,15 @@ function edgeLabel(node: ReviewWorkflowNode) {
   return undefined;
 }
 
-function fallbackAgentParentKey(node: ReviewWorkflowNode, nodeKeys: Set<string>) {
-  if (!node.nodeKey.startsWith("agent:")) return null;
-  const parts = node.nodeKey.split(":");
-  const botRunId = parts[1];
-  if (!botRunId) return null;
-
-  const iterationIndex = parts.indexOf("iteration");
-  if (iterationIndex === -1) {
-    return nodeKeys.has(RUN_AGENTS_NODE_KEY) ? RUN_AGENTS_NODE_KEY : null;
-  }
-
-  const iteration = parts[iterationIndex + 1];
-  const stage = node.kind === "decision"
-    ? "decision"
-    : parts[iterationIndex + 2];
-  const stageKey = (candidate: string) => `agent:${botRunId}:iteration:${iteration}:${candidate}`;
-  const existingKey = (candidate: string) => nodeKeys.has(candidate) ? candidate : null;
-  const firstExisting = (candidates: string[]) => candidates.find((candidate) => nodeKeys.has(candidate)) || null;
-
-  if (stage === "initializing") return existingKey(`agent:${botRunId}`);
-  if (stage === "context") return existingKey(stageKey("initializing"));
-  if (stage === "plan") return existingKey(stageKey("context"));
-  if (stage === "review") return existingKey(stageKey("plan"));
-  if (stage === "validation") return existingKey(stageKey("review"));
-  if (stage === "decision") return firstExisting([stageKey("validation"), stageKey("plan")]);
-  if (stage === "tool") return firstExisting([stageKey("decision:additional_agents"), stageKey("validation")]);
-  if (stage === "critic") return firstExisting([stageKey("tool"), stageKey("decision:additional_agents"), stageKey("validation")]);
-  if (stage === "finish" || stage === "error") return firstExisting([stageKey("critic"), stageKey("validation")]);
-  return null;
-}
-
 function resolveParentNodeKey(node: ReviewWorkflowNode, nodeKeys: Set<string>) {
-  return node.parentNodeKey && nodeKeys.has(node.parentNodeKey)
-    ? node.parentNodeKey
-    : fallbackAgentParentKey(node, nodeKeys);
-}
-
-function agentBotRunId(node: ReviewWorkflowNode) {
-  if (!node.nodeKey.startsWith("agent:")) return null;
-  return node.nodeKey.split(":")[1] || null;
-}
-
-function agentLoopStage(node: ReviewWorkflowNode) {
-  if (!node.nodeKey.startsWith("agent:")) return null;
-  const parts = node.nodeKey.split(":");
-  const iterationIndex = parts.indexOf("iteration");
-  if (iterationIndex === -1) return null;
-  if (node.kind === "decision") return "decision";
-  return parts[iterationIndex + 2] || null;
-}
-
-function isAgentRootNode(node: ReviewWorkflowNode) {
-  return node.nodeKey.startsWith("agent:") && !node.nodeKey.includes(":iteration:");
-}
-
-function isAgentLoopTerminalNode(node: ReviewWorkflowNode) {
-  const stage = agentLoopStage(node);
-  return stage === "finish" || stage === "error";
-}
-
-function latestNode(left: ReviewWorkflowNode, right: ReviewWorkflowNode) {
-  if (left.sequence !== right.sequence) return left.sequence > right.sequence ? left : right;
-  return left.createdAt > right.createdAt ? left : right;
+  return node.parentNodeKey && nodeKeys.has(node.parentNodeKey) ? node.parentNodeKey : null;
 }
 
 function aggregateBridgeSources(sorted: ReviewWorkflowNode[], nodeKeys: Set<string>) {
-  const primaryAgentRoots = sorted.filter((node) => (
-    isAgentRootNode(node) && resolveParentNodeKey(node, nodeKeys) === RUN_AGENTS_NODE_KEY
+  return sorted.filter((node) => (
+    node.nodeKey.startsWith("pi:")
+    && resolveParentNodeKey(node, nodeKeys) === RUN_PI_RUNTIME_NODE_KEY
   ));
-  const primaryBotRunIds = new Set(primaryAgentRoots.map(agentBotRunId).filter(Boolean));
-  if (primaryBotRunIds.size === 0) return [];
-
-  const terminalByBotRunId = new Map<string, ReviewWorkflowNode>();
-  sorted.forEach((node) => {
-    const botRunId = agentBotRunId(node);
-    if (!botRunId || !primaryBotRunIds.has(botRunId) || !isAgentLoopTerminalNode(node)) return;
-    const current = terminalByBotRunId.get(botRunId);
-    terminalByBotRunId.set(botRunId, current ? latestNode(current, node) : node);
-  });
-
-  if (terminalByBotRunId.size > 0) {
-    return [...terminalByBotRunId.values()].sort((left, right) => (
-      left.sequence - right.sequence || left.createdAt.getTime() - right.createdAt.getTime()
-    ));
-  }
-
-  return primaryAgentRoots;
 }
 
 export function buildWorkflowGraph(nodes: ReviewWorkflowNode[]) {
@@ -175,7 +97,7 @@ export function buildWorkflowGraph(nodes: ReviewWorkflowNode[]) {
       return;
     }
 
-    if (node.parentNodeKey || node.nodeKey.startsWith("agent:")) return;
+    if (node.parentNodeKey) return;
 
     if (node.nodeKey === AGGREGATE_NODE_KEY && bridgeSources.length > 0) {
       bridgeSources.forEach((sourceNode) => {

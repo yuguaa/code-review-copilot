@@ -61,22 +61,12 @@ type Repository = {
   description: string | null
   isActive: boolean
   autoReview: boolean
-  defaultAIModelId: string | null
-  defaultAIModel: AIModel | null
-  reviewBots: Array<{
+  piProfiles: Array<{
     id: string
     name: string
     aiModel: AIModel | null
   }>
   watchBranches: string | null
-  customPrompt: string | null
-  // 自定义 AI 模型配置
-  customProvider: string | null
-  customModelId: string | null
-  customApiKey: string | null
-  customApiEndpoint: string | null
-  customMaxTokens: number | null
-  customTemperature: number | null
   gitLabAccount: {
     id: string
     url: string
@@ -86,25 +76,25 @@ type Repository = {
   }
 }
 
-function renderReviewBotModels(repo: Repository) {
-  const bots = repo.reviewBots.filter((bot) => bot.aiModel)
+function renderPiProfileModels(repo: Repository) {
+  const profiles = repo.piProfiles.filter((profile) => profile.aiModel)
 
-  if (bots.length === 0) {
-    return <span className="text-xs text-muted-foreground">未配置机器人</span>
+  if (profiles.length === 0) {
+    return <span className="text-xs text-muted-foreground">未配置 Pi Profile</span>
   }
 
-  const visibleBots = bots.slice(0, 2)
+  const visibleProfiles = profiles.slice(0, 2)
 
   return (
     <div className="flex flex-wrap gap-1">
-      {visibleBots.map((bot) => (
-        <Badge key={bot.id} variant="default" className="font-normal">
-          {bot.name} / {getModelDisplayName(bot.aiModel!)}
+      {visibleProfiles.map((profile) => (
+        <Badge key={profile.id} variant="default" className="font-normal">
+          {profile.name} / {getModelDisplayName(profile.aiModel!)}
         </Badge>
       ))}
-      {bots.length > visibleBots.length && (
+      {profiles.length > visibleProfiles.length && (
         <Badge variant="secondary" className="font-normal">
-          +{bots.length - visibleBots.length}
+          +{profiles.length - visibleProfiles.length}
         </Badge>
       )}
     </div>
@@ -308,7 +298,7 @@ export default function RepositoriesPage() {
                 <TableRow className="hover:bg-transparent border-b-2">
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">仓库名称</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">GitLab 账号</TableHead>
-                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">AI 模型</TableHead>
+                  <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">Pi Profile</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">监听分支</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">自动审查</TableHead>
                   <TableHead className="h-10 px-4 text-xs font-semibold text-muted-foreground">状态</TableHead>
@@ -336,7 +326,7 @@ export default function RepositoriesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="px-4 py-3">
-                      {renderReviewBotModels(repo)}
+                      {renderPiProfileModels(repo)}
                     </TableCell>
                     <TableCell className="px-4 py-3">
                       {repo.watchBranches ? (

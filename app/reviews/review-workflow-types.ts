@@ -13,7 +13,7 @@ export type ReviewWorkflowNode = {
   durationMs: number | null
   metricsJson: unknown
   rawJson: unknown
-  reviewBotRunId: string | null
+  piReviewRunId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -23,7 +23,7 @@ export type ReviewWorkflowEdge = {
   source: string
   target: string
   label?: string
-  kind: 'main' | 'parent' | 'agent' | 'loop'
+  kind: 'main' | 'parent' | 'runtime' | 'loop'
 }
 
 export type ReviewWorkflowSnapshot = {
@@ -35,7 +35,7 @@ export type ReviewWorkflowSnapshot = {
 
 export type WorkflowIssue = {
   id: string
-  reviewBotRunId?: string | null
+  piReviewRunId?: string | null
   filePath: string
   lineNumber: number
   lineRangeEnd?: number | null
@@ -49,9 +49,9 @@ export const reviewWorkflowKindLabels: Record<string, string> = {
   diff: 'Diff',
   memory: 'Memory',
   summary: '摘要',
-  agent: 'Agent',
+  runtime: 'Pi',
   decision: '决策',
-  iteration_stage: 'Loop',
+  iteration_stage: '运行阶段',
   aggregate: '聚合',
   publish: '发布',
   finish: '结束',

@@ -1,48 +1,49 @@
-# Code Review Copilot - GitLab 智能代码审查工具
+# Code Review Copilot
 
-一个基于 Next.js 的私有化部署 GitLab 代码审查工具，支持 AI 自动审查代码并提交评论。
+私有化部署的 GitLab 代码审查工具。应用监听 GitLab MR / Push 事件，
+为每次审查拉起独立 Pi 进程，并通过 OpenSandbox 把仓库运行时隔离在宿主机
+Docker sandbox 中。
 
 ## 功能特性
 
 ### 核心功能
-- **私有工作台登录**: 通过环境变量初始化唯一登录账号，页面和业务 API 默认需要登录后访问
-- **多仓库管理**: 支持连接多个 GitLab 实例和仓库
-- **AI 模型集成**: 支持 OpenAI、Claude 和自定义 AI 模型
-- **智能代码审查**: 自动分析 GitLab Merge Request 的 Staged Diff
-- **主 Agent + 条件辅助 Agent**: 每个仓库可配置多个审查机器人，排序第一的启用机器人作为主 Agent，其余启用机器人按需复核
-- **Code Graph Memory**: 保存项目架构摘要、代码图谱、符号节点和高置信审查事实，减少重复全量读取
-- **Agent Loop 保险丝**: 记录最大轮次、问题上限、无新增问题、无更多上下文、无工具请求和重复无进展等停止原因
-- **三级问题分类**: 严重 / 一般 / 建议
-- **分支配置**: 为不同分支配置不同的审查策略
-- **审查历史**: 完整的审查日志、历史记录和 Agent Loop 可视化追溯
-- **Webhook 集成**: 自动监听 GitLab MR 事件并触发审查
-- **统计仪表盘**: 仓库维度和用户维度的审查统计
+
+- **私有工作台登录**：由环境变量初始化唯一登录账号，页面和业务 API 默认需要登录。
+- **GitLab 集成**：支持多个 GitLab 实例、多个仓库、MR 事件和 Push 事件。
+- **Pi 审查运行时**：排序第一的启用 Pi Profile 提供模型、Prompt 和输出限制，Pi 在 sandbox 内执行审查。
+- **OpenSandbox 隔离**：应用不挂载 Docker socket，只通过 OpenSandbox API 创建、恢复、暂停 review sandbox。
+- **仓库 VM 复用**：不同仓库绑定不同 sandbox；同仓库复用同一 sandbox，并发 review 使用不同 worktree 和 Pi 进程。
+- **Code Graph Memory**：保存项目架构摘要、代码图谱、符号节点和高置信审查事实。
+- **三级问题分类**：严重 / 一般 / 建议。
+- **审查历史**：保存 ReviewLog、PiReviewRun、ReviewComment、Workflow 和 sandbox session。
+- **通知发布**：审查完成后把总评发布到 GitLab，并发送钉钉通知。
 
 ### UI 特性
-- 基于 **shadcn/ui** 的现代化界面
-- 独立登录页，登录成功后进入带侧边栏的工作台
-- 审查详情页展示 Agent 每轮“计划 → 上下文 → 工具 → Finding → Critic”的执行过程
-- 完全响应式设计
-- 暗色模式支持
+
+- 基于 shadcn/ui、Tailwind CSS 和 @relation-graph/react。
+- 独立登录页，登录成功后进入带侧边栏的工作台。
+- 审查详情页展示过程图、问题清单、Pi Runtime 会话、OpenSandbox 状态和原始材料。
+- Code Graph 页面支持图谱缩放、拖拽、节点详情和关系查看。
 
 ## 技术栈
 
-- **框架**: Next.js 16 (App Router)
-- **数据库**: PostgreSQL + Prisma ORM
-- **UI 库**: shadcn/ui + Tailwind CSS + @relation-graph/react
-- **AI SDK**: Vercel AI SDK (@ai-sdk/openai, @ai-sdk/anthropic)
-- **HTTP 客户端**: Axios
+- **框架**：Next.js 16 App Router
+- **数据库**：PostgreSQL + Prisma ORM
+- **运行时隔离**：OpenSandbox Server + Docker runtime
+- **审查智能体**：Pi
+- **模型连通性测试**：OpenAI SDK + Anthropic HTTP API
+- **UI**：shadcn/ui + Tailwind CSS
 
 ## 快速开始
 
-### 1. Docker 一键启动
+### 1. 启动应用、数据库和定时任务
 
 ```bash
 cp .env.example .env
 docker compose up --build -d
 ```
 
-启动前至少需要在 `.env` 中替换登录相关配置：
+启动前至少替换登录配置：
 
 ```env
 APP_AUTH_USERNAME="admin"
@@ -50,28 +51,95 @@ APP_AUTH_SECRET="replace-with-login-secret"
 APP_AUTH_SESSION_SECRET="replace-with-long-random-session-secret"
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3000。
 
-应用容器启动时会自动执行 `prisma migrate deploy`，然后启动 Next.js。
+应用容器启动时会执行 `prisma migrate deploy`，然后启动 Next.js。
 
-### 2. SQLite 历史数据迁移
+### 2. 单机部署 OpenSandbox + Pi
 
-```bash
-# 只启动 PostgreSQL
-docker compose up -d postgres
+推荐在同一台服务器上部署：
+
+```text
+[同一台服务器]
+├── Docker daemon
+│   ├── code-review-copilot-app
+│   ├── code-review-copilot-postgres
+│   ├── code-graph-cron
+│   └── OpenSandbox 创建的 review sandbox 容器
+├── OpenSandbox Server
+│   └── localhost:8080
+├── Pi 安装目录
+│   └── /opt/pi
+└── 持久化目录
+    ├── postgres_data
+    └── OpenSandbox / Docker volumes
 ```
 
-如果你是从旧版 SQLite 升级，需要先迁移历史数据：
+基础依赖：
+
+- Docker / Docker Compose
+- Python 3.10+
+- Node.js，用于安装 Pi
+- `uv` 或 `pipx`，用于运行 OpenSandbox Server
+- `opensandbox-cli`，用于执行 `osb` 验证命令
+
+初始化并启动 OpenSandbox Server：
 
 ```bash
-# 本机已安装 npm 依赖时，可直接在宿主机校验和迁移
-npm run db:migrate:sqlite -- --dry-run
-npm run db:migrate:sqlite -- --source prisma/dev.db --force
+sudo mkdir -p /etc/opensandbox
+uvx opensandbox-server init-config /etc/opensandbox/sandbox.toml --example docker
+uvx opensandbox-server --config /etc/opensandbox/sandbox.toml
+```
 
-# 或者使用 Docker 容器执行迁移，并挂载旧 SQLite 文件
-docker compose run --rm \
-  -v "$PWD/prisma/dev.db:/app/prisma/dev.db:ro" \
-  app npm run db:migrate:sqlite -- --source prisma/dev.db --force
+确认可用后交给 systemd：
+
+```bash
+sudo cp deploy/systemd/opensandbox-server.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now opensandbox-server
+sudo systemctl status opensandbox-server
+```
+
+安装 `osb`：
+
+```bash
+pipx install opensandbox-cli
+```
+
+安装 Pi：
+
+```bash
+sudo mkdir -p /opt/pi
+sudo npm install -g --prefix /opt/pi --ignore-scripts @earendil-works/pi-coding-agent
+/opt/pi/bin/pi --version
+```
+
+在 `.env` 中补充运行时配置：
+
+```env
+OPEN_SANDBOX_DOMAIN="host.docker.internal:8080"
+OPEN_SANDBOX_PROTOCOL="http"
+OPEN_SANDBOX_API_KEY=""
+
+PI_HOST_PATH="/opt/pi"
+PI_SANDBOX_MOUNT_PATH="/opt/pi"
+PI_SANDBOX_IMAGE="node:24-bookworm"
+PI_SANDBOX_TIMEOUT_SECONDS="7200"
+```
+
+验证 OpenSandbox：
+
+```bash
+osb config set connection.domain localhost:8080
+osb sandbox create --image node:24-bookworm --timeout 10m -o json
+docker compose exec app sh -lc 'wget -qO- http://host.docker.internal:8080/health || true'
+```
+
+创建 review sandbox 时，应用会把宿主机 `/opt/pi` 只读挂载到 sandbox 内
+`/opt/pi`。可在 sandbox 内验证：
+
+```bash
+/opt/pi/bin/pi --version
 ```
 
 ### 3. 本地开发
@@ -83,350 +151,207 @@ npm run db:deploy
 npm run dev
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3000。
+
+## 运行时策略
+
+- 不同仓库对应不同 OpenSandbox sandbox。
+- 同仓库复用同一个 sandbox。
+- 同仓库并发 review 共享 VM，但每次 review 使用独立 `git worktree` 和独立 Pi 进程。
+- VM 内用 bare repo 保存仓库；fetch、worktree add/remove 通过仓库级 `flock` 串行化。
+- 每次 review 创建 `ReviewSandboxSession`，记录独立 worktree 和 Pi command，完成后清理 worktree。
+- sandbox 空闲后执行 `pause`，不 `kill`，以保留仓库绑定和降低下一次启动成本。
+- GitLab Token 和模型 API Key 只通过命令环境变量传入 sandbox，不写入 clone URL、prompt 或 review input JSON。
+- Pi 输出必须是严格 JSON；provider 不支持、自定义 endpoint 未接入或 JSON 不合法时快速失败。
 
 ## 使用指南
 
-### 第一步：登录工作台
+### 1. 登录工作台
 
-1. 打开部署后的站点
-2. 使用 `.env` 中的 `APP_AUTH_USERNAME` 和 `APP_AUTH_SECRET` 登录
-3. 登录会话由 HTTP-only Cookie 保存，有效期 7 天
-4. 侧边栏底部可以退出登录
+使用 `.env` 中的 `APP_AUTH_USERNAME` 和 `APP_AUTH_SECRET` 登录。
+登录会话由 HTTP-only Cookie 保存，有效期 7 天。
 
-### 第二步：配置 GitLab 账号
+### 2. 配置 GitLab 账号
 
-1. 进入"配置"页面
-2. 点击"添加账号"
-3. 填写 GitLab 信息：
-   - 名称：例如"GitLab.com"或"公司内部 GitLab"
-   - URL：GitLab 实例地址（如 https://gitlab.com）
-   - Access Token：个人访问令牌（需要 api 权限）
+进入“配置”页面，添加 GitLab URL 和 Access Token。Token 需要 `api` 权限。
 
-### 第三步：配置 AI 模型
+### 3. 配置模型凭据
 
-1. 在"配置"页面切换到"AI 模型"标签
-2. 点击"添加模型"
-3. 填写模型信息：
-   - 名称：例如"GPT-4"或"Claude 3.5"
-   - 提供商：OpenAI / Claude / 自定义
-   - 模型 ID：如 gpt-4, claude-3-5-sonnet
-   - API 密钥：对应的 API 密钥
+进入“配置”页面的“Pi Runtime 模型凭据”区域，添加 OpenAI 或 Claude 模型。
+当前 Pi runtime 支持 `openai` 和 `claude` provider；自定义 endpoint 会快速失败。
 
-### 第四步：添加仓库
+### 4. 添加仓库和 Pi Profile
 
-1. 进入"仓库列表"页面
-2. 选择 GitLab 账号
-3. 从列表中选择要添加的仓库
-4. 配置分支审查规则：
-   - 分支模式：如 "main", "develop", "feature/*"
-5. 配置审查机器人：
-   - 机器人名称：例如“安全审查机器人”“架构审查机器人”
-   - AI 模型：选择已有 `AIModel`
-   - Prompt 模式：扩展内置 Prompt 或完全替换
-   - 启用状态和排序：排序第一的启用机器人作为主 Agent，其余启用机器人作为条件辅助 Agent
+1. 进入“仓库列表”页面。
+2. 选择 GitLab 账号和仓库。
+3. 配置分支监听规则。
+4. 新增 Pi Profile：
+   - Profile 名称
+   - 模型凭据
+   - Prompt 模式：扩展内置 Prompt 或替换内置 Prompt
+   - 启用状态和排序
+   - Pi 输出条数限制
 
-### 第五步：配置 Webhook（可选）
+排序第一的启用 Profile 会被用于本次 Pi 审查。其他 Profile 可以保留给后续排序切换，
+但当前一次 review 只运行一个 Pi。
 
-#### 生产环境
+### 5. 配置 Webhook
 
-如需自动审查，在 GitLab 仓库中配置 Webhook：
+GitLab Webhook：
 
-- URL: `http://your-server/api/webhook/gitlab`
-- 触发事件: Merge Request events + Push events
-- Secret: （如果配置了）
+- URL：`http://your-server/api/webhook/gitlab`
+- 触发事件：Merge Request events + Push events
+- Secret：按需配置
 
-#### 本地开发配置
+本地开发可使用 ngrok、Cloudflare Tunnel 或 localtunnel 暴露 `localhost:3000`。
 
-本地开发时 GitLab 无法直接访问 `localhost`，需要使用内网穿透工具：
+### 6. 查看审查结果
 
-**方案 1：使用 ngrok（推荐）**
-
-```bash
-# 安装 ngrok
-brew install ngrok  # macOS
-# 或访问 https://ngrok.com 下载
-
-# 启动隧道
-ngrok http 3000
-```
-
-启动后会得到一个公网地址，如 `https://abc123.ngrok.io`
-
-**GitLab Webhook 配置：**
-- URL: `https://abc123.ngrok.io/api/webhook/gitlab`
-- 触发事件: Merge Request events + Push events
-
-**方案 2：使用 Cloudflare Tunnel**
-
-```bash
-# 安装 cloudflared
-brew install cloudflared  # macOS
-
-# 启动隧道
-cloudflared tunnel --url http://localhost:3000
-```
-
-**方案 3：使用 localtunnel**
-
-```bash
-npx localtunnel --port 3000
-```
-
-**方案 4：自建 GitLab 允许本地地址**
-
-如果是自建 GitLab，可以配置允许本地网络地址：
-
-GitLab Omnibus 配置 (`/etc/gitlab/gitlab.rb`)：
-
-```ruby
-gitlab_rails['webhook_timeout'] = 10
-gitlab_rails['outbound_local_requests_whitelist'] = ['localhost', '127.0.0.1', 'host.docker.internal']
-```
-
-重启 GitLab 后，Webhook URL 可以是：
-- `http://localhost:3000/api/webhook/gitlab`
-- `http://host.docker.internal:3000/api/webhook/gitlab`（GitLab 在 Docker 中）
-
-### 第六步：查看审查结果
-
-- **仪表盘**: 查看整体统计和趋势
-- **审查历史**: 查看每次审查的详细结果
-- **Agent Loop 追溯**: 查看每个机器人每轮计划、上下文命中、工具调用、Finding 校验和 Critic 决策
-- **GitLab MR**: AI 评论会自动发布到 MR
+- **仪表盘**：查看整体统计和趋势。
+- **审查历史**：查看每次审查的详情。
+- **过程图**：查看 fetch diff、refresh memory、summary、Pi review、aggregate、publish 等步骤。
+- **Pi Runtime**：查看 OpenSandbox sandbox、worktree、会话状态和错误。
+- **GitLab**：审查总评会发布到 MR 或 Commit。
 
 ## 数据库模型
 
-### GitLabAccount
-GitLab 账号配置
+- `GitLabAccount`：GitLab 账号配置。
+- `AIModel`：供 Pi Profile 引用的模型凭据。
+- `Repository`：仓库配置，关联 GitLab 账号。
+- `RepositoryPiProfile`：Pi Profile 配置，保存模型、Prompt、启停状态、排序和输出限制。
+- `RepositorySandboxBinding`：仓库到 OpenSandbox sandbox 的唯一绑定。
+- `ReviewSandboxSession`：单次 review 在 sandbox 内的 worktree、Pi command 和状态。
+- `ReviewLog`：审查日志，记录每次审查的统计信息。
+- `PiReviewRun`：单次审查中的 Pi 运行快照。
+- `ReviewComment`：审查评论和来源信息。
+- `ReviewWorkflowNode`：动态审查过程图节点。
+- `RepositoryMemorySnapshot`：仓库 Code Graph 快照。
+- `CodeFileNode / CodeSymbolNode / CodeRelationEdge`：代码图谱节点和关系边。
+- `RepositoryMemoryFact`：可持续更新的仓库记忆事实。
 
-### AIModel
-AI 模型配置（OpenAI/Claude/自定义）
+## Code Graph
 
-### Repository
-仓库配置，关联 GitLab 账号
+Code Graph 是提交级代码关系图。每次审查会围绕
+`repositoryId + sourceBranch + commitSha` 生成或复用快照，再把架构摘要和代码关系
+作为审查前置记忆保存。
 
-### ReviewLog
-审查日志，记录每次审查的统计信息
+当前重点支持 TypeScript / TSX：
 
-### RepositoryReviewBot
-仓库审查机器人配置，保存机器人名称、描述、绑定模型、Prompt、启停状态和排序
+- import / export
+- 函数和组件
+- API route
+- 审查步骤
+- service、page、component、data model 等文件角色
 
-### ReviewBotRun
-单次审查中每个机器人的执行记录，保存状态、模型快照、Prompt 快照、摘要和错误
-
-### ReviewComment
-审查评论，存储具体的代码问题，并记录来源机器人和合并后的来源列表
-
-### RepositoryMemorySnapshot
-仓库 Code Graph 快照，保存架构摘要和索引状态
-
-### CodeFileNode / CodeSymbolNode / CodeRelationEdge
-代码调用图节点与关系边，用于跨文件上下文检索
-
-### RepositoryMemoryFact
-可持续更新的仓库记忆事实
-
-### ReviewAgentTrace
-每个机器人独立的 Agent Loop 轨迹，包括每轮工具调用、上下文和 Critic 结果
-
-## Code Graph 架构
-
-Code Graph 是提交级代码关系图。每次审查都会围绕 `sourceBranch + commitSha` 生成或复用对应快照，再把文件角色、调用关系和架构摘要作为 Agent Tools 上下文提供给审查机器人。
-
-### 存储结构
-
-- `RepositoryMemorySnapshot` 保存分支提交级 Code Graph 快照，包括架构摘要、索引状态、提交 SHA 和更新模式。
-- `CodeFileNode` 保存文件节点，包括文件路径、语言、角色、摘要、imports、exports 和 hash。
-- `CodeSymbolNode` 保存文件内符号节点，用于后续扩展到函数、类、接口级定位。
-- `CodeRelationEdge` 保存跨文件关系边，包括 from、to、relationType、confidence 和 evidence。
-- `RepositoryMemoryFact` 保存高置信仓库事实，和 Code Graph 一起组成审查时的长期记忆。
-
-### 更新策略
-
-- 首次没有 Code Graph 时，系统基于当前审查提交全量建立图谱。
-- 审查前刷新时，会读取同一 source branch 上一次 ready 快照，只重建本次 diff 里发生变化的可索引文件。
-- 如果同一 `repositoryId + sourceBranch + commitSha` 已经有 ready 快照，直接复用，不重复扫描仓库。
-- 如果本次变更没有可索引源码文件，也复用已有快照，只更新快照状态说明。
-- 独立 Code Graph 页面支持按“仓库 → 分支 → HEAD/提交”查看，也支持为分支当前 HEAD 手动生成图谱。
-
-### Agent Tools 使用方式
-
-审查机器人不会直接假设自己知道项目结构，而是通过上下文工具读取 Code Graph：
-
-- `get_code_graph_status` 检查图谱是否可用、索引模式和 HEAD 状态。
-- `get_architecture_summary` 读取基于 Code Graph 生成的项目架构摘要。
-- `get_file_context` 读取变更文件在图谱中的角色、imports、exports 和摘要。
-- `get_call_graph_neighbors` 读取变更文件附近的跨文件关系。
-- `rebuild_code_graph` 只作为图谱缺失时的系统准备动作。工具观测显示 Code Graph 可用后，机器人才能基于调用链下结论。
-
-### Web 页面展示
-
-独立 Code Graph 页面会从 `/api/repositories/[id]/memory/graph` 读取数据库中的文件节点、符号节点和关系边，并使用 `@relation-graph/react` 渲染图谱。页面不手绘 SVG，也不在前端重新发明布局算法；缩放、拖拽、关系线、迷你地图和节点点击交互由开源图谱组件负责。点击节点后，页面展示该文件的角色、语言、摘要和相关关系，方便直接查看 Code Graph 数据。
+独立 Code Graph 页面从 `/api/repositories/[id]/memory/graph` 读取数据库中的节点和边，
+使用 `@relation-graph/react` 渲染图谱。
 
 ## 环境变量
-
-创建 `.env` 文件：
 
 ```env
 DATABASE_URL="postgresql://code_review:code_review@localhost:5432/code_review_copilot?schema=public"
 
-# 系统登录账号。项目只支持这个由 env 初始化的账号，不提供注册功能。
 APP_AUTH_USERNAME="admin"
 APP_AUTH_SECRET="change-me-login-secret"
 APP_AUTH_SESSION_SECRET="change-me-session-signing-secret"
-# 可选：配置后只有这些 IP 可以访问页面和业务 API，多个 IP 用英文逗号分隔。
 APP_AUTH_IP_WHITELIST="127.0.0.1,::1"
 
+OPEN_SANDBOX_DOMAIN="host.docker.internal:8080"
+OPEN_SANDBOX_PROTOCOL="http"
+OPEN_SANDBOX_API_KEY=""
+
+PI_HOST_PATH="/opt/pi"
+PI_SANDBOX_MOUNT_PATH="/opt/pi"
+PI_SANDBOX_IMAGE="node:24-bookworm"
+PI_SANDBOX_TIMEOUT_SECONDS="7200"
+
 DINGTALK_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
-# 可选：开启加签时填写（钉钉机器人安全设置中的加签密钥）
 DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
 ```
 
-`APP_AUTH_SECRET` 是登录密钥，`APP_AUTH_SESSION_SECRET` 用于签名登录会话。
-生产环境必须替换为足够长的随机字符串。
-`APP_AUTH_IP_WHITELIST` 为空时不启用 IP 限制；部署在 Nginx、Docker 或反向代理后时，
-系统会优先读取 `x-forwarded-for` 的第一个 IP，其次读取 `x-real-ip`。
-反向代理必须覆盖客户端传入的这些头，避免外部请求伪造来源 IP。
-
-`/api/webhook/gitlab` 和 `/api/code-graph/refresh-scheduled` 是外部回调入口，不要求登录 Cookie。
-除登录接口和这两个外部入口外，页面和业务 API 都会经过登录校验；配置了 IP 白名单时，白名单校验会先于登录校验执行。
+`/api/webhook/gitlab` 和 `/api/code-graph/refresh-scheduled` 是外部回调入口，
+不要求登录 Cookie。除登录接口和外部入口外，页面和业务 API 都会经过登录校验。
 
 ## SQLite 历史数据迁移
 
-从 SQLite 切换到 PostgreSQL 时，历史配置和审查记录不能丢。
-
-迁移脚本默认读取 `prisma/dev.db`，并按依赖顺序写入 PostgreSQL：
-
-1. GitLab 账号
-2. AI 模型
-3. 仓库配置
-4. 审查日志
-5. 审查评论
-6. 通知配置
-7. 默认审查机器人
+```bash
+docker compose up -d postgres
+npm run db:migrate:sqlite -- --dry-run
+npm run db:migrate:sqlite -- --source prisma/dev.db --force
+```
 
 迁移规则：
 
 - 保留旧数据的 `id`、创建时间、更新时间和外键关系。
-- 目标库已存在相同 `id` 时跳过，不覆盖已有记录。
-- 每个旧仓库会创建一个“默认审查机器人”，继承旧仓库级模型、Prompt 和 Prompt 模式。
-- 旧仓库自定义模型会迁移为专用 `AIModel`，再绑定到默认机器人。
-- 如果旧仓库没有可迁移模型配置，dry-run 和正式迁移都会快速失败。
+- 目标库已存在相同 `id` 时跳过。
+- 每个旧仓库会创建一个默认 Pi Profile。
+- 旧仓库自定义模型会迁移为专用 `AIModel`。
 - 旧 SQLite schema 不匹配当前可迁移结构时快速失败。
-- 迁移不会自动生成 Code Graph 数据，这些数据会在后续审查或手动刷新 Code Graph 时创建。
-
-常用命令：
-
-```bash
-# 校验默认源库 prisma/dev.db
-npm run db:migrate:sqlite -- --dry-run
-
-# 指定其他 SQLite 文件校验
-npm run db:migrate:sqlite -- --source ./backup/dev.db --dry-run
-
-# 写入 PostgreSQL
-npm run db:migrate:sqlite -- --source prisma/dev.db --force
-```
-
-## 目录结构
-
-```
-├── app/
-│   ├── api/              # API 路由
-│   │   ├── auth/         # 登录和退出登录
-│   │   ├── repositories/ # 仓库管理
-│   │   ├── review/       # 代码审查
-│   │   ├── settings/     # 配置管理
-│   │   └── webhook/      # Webhook 处理
-│   ├── layout.tsx        # 根布局
-│   ├── login/            # 登录页
-│   ├── page.tsx          # 仪表盘
-│   ├── reviews/          # 审查历史和审查过程可视化
-│   ├── settings/         # 配置页面
-│   └── repositories/     # 仓库页面
-├── components/
-│   ├── ui/               # shadcn/ui 组件
-│   ├── app-shell.tsx     # 登录页和工作台布局分流
-│   └── app-sidebar.tsx   # 工作台侧边栏和退出登录
-├── lib/
-│   ├── auth.ts           # 登录会话、签名和 IP 白名单
-│   ├── prisma.ts         # Prisma Client
-│   ├── types.ts          # TypeScript 类型
-│   ├── prompts.ts        # AI Prompt 模板
-│   └── services/         # 业务逻辑服务
-│       ├── gitlab.ts     # GitLab API
-│       ├── ai.ts         # AI 模型服务
-│       └── review.ts     # 审查服务
-└── prisma/
-    └── schema.prisma     # 数据库模型
-```
 
 ## API 端点
 
 ### 认证
-- `POST /api/auth/login` - 校验环境变量账号和密钥，写入登录 Cookie
-- `POST /api/auth/logout` - 清理登录 Cookie
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
 
 ### 仓库管理
-- `GET /api/repositories` - 获取所有仓库
-- `POST /api/repositories` - 添加仓库
-- `PUT /api/repositories` - 更新仓库
-- `DELETE /api/repositories` - 删除仓库
-- `GET /api/repositories/[id]/bots` - 获取仓库审查机器人
-- `POST /api/repositories/[id]/bots` - 新增审查机器人
-- `PUT /api/repositories/[id]/bots` - 更新审查机器人
-- `DELETE /api/repositories/[id]/bots?id=xxx` - 删除审查机器人
-- `GET /api/repositories/[id]/memory` - 获取仓库 Code Graph 元信息和高置信风险
-- `GET /api/repositories/[id]/memory/graph` - 获取 Code Graph 文件节点和关系边
-- `POST /api/repositories/[id]/memory/refresh` - 增量刷新 Code Graph，传 `force=true` 时强制全量重建
+
+- `GET /api/repositories`
+- `POST /api/repositories`
+- `PUT /api/repositories`
+- `DELETE /api/repositories`
+- `GET /api/repositories/[id]/pi-profiles`
+- `POST /api/repositories/[id]/pi-profiles`
+- `PUT /api/repositories/[id]/pi-profiles`
+- `DELETE /api/repositories/[id]/pi-profiles?id=xxx`
+- `GET /api/repositories/[id]/memory`
+- `GET /api/repositories/[id]/memory/graph`
+- `POST /api/repositories/[id]/memory/refresh`
 
 ### 配置管理
-- `GET /api/settings/gitlab` - 获取 GitLab 账号
-- `POST /api/settings/gitlab` - 添加 GitLab 账号
-- `GET /api/settings/models` - 获取 AI 模型
-- `POST /api/settings/models` - 添加 AI 模型
+
+- `GET /api/settings/gitlab`
+- `POST /api/settings/gitlab`
+- `GET /api/settings/models`
+- `POST /api/settings/models`
 
 ### 代码审查
-- `POST /api/review` - 手动触发审查
-- `GET /api/review?logId=xxx` - 获取审查状态
-- `POST /api/review/[id]/retry` - 清理旧评论、机器人运行和 Trace 后重试审查
-- `GET /api/reviews/[id]/agent-trace` - 获取所有机器人 Agent Trace
+
+- `POST /api/review`
+- `GET /api/review?logId=xxx`
+- `POST /api/review/[id]/retry`
+- `POST /api/review/[id]/stop`
+- `GET /api/reviews`
+- `GET /api/reviews/[id]`
+- `GET /api/reviews/[id]/workflow`
 
 ### Webhook
-- `POST /api/webhook/gitlab` - GitLab Webhook
+
+- `POST /api/webhook/gitlab`
 
 ## 审查流程
 
-1. **触发方式**：
-   - 手动触发：在界面点击"开始审查"
-   - 自动触发：GitLab Webhook 检测到 MR 或 Push 事件
+1. 手动触发、Webhook 或 Retry 进入 `ReviewTriggerService`。
+2. `ReviewService.performReview` 串行执行 review steps。
+3. `fetch_diff` 获取 MR / Commit diff。
+4. `refresh_memory` 生成或复用 Code Graph。
+5. `generate_summary` 根据 diff 生成确定性公共变更摘要。
+6. `run_pi_runtime` 选择排序第一的启用 Profile，连接仓库 sandbox，创建 worktree，运行 Pi。
+7. `aggregate_results` 校验 finding 是否命中本次 diff，并写入评论。
+8. `publish_comment` 发布 GitLab 总评并发送钉钉通知。
+9. sandbox 内 worktree 清理完成后，如果没有 running session，暂停仓库 VM。
 
-2. **审查步骤**：
-   - 只获取一次 MR/Commit Diff
-   - 刷新或复用 Code Graph
-   - 使用排序第一的启用机器人生成公共变更摘要
-   - 主 Agent 执行 Agent Loop
-   - 主 Agent 明确请求且存在可调用辅助 Agent 时，条件调用辅助 Agent
-   - 主 Agent 发现严重或可处理问题达到复核阈值时，也会调用剩余辅助 Agent 复核
-   - 每轮校验 finding 是否命中本次 diff、行号是否有效、confidence 是否达到阈值
-   - 合并重复问题，保留主 Agent 和辅助 Agent 各自的来源机器人、模型和 confidence
-   - 保存评论和 Trace，只发布一条 GitLab 总评
-   - 审查详情页把 Trace 展示为“计划 → 上下文 → 工具 → Finding → Critic”的可视化过程
+## 质量门禁
 
-3. **问题级别**：
-   - **严重**: 安全漏洞、重大 bug、性能问题
-   - **一般**: 代码质量问题、小 bug
-   - **建议**: 最佳实践、优化建议
-
-## 开发计划
-
-- [ ] 完善仓库列表页面
-- [ ] 添加审查历史查看界面
-- [ ] 创建帮助中心页面
-- [ ] 支持更多 GitLab 事件
-- [ ] 添加审查报告导出功能
-- [ ] 支持机器人模板市场
+```bash
+npx prisma validate
+npx prisma generate
+npx tsc --noEmit --pretty false
+npm run lint
+npm run build
+docker compose --env-file .env.example config
+```
 
 ## License
 

@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { createGitLabService } from '@/lib/services/gitlab'
-import { DEFAULT_AGENT_LOOP_BUDGET } from '@/lib/services/review-budget'
+import { DEFAULT_PI_REVIEW_LIMITS } from '@/lib/services/review-budget'
 
 /** GET /api/repositories - 获取所有仓库 */
 export async function GET() {
@@ -25,31 +25,14 @@ export async function GET() {
         gitLabAccountId: true,
         isActive: true,
         autoReview: true,
-        defaultAIModelId: true,
         watchBranches: true,
-        customPrompt: true,
-        customPromptMode: true,
-        customProvider: true,
-        customModelId: true,
-        customApiKey: true,
-        customApiEndpoint: true,
-        customMaxTokens: true,
-        customTemperature: true,
         gitLabAccount: {
           select: {
             id: true,
             url: true,
           },
         },
-        defaultAIModel: {
-          select: {
-            id: true,
-            provider: true,
-            modelId: true,
-            isActive: true,
-          },
-        },
-        reviewBots: {
+        piProfiles: {
           where: { isActive: true },
           select: {
             id: true,
@@ -124,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     const project = await gitlabService.getProject(gitLabProjectId)
 
-    const defaultAIModel = await prisma.aIModel.findFirst({
+    const initialProfileModel = await prisma.aIModel.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: 'asc' },
     })
@@ -137,22 +120,21 @@ export async function POST(request: NextRequest) {
         path: project.path_with_namespace,
         description: project.description,
         gitLabAccountId: gitLabAccount.id,
-        defaultAIModelId: defaultAIModel?.id,
-        reviewBots: defaultAIModel ? {
+        piProfiles: initialProfileModel ? {
           create: {
-            aiModelId: defaultAIModel.id,
-            name: '默认审查机器人',
+            aiModelId: initialProfileModel.id,
+            name: '默认 Pi Profile',
             description: '仓库创建时自动生成，可按需编辑或禁用',
             promptMode: 'extend',
             isActive: true,
             sortOrder: 0,
-            ...DEFAULT_AGENT_LOOP_BUDGET,
+            ...DEFAULT_PI_REVIEW_LIMITS,
           },
         } : undefined,
       },
       include: {
         gitLabAccount: true,
-        reviewBots: {
+        piProfiles: {
           include: {
             aiModel: {
               select: {
@@ -193,31 +175,13 @@ export async function PUT(request: NextRequest) {
       id,
       isActive,
       autoReview,
-      defaultAIModelId,
-      customPrompt,
-      customPromptMode,
       watchBranches,
-      customProvider,
-      customModelId,
-      customApiKey,
-      customApiEndpoint,
-      customMaxTokens,
-      customTemperature,
     } = body
 
     const updateData: Prisma.RepositoryUncheckedUpdateInput = {}
     if (isActive !== undefined) updateData.isActive = isActive
     if (autoReview !== undefined) updateData.autoReview = autoReview
-    if (defaultAIModelId !== undefined) updateData.defaultAIModelId = defaultAIModelId
-    if (customPrompt !== undefined) updateData.customPrompt = customPrompt
-    if (customPromptMode !== undefined) updateData.customPromptMode = customPromptMode
     if (watchBranches !== undefined) updateData.watchBranches = watchBranches
-    if (customProvider !== undefined) updateData.customProvider = customProvider
-    if (customModelId !== undefined) updateData.customModelId = customModelId
-    if (customApiKey !== undefined) updateData.customApiKey = customApiKey
-    if (customApiEndpoint !== undefined) updateData.customApiEndpoint = customApiEndpoint
-    if (customMaxTokens !== undefined) updateData.customMaxTokens = customMaxTokens
-    if (customTemperature !== undefined) updateData.customTemperature = customTemperature
 
     const repository = await prisma.repository.update({
       where: { id },
@@ -229,15 +193,7 @@ export async function PUT(request: NextRequest) {
             url: true,
           },
         },
-        defaultAIModel: {
-          select: {
-            id: true,
-            provider: true,
-            modelId: true,
-            isActive: true,
-          },
-        },
-        reviewBots: {
+        piProfiles: {
           where: { isActive: true },
           select: {
             id: true,

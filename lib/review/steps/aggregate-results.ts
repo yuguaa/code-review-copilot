@@ -13,6 +13,7 @@ import { buildFindingKey, toPrismaJsonInput } from "@/lib/review/utils";
 import type { ReviewState, ReviewStatistics } from "../types";
 import type { ReviewComment } from "@/lib/types";
 import { createLogger } from "@/lib/logger";
+import { REVIEW_CANCELLED_STATUS, ReviewCancelledError } from "@/lib/services/review-cancellation";
 
 const log = createLogger("AggregateResultsStep");
 
@@ -64,36 +65,43 @@ export async function aggregateResultsStep(state: ReviewState): Promise<Partial<
       await tx.reviewComment.createMany({
         data: commentsToSave.map((comment) => ({
           reviewLogId: state.reviewLogId,
-          reviewBotRunId: comment.reviewBotRunId,
+          piReviewRunId: comment.piReviewRunId,
           filePath: comment.filePath,
           lineNumber: comment.lineNumber,
           lineRangeEnd: comment.lineRangeEnd,
           severity: comment.severity,
           content: comment.content,
-          sourceBotName: comment.sourceBotName,
-          sourceBotModel: comment.sourceBotModel,
-          sourceBotsJson: comment.sourceBots ? toPrismaJsonInput(comment.sourceBots) : undefined,
+          sourceProfileName: comment.sourceProfileName,
+          sourceProfileModel: comment.sourceProfileModel,
+          sourceProfilesJson: comment.sourceProfiles ? toPrismaJsonInput(comment.sourceProfiles) : undefined,
           diffHunk: comment.diffHunk,
           confidence: comment.confidence,
         })),
       });
     }
 
-    await tx.reviewLog.update({
-      where: { id: state.reviewLogId },
+    const updateResult = await tx.reviewLog.updateMany({
+      where: { id: state.reviewLogId, status: "pending" },
       data: {
-        status: "completed",
-        completedAt: new Date(),
         reviewedFiles: state.relevantDiffs.length,
         criticalIssues: statistics.critical,
         normalIssues: statistics.normal,
         suggestions: statistics.suggestion,
-        aiResponse: JSON.stringify(state.aiResponsesByFile),
-        reviewPrompts: JSON.stringify(state.reviewPromptsByFile),
-        aiModelProvider: null,
-        aiModelId: null,
+        piRawOutputs: JSON.stringify(state.piRawOutputsByFile),
+        piPrompts: JSON.stringify(state.piPromptsByFile),
       },
     });
+
+    if (updateResult.count === 0) {
+      const reviewLog = await tx.reviewLog.findUnique({
+        where: { id: state.reviewLogId },
+        select: { status: true },
+      });
+      if (reviewLog?.status === REVIEW_CANCELLED_STATUS) {
+        throw new ReviewCancelledError(state.reviewLogId);
+      }
+      throw new Error("Review log is no longer pending");
+    }
   });
 
   return {

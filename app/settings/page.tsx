@@ -77,7 +77,7 @@ export default function SettingsPage() {
   const [dingtalkTesting, setDingtalkTesting] = useState(false)
   const [dingtalkSaving, setDingtalkSaving] = useState(false)
 
-  // AI 模型表单状态
+  // 模型凭据表单状态
   const [editingModel, setEditingModel] = useState<AIModel | null>(null)
   const [modelForm, setModelForm] = useState({
     provider: 'openai' as AIProvider,
@@ -239,7 +239,7 @@ export default function SettingsPage() {
     }
   }
 
-  // 保存 AI 模型
+  // 保存模型凭据
   const saveAIModel = async () => {
     if (!modelForm.modelId || !modelForm.apiKey) {
       toast.error('模型 ID 和 API 密钥为必填项')
@@ -276,10 +276,10 @@ export default function SettingsPage() {
 
       if (editingModel) {
         setAiModels(aiModels.map(m => m.id === editingModel.id ? savedModel : m))
-        toast.success('AI 模型已更新')
+        toast.success('模型凭据已更新')
       } else {
         setAiModels([...aiModels, savedModel])
-        toast.success('AI 模型已添加')
+        toast.success('模型凭据已添加')
       }
 
       setEditingModel(null)
@@ -291,7 +291,7 @@ export default function SettingsPage() {
     }
   }
 
-  // 编辑 AI 模型
+  // 编辑模型凭据
   const editModel = (model: AIModel) => {
     setEditingModel(model)
     setModelForm({
@@ -310,7 +310,7 @@ export default function SettingsPage() {
     resetModelForm()
   }
 
-  // 删除 AI 模型
+  // 删除模型凭据
   const deleteAIModel = async (id: string) => {
     try {
       const response = await fetch(`/api/settings/models?id=${id}`, {
@@ -319,7 +319,7 @@ export default function SettingsPage() {
       if (!response.ok) throw new Error('Failed to delete model')
 
       setAiModels(aiModels.filter(m => m.id !== id))
-      toast.success('AI 模型已删除')
+      toast.success('模型凭据已删除')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '未知错误')
     }
@@ -345,7 +345,7 @@ export default function SettingsPage() {
     }
   }
 
-  // 测试 AI 模型连接
+  // 测试模型连接
   const testAIModelConnection = async (model?: AIModel) => {
     const provider = model?.provider || modelForm.provider
     const modelId = model?.modelId || modelForm.modelId
@@ -382,7 +382,7 @@ export default function SettingsPage() {
 
       const result = await response.json()
       if (result.success) {
-        toast.success(result.message || 'AI 模型连接成功')
+        toast.success(result.message || '模型连接成功')
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '连接测试失败，请检查配置')
@@ -532,7 +532,7 @@ export default function SettingsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">配置</h1>
         <p className="text-muted-foreground">
-          管理 GitLab 账号和全局 AI 模型配置
+          管理 GitLab 账号和 Pi Runtime 模型凭据
         </p>
       </div>
 
@@ -632,13 +632,13 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* 全局 AI 模型配置 */}
+          {/* Pi Runtime 模型凭据 */}
           <Card>
             <CardHeader>
               <div>
-                <CardTitle>全局 AI 模型</CardTitle>
+                <CardTitle>Pi Runtime 模型凭据</CardTitle>
                 <CardDescription>
-                  配置用于代码审查的默认 AI 模型（仓库可单独配置）
+                  配置供 Pi Profile 引用的 OpenAI 或 Claude 模型凭据
                 </CardDescription>
               </div>
             </CardHeader>
@@ -647,7 +647,7 @@ export default function SettingsPage() {
               {editingModel ? (
                 <div className="p-6 border rounded-lg space-y-4">
                   <h3 className="text-lg font-semibold">
-                    {editingModel ? '编辑 AI 模型' : '添加 AI 模型'}
+                    {editingModel ? '编辑模型凭据' : '添加模型凭据'}
                   </h3>
                   <div className="space-y-4">
                     <div className="space-y-2">
@@ -757,7 +757,7 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div className="p-6 border rounded-lg space-y-4">
-                  <h3 className="text-lg font-semibold">添加 AI 模型</h3>
+                  <h3 className="text-lg font-semibold">添加模型凭据</h3>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label>提供商</Label>
@@ -863,7 +863,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 {aiModels.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground">
-                    还没有添加任何 AI 模型
+                    还没有添加任何模型凭据
                   </div>
                 ) : (
                   aiModels.map((model) => (

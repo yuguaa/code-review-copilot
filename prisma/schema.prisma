@@ -36,8 +36,7 @@ model AIModel {
   isActive          Boolean       @default(true)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-  repositories      Repository[]  // 使用此模型作为默认的仓库
-  reviewBots        RepositoryReviewBot[]
+  piProfiles        RepositoryPiProfile[]
 
   @@map("ai_models")
 }
@@ -53,29 +52,64 @@ model Repository {
   gitLabAccount     GitLabAccount @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
   isActive          Boolean       @default(true)
   autoReview        Boolean       @default(false) // 是否自动审查
-  defaultAIModelId  String?       // 默认 AI 模型 ID（可选，为空时使用全局默认）
-  defaultAIModel    AIModel?      @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
   watchBranches     String?       // 监听的分支（逗号分隔或通配符，如 "main,develop,feature/*"）
-  customPrompt      String?       // 自定义审查 Prompt（可选，为空时使用全局默认）
-  customPromptMode  String?       @default("extend") // 自定义提示词模式: "extend"(扩展) 或 "replace"(替换)
-  // 自定义 AI 模型配置（优先级高于 defaultAIModelId）
-  customProvider    String?       // 自定义提供商: openai, claude, custom
-  customModelId     String?       // 自定义模型 ID
-  customApiKey      String?       // 自定义 API 密钥
-  customApiEndpoint String?       // 自定义 API 端点（仅用于 custom 提供商）
-  customMaxTokens   Int?          // 自定义最大 token 数
-  customTemperature Float?        // 自定义温度参数
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   reviewLogs        ReviewLog[]   // 关联的审查日志
-  reviewBots        RepositoryReviewBot[]
+  piProfiles        RepositoryPiProfile[]
   memorySnapshots   RepositoryMemorySnapshot[]
   codeFileNodes     CodeFileNode[]
   codeRelationEdges CodeRelationEdge[]
   memoryFacts       RepositoryMemoryFact[]
+  sandboxBinding    RepositorySandboxBinding?
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@map("repositories")
+}
+
+// 仓库与 OpenSandbox VM 的绑定；同一仓库复用同一个 sandbox。
+model RepositorySandboxBinding {
+  id                 String     @id @default(cuid())
+  repositoryId       String     @unique
+  repository         Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sandboxId          String     @unique
+  status             String     @default("running") // running, pausing, paused, error
+  image              String
+  piHostPath         String
+  piSandboxMountPath String
+  lastUsedAt         DateTime   @default(now())
+  pausedAt           DateTime?
+  error              String?
+  metadataJson       Json?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  sessions           ReviewSandboxSession[]
+
+  @@index([repositoryId, status])
+  @@index([status, lastUsedAt])
+  @@map("repository_sandbox_bindings")
+}
+
+// 单次 review 在仓库 sandbox 内的会话记录，绑定独立 worktree 和 Pi command。
+model ReviewSandboxSession {
+  id                         String                   @id @default(cuid())
+  reviewLogId                String                   @unique
+  reviewLog                  ReviewLog                @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
+  repositorySandboxBindingId String
+  repositorySandboxBinding   RepositorySandboxBinding @relation(fields: [repositorySandboxBindingId], references: [id], onDelete: Cascade)
+  sandboxId                  String
+  piCommandId                String?
+  worktreePath               String
+  status                     String                   @default("running") // running, cancelling, completed, failed, cancelled
+  error                      String?
+  startedAt                  DateTime                 @default(now())
+  completedAt                DateTime?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+
+  @@index([repositorySandboxBindingId, status])
+  @@index([sandboxId, status])
+  @@map("review_sandbox_sessions")
 }
 
 // 审查日志
@@ -95,33 +129,31 @@ model ReviewLog {
   commitShortId     String          // 提交的短 ID
   baseCommitSha     String?         // Push 事件的起始 SHA，用于覆盖一次 push 的多 commit diff
   pushCommitShasJson Json?          // Push 事件包含的 commit SHA 列表，用于新分支等无 before 场景
-  status            String          // 状态: pending, completed, failed
+  status            String          // 状态: pending, completed, failed, cancelled
   error             String?         // 错误信息（如果有）
   totalFiles        Int             // 总文件数
   reviewedFiles     Int             @default(0) // 已审查文件数
   criticalIssues    Int             @default(0) // 严重问题数
   normalIssues      Int             @default(0) // 一般问题数
   suggestions       Int             @default(0) // 建议数
-  aiSummary         String?         // AI 生成的代码变更总结
-  aiResponse        String?         // AI 完整审查回复（JSON 格式，按文件存储）
-  reviewPrompts     String?         // 发送给 AI 的完整 Prompt（用于追溯）
-  aiModelProvider   String?         // 使用的 AI 模型提供商
-  aiModelId         String?         // 使用的 AI 模型 ID
+  changeSummary     String?         // 确定性变更摘要
+  piRawOutputs      String?         // Pi 原始审查输出（JSON 格式，按文件存储）
+  piPrompts         String?         // 发送给 Pi 的完整 Prompt（用于追溯）
   gitlabDiscussionId String?        // GitLab MR Discussion ID（用于更新占位评论）
   gitlabNoteId      Int?            // GitLab Note ID（用于更新占位评论）
   startedAt         DateTime        @default(now())
   completedAt       DateTime?       // 完成时间
-  botRuns           ReviewBotRun[]
+  piRuns            PiReviewRun[]
   comments          ReviewComment[] // 关联的审查评论
-  agentTraces       ReviewAgentTrace[]
   workflowNodes     ReviewWorkflowNode[]
+  sandboxSession    ReviewSandboxSession?
 
   @@index([repositoryId, mergeRequestIid, commitSha])
   @@map("review_logs")
 }
 
-// 仓库审查机器人配置
-model RepositoryReviewBot {
+// 仓库 Pi 运行配置。
+model RepositoryPiProfile {
   id                String        @id @default(cuid())
   repositoryId      String
   repository        Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
@@ -133,46 +165,42 @@ model RepositoryReviewBot {
   promptMode        String        @default("extend")
   isActive          Boolean       @default(true)
   sortOrder         Int           @default(0)
-  maxIterations     Int           @default(5)
-  maxContextFiles   Int           @default(12)
-  maxCallGraphDepth Int           @default(2)
   maxFindings       Int           @default(50)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
-  botRuns           ReviewBotRun[]
+  piRuns            PiReviewRun[]
 
   @@index([repositoryId, isActive, sortOrder])
   @@index([aiModelId])
-  @@map("repository_review_bots")
+  @@map("repository_pi_profiles")
 }
 
-// 单次审查中的机器人执行记录
-model ReviewBotRun {
+// 单次审查中的 Pi 执行记录。
+model PiReviewRun {
   id                String          @id @default(cuid())
   reviewLogId       String
   reviewLog         ReviewLog       @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotId       String?
-  reviewBot         RepositoryReviewBot? @relation(fields: [reviewBotId], references: [id], onDelete: SetNull)
+  piProfileId       String?
+  piProfile         RepositoryPiProfile? @relation(fields: [piProfileId], references: [id], onDelete: SetNull)
   status            String
   error             String?
   summary           String?
-  aiModelProvider   String
-  aiModelId         String
-  aiModelName       String
+  modelProvider     String
+  modelId           String
+  modelName         String
   promptSnapshot    String?
   promptMode        String
   startedAt         DateTime        @default(now())
   completedAt       DateTime?
   comments          ReviewComment[]
-  agentTrace        ReviewAgentTrace?
   workflowNodes     ReviewWorkflowNode[]
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  @@unique([reviewLogId, reviewBotId])
+  @@unique([reviewLogId, piProfileId])
   @@index([reviewLogId, status])
-  @@index([reviewBotId])
-  @@map("review_bot_runs")
+  @@index([piProfileId])
+  @@map("pi_review_runs")
 }
 
 // 审查评论
@@ -180,16 +208,16 @@ model ReviewComment {
   id                String        @id @default(cuid())
   reviewLogId       String
   reviewLog         ReviewLog     @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotRunId    String?
-  reviewBotRun      ReviewBotRun? @relation(fields: [reviewBotRunId], references: [id], onDelete: SetNull)
+  piReviewRunId     String?
+  piReviewRun       PiReviewRun?  @relation(fields: [piReviewRunId], references: [id], onDelete: SetNull)
   filePath          String        // 文件路径
   lineNumber        Int           // 行号
   lineRangeEnd      Int?          // 行范围结束（可选，用于多行评论）
   severity          String        // 严重级别: critical, normal, suggestion
   content           String        // 评论内容
-  sourceBotName     String?
-  sourceBotModel    String?
-  sourceBotsJson    Json?
+  sourceProfileName String?
+  sourceProfileModel String?
+  sourceProfilesJson Json?
   diffHunk          String?       // diff 片段（可选）
   confidence        Float?        // AI 置信度（0-1）
   gitlabCommentId   String?       // GitLab 评论 ID（已创建后）
@@ -197,8 +225,8 @@ model ReviewComment {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  @@index([reviewLogId, reviewBotRunId, severity])
-  @@index([reviewBotRunId, isPosted])
+  @@index([reviewLogId, piReviewRunId, severity])
+  @@index([piReviewRunId, isPosted])
   @@map("review_comments")
 }
 
@@ -234,7 +262,6 @@ model RepositoryMemorySnapshot {
   error               String?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
-  agentTraces         ReviewAgentTrace[]
 
   @@unique([repositoryId, branch, commitSha])
   @@index([repositoryId, branch, status])
@@ -335,35 +362,13 @@ model RepositoryMemoryFact {
   @@map("repository_memory_facts")
 }
 
-// Agent 审查轨迹
-model ReviewAgentTrace {
-  id                   String                    @id @default(cuid())
-  reviewLogId          String
-  reviewLog            ReviewLog                 @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotRunId       String?                   @unique
-  reviewBotRun         ReviewBotRun?             @relation(fields: [reviewBotRunId], references: [id], onDelete: Cascade)
-  memorySnapshotId     String?
-  memorySnapshot       RepositoryMemorySnapshot? @relation(fields: [memorySnapshotId], references: [id], onDelete: SetNull)
-  loopIterationsJson   Json?
-  retrievedContextJson Json?
-  finalPlanJson        Json?
-  criticJson           Json?
-  memoryUpdatesJson    Json?
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
-
-  @@index([reviewLogId])
-  @@index([memorySnapshotId])
-  @@map("review_agent_traces")
-}
-
 // 动态审查过程图节点
 model ReviewWorkflowNode {
   id              String        @id @default(cuid())
   reviewLogId     String
   reviewLog       ReviewLog     @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotRunId  String?
-  reviewBotRun    ReviewBotRun? @relation(fields: [reviewBotRunId], references: [id], onDelete: Cascade)
+  piReviewRunId   String?
+  piReviewRun     PiReviewRun? @relation(fields: [piReviewRunId], references: [id], onDelete: Cascade)
   nodeKey         String
   parentNodeKey   String?
   kind            String
@@ -383,6 +388,6 @@ model ReviewWorkflowNode {
   @@unique([reviewLogId, nodeKey])
   @@index([reviewLogId, sequence])
   @@index([reviewLogId, status])
-  @@index([reviewBotRunId])
+  @@index([piReviewRunId])
   @@map("review_workflow_nodes")
 }

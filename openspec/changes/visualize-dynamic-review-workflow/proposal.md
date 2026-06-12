@@ -1,6 +1,6 @@
 ## Why
 
-当前审查详情只能用日志和静态阶段卡片追踪 Agent Loop，用户无法在 review 进行中直观看到流程推进、节点状态和辅助 Agent 触发关系。动态过程图可以把 review 从“事后读日志”变成“实时看链路”，尤其适合排查卡点、失败、上下文缺失和 Finding 被丢弃的原因。
+当前审查详情需要直接呈现 Pi + OpenSandbox 主链路，用户要能在 review 进行中看到流程推进、节点状态、sandbox 会话和失败位置。动态过程图可以把 review 从“事后读日志”变成“实时看链路”，尤其适合排查 OpenSandbox、Git fetch/worktree、Pi 输出、Finding 校验和发布卡点。
 
 ## What Changes
 
@@ -9,7 +9,7 @@
 - 新增 `/api/reviews/[id]/workflow`，返回当前 workflow 的 `nodes` 和读取时生成的 `edges`。
 - 在审查详情中新增“过程图”Tab，使用 `@xyflow/react` 展示动态节点和边，并在 review 进行中轮询刷新。
 - 将 React Flow 画布动态加载，避免进入审查列表首屏 bundle。
-- 保留 `ReviewAgentTrace` 作为 Agent Loop 原始轨迹来源，workflow 只负责可视化快照。
+- 使用 `ReviewWorkflowNode` 作为过程图唯一来源；Pi 原始输出、sandbox session 和 Pi Review Run 详情由审查详情接口按需返回。
 
 ## Capabilities
 
@@ -22,7 +22,7 @@
 ## Impact
 
 - 数据库：新增 `review_workflow_nodes` 表及相关索引。
-- 后端：新增 workflow recorder 服务；触发、主审查步骤、Agent Loop、停止审查、失败处理写入动态节点。
-- API：新增 `/api/reviews/[id]/workflow`；新增 `/api/reviews/[id]` 详情接口；列表接口减少详情级 trace/raw 字段。
+- 后端：新增 workflow recorder 服务；触发、主审查步骤、Pi Runtime、停止审查、失败处理写入动态节点。
+- API：新增 `/api/reviews/[id]/workflow`；新增 `/api/reviews/[id]` 详情接口；列表接口减少详情级 runtime/raw 字段。
 - 前端：拆分审查详情相关组件，新增 React Flow 过程图、节点详情面板和轮询刷新逻辑。
 - 依赖：新增本地依赖 `@xyflow/react`。

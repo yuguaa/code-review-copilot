@@ -60,26 +60,24 @@ interface Review {
   criticalIssues: number
   normalIssues: number
   suggestions: number
-  aiSummary: string | null  // AI 变更总结
-  aiResponse: string | null // AI 完整回复（JSON 格式）
-  reviewPrompts: string | null // 发送给 AI 的完整 Prompt
-  aiModelProvider: string | null // AI 模型提供商
-  aiModelId: string | null // AI 模型 ID
+  changeSummary: string | null
+  piRawOutputs: string | null
+  piPrompts: string | null
   attemptNumber: number
   totalAttempts: number
   startedAt: string
   completedAt: string | null
   eventType: 'push' | 'merge_request'
-  botRuns: Array<{
+  piRuns: Array<{
     id: string
-    botName: string
-    botDescription: string | null
+    profileName: string
+    profileDescription: string | null
     status: string
     error: string | null
     summary: string | null
-    aiModelProvider: string
-    aiModelId: string
-    aiModelName: string
+    modelProvider: string | null
+    modelId: string | null
+    modelName: string
     promptSnapshot: string | null
     promptMode: string
     startedAt: string
@@ -93,28 +91,38 @@ interface Review {
       content: string
       confidence: number | null
     }>
-    trace: {
-      id: string
-      loopIterationsJson: unknown
-      finalPlanJson: unknown
-      criticJson: unknown
-      memoryUpdatesJson: unknown
-      createdAt: string
-      updatedAt: string
-    } | null
   }>
+  sandboxSession: {
+    id: string
+    sandboxId: string
+    piCommandId: string | null
+    worktreePath: string
+    status: string
+    error: string | null
+    startedAt: string
+    completedAt: string | null
+    binding: {
+      sandboxId: string
+      status: string
+      image: string
+      piSandboxMountPath: string
+      lastUsedAt: string
+      pausedAt: string | null
+      error: string | null
+    }
+  } | null
   comments: Array<{
     id: string
-    reviewBotRunId?: string | null
+    piReviewRunId?: string | null
     filePath: string
     lineNumber: number
     lineRangeEnd?: number | null
     severity: string
     content: string
     confidence?: number | null
-    sourceBotName?: string | null
-    sourceBotModel?: string | null
-    sourceBotsJson?: unknown
+    sourceProfileName?: string | null
+    sourceProfileModel?: string | null
+    sourceProfilesJson?: unknown
     isPosted: boolean
     gitlabDiffUrl?: string | null
   }>
@@ -146,26 +154,13 @@ const findReviewGroup = (groups: ReviewGroup[], groupId: string) => (
 const mergeReviewSummaryIntoDetail = (detail: Review, summary: Review): Review => ({
   ...detail,
   ...summary,
-  aiSummary: detail.aiSummary,
-  aiResponse: detail.aiResponse,
-  reviewPrompts: detail.reviewPrompts,
-  botRuns: detail.botRuns,
+  changeSummary: detail.changeSummary,
+  piRawOutputs: detail.piRawOutputs,
+  piPrompts: detail.piPrompts,
+  piRuns: detail.piRuns,
   comments: detail.comments,
+  sandboxSession: detail.sandboxSession,
 })
-
-type AgentTraceEventStatus = 'running' | 'completed' | 'failed' | 'skipped'
-
-interface AgentTraceEvent {
-  id?: string
-  at?: string
-  iteration: number
-  stage: string
-  status: AgentTraceEventStatus
-  title: string
-  detail?: string
-  durationMs?: number
-  metrics?: Record<string, unknown>
-}
 
 export default function ReviewsPage() {
   const [reviewGroups, setReviewGroups] = useState<ReviewGroup[]>([])
@@ -330,11 +325,11 @@ export default function ReviewsPage() {
       })
   }
 
-  // 解析 AI 回复 JSON
-  const parseAiResponse = (aiResponse: string | null): Record<string, string> => {
-    if (!aiResponse) return {}
+  // 解析 Pi 原始材料 JSON
+  const parsePiEvidence = (value: string | null): Record<string, string> => {
+    if (!value) return {}
     try {
-      return JSON.parse(aiResponse)
+      return JSON.parse(value)
     } catch {
       return {}
     }
@@ -420,27 +415,6 @@ export default function ReviewsPage() {
     }
   }
 
-  const formatJson = (value: unknown) => {
-    if (!value) return '无'
-    try {
-      return JSON.stringify(value, null, 2)
-    } catch {
-      return String(value)
-    }
-  }
-
-  const extractLastReviewResponse = (botRun: Review['botRuns'][number]) => {
-    const iterations = Array.isArray(botRun.trace?.loopIterationsJson)
-      ? botRun.trace?.loopIterationsJson as Array<Record<string, unknown>>
-      : []
-    const last = [...iterations].reverse().find((item) => {
-      const review = item.review as { response?: unknown } | undefined
-      return typeof review?.response === 'string' && review.response.trim()
-    })
-    const review = last?.review as { response?: string } | undefined
-    return review?.response || ''
-  }
-
   const issueCount = (review: Review) => review.criticalIssues + review.normalIssues + review.suggestions
 
   const getReviewVerdict = (review: Review) => {
@@ -479,164 +453,23 @@ export default function ReviewsPage() {
     }
   }
 
-  const getBotIterations = (botRun: Review['botRuns'][number]) => {
-    return Array.isArray(botRun.trace?.loopIterationsJson)
-      ? botRun.trace?.loopIterationsJson as Array<Record<string, unknown>>
-      : []
-  }
-
-  const getBotTraceEvents = (botRun: Review['botRuns'][number]) => {
-    return getBotIterations(botRun)
-      .flatMap((iteration, iterationIndex) => {
-        const events = Array.isArray(iteration.events) ? iteration.events : []
-        return events
-          .filter((event): event is Record<string, unknown> => Boolean(event && typeof event === 'object'))
-          .map((event, eventIndex): AgentTraceEvent => ({
-            id: typeof event.id === 'string' ? event.id : `${botRun.id}-${iterationIndex}-${eventIndex}`,
-            at: typeof event.at === 'string' ? event.at : undefined,
-            iteration: Number(event.iteration || iteration.iteration || iterationIndex + 1),
-            stage: typeof event.stage === 'string' ? event.stage : 'unknown',
-            status: event.status === 'running' || event.status === 'completed' || event.status === 'failed' || event.status === 'skipped'
-              ? event.status
-              : 'completed',
-            title: typeof event.title === 'string' ? event.title : '未命名步骤',
-            detail: typeof event.detail === 'string' ? event.detail : undefined,
-            durationMs: typeof event.durationMs === 'number' ? event.durationMs : undefined,
-            metrics: event.metrics && typeof event.metrics === 'object' && !Array.isArray(event.metrics)
-              ? event.metrics as Record<string, unknown>
-              : undefined,
-          }))
-      })
-      .sort((left, right) => {
-        if (!left.at || !right.at) return 0
-        return new Date(left.at).getTime() - new Date(right.at).getTime()
-      })
-  }
-
-  const getCurrentTraceEvent = (botRun: Review['botRuns'][number]) => {
-    const events = getBotTraceEvents(botRun)
-    return events.at(-1) || null
-  }
-
-  const formatTraceEventTime = (event: AgentTraceEvent) => {
-    if (!event.at) return '时间未知'
-    return new Date(event.at).toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
-  }
-
-  const formatTraceEventDuration = (durationMs?: number) => {
-    if (!durationMs || durationMs < 0) return ''
-    if (durationMs < 1000) return `${durationMs}ms`
-    const seconds = Math.round(durationMs / 100) / 10
-    if (seconds < 60) return `${seconds}s`
-    return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
-  }
-
-  const getTraceEventStatusClass = (status: AgentTraceEventStatus) => {
-    switch (status) {
-      case 'running':
-        return 'border-primary/30 bg-primary/10 text-primary'
-      case 'completed':
-        return 'border-emerald-600/20 bg-emerald-500/10 text-emerald-800'
-      case 'failed':
-        return 'border-destructive/30 bg-destructive/5 text-destructive'
-      case 'skipped':
-        return 'border-amber-500/30 bg-amber-500/10 text-amber-800'
-      default:
-        return 'border-border bg-muted text-muted-foreground'
-    }
-  }
-
-  const getTraceEventStatusLabel = (status: AgentTraceEventStatus) => {
-    switch (status) {
-      case 'running':
-        return '进行中'
-      case 'completed':
-        return '完成'
-      case 'failed':
-        return '失败'
-      case 'skipped':
-        return '跳过'
-      default:
-        return status
-    }
-  }
-
-  const getTraceEventStageLabel = (stage: string) => {
-    const labels: Record<string, string> = {
-      initializing: '初始化',
-      context: '上下文',
-      plan: '计划',
-      tool: '工具',
-      review: '审查',
-      validation: '校验',
-      critic: '决策',
-      finish: '完成',
-      error: '异常',
-    }
-    return labels[stage] || stage
-  }
-
   const formatReviewAttempt = (review: Pick<Review, 'attemptNumber' | 'totalAttempts'>) => {
     if (review.totalAttempts <= 1) return '首次审查'
     return `第 ${review.attemptNumber} / ${review.totalAttempts} 次`
   }
 
-  const renderTraceEvent = (event: AgentTraceEvent) => {
-    const duration = formatTraceEventDuration(event.durationMs)
-    return (
-      <li key={event.id || `${event.iteration}-${event.stage}-${event.at}`} className="relative pl-7">
-        <span className={`absolute left-0 top-1.5 flex h-4 w-4 items-center justify-center rounded-full border ${getTraceEventStatusClass(event.status)}`}>
-          {event.status === 'running' ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : event.status === 'failed' ? (
-            <AlertCircle className="h-3 w-3" />
-          ) : (
-            <Check className="h-3 w-3" />
-          )}
-        </span>
-        <div className="rounded-lg bg-background/70 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">第 {event.iteration} 轮</Badge>
-            <Badge className={getTraceEventStatusClass(event.status)}>
-              {getTraceEventStatusLabel(event.status)}
-            </Badge>
-            <span className="text-xs text-muted-foreground">{getTraceEventStageLabel(event.stage)}</span>
-            <span className="text-xs font-mono text-muted-foreground">{formatTraceEventTime(event)}</span>
-            {duration && <span className="text-xs font-mono text-muted-foreground">{duration}</span>}
-          </div>
-          <p className="mt-2 text-sm font-medium text-foreground">{event.title}</p>
-          {event.detail && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">{event.detail}</p>
-          )}
-          {event.metrics && Object.keys(event.metrics).length > 0 && (
-            <details className="mt-2">
-              <summary className="cursor-pointer text-xs text-muted-foreground">查看指标</summary>
-              <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-sidebar/50 p-2 text-[11px] text-muted-foreground whitespace-pre-wrap">
-                {formatJson(event.metrics)}
-              </pre>
-            </details>
-          )}
-        </div>
-      </li>
-    )
-  }
-
   const formatCommentSource = (comment: Review['comments'][number]) => {
-    if (Array.isArray(comment.sourceBotsJson) && comment.sourceBotsJson.length > 0) {
-      return comment.sourceBotsJson
+    if (Array.isArray(comment.sourceProfilesJson) && comment.sourceProfilesJson.length > 0) {
+      return comment.sourceProfilesJson
         .map((source) => {
           if (!source || typeof source !== 'object') return '未知来源'
-          const data = source as { botName?: string; model?: string; confidence?: number }
-          return `${data.botName || '未知机器人'} / ${data.model || 'unknown'}`
+          const data = source as { profileName?: string; model?: string; confidence?: number }
+          return `${data.profileName || '未知 Profile'} / ${data.model || 'unknown'}`
         })
         .join('；')
     }
 
-    return `${comment.sourceBotName || '默认审查机器人'} / ${comment.sourceBotModel || 'unknown'}`
+    return `${comment.sourceProfileName || '默认 Pi Profile'} / ${comment.sourceProfileModel || 'unknown'}`
   }
 
   const openIssueFromWorkflow = (issueId: string) => {
@@ -655,7 +488,7 @@ export default function ReviewsPage() {
   const getWorkflowIssues = (review: Review) => {
     return (review.comments || []).map((comment) => ({
       id: comment.id,
-      reviewBotRunId: comment.reviewBotRunId,
+      piReviewRunId: comment.piReviewRunId,
       filePath: comment.filePath,
       lineNumber: comment.lineNumber,
       lineRangeEnd: comment.lineRangeEnd,
@@ -1095,15 +928,15 @@ export default function ReviewsPage() {
                         </a>
                         <a href="#review-summary" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
                           <span>技术走查</span>
-                          <Badge variant="outline">{selectedReview.aiSummary ? '有' : '无'}</Badge>
+                          <Badge variant="outline">{selectedReview.changeSummary ? '有' : '无'}</Badge>
                         </a>
-                        <a href="#review-agents" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
-                          <span>Agent Loop</span>
-                          <Badge variant="outline">{selectedReview.botRuns?.length || 0}</Badge>
+                        <a href="#review-runtime" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
+                          <span>Pi Runtime</span>
+                          <Badge variant="outline">{selectedReview.piRuns?.length || 0}</Badge>
                         </a>
                         <a href="#review-raw" className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-sidebar">
                           <span>原始材料</span>
-                          <Badge variant="outline">Trace</Badge>
+                          <Badge variant="outline">Raw</Badge>
                         </a>
                       </div>
                     </section>
@@ -1132,40 +965,26 @@ export default function ReviewsPage() {
                     </section>
 
                     <section className="rounded-xl border border-border/60 bg-background/80 p-4">
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Agent 时间线</p>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Pi 时间线</p>
                       <div className="mt-3 space-y-3">
-                        {selectedReview.botRuns?.length ? selectedReview.botRuns.map((botRun) => {
-                          const currentEvent = getCurrentTraceEvent(botRun)
-                          const traceEvents = getBotTraceEvents(botRun)
-                          return (
-                            <div key={botRun.id} className="rounded-lg border border-border/50 bg-card/60 p-3">
+                        {selectedReview.piRuns?.length ? selectedReview.piRuns.map((piRun) => (
+                            <div key={piRun.id} className="rounded-lg border border-border/50 bg-card/60 p-3">
                               <div className="flex items-center justify-between gap-2">
-                                <p className="truncate text-sm font-medium text-foreground">{botRun.botName}</p>
-                                {getStatusBadge(botRun.status)}
+                                <p className="truncate text-sm font-medium text-foreground">{piRun.profileName}</p>
+                                {getStatusBadge(piRun.status)}
                               </div>
-                              <p className="mt-1 truncate text-xs text-muted-foreground">{botRun.aiModelName}</p>
-                              {currentEvent ? (
-                                <div className="mt-3 rounded-lg bg-background/70 p-2">
-                                  <div className="flex items-center gap-2">
-                                    {currentEvent.status === 'running' && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-                                    <span className="text-xs font-medium text-foreground">{currentEvent.title}</span>
-                                  </div>
-                                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                                    第 {currentEvent.iteration} 轮 · {getTraceEventStageLabel(currentEvent.stage)} · {getTraceEventStatusLabel(currentEvent.status)}
-                                  </p>
-                                </div>
-                              ) : (
-                                <p className="mt-3 rounded-lg bg-muted p-2 text-xs text-muted-foreground">暂无实时步骤。</p>
-                              )}
+                              <p className="mt-1 truncate text-xs text-muted-foreground">{piRun.modelName}</p>
+                              <p className="mt-3 rounded-lg bg-background/70 p-2 text-xs text-muted-foreground">
+                                {piRun.summary || piRun.error || '等待 Pi 输出。'}
+                              </p>
                               <div className="mt-2 flex flex-wrap gap-2">
-                                <Badge variant="outline">问题 {botRun.comments.length}</Badge>
-                                <Badge variant="outline">轮次 {getBotIterations(botRun).length}</Badge>
-                                <Badge variant="outline">日志 {traceEvents.length}</Badge>
+                                <Badge variant="outline">问题 {piRun.comments.length}</Badge>
+                                <Badge variant="outline">Pi {piRun.status}</Badge>
                               </div>
                             </div>
                           )
-                        }) : (
-                          <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">暂无 Agent 运行记录。</p>
+                        ) : (
+                          <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">暂无 Pi 运行记录。</p>
                         )}
                       </div>
                     </section>
@@ -1256,7 +1075,7 @@ export default function ReviewsPage() {
                         </div>
                       ) : (
                         <div className="mt-4 rounded-xl border border-emerald-600/20 bg-emerald-500/10 p-5 text-sm text-emerald-800">
-                          未发现可定位、可行动的问题。若统计不为 0，可在下方原始材料中查看模型返回内容。
+                          未发现可定位、可行动的问题。若统计不为 0，可在下方原始材料中查看 Pi 原始输出。
                         </div>
                       )}
                     </section>
@@ -1267,145 +1086,103 @@ export default function ReviewsPage() {
                           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Walkthrough</p>
                           <h2 className="mt-1 text-xl font-semibold">变更摘要与技术走查</h2>
                         </div>
-                        {selectedReview.aiSummary && (
-                          <Button variant="ghost" size="xs" onClick={() => handleCopy(selectedReview.aiSummary || '', 'summary')}>
+                        {selectedReview.changeSummary && (
+                          <Button variant="ghost" size="xs" onClick={() => handleCopy(selectedReview.changeSummary || '', 'summary')}>
                             {copiedKey === 'summary' ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
                           </Button>
                         )}
                       </div>
                       <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-sidebar/40 p-4 text-sm leading-6 text-foreground/90">
-                        {selectedReview.aiSummary || '暂无 AI 总结。'}
+                        {selectedReview.changeSummary || '暂无变更摘要。'}
                       </pre>
                     </section>
 
-                    <section id="review-agents" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
+                    <section id="review-runtime" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Agent Evidence</p>
-                        <h2 className="mt-1 text-xl font-semibold">Agent Loop 追溯</h2>
+                          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Pi Evidence</p>
+                        <h2 className="mt-1 text-xl font-semibold">Pi Runtime 追溯</h2>
                       </div>
 
-                      {selectedReview.botRuns && selectedReview.botRuns.length > 0 ? (
+                      {selectedReview.sandboxSession && (
+                        <div className="mt-4 rounded-xl border border-border/60 bg-card/60 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">OpenSandbox 会话</p>
+                              <p className="mt-1 font-mono text-xs text-muted-foreground">{selectedReview.sandboxSession.sandboxId}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="outline">session {selectedReview.sandboxSession.status}</Badge>
+                              <Badge variant="outline">vm {selectedReview.sandboxSession.binding.status}</Badge>
+                              <Badge variant="outline">{selectedReview.sandboxSession.binding.image}</Badge>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                            <p>worktree：<span className="font-mono">{selectedReview.sandboxSession.worktreePath}</span></p>
+                            {selectedReview.sandboxSession.piCommandId && (
+                              <p>Pi command：<span className="font-mono">{selectedReview.sandboxSession.piCommandId}</span></p>
+                            )}
+                            <p>Pi mount：<span className="font-mono">{selectedReview.sandboxSession.binding.piSandboxMountPath}</span></p>
+                            <p>开始：{new Date(selectedReview.sandboxSession.startedAt).toLocaleString('zh-CN')}</p>
+                            <p>结束：{selectedReview.sandboxSession.completedAt ? new Date(selectedReview.sandboxSession.completedAt).toLocaleString('zh-CN') : '运行中'}</p>
+                          </div>
+                          {(selectedReview.sandboxSession.error || selectedReview.sandboxSession.binding.error) && (
+                            <p className="mt-3 rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
+                              {selectedReview.sandboxSession.error || selectedReview.sandboxSession.binding.error}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {selectedReview.piRuns && selectedReview.piRuns.length > 0 ? (
                         <div className="mt-4 space-y-4">
-                          {selectedReview.botRuns.map((botRun) => {
-                            const rawReview = extractLastReviewResponse(botRun)
-                            const traceEvents = getBotTraceEvents(botRun)
-                            const currentEvent = getCurrentTraceEvent(botRun)
-                            return (
-                              <article key={botRun.id} className="rounded-xl border border-border/60 bg-card/60 p-4">
+                          {selectedReview.piRuns.map((piRun) => (
+                              <article key={piRun.id} className="rounded-xl border border-border/60 bg-card/60 p-4">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
-                                      <h3 className="font-semibold text-foreground">{botRun.botName}</h3>
-                                      {getStatusBadge(botRun.status)}
-                                      <Badge variant="outline">{botRun.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}</Badge>
+                                      <h3 className="font-semibold text-foreground">{piRun.profileName}</h3>
+                                      {getStatusBadge(piRun.status)}
+                                      <Badge variant="outline">{piRun.promptMode === 'replace' ? '替换 Prompt' : '扩展 Prompt'}</Badge>
                                     </div>
-                                    <p className="mt-1 text-xs text-muted-foreground">{botRun.aiModelName}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">{piRun.modelName}</p>
                                   </div>
                                   <div className="flex flex-wrap gap-2">
-                                    <Badge variant="outline">问题 {botRun.comments.length}</Badge>
-                                    <Badge variant="outline">Loop {getBotIterations(botRun).length}</Badge>
-                                    <Badge variant="outline">日志 {traceEvents.length}</Badge>
+                                    <Badge variant="outline">问题 {piRun.comments.length}</Badge>
+                                    <Badge variant="outline">Pi {piRun.status}</Badge>
                                   </div>
                                 </div>
 
-                                {currentEvent && (
-                                  <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {currentEvent.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                                      <p className="text-sm font-semibold text-foreground">当前步骤：{currentEvent.title}</p>
-                                      <Badge className={getTraceEventStatusClass(currentEvent.status)}>
-                                        {getTraceEventStatusLabel(currentEvent.status)}
-                                      </Badge>
-                                    </div>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      第 {currentEvent.iteration} 轮 · {getTraceEventStageLabel(currentEvent.stage)} · {formatTraceEventTime(currentEvent)}
-                                    </p>
-                                    {currentEvent.detail && (
-                                      <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{currentEvent.detail}</p>
-                                    )}
-                                  </div>
+                                {piRun.summary && (
+                                  <p className="mt-3 rounded-lg bg-background/70 p-3 text-sm leading-6 text-foreground">{piRun.summary}</p>
+                                )}
+                                {piRun.error && (
+                                  <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{piRun.error}</p>
                                 )}
 
-                                {botRun.summary && (
-                                  <p className="mt-3 rounded-lg bg-background/70 p-3 text-sm leading-6 text-foreground">{botRun.summary}</p>
-                                )}
-                                {botRun.error && (
-                                  <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{botRun.error}</p>
-                                )}
-
-                                <div className="mt-4 grid gap-3">
-                                  <details className="group rounded-lg border border-border/50 bg-background/70 p-3" open>
-                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
-                                      实时执行日志
-                                    </summary>
-                                    {traceEvents.length > 0 ? (
-                                      <ol className="mt-3 space-y-2 border-l border-border/60 pl-3">
-                                        {traceEvents.map(renderTraceEvent)}
-                                      </ol>
-                                    ) : (
-                                      <p className="mt-3 text-sm text-muted-foreground">暂无实时执行日志。新审查开始后会逐步写入。</p>
-                                    )}
-                                  </details>
-
-                                  <details className="group rounded-lg border border-border/50 bg-background/70 p-3">
-                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
-                                      Final Plan / Critic
-                                    </summary>
-                                    <div className="mt-3 flex justify-end">
-                                      <Button variant="ghost" size="xs" onClick={() => handleCopy(formatJson(botRun.trace), `trace-${botRun.id}`)}>
-                                        {copiedKey === `trace-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
-                                      </Button>
-                                    </div>
-                                    <pre className="mt-2 max-h-80 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-                                      {formatJson({
-                                        finalPlan: botRun.trace?.finalPlanJson,
-                                        critic: botRun.trace?.criticJson,
-                                        memoryUpdates: botRun.trace?.memoryUpdatesJson,
-                                      })}
-                                    </pre>
-                                  </details>
-                                </div>
-
-                                {rawReview && (
-                                  <details className="mt-3 rounded-lg border border-border/50 bg-background/70 p-3">
-                                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
-                                      Agent 原始评价
-                                    </summary>
-                                    <div className="mt-3 flex justify-end">
-                                      <Button variant="ghost" size="xs" onClick={() => handleCopy(rawReview, `bot-review-${botRun.id}`)}>
-                                        {copiedKey === `bot-review-${botRun.id}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
-                                      </Button>
-                                    </div>
-                                    <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-                                      {rawReview}
-                                    </pre>
-                                  </details>
-                                )}
                               </article>
-                            )
-                          })}
+                          ))}
                         </div>
                       ) : (
-                        <p className="mt-4 rounded-xl bg-muted p-5 text-sm text-muted-foreground">暂无机器人运行记录。</p>
+                        <p className="mt-4 rounded-xl bg-muted p-5 text-sm text-muted-foreground">暂无 Pi 运行记录。</p>
                       )}
                     </section>
 
                     <section id="review-raw" className="scroll-mt-4 rounded-2xl border border-border/60 bg-background p-5">
                       <div>
                         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Raw Materials</p>
-                        <h2 className="mt-1 text-xl font-semibold">原始回复、Prompt 与模型</h2>
+	                        <h2 className="mt-1 text-xl font-semibold">Pi 原始输出、Prompt 与模型</h2>
                       </div>
 
                       <div className="mt-4 space-y-3">
                         <details className="rounded-xl border border-border/50 bg-card/60 p-4">
-                          <summary className="cursor-pointer list-none text-sm font-medium text-foreground">AI 原始回复</summary>
-                          <div className="mt-3 space-y-4">
-                            {selectedReview.aiResponse ? Object.entries(parseAiResponse(selectedReview.aiResponse)).map(([filePath, response]) => (
+	                          <summary className="cursor-pointer list-none text-sm font-medium text-foreground">Pi 原始输出</summary>
+	                          <div className="mt-3 space-y-4">
+	                            {selectedReview.piRawOutputs ? Object.entries(parsePiEvidence(selectedReview.piRawOutputs)).map(([filePath, response]) => (
                               <div key={filePath}>
                                 <div className="mb-2 flex items-center justify-between gap-2">
                                   <p className="break-all font-mono text-xs text-muted-foreground">{filePath}</p>
-                                  <Button variant="ghost" size="xs" onClick={() => handleCopy(response, `ai-${filePath}`)}>
-                                    {copiedKey === `ai-${filePath}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
+	                                  <Button variant="ghost" size="xs" onClick={() => handleCopy(response, `pi-output-${filePath}`)}>
+	                                    {copiedKey === `pi-output-${filePath}` ? <><Check className="h-3 w-3" /> 已复制</> : <><Copy className="h-3 w-3" /> 复制</>}
                                   </Button>
                                 </div>
                                 <pre className="max-h-96 overflow-auto rounded-md bg-sidebar/50 p-3 text-xs text-muted-foreground whitespace-pre-wrap">{response}</pre>
@@ -1419,7 +1196,7 @@ export default function ReviewsPage() {
                         <details className="rounded-xl border border-border/50 bg-card/60 p-4">
                           <summary className="cursor-pointer list-none text-sm font-medium text-foreground">Prompt 追溯</summary>
                           <div className="mt-3 space-y-4">
-                            {selectedReview.reviewPrompts ? Object.entries(parseAiResponse(selectedReview.reviewPrompts)).map(([filePath, prompt]) => (
+	                            {selectedReview.piPrompts ? Object.entries(parsePiEvidence(selectedReview.piPrompts)).map(([filePath, prompt]) => (
                               <div key={filePath}>
                                 <div className="mb-2 flex items-center justify-between gap-2">
                                   <p className="break-all font-mono text-xs text-muted-foreground">{filePath}</p>
@@ -1438,8 +1215,8 @@ export default function ReviewsPage() {
                         <div className="rounded-xl border border-border/50 bg-card/60 p-4">
                           <p className="text-sm font-medium text-foreground">模型信息</p>
                           <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                            <p>提供商：<span className="font-mono text-foreground">{selectedReview.aiModelProvider || 'N/A'}</span></p>
-                            <p>模型：<span className="font-mono text-foreground">{selectedReview.aiModelId || 'N/A'}</span></p>
+	                            <p>提供商：<span className="font-mono text-foreground">{selectedReview.piRuns[0]?.modelProvider || 'N/A'}</span></p>
+	                            <p>模型：<span className="font-mono text-foreground">{selectedReview.piRuns[0]?.modelId || 'N/A'}</span></p>
                           </div>
                         </div>
                       </div>

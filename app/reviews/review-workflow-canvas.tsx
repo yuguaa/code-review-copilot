@@ -57,20 +57,6 @@ const mainGapY = 132
 const loopGapX = 286
 const loopGapY = 126
 
-const loopStageOrder: Record<string, number> = {
-  agent: 0,
-  initializing: 1,
-  context: 2,
-  plan: 3,
-  review: 4,
-  validation: 5,
-  decision: 6,
-  tool: 7,
-  critic: 8,
-  finish: 9,
-  error: 9,
-}
-
 function formatDuration(durationMs: number | null) {
   if (!durationMs) return ''
   if (durationMs < 1000) return `${durationMs}ms`
@@ -103,89 +89,34 @@ function nodeLabel(node: ReviewWorkflowNode) {
   )
 }
 
-function getLoopNodeInfo(node: ReviewWorkflowNode) {
-  if (!node.nodeKey.startsWith('agent:')) return null
-  const parts = node.nodeKey.split(':')
-  const agentId = parts[1]
-  if (!agentId) return null
-
-  const iterationIndex = parts.indexOf('iteration')
-  if (iterationIndex === -1) {
-    return {
-      agentId,
-      iteration: 1,
-      stage: 'agent',
-      stageIndex: loopStageOrder.agent,
-    }
-  }
-
-  const iteration = Number(parts[iterationIndex + 1]) || 1
-  const stage = node.kind === 'decision'
-    ? 'decision'
-    : parts[iterationIndex + 2] || node.kind
-
-  return {
-    agentId,
-    iteration,
-    stage,
-    stageIndex: loopStageOrder[stage] ?? 99,
-  }
-}
-
-function isLoopNode(node: ReviewWorkflowNode) {
-  return Boolean(getLoopNodeInfo(node))
+function isRuntimeNode(node: ReviewWorkflowNode) {
+  return node.nodeKey.startsWith('pi:')
 }
 
 function buildNodePositions(workflowNodes: ReviewWorkflowNode[]) {
-  const mainNodes = workflowNodes.filter((node) => !isLoopNode(node))
-  const loopNodes = workflowNodes
-    .map((node) => ({ node, info: getLoopNodeInfo(node) }))
-    .filter((item): item is { node: ReviewWorkflowNode; info: NonNullable<ReturnType<typeof getLoopNodeInfo>> } => Boolean(item.info))
+  const mainNodes = workflowNodes.filter((node) => !isRuntimeNode(node))
+  const runtimeNodes = workflowNodes.filter(isRuntimeNode)
 
-  const runAgentsIndex = mainNodes.findIndex((node) => node.nodeKey === 'run_agents')
-  const agentGroups = new Map<string, { firstSequence: number; maxIteration: number }>()
-  loopNodes.forEach(({ node, info }) => {
-    const current = agentGroups.get(info.agentId)
-    agentGroups.set(info.agentId, {
-      firstSequence: Math.min(current?.firstSequence ?? node.sequence, node.sequence),
-      maxIteration: Math.max(current?.maxIteration ?? 1, info.iteration),
-    })
-  })
-
-  const sortedAgentGroups = [...agentGroups.entries()].sort((left, right) => (
-    left[1].firstSequence - right[1].firstSequence
-  ))
-  const agentColumnIndex = new Map<string, number>()
-  sortedAgentGroups.forEach(([agentId]) => {
-    agentColumnIndex.set(agentId, agentColumnIndex.size)
-  })
-
-  const loopStageCount = Math.max(...Object.values(loopStageOrder)) + 1
-  const loopRows = loopNodes.reduce((maxRows, { info }) => {
-    const row = (info.iteration - 1) * loopStageCount + info.stageIndex + 1
-    return Math.max(maxRows, row)
-  }, 0)
-  const loopSpace = runAgentsIndex === -1 || loopRows === 0
+  const runPiRuntimeIndex = mainNodes.findIndex((node) => node.nodeKey === 'run_pi_runtime')
+  const runtimeSpace = runPiRuntimeIndex === -1 || runtimeNodes.length === 0
     ? 0
-    : (loopRows - 1) * loopGapY
+    : Math.max(0, runtimeNodes.length - 1) * loopGapY
 
   const positions = new Map<string, { x: number; y: number }>()
 
   mainNodes.forEach((node, index) => {
-    const shiftAfterLoop = runAgentsIndex !== -1 && index > runAgentsIndex ? loopSpace : 0
+    const shiftAfterRuntime = runPiRuntimeIndex !== -1 && index > runPiRuntimeIndex ? runtimeSpace : 0
     positions.set(node.nodeKey, {
       x: mainLaneX,
-      y: topOffset + index * mainGapY + shiftAfterLoop,
+      y: topOffset + index * mainGapY + shiftAfterRuntime,
     })
   })
 
-  const loopBaseY = positions.get('run_agents')?.y ?? (topOffset + Math.max(1, mainNodes.length) * mainGapY)
-  loopNodes.forEach(({ node, info }) => {
-    const columnIndex = agentColumnIndex.get(info.agentId) ?? 0
-    const iterationOffset = (info.iteration - 1) * loopStageCount
+  const runtimeBaseY = positions.get('run_pi_runtime')?.y ?? (topOffset + Math.max(1, mainNodes.length) * mainGapY)
+  runtimeNodes.forEach((node, index) => {
     positions.set(node.nodeKey, {
-      x: loopLaneX + columnIndex * loopGapX,
-      y: loopBaseY + (iterationOffset + info.stageIndex) * loopGapY,
+      x: loopLaneX + index * loopGapX,
+      y: runtimeBaseY,
     })
   })
 
@@ -200,13 +131,13 @@ function toReactFlowNodes(
   return workflowNodes.map((node) => {
     const style = statusStyles[node.status] || statusStyles.idle
     const selected = selectedNodeKey === node.nodeKey
-    const loopNode = isLoopNode(node)
+    const runtimeNode = isRuntimeNode(node)
     return {
       id: node.nodeKey,
       data: { label: nodeLabel(node) },
       position: positions.get(node.nodeKey) || { x: mainLaneX, y: topOffset },
       sourcePosition: Position.Bottom,
-      targetPosition: loopNode && node.nodeKey.split(':').length === 2 ? Position.Left : Position.Top,
+      targetPosition: runtimeNode ? Position.Left : Position.Top,
       className: selected ? 'shadow-[0_0_0_3px_rgba(204,120,92,0.22)]' : undefined,
       style: {
         width: nodeWidth,

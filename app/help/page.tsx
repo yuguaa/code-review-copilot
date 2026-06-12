@@ -21,26 +21,24 @@ export default function HelpPage() {
         },
         {
           icon: <Settings className="h-5 w-5 text-sidebar-primary" />,
-          title: '2. 配置 AI 模型',
-          description: '添加并配置用于代码审查的 AI 模型',
+          title: '2. 配置模型凭据',
+          description: '添加供 Pi Profile 引用的模型凭据',
           details: [
-            '选择提供商：OpenAI、Anthropic Claude 或自定义',
+            '选择提供商：OpenAI 或 Anthropic Claude',
             '输入模型 ID（如 gpt-4o、claude-3-5-sonnet-20241022）',
             '提供 API 密钥',
-            '（可选）配置最大 Tokens 和 Temperature 参数',
-            '添加模型后，点击"启用"使其激活'
+            '添加模型后，点击"启用"使其可被 Pi Profile 使用'
           ]
         },
         {
           icon: <Code2 className="h-5 w-5 text-sidebar-primary" />,
           title: '3. 添加仓库',
-          description: '选择要审查的 GitLab 仓库',
+          description: '选择要审查的 GitLab 仓库并配置 Pi Profile',
           details: [
             '点击"添加仓库"按钮',
             '从列表中选择或搜索要添加的仓库',
-            '为仓库选择默认 AI 模型（或使用全局默认）',
-            '（可选）配置自定义提示词和提示词模式（扩展/替换）',
-            '（可选）配置自定义 AI 模型（优先级高于默认模型）',
+            '创建 Pi Profile 并选择模型凭据',
+            '（可选）配置 Profile Prompt 和 Prompt 模式（扩展/替换）',
             '（可选）启用自动审查功能'
           ]
         },
@@ -59,29 +57,29 @@ export default function HelpPage() {
       ]
     },
     {
-      id: 'ai-models',
-      title: 'AI 模型配置',
+      id: 'model-credentials',
+      title: '模型凭据配置',
       icon: <Settings className="h-5 w-5 text-sidebar-primary" />,
       content: [
         {
-          question: '支持哪些 AI 模型？',
-          answer: '目前支持：\n• OpenAI：GPT-4o、GPT-4 Turbo、GPT-3.5 Turbo\n• Anthropic Claude：Claude 3.5 Sonnet、Claude 3 Haiku、Claude 3 Opus\n• 自定义：任何兼容 OpenAI API 格式的模型（如本地部署的 Llama）'
+          question: 'Pi Runtime 支持哪些模型？',
+          answer: '当前主链路支持 OpenAI 和 Anthropic Claude。自定义 endpoint 尚未接入，配置后会快速失败。'
         },
         {
-          question: '什么是全局默认模型？',
-          answer: '全局默认模型是在设置页面配置的 AI 模型，当仓库没有单独配置模型时，将自动使用全局默认模型。这样可以避免为每个仓库重复配置。'
+          question: '模型凭据和 Pi Profile 是什么关系？',
+          answer: '模型凭据只保存 provider、modelId 和 API Key。仓库通过 Pi Profile 引用模型凭据，并配置 Prompt、排序和输出条数限制。'
         },
         {
           question: '如何为不同仓库使用不同模型？',
-          answer: '在仓库列表中，点击仓库的"AI 模型"列，选择该仓库专用的模型。如果不选择，则使用全局默认模型。这样可以根据项目需求使用不同的审查策略。'
+          answer: '进入仓库详情，为每个仓库创建或编辑 Pi Profile。不同仓库可以引用不同模型凭据；同一仓库当前只运行排序第一的启用 Profile。'
         },
         {
           question: 'Temperature 参数有什么作用？',
-          answer: 'Temperature 控制 AI 回复的随机性：\n• 较低值（0.1-0.3）：更确定、保守的审查\n• 中等值（0.4-0.7）：平衡的审查\n• 较高值（0.8-1.0）：更多样化的建议\n代码审查建议使用 0.2-0.4 之间'
+          answer: 'Temperature 控制模型输出随机性。Pi 审查建议使用较低值，让输出更稳定、更便于解析和追溯。'
         },
         {
-          question: '如何使用本地部署的模型？',
-          answer: '选择"自定义"提供商，然后：\n1. 输入模型 ID（如 llama-3-70b）\n2. 填写 API 请求地址（如 http://localhost:11434/v1）\n3. 确保你的服务兼容 OpenAI API 格式'
+          question: '能否使用自定义 endpoint？',
+          answer: '当前 Pi Runtime 主链路尚未接入自定义 endpoint。配置自定义 provider 或 endpoint 会快速失败，避免审查链路悄悄偏移。'
         }
       ]
     },
@@ -91,8 +89,8 @@ export default function HelpPage() {
       icon: <Code2 className="h-5 w-5 text-sidebar-primary" />,
       content: [
         {
-          question: '什么是自定义提示词？',
-          answer: '自定义提示词允许你为每个仓库定制 AI 审查的行为和重点。例如：\n• 指定特定的编码规范\n• 强调某些安全要求\n• 针对特定技术栈的最佳实践'
+          question: '什么是 Pi Profile Prompt？',
+          answer: 'Pi Profile Prompt 用来为仓库定制 Pi 审查重点。例如指定编码规范、安全要求或特定技术栈风险。'
         },
         {
           question: '提示词模式：扩展 vs 替换？',
@@ -103,8 +101,8 @@ export default function HelpPage() {
           answer: '监听分支允许你指定哪些分支需要自动审查：\n• 留空：监听所有分支\n• 单个分支：main\n• 多个分支：main,develop（逗号分隔）\n• 通配符：feature/*,hotfix/*'
         },
         {
-          question: '如何为仓库配置独立的 AI 模型？',
-          answer: '在仓库配置中可以设置自定义 AI 模型配置，优先级为：\n1. 仓库自定义模型（最高优先级）\n2. 仓库默认 AI 模型\n3. 全局默认模型\n\n这样可以为不同项目使用不同的模型和参数'
+          question: '如何为仓库配置独立模型？',
+          answer: '在仓库详情中创建 Pi Profile，并选择该 Profile 使用的模型凭据。仓库不再保存独立 API Key，模型归属统一由 Pi Profile 管理。'
         }
       ]
     },
@@ -145,8 +143,8 @@ export default function HelpPage() {
           answer: '问题分为三个级别：\n\n🔴 严重：\n• 安全漏洞（SQL 注入、XSS 等）\n• 重大 Bug（空指针、资源泄漏等）\n• 数据丢失风险\n\n🟡 一般：\n• 代码质量问题（重复代码、过长函数等）\n• 性能问题（N+1 查询、低效算法等）\n• 错误处理不当\n\n🔵 建议：\n• 最佳实践（命名规范、设计模式等）\n• 可读性改进\n• 文档完善'
         },
         {
-          question: 'AI 如何决定审查哪些文件？',
-          answer: 'AI 会审查 Merge Request 中所有变更的文件。对于大型 PR，系统可能会分批处理以确保质量。你可以通过自定义 Prompt 指定需要重点关注或忽略的文件类型。'
+          question: 'Pi 如何决定审查哪些文件？',
+          answer: '系统先获取本次 MR 或 Push 的可审查 diff，再把变更清单和 patch 写入 sandbox。Pi 必须基于这些材料输出可定位 finding。'
         },
         {
           question: '审查结果会自动发布到 GitLab 吗？',
@@ -154,11 +152,11 @@ export default function HelpPage() {
         },
         {
           question: '如何查看历史审查记录？',
-          answer: '在审查历史页面，你可以查看所有历史审查，包括：\n• 审查状态（进行中/完成/失败）\n• 审查的仓库和分支\n• 发现的问题统计\n• 详细的审查评论\n• AI 原始响应和总结\n\n支持分页浏览，每页显示 20 条记录'
+          answer: '在审查历史页面，你可以查看所有历史审查，包括：\n• 审查状态（进行中/完成/失败/已停止）\n• 审查的仓库和分支\n• 发现的问题统计\n• 详细的审查评论\n• Pi 原始输出、Prompt 和 OpenSandbox 会话\n\n支持分页浏览，每页显示 20 条记录'
         },
         {
-          question: 'AI 会在 GitLab 上留下什么样的评论？',
-          answer: '评论格式包含：\n1. 具体的问题描述或建议\n2. 分隔线\n3. Code Review Copilot 徽章和作者信息\n\n评论会尽可能以行内评论形式发布，如果失败则会发布为普通评论'
+          question: 'GitLab 上会留下什么样的评论？',
+          answer: '当前只发布一条总评评论，包含结论、问题索引、全部问题清单、文件风险排行、技术走查和 Pi Profile 结果。'
         }
       ]
     },
@@ -172,20 +170,20 @@ export default function HelpPage() {
           answer: '请检查：\n1. GitLab 访问令牌是否有效\n2. 令牌是否有足够的权限（api、read_repository）\n3. GitLab URL 是否正确\n4. 网络连接是否正常'
         },
         {
-          question: 'AI 审查失败或报错？',
+          question: 'Pi 审查失败或报错？',
           answer: '常见原因：\n1. API 密钥无效或已过期\n2. API 配额用完\n3. 网络问题导致 API 超时\n4. 模型配置错误\n\n建议：先在设置页面测试连接，确认配置正确。'
         },
         {
           question: '审查结果不如预期？',
-          answer: '可以尝试：\n1. 调整 Temperature 参数\n2. 更换不同的 AI 模型\n3. 优化系统 Prompt，明确审查重点\n4. 为不同分支配置不同的审查策略'
+          answer: '可以尝试：\n1. 检查 OpenSandbox Server 是否可用\n2. 检查 /opt/pi 是否已挂载进 sandbox\n3. 更换 Pi Profile 引用的模型凭据\n4. 优化 Profile Prompt，明确审查重点'
         },
         {
           question: '如何删除不需要的配置？',
-          answer: '• 删除仓库：在仓库列表中点击操作菜单的删除图标\n• 删除 AI 模型：在设置页面的模型列表中删除\n• 删除 GitLab 账号：在设置页面删除账号（会同时删除关联的所有仓库）'
+          answer: '• 删除仓库：在仓库列表中点击操作菜单的删除图标\n• 删除模型凭据：在设置页面的模型凭据列表中删除\n• 删除 GitLab 账号：在设置页面删除账号（会同时删除关联的所有仓库）'
         },
         {
           question: '系统性能和限制？',
-          answer: '• 审查历史支持分页，每页 20 条记录\n• 大型 PR 会自动分批处理\n• API 调用受限于所配置 AI 模型的速率限制\n• 建议为不同项目配置不同的 API 密钥以避免配额用尽'
+          answer: '• 审查历史支持分页，每页 20 条记录\n• 不同仓库使用不同 OpenSandbox VM\n• 同仓库并发 review 复用同一 VM，但使用独立 worktree 和 Pi 进程\n• API 调用受限于 Pi Profile 引用模型的速率限制'
         }
       ]
     }
@@ -199,7 +197,7 @@ export default function HelpPage() {
           帮助中心
         </h1>
         <p className="text-sm text-muted-foreground">
-          了解如何使用 Code Review Copilot 进行智能代码审查
+          了解如何使用 Code Review Copilot 进行 Pi Runtime 代码审查
         </p>
       </div>
 
