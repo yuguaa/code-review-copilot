@@ -9,7 +9,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabBranch } from '@/lib/types'
+import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabBranch } from '@/lib/types'
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("GitLabService");
@@ -300,21 +300,6 @@ export class GitLabService {
   }
 
   /**
-   * 获取 Commit 评论列表（用于按自定义 marker 回查占位评论）
-   */
-  async getCommitComments(projectId: number | string, commitSha: string): Promise<GitLabCommitComment[]> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/repository/commits/${commitSha}/comments`
-      )
-      return Array.isArray(response.data) ? response.data : []
-    } catch (error) {
-      log.error('Failed to fetch commit comments:', error)
-      throw new Error('Failed to fetch commit comments from GitLab')
-    }
-  }
-
-  /**
    * 在 MR 中创建评论（支持行内评论）
    */
   async createMergeRequestComment(
@@ -351,96 +336,6 @@ export class GitLabService {
       }
       throw error
     }
-  }
-
-  /**
-   * 更新 MR 中的 Discussion 评论
-   * @param projectId - 项目 ID
-   * @param mergeRequestIid - MR IID
-   * @param discussionId - Discussion ID
-   * @param noteId - Note ID（评论的具体 ID）
-   * @param newBody - 新的评论内容
-   */
-  async updateMergeRequestComment(
-    projectId: number | string,
-    mergeRequestIid: number,
-    discussionId: string,
-    noteId: number,
-    newBody: string
-  ): Promise<GitLabCommentResult> {
-    try {
-      // GitLab API: PUT /projects/:id/merge_requests/:merge_request_iid/discussions/:discussion_id/notes/:note_id
-      const response = await this.client.put(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}/notes/${noteId}`,
-        { body: newBody }
-      )
-      return response.data
-    } catch (error) {
-      const apiError = error as GitLabApiError
-      if (apiError.response?.data) {
-        log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
-      }
-      log.error('Failed to update MR comment:', error)
-      throw new Error('Failed to update comment on GitLab MR')
-    }
-  }
-
-  /**
-   * 获取 MR Discussion 详情（用于补偿获取 noteId）
-   */
-  async getMergeRequestDiscussion(
-    projectId: number | string,
-    mergeRequestIid: number,
-    discussionId: string
-  ): Promise<{ id: string; notes?: Array<{ id: number }> }> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}`
-      )
-      return response.data
-    } catch (error) {
-      const apiError = error as GitLabApiError
-      if (apiError.response?.data) {
-        log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
-      }
-      throw error
-    }
-  }
-
-  /**
-   * 更新 Commit 上的评论
-   * @param projectId - 项目 ID
-   * @param commitSha - Commit SHA
-   * @param noteId - Note ID（评论的具体 ID）
-   * @param newBody - 新的评论内容
-   */
-  async updateCommitComment(
-    projectId: number | string,
-    commitSha: string,
-    noteId: number,
-    newBody: string
-  ): Promise<GitLabCommentResult> {
-    const triedIds = [noteId]
-    let lastError: GitLabApiError | null = null
-
-    for (const id of triedIds) {
-      try {
-        const response = await this.client.put(
-          `/projects/${projectId}/repository/commits/${commitSha}/comments/${id}`,
-          { note: newBody }
-        )
-        return response.data
-      } catch (error) {
-        const apiError = error as GitLabApiError
-        lastError = apiError
-        if (apiError.response?.data) {
-          log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
-        }
-        log.error(`Failed to update commit comment with id=${id}:`, apiError.response?.status || error)
-      }
-    }
-
-    throw new Error(`Failed to update comment on GitLab commit (tried ids: ${triedIds.join(', ')})${lastError?.response?.status ? `, status=${lastError.response.status}` : ''}`)
   }
 
   /**

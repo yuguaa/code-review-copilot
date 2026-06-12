@@ -128,16 +128,8 @@ export class ReviewTriggerService {
         `GitLab MR webhook 触发：${reviewLog.sourceBranch} -> ${reviewLog.targetBranch}`,
       );
     }).then((reviewLog) => {
-      return this.createMergeRequestPlaceholder(params.repository, reviewLog)
-        .then(() => reviewLog)
-        .catch((error) => {
-          logError(log, error, "⚠️ [ReviewTriggerService] Failed to create MR placeholder:");
-          return reviewLog;
-        })
-        .then((reviewLog) => {
-          this.runAsync(reviewLog.id);
-          return reviewLog;
-        });
+      this.runAsync(reviewLog.id);
+      return reviewLog;
     });
   }
 
@@ -178,16 +170,8 @@ export class ReviewTriggerService {
         `GitLab Push webhook 触发：${reviewLog.sourceBranch} @ ${reviewLog.commitShortId}`,
       );
     }).then((reviewLog) => {
-      return this.createPushPlaceholder(params.repository, reviewLog)
-        .then(() => reviewLog)
-        .catch((error) => {
-          logError(log, error, "⚠️ [ReviewTriggerService] Failed to create push placeholder:");
-          return reviewLog;
-        })
-        .then((reviewLog) => {
-          this.runAsync(reviewLog.id);
-          return reviewLog;
-        });
+      this.runAsync(reviewLog.id);
+      return reviewLog;
     });
   }
 
@@ -231,16 +215,6 @@ export class ReviewTriggerService {
           "Retry",
           `重新触发审查，来源 Log ${reviewId.slice(0, 8)}`,
         );
-      }).then((reviewLog) => {
-        const placeholderPromise = reviewLog.mergeRequestIid === 0
-          ? this.createPushPlaceholder(sourceReview.repository, reviewLog)
-          : this.createMergeRequestPlaceholder(sourceReview.repository, reviewLog);
-
-        return placeholderPromise
-          .catch((error) => {
-            logError(log, error, "⚠️ [ReviewTriggerService] Failed to create retry placeholder:");
-            return reviewLog;
-          });
       });
     }).then((reviewLog) => {
       this.runAsync(reviewLog.id);
@@ -316,62 +290,6 @@ export class ReviewTriggerService {
           logError(log, error, "⚠️ [ReviewTriggerService] Failed to cancel workflow nodes:");
         })
         .then(() => reviewLog);
-    });
-  }
-
-  private createMergeRequestPlaceholder(repository: RepositoryWithGitLab, reviewLog: ReviewLog) {
-    const gitlabService = createGitLabService(
-      repository.gitLabAccount.url,
-      repository.gitLabAccount.accessToken,
-    );
-    const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🖥️ Pi Runtime 正在审查中\n\n<sub>⏱️ 开始时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`;
-
-    return gitlabService.createMergeRequestComment(
-      repository.gitLabProjectId,
-      reviewLog.mergeRequestIid,
-      placeholderBody,
-    ).then((placeholderResult) => {
-      const discussionId = String(placeholderResult.id);
-      const firstNoteId = placeholderResult.notes?.[0]?.id;
-      const noteId = Number.isInteger(firstNoteId)
-        ? firstNoteId
-        : null;
-
-      return prisma.reviewLog.update({
-        where: { id: reviewLog.id },
-        data: {
-          gitlabDiscussionId: discussionId,
-          gitlabNoteId: noteId,
-        },
-      });
-    });
-  }
-
-  private createPushPlaceholder(repository: RepositoryWithGitLab, reviewLog: ReviewLog) {
-    const gitlabService = createGitLabService(
-      repository.gitLabAccount.url,
-      repository.gitLabAccount.accessToken,
-    );
-    const pushMarker = `CRC_PUSH_PLACEHOLDER:${reviewLog.id}`;
-    const placeholderBody = `## 🔄 Code Review in Progress...\n\n正在进行代码审查，请稍候...\n\n- 📂 正在分析代码变更\n- 🖥️ Pi Runtime 正在审查中\n\n<!-- ${pushMarker} -->\n<sub>⏱️ 开始时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</sub>`;
-
-    return gitlabService.createCommitComment(
-      repository.gitLabProjectId,
-      reviewLog.commitSha,
-      placeholderBody,
-    ).then((placeholderResult) => {
-      const rawNoteId = Number.isInteger(placeholderResult?.note_id)
-        ? placeholderResult.note_id
-        : (Number.isInteger(placeholderResult?.id) ? placeholderResult.id : null);
-      const noteId = typeof rawNoteId === "number" ? rawNoteId : null;
-
-      return prisma.reviewLog.update({
-        where: { id: reviewLog.id },
-        data: {
-          gitlabDiscussionId: pushMarker,
-          gitlabNoteId: noteId,
-        },
-      });
     });
   }
 

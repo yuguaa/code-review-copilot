@@ -12,7 +12,10 @@ import { createGitLabService } from "./gitlab";
 import { aggregateResultsStep } from "@/lib/review/steps/aggregate-results";
 import { fetchDiffStep } from "@/lib/review/steps/fetch-diff";
 import { generateSummaryStep } from "@/lib/review/steps/generate-summary";
-import { publishCommentStep } from "@/lib/review/steps/publish-comment";
+import {
+  publishCommentStep,
+  publishReviewTerminalFailureNotification,
+} from "@/lib/review/steps/publish-comment";
 import { runPiRuntimeStep } from "@/lib/review/steps/run-pi-runtime";
 import { createInitialReviewState, type ReviewState } from "@/lib/review/types";
 import { assertStateReviewNotCancelled, isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
@@ -156,17 +159,6 @@ export class ReviewService {
       throw new Error("Review log not found");
     }
 
-    if (isReviewCancelledStatus(reviewLog.status)) {
-      log.info(`🛑 [ReviewService] Review already cancelled: ${reviewLogId}`);
-      return {
-        success: false,
-        totalComments: 0,
-        criticalIssues: 0,
-        normalIssues: 0,
-        suggestions: 0,
-      };
-    }
-
     // 2. 初始化 GitLab 服务
     const gitlabService = createGitLabService(
       reviewLog.repository.gitLabAccount.url,
@@ -179,6 +171,19 @@ export class ReviewService {
       gitlabService,
       reviewLog,
     });
+
+    if (isReviewCancelledStatus(reviewLog.status)) {
+      log.info(`🛑 [ReviewService] Review already cancelled: ${reviewLogId}`);
+      await publishReviewTerminalFailureNotification(state, "cancelled", new ReviewCancelledError(reviewLogId))
+        .catch((notifyError) => logError(log, notifyError, "Failed to publish already-cancelled review notification"));
+      return {
+        success: false,
+        totalComments: 0,
+        criticalIssues: 0,
+        normalIssues: 0,
+        suggestions: 0,
+      };
+    }
 
     // 4. 按固定链路执行，下一步由状态直接 if/else 决定。
     try {
@@ -257,6 +262,8 @@ export class ReviewService {
         log.info(`🛑 [ReviewService] Review cancelled: ${reviewLogId}`);
         await reviewWorkflowRecorder.cancelRunningNodes(reviewLogId)
           .catch((cancelError) => logError(log, cancelError, "Failed to cancel workflow nodes"));
+        await publishReviewTerminalFailureNotification(state, "cancelled", error)
+          .catch((notifyError) => logError(log, notifyError, "Failed to publish cancelled review notification"));
         return {
           success: false,
           totalComments: 0,
@@ -285,7 +292,11 @@ export class ReviewService {
           status: "failed",
           error: error instanceof Error ? error.message : "Unknown error",
         },
+      }).catch((updateError) => {
+        logError(log, updateError, "Failed to mark review log failed");
       });
+      await publishReviewTerminalFailureNotification(state, "failed", error)
+        .catch((notifyError) => logError(log, notifyError, "Failed to publish failed review notification"));
       throw error;
     }
   }

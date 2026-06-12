@@ -1,19 +1,14 @@
 /**
  * @file publish-comment.ts
- * @description 审查步骤：发布评论
- *
- * 此步骤负责：
- * 1. 遍历收集到的严重问题
- * 2. 调用 GitLab API 发布评论（MR 或 Commit）
- * 3. 记录发布结果
+ * @description 审查终态通知：发布 GitLab 总评并发送钉钉通知。
  */
 
-import { prisma } from "@/lib/prisma";
-import { sendReviewToDingTalk } from "@/lib/services/dingtalk";
 import type { ReviewComment, ReviewLog } from "@prisma/client";
-import type { ReviewState } from "../types";
-import { createLogger, logError, logWarn } from "@/lib/logger";
+import { prisma } from "@/lib/prisma";
+import type { ReviewState } from "@/lib/review/types";
+import { sendReviewToDingTalk } from "@/lib/services/dingtalk";
 import { REVIEW_CANCELLED_STATUS, ReviewCancelledError } from "@/lib/services/review-cancellation";
+import { createLogger, logError, logWarn } from "@/lib/logger";
 
 const log = createLogger("PublishCommentStep");
 
@@ -22,6 +17,28 @@ type PiRunForSummary = {
   summary: string | null;
   modelName: string;
   piProfile: { name: string } | null;
+};
+
+type ReviewTerminalStatus = "completed" | "failed" | "cancelled";
+
+type ReviewNotificationLog = ReviewLog & {
+  repository: {
+    name: string;
+    path: string;
+    gitLabProjectId: number;
+    gitLabAccount: {
+      url: string;
+    };
+  };
+  comments: ReviewComment[];
+  piRuns: PiRunForSummary[];
+};
+
+type ReviewNotificationContext = {
+  reviewLog: ReviewNotificationLog;
+  message: string;
+  title: string;
+  status: ReviewTerminalStatus;
 };
 
 function markReviewCompleted(reviewLogId: string): Promise<void> {
@@ -50,23 +67,9 @@ function markReviewCompleted(reviewLogId: string): Promise<void> {
   });
 }
 
-/**
- * 发布评论
- */
-export async function publishCommentStep(state: ReviewState): Promise<Partial<ReviewState>> {
-  log.info(`💬 [PublishCommentStep] Publishing comments to GitLab`);
-
-  const gitlabService = state.gitlabService;
-  if (!gitlabService) {
-    log.error(`❌ [PublishCommentStep] GitLab service not initialized`);
-    return {
-      completed: true,
-      error: "GitLab service not initialized",
-    };
-  }
-
-  const reviewLog = await prisma.reviewLog.findUnique({
-    where: { id: state.reviewLogId },
+function loadReviewNotificationLog(reviewLogId: string): Promise<ReviewNotificationLog | null> {
+  return prisma.reviewLog.findUnique({
+    where: { id: reviewLogId },
     include: {
       repository: {
         include: {
@@ -85,168 +88,174 @@ export async function publishCommentStep(state: ReviewState): Promise<Partial<Re
       },
     },
   });
+}
 
-  if (!reviewLog) {
-    return {
-      completed: true,
-      error: "Review log not found",
-    };
+function buildReviewNotificationContext(
+  state: ReviewState,
+  reviewLog: ReviewNotificationLog,
+  status: ReviewTerminalStatus,
+  error?: unknown,
+): ReviewNotificationContext {
+  const title = status === "completed"
+    ? "Code Review 完成"
+    : status === "cancelled"
+      ? "Code Review 已停止"
+      : "Code Review 失败";
+  const message = status === "completed"
+    ? formatSummaryComment(
+      reviewLog,
+      state.summary || "",
+      state.fileResults,
+      reviewLog.comments,
+      reviewLog.piRuns,
+      state.reviewScope,
+      state.incrementalBaseSha,
+    )
+    : formatUnfinishedComment(
+      reviewLog,
+      state.summary || "",
+      reviewLog.piRuns,
+      state.reviewScope,
+      state.incrementalBaseSha,
+      status,
+      error,
+    );
+
+  return { reviewLog, message, title, status };
+}
+
+function publishGitLabReviewNotification(
+  state: ReviewState,
+  context: ReviewNotificationContext,
+): Promise<string | null> {
+  const gitlabService = state.gitlabService;
+  if (!gitlabService) {
+    return Promise.resolve("GitLab service not initialized");
   }
 
-  const isPushEvent = reviewLog.mergeRequestIid === 0;
+  const reviewLog = context.reviewLog;
   const projectId = reviewLog.repository.gitLabProjectId;
+  const isPushEvent = reviewLog.mergeRequestIid === 0;
+  const publish = isPushEvent
+    ? gitlabService.createCommitComment(projectId, reviewLog.commitSha, context.message)
+      .then((result) => ({
+        discussionId: null,
+        noteId: readGitLabNoteId(result),
+        commentId: readGitLabCommentId(result),
+      }))
+    : gitlabService.createMergeRequestComment(projectId, reviewLog.mergeRequestIid, context.message)
+      .then((result) => ({
+        discussionId: String(result.id),
+        noteId: result.notes?.[0]?.id || null,
+        commentId: String(result.id),
+      }));
 
-  // 总评模式：不发布行内评论，所有内容汇总到总评中
-
-  // 格式化汇总评论
-  const summaryContent = formatSummaryComment(
-    reviewLog,
-    state.summary || "",
-    state.fileResults,
-    reviewLog.comments,
-    reviewLog.piRuns,
-    state.reviewScope,
-    state.incrementalBaseSha
-  );
-
-  // 发布总体摘要评论
-  let publishError: string | null = null;
-
-  try {
-    let result: { id: number | string } | null = null;
-
-    if (isPushEvent) {
-      const pushMarker = reviewLog.gitlabDiscussionId || `CRC_PUSH_PLACEHOLDER:${state.reviewLogId}`;
-      let resolvedNoteId = reviewLog.gitlabNoteId || null;
-
-      if (!resolvedNoteId) {
-        try {
-          const commitComments = await gitlabService.getCommitComments(
-            projectId,
-            reviewLog.commitSha
-          );
-          const markerComment = [...commitComments]
-            .reverse()
-            .find((item) => typeof item.note === "string" && item.note.includes(pushMarker));
-          const markerNoteId = markerComment?.note_id || markerComment?.id || null;
-          if (markerNoteId) {
-            resolvedNoteId = markerNoteId;
-            await prisma.reviewLog.update({
-              where: { id: state.reviewLogId },
-              data: { gitlabNoteId: resolvedNoteId },
-            });
-            log.info(`📝 [PublishCommentStep] Resolved placeholder commit noteId=${resolvedNoteId} by marker=${pushMarker}`);
-          }
-        } catch (error) {
-          logWarn(log, error, `⚠️ [PublishCommentStep] Failed to resolve commit placeholder by marker`);
-        }
-      }
-
-      if (resolvedNoteId) {
-        log.info(`📝 [PublishCommentStep] Updating placeholder commit comment: noteId=${resolvedNoteId || reviewLog.gitlabNoteId}`);
-        try {
-          result = await gitlabService.updateCommitComment(
-            projectId,
-            reviewLog.commitSha,
-            resolvedNoteId,
-            summaryContent
-          ) as { id: number | string };
-        } catch (updateError) {
-          logWarn(log, updateError, `⚠️ [PublishCommentStep] Failed to update commit placeholder(noteId=${resolvedNoteId}), fallback to create summary`);
-          result = await gitlabService.createCommitComment(
-            projectId,
-            reviewLog.commitSha,
-            summaryContent
-          ) as { id: number | string };
-        }
-      } else {
-        log.warn(`⚠️ [PublishCommentStep] Unable to resolve placeholder by marker=${pushMarker}, fallback to create summary`);
-        result = await gitlabService.createCommitComment(
-          projectId,
-          reviewLog.commitSha,
-          summaryContent
-        ) as { id: number | string };
-      }
-    } else {
-      const resolvedDiscussionId = reviewLog.gitlabDiscussionId || null;
-      let resolvedNoteId = reviewLog.gitlabNoteId || null;
-
-      if (resolvedDiscussionId && !resolvedNoteId) {
-        try {
-          const discussion = await gitlabService.getMergeRequestDiscussion(
-            projectId,
-            reviewLog.mergeRequestIid,
-            resolvedDiscussionId
-          );
-          const firstNoteId = discussion?.notes?.[0]?.id;
-          if (typeof firstNoteId === "number" && Number.isInteger(firstNoteId)) {
-            resolvedNoteId = firstNoteId;
-            await prisma.reviewLog.update({
-              where: { id: state.reviewLogId },
-              data: { gitlabNoteId: resolvedNoteId },
-            });
-            log.info(`📝 [PublishCommentStep] Resolved placeholder noteId=${resolvedNoteId} from discussion`);
-          }
-        } catch {
-          log.warn(`⚠️ [PublishCommentStep] Failed to resolve placeholder noteId, fallback to create new summary`);
-        }
-      }
-
-      if (resolvedDiscussionId && resolvedNoteId) {
-        log.info(`📝 [PublishCommentStep] Updating placeholder MR comment: discussionId=${resolvedDiscussionId}`);
-        result = await gitlabService.updateMergeRequestComment(
-          projectId,
-          reviewLog.mergeRequestIid,
-          resolvedDiscussionId,
-          resolvedNoteId,
-          summaryContent
-        ) as { id: number | string };
-      } else {
-        log.info(`📝 [PublishCommentStep] Posting new MR comment`);
-        result = await gitlabService.createMergeRequestComment(
-          projectId,
-          reviewLog.mergeRequestIid,
-          summaryContent
-        ) as { id: number | string };
-      }
-    }
-
-    // 更新评论状态
-    await prisma.reviewComment.updateMany({
-      where: { reviewLogId: state.reviewLogId, isPosted: false },
+  return publish.then((result) => {
+    const writeReviewLog = prisma.reviewLog.update({
+      where: { id: state.reviewLogId },
       data: {
-        isPosted: true,
-        gitlabCommentId: result?.id ? result.id.toString() : null,
+        gitlabDiscussionId: result.discussionId,
+        gitlabNoteId: result.noteId,
       },
     });
 
-  } catch (error) {
-    logError(log, error, "❌ [PublishCommentStep] Failed to publish summary comment");
-    publishError = error instanceof Error ? error.message : "Failed to publish summary comment";
-  }
+    const writes: Array<Promise<unknown>> = [writeReviewLog];
+    if (context.status === "completed") {
+      writes.push(prisma.reviewComment.updateMany({
+        where: { reviewLogId: state.reviewLogId, isPosted: false },
+        data: {
+          isPosted: true,
+          gitlabCommentId: result.commentId,
+        },
+      }));
+    }
 
-  if (!publishError) {
-    await markReviewCompleted(state.reviewLogId);
-  }
+    return Promise.all(writes).then(() => null);
+  }).catch((error) => {
+    logError(log, error, "❌ [PublishCommentStep] Failed to publish GitLab notification");
+    return error instanceof Error ? error.message : "Failed to publish GitLab notification";
+  });
+}
 
-  // 发送钉钉机器人通知（不影响主流程）
-  await sendReviewToDingTalk({
+function publishDingTalkReviewNotification(context: ReviewNotificationContext): Promise<void> {
+  const reviewLog = context.reviewLog;
+  return sendReviewToDingTalk({
     reviewLog,
     repositoryName: reviewLog.repository.name,
     repositoryPath: reviewLog.repository.path,
     gitlabUrl: reviewLog.repository.gitLabAccount.url,
-    messageOverride: summaryContent,
+    title: context.title,
+    messageOverride: context.message,
   }).catch((error) => {
-    logWarn(log, error, `⚠️ [PublishCommentStep] Failed to send DingTalk notification`);
+    logWarn(log, error, "⚠️ [PublishCommentStep] Failed to send DingTalk notification");
   });
-
-  return {
-    completed: true,
-    error: publishError,
-  };
 }
 
-/** 汇总评论格式化 */
+function readGitLabNoteId(result: { id?: number | string; note_id?: number; notes?: Array<{ id: number }> }): number | null {
+  if (typeof result.note_id === "number" && Number.isInteger(result.note_id)) return result.note_id;
+  if (typeof result.id === "number" && Number.isInteger(result.id)) return result.id;
+  const firstNoteId = result.notes?.[0]?.id;
+  return typeof firstNoteId === "number" && Number.isInteger(firstNoteId) ? firstNoteId : null;
+}
+
+function readGitLabCommentId(result: { id?: number | string; note_id?: number; notes?: Array<{ id: number }> }): string | null {
+  if (result.id !== undefined && result.id !== null) return String(result.id);
+  if (result.note_id !== undefined && result.note_id !== null) return String(result.note_id);
+  return null;
+}
+
+export function publishReviewTerminalFailureNotification(
+  state: ReviewState,
+  status: Exclude<ReviewTerminalStatus, "completed">,
+  error?: unknown,
+): Promise<void> {
+  return loadReviewNotificationLog(state.reviewLogId).then((reviewLog) => {
+    if (!reviewLog) {
+      log.warn(`⚠️ [PublishCommentStep] Review log not found for terminal notification: ${state.reviewLogId}`);
+      return;
+    }
+
+    const context = buildReviewNotificationContext(state, reviewLog, status, error);
+    return publishGitLabReviewNotification(state, context)
+      .then(() => publishDingTalkReviewNotification(context));
+  }).catch((notifyError) => {
+    logWarn(log, notifyError, "⚠️ [PublishCommentStep] Failed to publish terminal notification");
+  });
+}
+
+/**
+ * 发布成功终态通知。
+ */
+export function publishCommentStep(state: ReviewState): Promise<Partial<ReviewState>> {
+  log.info("💬 [PublishCommentStep] Publishing final review notification");
+
+  return loadReviewNotificationLog(state.reviewLogId).then((reviewLog) => {
+    if (!reviewLog) {
+      return {
+        completed: true,
+        error: "Review log not found",
+      };
+    }
+
+    const context = buildReviewNotificationContext(state, reviewLog, "completed");
+    return publishGitLabReviewNotification(state, context).then((publishError) => {
+      if (publishError) {
+        return {
+          completed: true,
+          error: publishError,
+        };
+      }
+
+      return markReviewCompleted(state.reviewLogId)
+        .then(() => publishDingTalkReviewNotification(context))
+        .then(() => ({
+          completed: true,
+          error: null,
+        }));
+    });
+  });
+}
+
 function formatSummaryComment(
   reviewLog: ReviewLog,
   summary: string,
@@ -254,24 +263,21 @@ function formatSummaryComment(
   postedComments: ReviewComment[],
   piRuns: PiRunForSummary[],
   reviewScope: "full" | "incremental",
-  incrementalBaseSha: string | null
+  incrementalBaseSha: string | null,
 ): string {
   const lines: string[] = [];
   const sortedComments = [...postedComments].sort((a, b) => severityWeight(b.severity) - severityWeight(a.severity));
   const criticalComments = sortedComments.filter((item) => item.severity === "critical");
   const normalComments = sortedComments.filter((item) => item.severity === "normal");
   const suggestionComments = sortedComments.filter((item) => item.severity === "suggestion");
-  // 评论展示统计口径：按“实际可展示的问题清单”计算，避免与概览不一致
   const critical = criticalComments.length;
   const normal = normalComments.length;
   const suggestion = suggestionComments.length;
   const totalFiles = reviewLog.totalFiles ?? 0;
   const reviewedFiles = reviewLog.reviewedFiles ?? 0;
-
   const filesWithIssues = fileResults.filter(
-    (file) => file.counts.critical > 0 || file.counts.normal > 0 || file.counts.suggestion > 0
+    (file) => file.counts.critical > 0 || file.counts.normal > 0 || file.counts.suggestion > 0,
   ).length;
-
   const reviewResult = getReviewConclusion(critical, normal, suggestion);
   const topFiles = buildFileRiskRank(sortedComments);
 
@@ -279,13 +285,7 @@ function formatSummaryComment(
   lines.push("");
   lines.push(`> **结论：${reviewResult}**`);
   lines.push("");
-
-  lines.push("### 概览");
-  if (reviewScope === "incremental") {
-    lines.push(`- 审查模式：Push 范围审查（${shortSha(incrementalBaseSha)} -> ${shortSha(reviewLog.commitSha)} 的完整变更）`);
-  } else {
-    lines.push(`- 审查模式：全量审查（当前 MR/Commit 完整变更）`);
-  }
+  pushScopeLines(lines, reviewLog, reviewScope, incrementalBaseSha);
   lines.push(`- 审查文件：${reviewedFiles}/${totalFiles}（其中 ${filesWithIssues} 个文件存在问题）`);
   lines.push(`- 问题统计：🔴 严重 ${critical} / ⚠️ 一般 ${normal} / 💡 建议 ${suggestion}`);
   lines.push(`- Pi Profile：${piRuns.length} 个`);
@@ -301,11 +301,9 @@ function formatSummaryComment(
     lines.push("- 无需要立即处理的问题。");
   } else {
     [...criticalComments, ...normalComments].forEach((comment) => {
-      const location = comment.lineRangeEnd
-        ? `${comment.filePath}:${comment.lineNumber}-${comment.lineRangeEnd}`
-        : `${comment.filePath}:${comment.lineNumber}`;
+      const location = formatCommentLocation(comment);
       lines.push(`- \`${location}\` (${comment.severity === "critical" ? "严重" : "一般"})`);
-    })
+    });
   }
   lines.push("");
   lines.push(`Nitpick comments: **${nitpickCount}**`);
@@ -313,26 +311,20 @@ function formatSummaryComment(
     lines.push("- 无 nitpick。");
   } else {
     suggestionComments.forEach((comment) => {
-      const location = comment.lineRangeEnd
-        ? `${comment.filePath}:${comment.lineNumber}-${comment.lineRangeEnd}`
-        : `${comment.filePath}:${comment.lineNumber}`;
-      lines.push(`- \`${location}\``);
-    })
+      lines.push(`- \`${formatCommentLocation(comment)}\``);
+    });
   }
-  lines.push("");
 
+  lines.push("");
   lines.push("### 全部问题清单");
   if (sortedComments.length === 0) {
     lines.push("- 本次无可定位问题。");
   } else {
     sortedComments.forEach((comment, index) => {
       const finding = parseStructuredFinding(comment.content);
-      const location = comment.lineRangeEnd
-        ? `${comment.filePath}:${comment.lineNumber}-${comment.lineRangeEnd}`
-        : `${comment.filePath}:${comment.lineNumber}`;
       const tag = comment.severity === "critical" ? "严重" : comment.severity === "normal" ? "一般" : "建议";
 
-      lines.push(`${index + 1}. [${tag}] \`${location}\``);
+      lines.push(`${index + 1}. [${tag}] \`${formatCommentLocation(comment)}\``);
       lines.push(`   - 问题：${finding.issue}`);
       lines.push(`   - 影响：${finding.impact}`);
       lines.push(`   - 建议：${finding.suggestion}`);
@@ -356,16 +348,7 @@ function formatSummaryComment(
     lines.push(stripSummaryHeading(summary));
   }
 
-  lines.push("");
-  lines.push("### Pi Profile 结果");
-  if (piRuns.length === 0) {
-    lines.push("- 未记录 Pi Profile 执行结果。");
-  } else {
-    piRuns.forEach((piRun) => {
-      const profileName = piRun.piProfile?.name || "未知 Profile";
-      lines.push(`- **${profileName}** / \`${piRun.modelName}\`：${formatPiRunStatus(piRun.status)}${piRun.summary ? `，${piRun.summary}` : ""}`);
-    });
-  }
+  pushPiRunLines(lines, piRuns);
 
   lines.push("");
   lines.push("### 建议处理顺序");
@@ -382,9 +365,83 @@ function formatSummaryComment(
   }
 
   lines.push("");
-  lines.push(`<sub>完成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</sub>`);
+  lines.push(`<sub>完成时间：${formatShanghaiTime(new Date())}</sub>`);
 
   return lines.join("\n");
+}
+
+function formatUnfinishedComment(
+  reviewLog: ReviewLog,
+  summary: string,
+  piRuns: PiRunForSummary[],
+  reviewScope: "full" | "incremental",
+  incrementalBaseSha: string | null,
+  status: Exclude<ReviewTerminalStatus, "completed">,
+  error?: unknown,
+): string {
+  const title = status === "cancelled" ? "已停止" : "失败";
+  const lines = [
+    "## 🤖 Code Review Copilot",
+    "",
+    `> **结论：审查${title}**`,
+    "",
+  ];
+
+  pushScopeLines(lines, reviewLog, reviewScope, incrementalBaseSha);
+  lines.push(`- 审查文件：${reviewLog.reviewedFiles ?? 0}/${reviewLog.totalFiles ?? 0}`);
+  const reason = status === "cancelled"
+    ? reviewLog.error || "手动停止"
+    : error || reviewLog.error || "未知错误";
+  lines.push(`- ${status === "cancelled" ? "停止原因" : "失败原因"}：${errorToMessage(reason)}`);
+
+  if (summary) {
+    lines.push("");
+    lines.push("### 已生成摘要");
+    lines.push(stripSummaryHeading(summary));
+  }
+
+  pushPiRunLines(lines, piRuns);
+  lines.push("");
+  lines.push("### 后续处理");
+  if (status === "cancelled") {
+    lines.push("1. 审查已停止，不再继续运行 Pi。");
+    lines.push("2. 如需重新审查，请使用 Retry 重新触发。");
+  } else {
+    lines.push("1. 先查看失败原因和 Pi Runtime 记录。");
+    lines.push("2. 修复配置、GitLab、OpenSandbox 或 Pi 输出问题后重新触发。");
+  }
+  lines.push("");
+  lines.push(`<sub>结束时间：${formatShanghaiTime(new Date())}</sub>`);
+
+  return lines.join("\n");
+}
+
+function pushScopeLines(
+  lines: string[],
+  reviewLog: ReviewLog,
+  reviewScope: "full" | "incremental",
+  incrementalBaseSha: string | null,
+): void {
+  lines.push("### 概览");
+  if (reviewScope === "incremental") {
+    lines.push(`- 审查模式：Push 范围审查（${shortSha(incrementalBaseSha)} -> ${shortSha(reviewLog.commitSha)} 的完整变更）`);
+  } else {
+    lines.push("- 审查模式：全量审查（当前 MR/Commit 完整变更）");
+  }
+}
+
+function pushPiRunLines(lines: string[], piRuns: PiRunForSummary[]): void {
+  lines.push("");
+  lines.push("### Pi Profile 结果");
+  if (piRuns.length === 0) {
+    lines.push("- 未记录 Pi Profile 执行结果。");
+    return;
+  }
+
+  piRuns.forEach((piRun) => {
+    const profileName = piRun.piProfile?.name || "未知 Profile";
+    lines.push(`- **${profileName}** / \`${piRun.modelName}\`：${formatPiRunStatus(piRun.status)}${piRun.summary ? `，${piRun.summary}` : ""}`);
+  });
 }
 
 function stripSummaryHeading(summary: string): string {
@@ -428,6 +485,12 @@ function formatPiRunStatus(status: string): string {
   return status;
 }
 
+function formatCommentLocation(comment: ReviewComment): string {
+  return comment.lineRangeEnd
+    ? `${comment.filePath}:${comment.lineNumber}-${comment.lineRangeEnd}`
+    : `${comment.filePath}:${comment.lineNumber}`;
+}
+
 function formatCommentSources(comment: ReviewComment): string {
   const sourceProfiles = Array.isArray(comment.sourceProfilesJson)
     ? comment.sourceProfilesJson as Array<{ profileName?: string; model?: string; confidence?: number }>
@@ -435,9 +498,7 @@ function formatCommentSources(comment: ReviewComment): string {
 
   if (sourceProfiles.length > 0) {
     return sourceProfiles
-      .map((source) => {
-        return `${source.profileName || "未知 Profile"} / ${source.model || "unknown"}`;
-      })
+      .map((source) => `${source.profileName || "未知 Profile"} / ${source.model || "unknown"}`)
       .join("；");
   }
 
@@ -454,7 +515,6 @@ function getReviewConclusion(critical: number, normal: number, suggestion: numbe
 function parseStructuredFinding(content: string): { issue: string; impact: string; suggestion: string } {
   const clean = content.trim();
   const segments = clean.split(/[｜|]/).map((segment) => segment.trim()).filter(Boolean);
-
   let issue = "";
   let impact = "";
   let suggestion = "";
@@ -465,11 +525,11 @@ function parseStructuredFinding(content: string): { issue: string; impact: strin
     if (segment.startsWith("建议：")) suggestion = segment.replace(/^建议：/, "").trim();
   }
 
-  if (!issue) issue = clean;
-  if (!impact) impact = "可能引入功能错误、稳定性或可维护性风险。";
-  if (!suggestion) suggestion = "请按该点修复并补充必要回归验证。";
-
-  return { issue, impact, suggestion };
+  return {
+    issue: issue || clean,
+    impact: impact || "可能引入功能错误、稳定性或可维护性风险。",
+    suggestion: suggestion || "请按该点修复并补充必要回归验证。",
+  };
 }
 
 function severityWeight(severity: string): number {
@@ -478,6 +538,14 @@ function severityWeight(severity: string): number {
   return 1;
 }
 
+function errorToMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" && error.trim() ? error.trim() : "未知错误";
+}
+
+function formatShanghaiTime(value: Date): string {
+  return value.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+}
 
 function shortSha(sha: string | null | undefined): string {
   if (!sha) return "unknown";

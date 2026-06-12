@@ -40,11 +40,12 @@ ReviewService.performReview
         └── publish_comment
         │
         ▼
-PostgreSQL + GitLab 总评 + 钉钉通知
+PostgreSQL + GitLab 终态总评 + 钉钉终态通知
 ```
 
 `ReviewService.performReview` 是主编排。步骤函数位于 `lib/review/steps/`，
 共享状态类型位于 `lib/review/types.ts`。过程可视化统一写入 `ReviewWorkflowNode`。
+触发阶段只创建 `ReviewLog` 和过程节点，不向 GitLab 发送评论。
 
 ## 认证边界
 
@@ -118,7 +119,10 @@ filePath + lineNumber + lineRangeEnd + severity + normalized content
 
 ### publish_comment
 
-发布一条 GitLab 总评。评论包含：
+发布一条 GitLab 终态总评，并发送同口径钉钉通知。`completed`、`failed`、
+`cancelled` 都通过这个出口发布，不存在触发阶段评论更新链路。
+
+完成态评论包含：
 
 - 审查结论。
 - 变更范围。
@@ -128,7 +132,12 @@ filePath + lineNumber + lineRangeEnd + severity + normalized content
 - 技术走查。
 - Pi 运行结果。
 
-同一份总评也会作为钉钉通知内容发送。
+失败或停止态评论包含：
+
+- 失败或停止原因。
+- 已完成的变更范围和摘要。
+- Pi Profile 运行状态。
+- 后续处理建议。
 
 ## Pi + OpenSandbox Runtime
 
@@ -318,6 +327,7 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_DATABASE_URL" code-r
 - Pi 自定义 endpoint 未接入：review failed。
 - Pi 输出非严格 JSON：review failed。
 - Finding 校验后为空：review completed，发布低风险总评。
+- review failed 或 cancelled 后仍发布 GitLab 和钉钉终态通知；通知失败只记录日志，不覆盖原始失败原因。
 - Retry：清理旧 comments、Pi Review Runs、workflow nodes 和 sandbox session 后重新运行。
 
 ## 质量门禁

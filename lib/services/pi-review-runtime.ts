@@ -723,7 +723,9 @@ export function runPiReview(params: RunPiReviewParams): Promise<PiReviewResult> 
     activeBindingId = binding.id;
     return reserveReviewSandboxSession(binding, params.input, activeWorktreePath).then((session) => {
       activeSessionId = session.id;
-      return connectRepositorySandbox(binding, params.input, config, sandbox)
+      return prisma.repositorySandboxBinding.findUniqueOrThrow({
+        where: { id: binding.id },
+      }).then((latestBinding) => connectRepositorySandbox(latestBinding, params.input, config, sandbox))
         .then((connectedSandbox) => {
           activeSandbox = connectedSandbox;
           return connectedSandbox;

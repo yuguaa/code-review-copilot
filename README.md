@@ -15,7 +15,7 @@ Docker sandbox 中。
 - **仓库 VM 复用**：不同仓库绑定不同 sandbox；同仓库复用同一 sandbox，并发 review 使用不同 worktree 和 Pi 进程。
 - **三级问题分类**：严重 / 一般 / 建议。
 - **审查历史**：保存 ReviewLog、PiReviewRun、ReviewComment、Workflow 和 sandbox session。
-- **通知发布**：审查完成后把总评发布到 GitLab，并发送钉钉通知。
+- **终态通知**：审查完成、失败或停止后，发布一条 GitLab 总评并发送钉钉通知。
 
 ### UI 特性
 
@@ -208,7 +208,7 @@ GitLab Webhook：
 - **审查历史**：查看每次审查的详情。
 - **过程图**：查看 fetch diff、summary、Pi review、aggregate、publish 等步骤。
 - **Pi Runtime**：查看 OpenSandbox sandbox、worktree、会话状态和错误。
-- **GitLab**：审查总评会发布到 MR 或 Commit。
+- **GitLab**：审查完成、失败或停止后，总评会发布到 MR 或 Commit。
 
 ## 数据库模型
 
@@ -308,13 +308,13 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 
 ## 审查流程
 
-1. 手动触发、Webhook 或 Retry 进入 `ReviewTriggerService`。
-2. `ReviewService.performReview` 串行执行 review steps。
+1. 手动触发、Webhook 或 Retry 进入 `ReviewTriggerService`，创建 `ReviewLog` 后直接启动审查。
+2. `ReviewService.performReview` 串行执行 review steps，触发阶段不向 GitLab 发送评论。
 3. `fetch_diff` 获取 MR / Commit diff。
 4. `generate_summary` 根据 diff 生成确定性公共变更摘要。
 5. `run_pi_runtime` 选择排序第一的启用 Profile，连接仓库 sandbox，创建 worktree，运行 Pi。
 6. `aggregate_results` 校验 finding 是否命中本次 diff，并写入评论。
-7. `publish_comment` 发布 GitLab 总评并发送钉钉通知。
+7. `publish_comment` 是唯一终态通知出口，`completed` / `failed` / `cancelled` 都会发布 GitLab 总评并发送钉钉通知。
 8. sandbox 内 worktree 清理完成后，如果没有 running session，暂停仓库 VM。
 
 ## 质量门禁

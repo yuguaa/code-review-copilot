@@ -93,6 +93,7 @@ export async function sendReviewToDingTalk(params: {
   repositoryName: string;
   repositoryPath: string;
   gitlabUrl: string;
+  title?: string;
   messageOverride: string;
 }): Promise<void> {
   const setting = await prisma.notificationSetting.findUnique({
@@ -115,6 +116,7 @@ export async function sendReviewToDingTalk(params: {
   }
 
   const { reviewLog, repositoryName, repositoryPath, gitlabUrl } = params;
+  const title = params.title || "Code Review 完成";
   const link = buildGitlabLink(reviewLog, gitlabUrl, repositoryPath);
 
   const lines: string[] = [];
@@ -122,7 +124,7 @@ export async function sendReviewToDingTalk(params: {
     ? `MR !${reviewLog.mergeRequestIid}`
     : `Commit ${reviewLog.commitShortId || (reviewLog.commitSha || "").slice(0, 8)}`;
 
-  lines.push("### 🤖 Code Review 完成");
+  lines.push(`### 🤖 ${title}`);
   lines.push("");
   lines.push(`- 仓库：${repositoryName}`);
   lines.push(`- 事件：${eventLabel}`);
@@ -141,7 +143,7 @@ export async function sendReviewToDingTalk(params: {
   const payload: DingTalkMarkdownMessage = {
     msgtype: "markdown",
     markdown: {
-      title: `Code Review 完成 - ${repositoryName}`,
+      title: `${title} - ${repositoryName}`,
       text: lines.join("\n"),
     },
   };
