@@ -25,8 +25,6 @@ services:
       - prometheus_data:/prometheus
     environment:
       APP_AUTH_SECRET: ${APP_AUTH_SECRET:?APP_AUTH_SECRET is required}
-    ports:
-      - "9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -38,7 +36,8 @@ services:
       - prometheus
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_HTTP_PORT: "3000"
     volumes:
@@ -46,7 +45,7 @@ services:
       - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.53.0
@@ -59,8 +58,6 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
       - /dev/disk:/dev/disk:ro
-    ports:
-      - "8081:8080"
 
   node-exporter:
     image: prom/node-exporter:v1.10.2
@@ -71,8 +68,6 @@ services:
     pid: host
     volumes:
       - /:/host:ro,rslave
-    ports:
-      - "9100:9100"
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.18.1
@@ -83,8 +78,6 @@ services:
         condition: service_healthy
     environment:
       DATA_SOURCE_NAME: "postgresql://code_review:code_review@postgres:5432/code_review_copilot?sslmode=disable"
-    ports:
-      - "9187:9187"
 
 volumes:
   prometheus_data:

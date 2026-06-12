@@ -66,17 +66,16 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 
 - App：http://localhost:3000
 - Grafana：http://localhost:3001
-- Prometheus：http://localhost:9090
-- cAdvisor：http://localhost:8081
 
-Grafana 默认账号密码来自环境变量：
+Prometheus、cAdvisor、node_exporter 和 postgres_exporter 不发布宿主机端口，
+只在 Docker 内网中供 Prometheus 采集，避免内网端口扫描时出现无记名访问入口。
+
+Grafana 账号密码来自环境变量：
 
 ```env
 GRAFANA_ADMIN_USER="admin"
-GRAFANA_ADMIN_PASSWORD="admin"
+GRAFANA_ADMIN_PASSWORD="change-me-grafana-password"
 ```
-
-建议部署后立即改掉默认密码。
 
 ### 2. 单机部署 OpenSandbox + Pi
 

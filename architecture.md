@@ -68,6 +68,10 @@ Docker healthcheck 和 Prometheus 会自动使用同一个 `APP_AUTH_SECRET`。
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
+Prometheus、cAdvisor、node-exporter 和 postgres-exporter 不发布宿主机端口，
+只在 Docker 内网中互通；Grafana 是唯一可视化入口，并绑定到
+`127.0.0.1:3001`，避免内网端口扫描时出现无记名访问入口。
+
 组件职责：
 
 ```text
