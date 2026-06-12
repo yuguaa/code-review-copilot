@@ -25,13 +25,12 @@ services:
       PI_SANDBOX_MOUNT_PATH: ${PI_SANDBOX_MOUNT_PATH:-/opt/pi}
       PI_SANDBOX_IMAGE: ${PI_SANDBOX_IMAGE:-node:24-bookworm}
       PI_SANDBOX_TIMEOUT_SECONDS: ${PI_SANDBOX_TIMEOUT_SECONDS:-7200}
-      MONITORING_TOKEN: ${MONITORING_TOKEN:?MONITORING_TOKEN is required}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS -H \"Authorization: Bearer $$MONITORING_TOKEN\" 'http://localhost:3000/api/health?scope=liveness' >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS -H \"Authorization: Bearer $$APP_AUTH_SECRET\" 'http://localhost:3000/api/health?scope=liveness' >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

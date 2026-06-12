@@ -51,16 +51,16 @@ PostgreSQL + GitLab 终态总评 + 钉钉终态通知
 
 ## 健康检查与监控
 
-系统提供两个监控入口：
+系统提供三个监控入口：
 
 - `GET /api/health`：检查 PostgreSQL、OpenSandbox 和 Pi Runtime 配置。
 - `GET /api/health?scope=liveness`：轻量存活检查，供 Docker healthcheck 使用。
 - `GET /api/metrics`：Prometheus 文本格式业务指标。
 
 `/api/health` 和 `/api/metrics` 不要求登录 Cookie，也不走页面 IP 白名单。
-`MONITORING_TOKEN` 必填，`/api/health`、`/api/health?scope=liveness` 和
-`/api/metrics` 都需要 `Authorization: Bearer <token>` 或 `?token=<token>`。
-Docker healthcheck 和 Prometheus 会自动使用同一个 `MONITORING_TOKEN`。
+`/api/health`、`/api/health?scope=liveness` 和 `/api/metrics` 都需要
+`Authorization: Bearer <APP_AUTH_SECRET>` 或 `?token=<APP_AUTH_SECRET>`。
+Docker healthcheck 和 Prometheus 会自动使用同一个 `APP_AUTH_SECRET`。
 
 监控栈使用独立 compose 扩展文件：
 
@@ -107,9 +107,9 @@ APP_AUTH_SESSION_SECRET
 APP_AUTH_IP_WHITELIST
 ```
 
-`APP_AUTH_SECRET` 用于登录校验，`APP_AUTH_SESSION_SECRET` 用 HMAC-SHA256
-签名会话 Cookie。Cookie 名为 `code_review_copilot_session`，HTTP-only，
-默认有效期 7 天。
+`APP_AUTH_SECRET` 用于登录校验和监控接口 Bearer Token 校验。
+`APP_AUTH_SESSION_SECRET` 用 HMAC-SHA256 签名会话 Cookie。
+Cookie 名为 `code_review_copilot_session`，HTTP-only，默认有效期 7 天。
 
 配置 IP 白名单后，系统先读取 `x-forwarded-for` 的第一个 IP，再读取
 `x-real-ip`。部署在反向代理后时，代理层必须覆盖这两个请求头，不能透传客户端

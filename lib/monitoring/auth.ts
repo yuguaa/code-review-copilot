@@ -1,4 +1,4 @@
-import { constantTimeEqual } from "@/lib/auth";
+import { constantTimeEqual, getAuthConfig } from "@/lib/auth";
 
 type MonitoringRequest = {
   headers: Headers;
@@ -16,7 +16,7 @@ function readBearerToken(request: MonitoringRequest): string {
 }
 
 export function isMonitoringRequestAuthorized(request: MonitoringRequest): boolean {
-  const expectedToken = process.env.MONITORING_TOKEN?.trim();
+  const expectedToken = getAuthConfig()?.secret;
   if (!expectedToken) return false;
 
   const receivedToken = readBearerToken(request);
