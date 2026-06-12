@@ -1,24 +1,27 @@
 # Code Review Copilot 架构说明
 
-本文档记录当前项目的实现架构，作为后续开发和审查策略调整的工程基准。系统目标是把 GitLab 代码审查从一次性 diff 审查，升级为带长期记忆、代码图谱和主 Agent + 条件辅助 Agent 的审查系统。
+本文档记录当前项目的实现架构。系统目标是：在私有化部署环境中，把 GitLab
+MR / Push 事件转换为可追溯、可复用 sandbox、可发布到 GitLab 和钉钉的 Pi 代码审查。
 
 ## 设计目标
 
-- 应用作为私有工作台部署，除登录接口和外部回调入口外，页面和业务 API 都要先经过登录校验。
-- 一个仓库可以配置多个审查机器人，每个机器人有独立模型、Prompt、启停状态、排序和审查预算。
-- 一次触发只创建一个 `ReviewLog`，排序第一的启用机器人作为主 Agent 执行审查，其余启用机器人作为可被条件调用的辅助 Agent。
-- 审查结果要可追溯到机器人、模型、Prompt 快照、Memory Snapshot、检索上下文、Finding 校验报告和 Agent Loop 轨迹。
-- Memory Wiki 保存项目架构摘要、代码图谱和高置信事实，减少每次审查重复读取全仓库的成本。
+- 页面和业务 API 默认需要登录，外部回调入口保持可调用。
+- 手动触发、Webhook 和 Retry 都进入同一个 `ReviewTriggerService`。
+- 每次 review 只运行一个 Pi 进程，模型和 Prompt 来自排序第一的启用 Pi Profile。
+- 不同仓库绑定不同 OpenSandbox sandbox，同仓库复用同一个 sandbox。
+- 同仓库并发 review 共享 VM，但使用独立 `git worktree`、独立 Pi 进程和独立 `ReviewSandboxSession`。
+- 应用不挂载 Docker socket，不直接管理宿主机容器，只调用 OpenSandbox API。
 - PostgreSQL 是运行数据库，Prisma 是唯一 ORM。
-- Docker 可以直接启动完整应用，容器入口只自动执行 PostgreSQL migration，不自动导入历史 SQLite 数据。
+- Code Graph 保存仓库长期记忆，但 Memory 刷新失败时快速失败，不降级成裸 diff 审查。
 
 ## 非目标
 
-- 第一版不自动修改代码，不生成补丁，不执行自动修复。
-- Agent Loop 只使用只读工具，不允许写代码仓库。
-- 审查评论第一版合并成一条 GitLab 总评，不做行内评论。
-- Memory 刷新失败时审查快速失败，不降级成裸 diff 审查。
-- 辅助 Agent 不默认执行，只有主 Agent 明确请求或主 Agent 发现的问题达到复核阈值时才会运行。
+- 不自动修改代码。
+- 不生成补丁。
+- 不做行内评论，当前只发布一条 GitLab 总评。
+- 不在 app 容器中运行 Docker runtime。
+- 不在一个 review 完成后删除仓库 sandbox。
+- 不支持 Pi 自定义模型 endpoint；配置了 endpoint 时快速失败。
 
 ## 总体链路
 
@@ -29,33 +32,30 @@ GitLab Webhook / 手动触发 / Retry
 ReviewTriggerService
         │
         ▼
-ReviewService
-        │
-        ▼
-Review Steps
+ReviewService.performReview
         │
         ├── fetch_diff
         ├── refresh_memory
         ├── generate_summary
-        ├── run_review_bots
+        ├── run_pi_runtime
         ├── aggregate_results
         └── publish_comment
         │
         ▼
-PostgreSQL + GitLab 评论
+PostgreSQL + GitLab 总评 + 钉钉通知
 ```
 
-`ReviewTriggerService` 是统一入口。手动触发、Webhook 和 Retry 都走这里，避免重复创建审查日志和重复实现触发逻辑。
-
-审查主链路直接写在 `ReviewService.performReview` 中，通过 `if/else` 根据状态进入下一步；步骤函数位于 `lib/review/steps/`，共享类型位于 `lib/review/types.ts`。运行时不依赖任何图编排库或额外编排层，Agent Loop 内部使用 `while (true)` 加预算条件控制。
+`ReviewService.performReview` 是主编排。步骤函数位于 `lib/review/steps/`，
+共享状态类型位于 `lib/review/types.ts`。过程可视化统一写入 `ReviewWorkflowNode`。
 
 ## 认证边界
 
-认证由 `proxy.ts` 统一拦截，页面和业务 API 默认都需要登录。公开路径只保留三类：
+认证由 `proxy.ts` 统一拦截。公开路径只有：
 
 - `/login`
 - `/api/auth/*`
-- 外部回调入口：`/api/webhook/gitlab` 和 `/api/code-graph/refresh-scheduled`
+- `/api/webhook/gitlab`
+- `/api/code-graph/refresh-scheduled`
 
 登录账号不落库，由环境变量提供：
 
@@ -66,210 +66,171 @@ APP_AUTH_SESSION_SECRET
 APP_AUTH_IP_WHITELIST
 ```
 
-`APP_AUTH_SECRET` 用于登录校验，`APP_AUTH_SESSION_SECRET` 用 HMAC-SHA256 签名会话 Cookie。Cookie 名为 `code_review_copilot_session`，HTTP-only，默认有效期 7 天。
+`APP_AUTH_SECRET` 用于登录校验，`APP_AUTH_SESSION_SECRET` 用 HMAC-SHA256
+签名会话 Cookie。Cookie 名为 `code_review_copilot_session`，HTTP-only，
+默认有效期 7 天。
 
-IP 白名单为空时不启用限制。配置后，系统先读取 `x-forwarded-for` 的第一个 IP，再读取 `x-real-ip`。部署在反向代理后时，代理层必须覆盖这两个请求头，不能透传客户端伪造的值。
-
-根布局通过 `AppShell` 分流：`/login` 直接渲染登录页，其余页面进入带侧边栏的工作台。侧边栏提供退出登录，调用 `/api/auth/logout` 清理 Cookie 后回到登录页。
+配置 IP 白名单后，系统先读取 `x-forwarded-for` 的第一个 IP，再读取
+`x-real-ip`。部署在反向代理后时，代理层必须覆盖这两个请求头，不能透传客户端
+伪造的值。
 
 ## 审查步骤
 
 ### fetch_diff
 
-读取 MR 或 Commit diff，只获取一次并写入审查状态。Webhook、手动审查和 Retry 共用同一条 diff 获取链路。
+读取 MR 或 Commit diff，只获取一次并写入审查状态。Webhook、手动审查和 Retry
+共用同一条 diff 获取链路。
 
 ### refresh_memory
 
-审查前为当前审查提交刷新 Code Graph。命中相同 `repositoryId + sourceBranch + commitSha` 的 ready snapshot 时复用；否则基于当前 diff 和仓库信息生成新的 Snapshot、Code File Node、Symbol Node 和 Relation Edge。
+审查前为当前提交刷新 Code Graph。命中相同
+`repositoryId + sourceBranch + commitSha` 的 ready snapshot 时复用；否则基于
+当前 diff 和仓库信息生成新的 Snapshot、Code File Node、Symbol Node 和 Relation Edge。
 
-刷新失败时，`ReviewLog` 标记为 failed。这里不做裸 diff 降级，因为裸 diff 审查会改变用户对 Agent 审查能力的预期，也会让结果不可追溯。
+刷新失败时，`ReviewLog` 标记为 failed。
 
 ### generate_summary
 
-使用排序第一的启用机器人生成公共变更摘要。这个摘要会被主 Agent 审查链路复用，避免重复总结同一份 diff。
+根据本次 diff 生成确定性公共变更摘要。摘要写入 `ReviewLog.changeSummary`，
+并作为 Pi 审查输入的一部分；app 进程不直接调用模型生成审查内容。
 
-### run_review_bots
+### run_pi_runtime
 
-加载当前仓库所有启用机器人，排序第一的机器人作为主 Agent 执行 Agent Loop，其余机器人作为辅助 Agent 暴露给主 Agent。
+当前运行时只选择排序第一的启用 Profile：
 
-辅助 Agent 只有在主 Agent 明确请求且存在可调用辅助 Agent，或主 Agent 已发现严重/可处理问题达到复核阈值时才会创建 `ReviewBotRun` 并运行。主 Agent 失败时本次审查失败；辅助 Agent 失败只记录自己的失败状态，不阻塞主 Agent 的结果汇总。
+1. 创建或连接 `RepositorySandboxBinding` 对应的 OpenSandbox sandbox。
+2. 创建 `ReviewSandboxSession`，记录当前 review 的 worktree、Pi command 和运行状态。
+3. 在 sandbox 内准备 bare repo，并 fetch 最新 refs。
+4. 为本次 review 创建独立 `git worktree`。
+5. 写入 `/tmp/pi-review-input.json` 和 Pi prompt 文件。
+6. 在 worktree 中执行 `/opt/pi/bin/pi -p --no-context-files --no-session`。
+7. 解析 Pi 严格 JSON 输出。
+8. 校验 finding 是否命中本次 diff。
+9. 完成后清理 worktree；若没有其他 running session，则 pause sandbox。
 
-如果当前主 Agent 没有可调用辅助 Agent，Plan Prompt 会明确写入“可调用辅助 Agent：无”，并禁止请求 `run_additional_review_agents`。服务端仍会做二次保护：模型误请求该工具时不创建空的辅助运行，只把本轮工具状态记录为 `unavailable`，然后继续走当前主 Agent 的审查链路。
+GitLab Token 通过 `GITLAB_PRIVATE_TOKEN` 环境变量传入 git 命令。模型 API Key
+通过 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY` 传给 Pi。两类密钥都不写入 clone URL、
+prompt 或 review input JSON。
 
 ### aggregate_results
 
-汇总主 Agent 和已运行辅助 Agent 的 findings。重复问题按以下 key 去重：
+汇总 Pi findings。重复问题按以下 key 去重：
 
 ```text
 filePath + lineNumber + lineRangeEnd + severity + normalized content
 ```
 
-去重前会校验 finding 必须命中本次 diff 的文件和行号，并过滤 `confidence < 0.6` 的低置信问题。Agent Loop 内部会保存 Finding 校验报告，记录 `low_confidence`、`file_not_in_diff`、`invalid_line_range` 三类丢弃原因。辅助 Agent 产出的 finding 会保留自己的 `reviewBotRunId`、来源机器人、模型和 `sourceBots` 列表，不会在主 Agent 汇总阶段被覆盖。长期 Memory 写回仍使用高置信阈值，避免污染项目记忆。
+写入前会校验：
+
+- finding 必须命中本次 diff 的文件。
+- 行号必须落在 diff 可评论范围。
+- `confidence < 0.6` 的低置信问题会被过滤。
+- 输出条数最多保留 Pi Profile 配置的 `maxFindings`。
 
 ### publish_comment
 
-发布一条 GitLab 总评。评论中标注来源机器人，例如：
+发布一条 GitLab 总评。评论包含：
+
+- 审查结论。
+- 变更范围。
+- 问题统计。
+- 全部问题清单。
+- 文件风险排行。
+- 技术走查。
+- Pi 运行结果。
+
+同一份总评也会作为钉钉通知内容发送。
+
+## Pi + OpenSandbox Runtime
+
+单机部署拓扑：
 
 ```text
-来源：安全审查机器人 / anthropic/claude-sonnet-4.5 confidence=0.78
+[同一台服务器]
+├── Docker daemon
+│   ├── code-review-copilot-app
+│   ├── code-review-copilot-postgres
+│   ├── code-graph-cron
+│   └── OpenSandbox 创建的 review sandbox 容器
+├── OpenSandbox Server
+│   └── localhost:8080
+├── Pi 安装目录
+│   └── /opt/pi
+└── 持久化目录
+    ├── postgres_data
+    └── OpenSandbox / Docker volumes
 ```
 
-## 多机器人模型
+OpenSandbox Server 跑在宿主机 systemd 中，不放进本项目 `docker compose`。
+app 容器通过 `host.docker.internal:8080` 调用 OpenSandbox API。Linux 下
+`docker-compose.yml` 使用 `extra_hosts: host.docker.internal:host-gateway`
+固定宿主机访问入口。
+
+Pi 安装在宿主机 `/opt/pi`，创建 sandbox 时以 host volume 只读挂载到 sandbox 内
+`/opt/pi`。app 不需要 Docker socket。
+
+关键环境变量：
 
 ```text
-Repository
-  └── RepositoryReviewBot[]
-        ├── name
-        ├── aiModelId
-        ├── prompt / promptMode
-        ├── isActive / sortOrder
-        └── Agent Loop budget
-
-ReviewLog
-  └── ReviewBotRun[]
-        ├── status
-        ├── model snapshot
-        ├── prompt snapshot
-        ├── summary / error
-        └── ReviewAgentTrace
+OPEN_SANDBOX_DOMAIN
+OPEN_SANDBOX_PROTOCOL
+OPEN_SANDBOX_API_KEY
+PI_HOST_PATH
+PI_SANDBOX_MOUNT_PATH
+PI_SANDBOX_IMAGE
+PI_SANDBOX_TIMEOUT_SECONDS
 ```
 
-机器人只引用 `AIModel`，不重复保存 API Key。运行时会把模型、Prompt 和 Prompt 模式写入 `ReviewBotRun` 快照，保证历史审查可追溯。
+## 并发模型
 
-每个机器人有独立审查预算：
-
-- `maxIterations`：Agent Loop 最大轮次，默认 5，运行时限制 1 到 10。
-- `maxContextFiles`：单次上下文检索最多文件数，默认 12，运行时限制 1 到 200。
-- `maxCallGraphDepth`：调用图上下游检索深度，默认 2，运行时限制 0 到 4。
-- `maxFindings`：单机器人最多 findings，默认 50，运行时限制 1 到 200。
-
-最终合并 findings 的上限按已启用机器人预算求和，并有全局硬上限 500；未被调用的辅助 Agent 不会产生结果。
-
-## Agent Loop
-
-每个机器人独立运行一个有界 Agent Loop。
+不同仓库：
 
 ```text
-while (true)
-  observe
-  plan_next
-  tool_call
-  review
-  critic
-
-  if budget exhausted
-    break
-
-  if critic says stop
-    break
-
-  if no new context requested
-    break
+repo A -> sandbox A
+repo B -> sandbox B
 ```
 
-每轮包含五个步骤：
-
-1. `observe` 读取 diff、已有 findings、预算和 Memory 摘要。
-2. `plan_next` 判断还缺什么上下文，决定是否继续检索。
-3. `tool_call` 只读检索 Memory、Code Graph、文件上下文和历史审查。
-4. `review` 基于新增上下文输出结构化 findings。
-5. `critic` 去重、判断是否继续，并提取可写回 Memory 的高置信事实。
-
-每轮停止原因会归一成 `stopReason` 写入 `ReviewAgentTrace.loopIterationsJson`：
-
-- `continue`：本轮继续扩展上下文。
-- `max_iterations`：达到 `maxIterations`。
-- `max_findings`：达到 `maxFindings`。
-- `critic_stop`：Critic 判定不需要继续。
-- `no_new_findings`：本轮没有新增问题。
-- `no_more_context`：计划没有更多上下文或没有新的目标文件。
-- `no_requested_tools`：计划没有请求工具。
-- `no_progress`：连续两次进展指纹相同。
-
-进展指纹由已请求文件、请求工具、计划上下文文件和已接受 finding 组成。这个保险丝用来阻止 Agent 在相同上下文、相同工具和相同发现上反复循环。
-
-每轮还会写入两类可观测指标：
-
-- `review.rawFindings / acceptedFindings / rejectedFindings / rejectionCounts`：说明模型原始输出和校验过滤结果。
-- `contextMetrics`：记录请求文件数、选中文件数、文件上下文命中数、调用关系数、历史审查数和缺失文件列表。
-
-Agent Loop 的工具权限第一版只读：
-
-- `get_memory_snapshot`
-- `search_memory_facts`
-- `get_changed_files`
-- `get_file_context`
-- `get_call_graph_neighbors`
-- `get_related_review_history`
-- `get_architecture_summary`
-- `run_additional_review_agents`
-
-不允许修改代码、生成补丁、执行写操作或自动修复。
-
-`run_additional_review_agents` 只会运行当前主 Agent 之外、尚未执行过的启用机器人。没有候选机器人时快速跳过并记录 `unavailable`，不进入空辅助 Agent 流程。
-
-## 大仓库如何处理
-
-`maxContextFiles` 不是仓库索引文件数，也不是说大仓库只能看 12 个文件。系统分成两层：
+同仓库并发：
 
 ```text
-仓库长期层：Memory Wiki + Code Graph
-        │
-        ├── 存项目架构
-        ├── 存文件摘要
-        ├── 存符号和调用边
-        └── 存高置信事实
-
-单次审查层：Agent Loop 检索预算
-        │
-        ├── 从 diff 出发
-        ├── 查相关文件
-        ├── 沿调用图上下游扩展
-        └── 把有限上下文交给模型
+repo A -> sandbox A
+        ├── review 1 -> worktree 1 -> Pi process 1
+        └── review 2 -> worktree 2 -> Pi process 2
 ```
 
-大仓库不应该在每次审查时把所有文件塞进模型上下文。正确做法是先把仓库结构沉淀到 Memory Wiki 和 Code Graph，再在审查时按预算精准检索。普通机器人保持轻量预算，安全或架构类机器人可以调高 `maxContextFiles` 和 `maxCallGraphDepth`。
+sandbox 内仓库结构：
 
-## Memory Wiki
+```text
+/workspace/repos/{repositoryId}/repo.git
+/workspace/repos/{repositoryId}/repo.lock
+/workspace/reviews/{reviewLogId}
+```
 
-Memory Wiki 是仓库级长期记忆，核心数据包括：
+`git fetch`、`git worktree add`、`git worktree remove` 和 `git worktree prune`
+通过 `flock` 串行化，避免同仓库并发 review 争用 Git lock。Pi 进程本身并发运行，
+因为每个进程都有独立 worktree。
 
-- `RepositoryMemorySnapshot`：某个分支和 commit 的架构快照。
-- `CodeFileNode`：文件节点，保存文件路径、语言、角色、摘要、imports 和 exports。
-- `CodeSymbolNode`：符号节点，保存函数、组件、API route 等结构。
-- `CodeRelationEdge`：文件或符号之间的关系边。
-- `RepositoryMemoryFact`：可持续更新的高置信事实。
+pause 策略：
 
-Memory Snapshot 以 `repositoryId + branch + commitSha` 唯一定位。审查时优先复用 ready snapshot，避免重复索引。
-
-Memory Fact 只允许高置信写回，当前阈值是 `confidence >= 0.85`。写回只追加或跳过重复事实，不覆盖旧事实。每条事实必须带 evidence、来源 reviewLogId 和最后验证 commit。
-
-## Code Graph
-
-Code Graph 第一版重点支持 TypeScript 和 TSX，主要识别：
-
-- import / export
-- 函数和组件
-- API route
-- 审查步骤
-- service、page、component、data model 等文件角色
-
-上下文检索从变更文件对应的 `CodeFileNode` 出发，按 `maxCallGraphDepth` 逐跳查找上下游关系。`maxCallGraphDepth = 0` 时不查调用图，只返回 Memory、文件摘要和历史审查。
+- session 创建后立即标记 `running`。
+- session 完成或失败后更新状态和完成时间。
+- 清理 worktree 后检查同一 binding 下是否还有 running session。
+- 没有 running session 时 `sandbox.pause()` 并把 binding 标记为 `paused`。
 
 ## 数据模型
-
-核心实体关系如下：
 
 ```text
 GitLabAccount
   └── Repository
-        ├── RepositoryReviewBot
+        ├── RepositoryPiProfile
         │     └── AIModel
+        ├── RepositorySandboxBinding
+        │     └── ReviewSandboxSession
         ├── ReviewLog
-        │     ├── ReviewBotRun
-        │     │     ├── ReviewComment
-        │     │     └── ReviewAgentTrace
-        │     └── ReviewComment
+        │     ├── PiReviewRun
+        │     ├── ReviewComment
+        │     ├── ReviewWorkflowNode
+        │     └── ReviewSandboxSession
         ├── RepositoryMemorySnapshot
         ├── CodeFileNode
         │     └── CodeSymbolNode
@@ -279,11 +240,31 @@ GitLabAccount
 
 关键约束：
 
-- `ReviewLog(repositoryId, mergeRequestIid, commitSha)` 保证同一 commit 审查幂等。
-- `ReviewBotRun(reviewLogId, reviewBotId)` 保证一次审查中一个机器人只运行一次。
+- `ReviewLog(repositoryId, mergeRequestIid, commitSha)` 支撑同一 commit 审查分组。
+- `PiReviewRun(reviewLogId, piProfileId)` 保证一次审查中一个 Profile 只运行一次。
+- `RepositorySandboxBinding(repositoryId)` 保证同仓库只有一个 sandbox 绑定。
+- `RepositorySandboxBinding(sandboxId)` 保证一个 sandbox 不绑定多个仓库。
+- `ReviewSandboxSession(reviewLogId)` 保证一个 review 只有一个 sandbox 会话记录。
+- `ReviewWorkflowNode(reviewLogId, nodeKey)` 保证过程节点可幂等更新。
 - `RepositoryMemorySnapshot(repositoryId, branch, commitSha)` 保证快照可复用。
 - `CodeFileNode(repositoryId, branch, commitSha, filePath)` 保证文件节点唯一。
 - `RepositoryMemoryFact(repositoryId, branch, type, content)` 防止重复写入同一事实。
+
+## Code Graph
+
+Code Graph 是提交级代码关系图。当前重点支持 TypeScript 和 TSX：
+
+- import / export
+- 函数和组件
+- API route
+- 审查步骤
+- service、page、component、data model 等文件角色
+
+Memory Snapshot 以 `repositoryId + branch + commitSha` 唯一定位。审查时优先复用
+ready snapshot，避免重复索引。
+
+Memory Fact 只允许高置信写回，阈值是 `confidence >= 0.85`。写回只追加或跳过
+重复事实，不覆盖旧事实。每条事实必须带 evidence、来源和最后验证 commit。
 
 ## API 和页面
 
@@ -292,42 +273,48 @@ GitLabAccount
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 
-登录接口校验环境变量账号和密钥，成功后写入 HTTP-only 会话 Cookie。退出登录接口清理 Cookie，不访问数据库。
-
 ### 审查入口
 
 - `POST /api/review`
 - `POST /api/webhook/gitlab`
 - `POST /api/review/[id]/retry`
+- `POST /api/review/[id]/stop`
 
-三类入口统一进入 `ReviewTriggerService`。
+三类触发入口统一进入 `ReviewTriggerService`。
 
-### Memory Wiki
+### 审查详情
+
+- `GET /api/reviews`
+- `GET /api/reviews/[id]`
+- `GET /api/reviews/[id]/workflow`
+
+审查详情页展示：
+
+- 动态过程图。
+- 全部问题清单。
+- 变更摘要与技术走查。
+- OpenSandbox session。
+- Pi Review Run。
+- 原始回复、Prompt 和模型信息。
+
+### Pi Profile
+
+- `GET /api/repositories/[id]/pi-profiles`
+- `POST /api/repositories/[id]/pi-profiles`
+- `PUT /api/repositories/[id]/pi-profiles`
+- `DELETE /api/repositories/[id]/pi-profiles?id=xxx`
+
+仓库详情页支持新增、编辑、启用、禁用、排序、选择模型、配置 Prompt 和 Pi 输出限制。
+
+### Memory
 
 - `POST /api/repositories/[id]/memory/refresh`
 - `GET /api/repositories/[id]/memory`
 - `GET /api/repositories/[id]/memory/graph`
 
-仓库详情页展示当前分支、commit、刷新时间、架构摘要和高置信事实。
-
-### 审查机器人
-
-- `GET /api/repositories/[id]/bots`
-- `POST /api/repositories/[id]/bots`
-- `PUT /api/repositories/[id]/bots`
-- `DELETE /api/repositories/[id]/bots?id=xxx`
-
-仓库详情页支持新增、编辑、启用、禁用、排序、选择模型、配置 Prompt 和配置 Agent Loop 预算。
-
-### Agent Trace
-
-- `GET /api/reviews/[id]/agent-trace`
-
-审查详情页可以查看每个机器人的 loop 轮次、工具调用、检索上下文、Finding 校验、Critic 停止原因、最终 findings 和 Memory 写回。页面会把每轮 Trace 可视化成五个阶段：计划、上下文、工具、Finding、Critic。
-
 ## Docker 和数据库迁移
 
-项目支持 Docker 直接启动完整应用：
+项目支持 Docker 启动 app、postgres 和 code-graph-cron：
 
 ```bash
 cp .env.example .env
@@ -340,8 +327,6 @@ docker compose up --build -d
 prisma migrate deploy
 npm run start
 ```
-
-这里不使用 PM2。Docker 自身负责进程生命周期和重启策略，`docker-compose.yml` 中的 app 和 postgres 都配置了 `restart: unless-stopped`。
 
 SQLite 历史数据迁移必须显式执行：
 
@@ -366,35 +351,39 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_DATABASE_URL" code-r
 
 ## 失败策略
 
-- 认证环境变量缺失：页面和业务 API 返回未授权，登录接口返回环境变量缺失。
+- 认证环境变量缺失：页面和业务 API 返回未授权。
 - IP 不在白名单：页面和业务 API 返回 403。
 - Memory 刷新失败：`ReviewLog` failed，不发布评论。
-- 仓库没有启用机器人：`ReviewLog` failed，错误为 `No active review bots configured`。
-- 单个机器人失败：对应 `ReviewBotRun` failed，不阻塞其他机器人。
-- 所有机器人失败：`ReviewLog` failed，不发布空评论。
-- AI JSON 解析失败：当前机器人失败，错误写入 `ReviewBotRun.error`。
-- 主 Agent 请求辅助 Agent 但没有候选机器人：工具调用记为 `unavailable`，主 Agent 继续审查，不创建空的辅助运行。
-- Agent Loop 重复无进展：停止原因记为 `no_progress`，本轮 Trace 保留重复次数。
-- Retry：清理旧 comments、bot runs、agent traces，再按当前启用机器人重新运行。
+- 仓库没有启用 Profile：`ReviewLog` failed，错误为 `No active pi profiles configured`。
+- OpenSandbox 连接失败：`ReviewSandboxSession` failed，binding 标记 error。
+- Git clone / fetch / worktree 失败：session failed，本次 review failed。
+- Pi provider 不支持：review failed。
+- Pi 自定义 endpoint 未接入：review failed。
+- Pi 输出非严格 JSON：review failed。
+- Finding 校验后为空：review completed，发布低风险总评。
+- Retry：清理旧 comments、Pi Review Runs、workflow nodes 和 sandbox session 后重新运行。
 
 ## 质量门禁
 
 当前工程质量门禁：
 
 ```bash
+npx prisma validate
+npx prisma generate
 npx tsc --noEmit --pretty false
 npm run lint
 npm run build
+docker compose --env-file .env.example config
 ```
 
-项目暂时没有 `npm test` 脚本。后续补测试时，应优先覆盖：
+后续补测试时，应优先覆盖：
 
 - 环境变量登录、会话过期、退出登录和 IP 白名单。
-- Memory Snapshot 命中和刷新。
-- Code Graph TS / TSX 解析。
-- Agent Loop 预算停止、无新增问题停止、重复无进展停止。
-- 主 Agent 条件调用辅助 Agent、无候选辅助 Agent 快速跳过，以及辅助 Agent 失败隔离。
-- Finding 校验报告和 Trace 可视化字段。
+- OpenSandbox 配置读取和 provider 快速失败。
+- 仓库 sandbox binding 创建、并发 race 和复用。
+- 同仓库并发 review 的 session、worktree 和 pause 策略。
+- Pi JSON 解析、finding 校验和输出限制。
 - findings 去重和来源合并。
-- Memory Fact 高置信写回和重复跳过。
+- Code Graph Snapshot 命中和刷新。
+- GitLab 总评发布和钉钉通知。
 - SQLite 到 PostgreSQL 历史数据迁移。
