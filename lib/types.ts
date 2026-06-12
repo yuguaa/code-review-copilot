@@ -95,15 +95,6 @@ export interface GitLabCommit {
   created_at: string
 }
 
-/** GitLab 仓库树节点 */
-export interface GitLabRepositoryTreeItem {
-  id: string
-  name: string
-  type: 'tree' | 'blob'
-  path: string
-  mode: string
-}
-
 /** GitLab 分支信息 */
 export interface GitLabBranch {
   name: string

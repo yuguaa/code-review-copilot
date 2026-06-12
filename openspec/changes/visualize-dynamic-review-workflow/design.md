@@ -1,6 +1,6 @@
 ## Context
 
-当前 review 后端是固定串行主链路：触发创建 `ReviewLog`，随后 `ReviewService.performReview` 执行 Diff、Memory、Summary、Pi Runtime、Aggregate、Publish。Pi Runtime 会创建 OpenSandbox session 和 Pi Review Run，但前端需要通过动态节点查看 review 运行中的主链路变化。
+当前 review 后端是固定串行主链路：触发创建 `ReviewLog`，随后 `ReviewService.performReview` 执行 Diff、Summary、Pi Runtime、Aggregate、Publish。Pi Runtime 会创建 OpenSandbox session 和 Pi Review Run，但前端需要通过动态节点查看 review 运行中的主链路变化。
 
 前端 `app/reviews/page.tsx` 目前承担列表、详情、runtime 原始材料解析和 UI，列表接口 `/api/reviews` 也返回了过多详情级数据。新增 React Flow 后必须避免把重型图组件和 runtime 原始材料塞进列表首屏。
 

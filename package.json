@@ -15,7 +15,6 @@
   "dependencies": {
     "@alibaba-group/opensandbox": "^0.1.8",
     "@prisma/client": "^6.19.2",
-    "@relation-graph/react": "^3.0.13",
     "@xyflow/react": "^12.11.0",
     "axios": "^1.13.4",
     "class-variance-authority": "^0.7.1",

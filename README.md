@@ -13,17 +13,15 @@ Docker sandbox 中。
 - **Pi 审查运行时**：排序第一的启用 Pi Profile 提供模型、Prompt 和输出限制，Pi 在 sandbox 内执行审查。
 - **OpenSandbox 隔离**：应用不挂载 Docker socket，只通过 OpenSandbox API 创建、恢复、暂停 review sandbox。
 - **仓库 VM 复用**：不同仓库绑定不同 sandbox；同仓库复用同一 sandbox，并发 review 使用不同 worktree 和 Pi 进程。
-- **Code Graph Memory**：保存项目架构摘要、代码图谱、符号节点和高置信审查事实。
 - **三级问题分类**：严重 / 一般 / 建议。
 - **审查历史**：保存 ReviewLog、PiReviewRun、ReviewComment、Workflow 和 sandbox session。
 - **通知发布**：审查完成后把总评发布到 GitLab，并发送钉钉通知。
 
 ### UI 特性
 
-- 基于 shadcn/ui、Tailwind CSS 和 @relation-graph/react。
+- 基于 shadcn/ui、Tailwind CSS 和 React Flow。
 - 独立登录页，登录成功后进入带侧边栏的工作台。
 - 审查详情页展示过程图、问题清单、Pi Runtime 会话、OpenSandbox 状态和原始材料。
-- Code Graph 页面支持图谱缩放、拖拽、节点详情和关系查看。
 
 ## 技术栈
 
@@ -36,7 +34,7 @@ Docker sandbox 中。
 
 ## 快速开始
 
-### 1. 启动应用、数据库和定时任务
+### 1. 启动应用和数据库
 
 ```bash
 cp .env.example .env
@@ -64,7 +62,6 @@ APP_AUTH_SESSION_SECRET="replace-with-long-random-session-secret"
 ├── Docker daemon
 │   ├── code-review-copilot-app
 │   ├── code-review-copilot-postgres
-│   ├── code-graph-cron
 │   └── OpenSandbox 创建的 review sandbox 容器
 ├── OpenSandbox Server
 │   └── localhost:8080
@@ -209,7 +206,7 @@ GitLab Webhook：
 
 - **仪表盘**：查看整体统计和趋势。
 - **审查历史**：查看每次审查的详情。
-- **过程图**：查看 fetch diff、refresh memory、summary、Pi review、aggregate、publish 等步骤。
+- **过程图**：查看 fetch diff、summary、Pi review、aggregate、publish 等步骤。
 - **Pi Runtime**：查看 OpenSandbox sandbox、worktree、会话状态和错误。
 - **GitLab**：审查总评会发布到 MR 或 Commit。
 
@@ -225,26 +222,6 @@ GitLab Webhook：
 - `PiReviewRun`：单次审查中的 Pi 运行快照。
 - `ReviewComment`：审查评论和来源信息。
 - `ReviewWorkflowNode`：动态审查过程图节点。
-- `RepositoryMemorySnapshot`：仓库 Code Graph 快照。
-- `CodeFileNode / CodeSymbolNode / CodeRelationEdge`：代码图谱节点和关系边。
-- `RepositoryMemoryFact`：可持续更新的仓库记忆事实。
-
-## Code Graph
-
-Code Graph 是提交级代码关系图。每次审查会围绕
-`repositoryId + sourceBranch + commitSha` 生成或复用快照，再把架构摘要和代码关系
-作为审查前置记忆保存。
-
-当前重点支持 TypeScript / TSX：
-
-- import / export
-- 函数和组件
-- API route
-- 审查步骤
-- service、page、component、data model 等文件角色
-
-独立 Code Graph 页面从 `/api/repositories/[id]/memory/graph` 读取数据库中的节点和边，
-使用 `@relation-graph/react` 渲染图谱。
 
 ## 环境变量
 
@@ -269,8 +246,8 @@ DINGTALK_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOK
 DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
 ```
 
-`/api/webhook/gitlab` 和 `/api/code-graph/refresh-scheduled` 是外部回调入口，
-不要求登录 Cookie。除登录接口和外部入口外，页面和业务 API 都会经过登录校验。
+`/api/webhook/gitlab` 是外部回调入口，不要求登录 Cookie。除登录接口和外部入口外，
+页面和业务 API 都会经过登录校验。
 
 ## SQLite 历史数据迁移
 
@@ -287,6 +264,8 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 - 每个旧仓库会创建一个默认 Pi Profile。
 - 旧仓库自定义模型会迁移为专用 `AIModel`。
 - 旧 SQLite schema 不匹配当前可迁移结构时快速失败。
+- 升级到当前版本会删除旧 Code Graph / Memory 表；生产库升级前先保留 PostgreSQL
+  `pg_dump` 备份。
 
 ## API 端点
 
@@ -305,9 +284,6 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 - `POST /api/repositories/[id]/pi-profiles`
 - `PUT /api/repositories/[id]/pi-profiles`
 - `DELETE /api/repositories/[id]/pi-profiles?id=xxx`
-- `GET /api/repositories/[id]/memory`
-- `GET /api/repositories/[id]/memory/graph`
-- `POST /api/repositories/[id]/memory/refresh`
 
 ### 配置管理
 
@@ -335,12 +311,11 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 1. 手动触发、Webhook 或 Retry 进入 `ReviewTriggerService`。
 2. `ReviewService.performReview` 串行执行 review steps。
 3. `fetch_diff` 获取 MR / Commit diff。
-4. `refresh_memory` 生成或复用 Code Graph。
-5. `generate_summary` 根据 diff 生成确定性公共变更摘要。
-6. `run_pi_runtime` 选择排序第一的启用 Profile，连接仓库 sandbox，创建 worktree，运行 Pi。
-7. `aggregate_results` 校验 finding 是否命中本次 diff，并写入评论。
-8. `publish_comment` 发布 GitLab 总评并发送钉钉通知。
-9. sandbox 内 worktree 清理完成后，如果没有 running session，暂停仓库 VM。
+4. `generate_summary` 根据 diff 生成确定性公共变更摘要。
+5. `run_pi_runtime` 选择排序第一的启用 Profile，连接仓库 sandbox，创建 worktree，运行 Pi。
+6. `aggregate_results` 校验 finding 是否命中本次 diff，并写入评论。
+7. `publish_comment` 发布 GitLab 总评并发送钉钉通知。
+8. sandbox 内 worktree 清理完成后，如果没有 running session，暂停仓库 VM。
 
 ## 质量门禁
 

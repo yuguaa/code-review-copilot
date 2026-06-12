@@ -12,7 +12,6 @@ import {
   Clock,
   PanelLeftClose,
   PanelLeftOpen,
-  Network,
   LogOut,
 } from 'lucide-react'
 
@@ -47,11 +46,6 @@ const navItems = [
     title: '审查历史',
     href: '/reviews',
     icon: Clock,
-  },
-  {
-    title: 'Code Graph',
-    href: '/code-graph',
-    icon: Network,
   },
   {
     title: '配置',

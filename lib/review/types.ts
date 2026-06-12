@@ -4,7 +4,7 @@
  */
 
 import type { Prisma } from "@prisma/client";
-import type { GitLabDiff, ReviewComment, ReviewCommentSource, GitLabMergeRequest, GitLabRepositoryTreeItem, GitLabBranch } from "@/lib/types";
+import type { GitLabDiff, ReviewComment, ReviewCommentSource, GitLabMergeRequest } from "@/lib/types";
 
 export type ReviewLogWithRepository = Prisma.ReviewLogGetPayload<{
   include: {
@@ -95,24 +95,6 @@ export interface GitLabServiceInstance {
   createCommitComment: (projectId: number | string, commitSha: string, note: string, options?: { path?: string; line?: number; line_type?: 'new' | 'old' }) => Promise<GitLabCommentResult>;
   updateCommitComment: (projectId: number | string, commitSha: string, noteId: number, body: string) => Promise<GitLabCommentResult>;
   compareCommits: (projectId: number | string, fromSha: string, toSha: string) => Promise<{ diffs: GitLabDiff[] }>;
-  getBranch: (projectId: number | string, branch: string) => Promise<GitLabBranch>;
-  getBranches?: (projectId: number | string, params?: { search?: string; per_page?: number; max_pages?: number }) => Promise<GitLabBranch[]>;
-  getRepositoryTree: (projectId: number | string, params: {
-    ref: string;
-    path?: string;
-    recursive?: boolean;
-    per_page?: number;
-    max_pages?: number;
-  }) => Promise<GitLabRepositoryTreeItem[]>;
-  getRepositoryFileRaw: (projectId: number | string, filePath: string, ref: string) => Promise<string>;
-  getProjectCommits: (projectId: number | string, params?: {
-    since?: string;
-    until?: string;
-    ref_name?: string;
-    author?: string;
-    per_page?: number;
-    max_pages?: number;
-  }) => Promise<Array<{ id: string; short_id: string; title: string; message: string; author_name: string; author_email: string; created_at: string }>>;
 }
 
 /** 代码审查执行状态 */
@@ -127,8 +109,6 @@ export interface ReviewState {
   reviewScope: "full" | "incremental";
   incrementalBaseSha: string | null;
   summary: string;
-  memorySnapshotId: string | null;
-  architectureSummary: string;
   currentFileIndex: number;
   currentFile: FileReviewInput | null;
   fileResults: FileReviewResult[];
@@ -153,8 +133,6 @@ export function createInitialReviewState(input: Partial<ReviewState>): ReviewSta
     reviewScope: "full",
     incrementalBaseSha: null,
     summary: "",
-    memorySnapshotId: null,
-    architectureSummary: "",
     currentFileIndex: 0,
     currentFile: null,
     fileResults: [],

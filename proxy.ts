@@ -11,7 +11,6 @@ import {
 
 const PUBLIC_API_PREFIXES = [
   "/api/webhook/gitlab",
-  "/api/code-graph/refresh-scheduled",
 ];
 
 export function proxy(request: NextRequest) {

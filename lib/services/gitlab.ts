@@ -9,7 +9,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabRepositoryTreeItem, GitLabBranch } from '@/lib/types'
+import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabBranch } from '@/lib/types'
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("GitLabService");
@@ -198,51 +198,6 @@ export class GitLabService {
   }
 
   /**
-   * 获取项目的提交列表（支持分页聚合）
-   */
-  async getProjectCommits(
-    projectId: number | string,
-    params?: {
-      since?: string
-      until?: string
-      ref_name?: string
-      author?: string
-      per_page?: number
-      max_pages?: number
-    }
-  ): Promise<GitLabCommit[]> {
-    const perPage = params?.per_page ?? 100
-    const maxPages = params?.max_pages ?? 200
-    const commits: GitLabCommit[] = []
-
-    for (let page = 1; page <= maxPages; page += 1) {
-      try {
-        const response = await this.client.get(
-          `/projects/${projectId}/repository/commits`,
-          {
-            params: {
-              per_page: perPage,
-              page,
-              since: params?.since,
-              until: params?.until,
-              ref_name: params?.ref_name,
-              author: params?.author,
-            },
-          }
-        )
-        const batch = Array.isArray(response.data) ? response.data : []
-        commits.push(...batch)
-        if (batch.length < perPage) break
-      } catch (error) {
-        log.error('Failed to fetch project commits:', error)
-        throw new Error('Failed to fetch project commits from GitLab')
-      }
-    }
-
-    return commits
-  }
-
-  /**
    * 获取分支当前 HEAD
    */
   getBranch(projectId: number | string, branch: string): Promise<GitLabBranch> {
@@ -316,64 +271,6 @@ export class GitLabService {
       log.error('Failed to fetch commit diff:', error)
       throw new Error('Failed to fetch commit diff from GitLab')
     }
-  }
-
-  /**
-   * 获取仓库文件树（支持分页聚合）
-   */
-  getRepositoryTree(
-    projectId: number | string,
-    params: {
-      ref: string
-      path?: string
-      recursive?: boolean
-      per_page?: number
-      max_pages?: number
-    }
-  ): Promise<GitLabRepositoryTreeItem[]> {
-    const perPage = params.per_page ?? 100
-    const maxPages = params.max_pages ?? 20
-    const treeItems: GitLabRepositoryTreeItem[] = []
-    let page = 1
-
-    const loadPage = (): Promise<GitLabRepositoryTreeItem[]> => {
-      if (page > maxPages) return Promise.resolve(treeItems)
-      return this.client.get(`/projects/${projectId}/repository/tree`, {
-        params: {
-          ref: params.ref,
-          path: params.path,
-          recursive: params.recursive ?? true,
-          per_page: perPage,
-          page,
-        },
-      }).then((response) => {
-        const batch = Array.isArray(response.data) ? response.data : []
-        treeItems.push(...batch)
-        page += 1
-        if (batch.length < perPage) return treeItems
-        return loadPage()
-      }).catch((error) => {
-        log.error('Failed to fetch repository tree:', error)
-        throw new Error('Failed to fetch repository tree from GitLab')
-      })
-    }
-
-    return loadPage()
-  }
-
-  /**
-   * 获取指定 ref 下的原始文件内容
-   */
-  getRepositoryFileRaw(projectId: number | string, filePath: string, ref: string): Promise<string> {
-    const encodedPath = encodeURIComponent(filePath)
-    return this.client.get(`/projects/${projectId}/repository/files/${encodedPath}/raw`, {
-      params: { ref },
-      responseType: 'text',
-      transformResponse: [(data) => data],
-    }).then((response) => String(response.data || '')).catch((error) => {
-      log.error(`Failed to fetch repository file raw: ${filePath}`, error)
-      throw new Error(`Failed to fetch repository file ${filePath} from GitLab`)
-    })
   }
 
   /**

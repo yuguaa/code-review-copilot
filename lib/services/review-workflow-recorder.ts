@@ -14,7 +14,6 @@ export type ReviewWorkflowNodeStatus =
 export type ReviewWorkflowNodeKind =
   | "trigger"
   | "diff"
-  | "memory"
   | "summary"
   | "runtime"
   | "decision"

@@ -13,7 +13,6 @@ import { aggregateResultsStep } from "@/lib/review/steps/aggregate-results";
 import { fetchDiffStep } from "@/lib/review/steps/fetch-diff";
 import { generateSummaryStep } from "@/lib/review/steps/generate-summary";
 import { publishCommentStep } from "@/lib/review/steps/publish-comment";
-import { refreshMemoryStep } from "@/lib/review/steps/refresh-memory";
 import { runPiRuntimeStep } from "@/lib/review/steps/run-pi-runtime";
 import { createInitialReviewState, type ReviewState } from "@/lib/review/types";
 import { assertStateReviewNotCancelled, isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
@@ -41,15 +40,6 @@ function summarizePatch(step: string, patch: Partial<ReviewState>): { summary?: 
         totalDiffs: patch.diffs?.length || 0,
         relevantDiffs: patch.relevantDiffs?.length || 0,
         reviewScope: patch.reviewScope,
-      },
-    };
-  }
-  if (step === "refresh_memory") {
-    return {
-      summary: patch.memorySnapshotId ? "记忆快照已刷新" : "未生成记忆快照",
-      metrics: {
-        memorySnapshotId: patch.memorySnapshotId,
-        architectureSummaryLength: patch.architectureSummary?.length || 0,
       },
     };
   }
@@ -204,20 +194,10 @@ export class ReviewService {
       if (!state.error) {
         await assertStateReviewNotCancelled(state);
         state = mergeState(state, await this.runStep(state, {
-          nodeKey: "refresh_memory",
-          kind: "memory",
-          title: "刷新 Memory / Code Graph",
-          sequence: 200,
-        }, refreshMemoryStep));
-      }
-
-      if (!state.error) {
-        await assertStateReviewNotCancelled(state);
-        state = mergeState(state, await this.runStep(state, {
           nodeKey: "generate_summary",
           kind: "summary",
           title: "生成变更摘要",
-          sequence: 300,
+          sequence: 200,
         }, generateSummaryStep));
       }
 
@@ -227,7 +207,7 @@ export class ReviewService {
           nodeKey: "run_pi_runtime",
           kind: "runtime",
           title: "运行 Pi Runtime",
-          sequence: 400,
+          sequence: 300,
         }, runPiRuntimeStep));
       }
 
@@ -236,7 +216,7 @@ export class ReviewService {
         nodeKey: "aggregate",
         kind: "aggregate",
         title: "聚合去重",
-        sequence: 700,
+        sequence: 400,
       }, aggregateResultsStep));
 
       await assertStateReviewNotCancelled(state);
@@ -244,7 +224,7 @@ export class ReviewService {
         nodeKey: "publish",
         kind: "publish",
         title: "发布 GitLab 评论",
-        sequence: 800,
+        sequence: 500,
       }, publishCommentStep));
       
       if (result.error) {

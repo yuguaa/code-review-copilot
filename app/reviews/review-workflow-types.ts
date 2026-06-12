@@ -47,7 +47,6 @@ export type WorkflowIssue = {
 export const reviewWorkflowKindLabels: Record<string, string> = {
   trigger: '触发',
   diff: 'Diff',
-  memory: 'Memory',
   summary: '摘要',
   runtime: 'Pi',
   decision: '决策',

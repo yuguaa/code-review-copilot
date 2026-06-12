@@ -628,7 +628,7 @@ When photography is used (rare — mostly testimonials), avatars crop to perfect
 过程图不展示旧原始 Trace，而是展示当前审查主链路：
 
 ```text
-Diff → Memory / Code Graph → Summary → Pi Runtime → Aggregate → Publish
+Diff → Summary → Pi Runtime → Aggregate → Publish
 ```
 
 Pi Runtime 区域展示 OpenSandbox 会话事实：

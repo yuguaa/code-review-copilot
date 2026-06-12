@@ -49,15 +49,3 @@ EXPOSE 3000
 
 ENTRYPOINT ["sh", "./scripts/docker-entrypoint.sh"]
 CMD ["npm", "run", "start"]
-
-FROM alpine:3.21 AS code-graph-cron
-
-RUN apk add --no-cache curl tzdata
-
-WORKDIR /app
-
-COPY scripts/code-graph-cron.sh ./scripts/code-graph-cron.sh
-
-RUN chmod +x scripts/code-graph-cron.sh
-
-ENTRYPOINT ["sh", "./scripts/code-graph-cron.sh"]

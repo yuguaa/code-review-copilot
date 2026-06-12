@@ -18,7 +18,6 @@ services:
       APP_AUTH_IP_WHITELIST: ${APP_AUTH_IP_WHITELIST:-}
       DINGTALK_WEBHOOK_URL: ${DINGTALK_WEBHOOK_URL:-}
       DINGTALK_SECRET: ${DINGTALK_SECRET:-}
-      CODE_GRAPH_CRON_SECRET: ${CODE_GRAPH_CRON_SECRET:?CODE_GRAPH_CRON_SECRET is required}
       OPEN_SANDBOX_DOMAIN: ${OPEN_SANDBOX_DOMAIN:-host.docker.internal:8080}
       OPEN_SANDBOX_PROTOCOL: ${OPEN_SANDBOX_PROTOCOL:-http}
       OPEN_SANDBOX_API_KEY: ${OPEN_SANDBOX_API_KEY:-}
@@ -30,22 +29,6 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "3000:3000"
-
-  code-graph-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: code-graph-cron
-    container_name: code-review-copilot-code-graph-cron
-    restart: unless-stopped
-    depends_on:
-      app:
-        condition: service_started
-    environment:
-      TZ: Asia/Shanghai
-      APP_BASE_URL: http://app:3000
-      CODE_GRAPH_CRON_SECRET: ${CODE_GRAPH_CRON_SECRET:?CODE_GRAPH_CRON_SECRET is required}
-      CODE_GRAPH_CRON_SCHEDULE: ${CODE_GRAPH_CRON_SCHEDULE:-0 23 * * *}
 
   postgres:
     image: postgres:16-alpine

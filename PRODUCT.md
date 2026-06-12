@@ -12,7 +12,7 @@ They usually arrive while a merge request or push review is running, has failed,
 
 ## Product Purpose
 
-The product turns GitLab code review into a private, auditable Pi + OpenSandbox workflow with repository memory, Code Graph context, isolated Pi execution, GitLab publishing, and DingTalk notification.
+The product turns GitLab code review into a private, auditable Pi + OpenSandbox workflow with isolated Pi execution, GitLab publishing, and DingTalk notification.
 
 Success means reviewers can see what changed, which Pi Profile ran, which sandbox and worktree were used, which findings survived validation, and where the final comments came from without reading raw logs first.
 
