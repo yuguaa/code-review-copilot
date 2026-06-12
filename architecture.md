@@ -58,9 +58,9 @@ PostgreSQL + GitLab 终态总评 + 钉钉终态通知
 - `GET /api/metrics`：Prometheus 文本格式业务指标。
 
 `/api/health` 和 `/api/metrics` 不要求登录 Cookie，也不走页面 IP 白名单。
-设置 `MONITORING_TOKEN` 后，`/api/metrics` 和完整 `/api/health` 需要
-`Authorization: Bearer <token>` 或 `?token=<token>`；`/api/health?scope=liveness`
-保留为 Docker healthcheck 使用的轻量存活检查。
+`MONITORING_TOKEN` 必填，`/api/health`、`/api/health?scope=liveness` 和
+`/api/metrics` 都需要 `Authorization: Bearer <token>` 或 `?token=<token>`。
+Docker healthcheck 和 Prometheus 会自动使用同一个 `MONITORING_TOKEN`。
 
 监控栈使用独立 compose 扩展文件：
 

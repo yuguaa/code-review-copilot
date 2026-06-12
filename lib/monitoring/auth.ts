@@ -15,13 +15,9 @@ function readBearerToken(request: MonitoringRequest): string {
   return request.nextUrl.searchParams.get("token")?.trim() || "";
 }
 
-export function isMonitoringTokenConfigured(): boolean {
-  return Boolean(process.env.MONITORING_TOKEN?.trim());
-}
-
 export function isMonitoringRequestAuthorized(request: MonitoringRequest): boolean {
   const expectedToken = process.env.MONITORING_TOKEN?.trim();
-  if (!expectedToken) return true;
+  if (!expectedToken) return false;
 
   const receivedToken = readBearerToken(request);
   return Boolean(receivedToken) && constantTimeEqual(receivedToken, expectedToken);

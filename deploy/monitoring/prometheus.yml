@@ -13,6 +13,7 @@ scrape_configs:
 
   - job_name: code-review-copilot-health
     metrics_path: /api/health
+    bearer_token_file: /etc/prometheus/monitoring-token
     params:
       scope:
         - liveness

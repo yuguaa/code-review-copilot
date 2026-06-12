@@ -258,7 +258,7 @@ APP_AUTH_SECRET="change-me-login-secret"
 APP_AUTH_SESSION_SECRET="change-me-session-signing-secret"
 APP_AUTH_IP_WHITELIST="127.0.0.1,::1"
 
-MONITORING_TOKEN=""
+MONITORING_TOKEN="change-me-monitoring-token"
 
 OPEN_SANDBOX_DOMAIN="host.docker.internal:8080"
 OPEN_SANDBOX_PROTOCOL="http"
@@ -275,9 +275,9 @@ DINGTALK_SECRET="YOUR_DINGTALK_SECRET"
 
 `/api/webhook/gitlab` 是外部回调入口，不要求登录 Cookie。`/api/health` 和
 `/api/metrics` 是监控入口，不要求登录 Cookie，也不走页面 IP 白名单。
-设置 `MONITORING_TOKEN` 后，`/api/metrics` 和完整 `/api/health` 需要
-`Authorization: Bearer <token>` 或 `?token=<token>`；`/api/health?scope=liveness`
-保留为轻量存活检查。
+`MONITORING_TOKEN` 必填，`/api/health`、`/api/health?scope=liveness` 和
+`/api/metrics` 都需要 `Authorization: Bearer <token>` 或 `?token=<token>`。
+Docker healthcheck 和 Prometheus 会自动使用同一个 `MONITORING_TOKEN`。
 
 ## SQLite 历史数据迁移
 

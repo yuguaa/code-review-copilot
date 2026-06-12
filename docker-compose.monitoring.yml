@@ -17,18 +17,14 @@ services:
       - /bin/sh
       - -c
       - |
-        if [ -n "$${MONITORING_TOKEN:-}" ]; then
-          printf '%s' "$${MONITORING_TOKEN}" > /etc/prometheus/monitoring-token
-        else
-          : > /etc/prometheus/monitoring-token
-        fi
+        printf '%s' "$${MONITORING_TOKEN}" > /etc/prometheus/monitoring-token
         exec /bin/prometheus "$$@"
       - prometheus
     volumes:
       - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     environment:
-      MONITORING_TOKEN: ${MONITORING_TOKEN:-}
+      MONITORING_TOKEN: ${MONITORING_TOKEN:?MONITORING_TOKEN is required}
     ports:
       - "9090:9090"
     extra_hosts:
