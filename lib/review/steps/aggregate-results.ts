@@ -35,7 +35,7 @@ function normalizeComments(comments: ReviewComment[]): ReviewComment[] {
 /**
  * 汇总审查结果
  */
-export async function aggregateResultsStep(state: ReviewState): Promise<Partial<ReviewState>> {
+export function aggregateResultsStep(state: ReviewState): Promise<Partial<ReviewState>> {
   log.info(`📊 [AggregateResultsStep] Aggregating review results`);
 
   // 最终发布口径以去重后的评论为准，confidence 只用于内部排序和去重。
@@ -60,9 +60,9 @@ export async function aggregateResultsStep(state: ReviewState): Promise<Partial<
   log.info(`   ⚠️ Normal: ${statistics.normal}`);
   log.info(`   💡 Suggestions: ${statistics.suggestion}`);
 
-  await prisma.$transaction(async (tx) => {
-    if (commentsToSave.length > 0) {
-      await tx.reviewComment.createMany({
+  return prisma.$transaction((tx) => {
+    const writeComments = commentsToSave.length > 0
+      ? tx.reviewComment.createMany({
         data: commentsToSave.map((comment) => ({
           reviewLogId: state.reviewLogId,
           piReviewRunId: comment.piReviewRunId,
@@ -77,10 +77,10 @@ export async function aggregateResultsStep(state: ReviewState): Promise<Partial<
           diffHunk: comment.diffHunk,
           confidence: comment.confidence,
         })),
-      });
-    }
+      }).then(() => undefined)
+      : Promise.resolve();
 
-    const updateResult = await tx.reviewLog.updateMany({
+    return writeComments.then(() => tx.reviewLog.updateMany({
       where: { id: state.reviewLogId, status: "pending" },
       data: {
         reviewedFiles: state.relevantDiffs.length,
@@ -90,21 +90,20 @@ export async function aggregateResultsStep(state: ReviewState): Promise<Partial<
         piRawOutputs: JSON.stringify(state.piRawOutputsByFile),
         piPrompts: JSON.stringify(state.piPromptsByFile),
       },
-    });
+    })).then((updateResult) => {
+      if (updateResult.count > 0) return undefined;
 
-    if (updateResult.count === 0) {
-      const reviewLog = await tx.reviewLog.findUnique({
+      return tx.reviewLog.findUnique({
         where: { id: state.reviewLogId },
         select: { status: true },
+      }).then((reviewLog) => {
+        if (reviewLog?.status === REVIEW_CANCELLED_STATUS) {
+          throw new ReviewCancelledError(state.reviewLogId);
+        }
+        throw new Error("Review log is no longer pending");
       });
-      if (reviewLog?.status === REVIEW_CANCELLED_STATUS) {
-        throw new ReviewCancelledError(state.reviewLogId);
-      }
-      throw new Error("Review log is no longer pending");
-    }
-  });
-
-  return {
+    });
+  }).then(() => ({
     statistics,
-  };
+  }));
 }

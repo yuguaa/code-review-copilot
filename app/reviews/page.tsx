@@ -1107,12 +1107,12 @@ export default function ReviewsPage() {
                         <div className="mt-4 rounded-xl border border-border/60 bg-card/60 p-4">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-foreground">OpenSandbox 会话</p>
+                              <p className="text-sm font-semibold text-foreground">Bubblewrap 会话</p>
                               <p className="mt-1 font-mono text-xs text-muted-foreground">{selectedReview.sandboxSession.sandboxId}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <Badge variant="outline">session {selectedReview.sandboxSession.status}</Badge>
-                              <Badge variant="outline">vm {selectedReview.sandboxSession.binding.status}</Badge>
+                              <Badge variant="outline">runtime {selectedReview.sandboxSession.binding.status}</Badge>
                               <Badge variant="outline">{selectedReview.sandboxSession.binding.image}</Badge>
                             </div>
                           </div>

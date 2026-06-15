@@ -3,147 +3,34 @@
  *
  * 核心审查逻辑，协调 GitLab 和 Pi Runtime 完成：
  * - 获取 MR/Commit 的代码变更
- * - 调用 Pi + OpenSandbox Runtime 进行代码审查
+ * - 调用 Pi + Bubblewrap Runtime 进行代码审查
  * - 解析审查结果并发布评论
  */
 
 import { prisma } from "@/lib/prisma";
 import { createGitLabService } from "./gitlab";
-import { aggregateResultsStep } from "@/lib/review/steps/aggregate-results";
-import { fetchDiffStep } from "@/lib/review/steps/fetch-diff";
-import { generateSummaryStep } from "@/lib/review/steps/generate-summary";
 import {
-  publishCommentStep,
   publishReviewTerminalFailureNotification,
 } from "@/lib/review/steps/publish-comment";
-import { runPiRuntimeStep } from "@/lib/review/steps/run-pi-runtime";
 import { createInitialReviewState, type ReviewState } from "@/lib/review/types";
-import { assertStateReviewNotCancelled, isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
-import { reviewWorkflowRecorder, type ReviewWorkflowNodeKind } from "@/lib/services/review-workflow-recorder";
+import { isReviewCancelledStatus, ReviewCancelledError } from "@/lib/services/review-cancellation";
+import { REVIEW_AGENT_STAGES, runReviewAgentStage } from "@/lib/review/review-agent-pipeline";
+import { reviewWorkflowRecorder } from "@/lib/services/review-workflow-recorder";
 import { createLogger, logError } from "@/lib/logger";
 
 const log = createLogger("ReviewService");
-
-function mergeState(state: ReviewState, patch: Partial<ReviewState>): ReviewState {
-  return { ...state, ...patch };
-}
-
-type ReviewStepWorkflow = {
-  nodeKey: string;
-  kind: ReviewWorkflowNodeKind;
-  title: string;
-  sequence: number;
-};
-
-function summarizePatch(step: string, patch: Partial<ReviewState>): { summary?: string; metrics?: unknown } {
-  if (step === "fetch_diff") {
-    return {
-      summary: `可审查文件 ${patch.relevantDiffs?.length || 0} 个`,
-      metrics: {
-        totalDiffs: patch.diffs?.length || 0,
-        relevantDiffs: patch.relevantDiffs?.length || 0,
-        reviewScope: patch.reviewScope,
-      },
-    };
-  }
-  if (step === "generate_summary") {
-    return {
-      summary: patch.summary ? patch.summary.slice(0, 120) : "摘要为空",
-      metrics: { summaryLength: patch.summary?.length || 0 },
-    };
-  }
-  if (step === "run_pi_runtime") {
-    return {
-      summary: `发现 ${patch.reviewComments?.length || 0} 条候选问题`,
-      metrics: {
-        comments: patch.reviewComments?.length || 0,
-        fileResults: patch.fileResults?.length || 0,
-      },
-    };
-  }
-  if (step === "aggregate") {
-    return {
-      summary: `严重 ${patch.statistics?.critical || 0} / 一般 ${patch.statistics?.normal || 0} / 建议 ${patch.statistics?.suggestion || 0}`,
-      metrics: patch.statistics || {},
-    };
-  }
-  if (step === "publish") {
-    return {
-      summary: patch.error ? "发布失败" : "GitLab 总评已发布",
-      metrics: {
-        completed: patch.completed,
-        error: patch.error,
-      },
-    };
-  }
-  return {};
-}
 
 /**
  * 代码审查服务类
  */
 export class ReviewService {
-  private runStep(
-    state: ReviewState,
-    workflow: ReviewStepWorkflow,
-    execute: (state: ReviewState) => Promise<Partial<ReviewState>>,
-  ): Promise<Partial<ReviewState>> {
-    return reviewWorkflowRecorder.startNode({
-      reviewLogId: state.reviewLogId,
-      nodeKey: workflow.nodeKey,
-      kind: workflow.kind,
-      status: "running",
-      title: workflow.title,
-      sequence: workflow.sequence,
-    }).then(() => {
-      return execute(state);
-    }).then((patch) => {
-      const summary = summarizePatch(workflow.nodeKey, patch);
-      return reviewWorkflowRecorder.completeNode({
-        reviewLogId: state.reviewLogId,
-        nodeKey: workflow.nodeKey,
-        kind: workflow.kind,
-        title: workflow.title,
-        status: patch.error ? "failed" : "success",
-        summary: summary.summary,
-        detail: patch.error || null,
-        sequence: workflow.sequence,
-        metrics: summary.metrics,
-      }).then(() => patch);
-    }).catch((error) => {
-      if (error instanceof ReviewCancelledError) {
-        return reviewWorkflowRecorder.completeNode({
-          reviewLogId: state.reviewLogId,
-          nodeKey: workflow.nodeKey,
-          kind: workflow.kind,
-          title: workflow.title,
-          status: "cancelled",
-          summary: "步骤已停止",
-          detail: error.message,
-          sequence: workflow.sequence,
-        }).then(() => Promise.reject(error));
-      }
-
-      return reviewWorkflowRecorder.failNode({
-        reviewLogId: state.reviewLogId,
-        nodeKey: workflow.nodeKey,
-        kind: workflow.kind,
-        title: workflow.title,
-        summary: "步骤执行失败",
-        detail: error instanceof Error ? error.message : "Unknown error",
-        sequence: workflow.sequence,
-      }).then(() => Promise.reject(error));
-    });
-  }
-
   /**
    * 执行代码审查
    */
-  async performReview(reviewLogId: string) {
+  performReview(reviewLogId: string) {
     log.info(`🔍 [ReviewService] Starting review for log: ${reviewLogId}`);
 
-    // 1. 获取 ReviewLog 以初始化 GitLab 服务
-    const reviewLog = await prisma.reviewLog.findUnique({
+    return prisma.reviewLog.findUnique({
       where: { id: reviewLogId },
       include: {
         repository: {
@@ -152,153 +39,104 @@ export class ReviewService {
           },
         },
       },
-    });
-
-    if (!reviewLog) {
-      log.error(`❌ [ReviewService] Review log not found: ${reviewLogId}`);
-      throw new Error("Review log not found");
-    }
-
-    // 2. 初始化 GitLab 服务
-    const gitlabService = createGitLabService(
-      reviewLog.repository.gitLabAccount.url,
-      reviewLog.repository.gitLabAccount.accessToken,
-    );
-
-    // 3. 初始化审查状态
-    let state = createInitialReviewState({
-      reviewLogId,
-      gitlabService,
-      reviewLog,
-    });
-
-    if (isReviewCancelledStatus(reviewLog.status)) {
-      log.info(`🛑 [ReviewService] Review already cancelled: ${reviewLogId}`);
-      await publishReviewTerminalFailureNotification(state, "cancelled", new ReviewCancelledError(reviewLogId))
-        .catch((notifyError) => logError(log, notifyError, "Failed to publish already-cancelled review notification"));
-      return {
-        success: false,
-        totalComments: 0,
-        criticalIssues: 0,
-        normalIssues: 0,
-        suggestions: 0,
-      };
-    }
-
-    // 4. 按固定链路执行，下一步由状态直接 if/else 决定。
-    try {
-      log.info(`🚀 [ReviewService] Running review steps`);
-
-      state = mergeState(state, await this.runStep(state, {
-        nodeKey: "fetch_diff",
-        kind: "diff",
-        title: "获取 Diff",
-        sequence: 100,
-      }, fetchDiffStep));
-
-      if (!state.error) {
-        await assertStateReviewNotCancelled(state);
-        state = mergeState(state, await this.runStep(state, {
-          nodeKey: "generate_summary",
-          kind: "summary",
-          title: "生成变更摘要",
-          sequence: 200,
-        }, generateSummaryStep));
+    }).then((reviewLog) => {
+      if (!reviewLog) {
+        log.error(`❌ [ReviewService] Review log not found: ${reviewLogId}`);
+        throw new Error("Review log not found");
       }
 
-      if (!state.error && state.relevantDiffs.length > 0) {
-        await assertStateReviewNotCancelled(state);
-        state = mergeState(state, await this.runStep(state, {
-          nodeKey: "run_pi_runtime",
-          kind: "runtime",
-          title: "运行 Pi Runtime",
-          sequence: 300,
-        }, runPiRuntimeStep));
-      }
+      const gitlabService = createGitLabService(
+        reviewLog.repository.gitLabAccount.url,
+        reviewLog.repository.gitLabAccount.accessToken,
+      );
 
-      await assertStateReviewNotCancelled(state);
-      state = mergeState(state, await this.runStep(state, {
-        nodeKey: "aggregate",
-        kind: "aggregate",
-        title: "聚合去重",
-        sequence: 400,
-      }, aggregateResultsStep));
-
-      await assertStateReviewNotCancelled(state);
-      const result = mergeState(state, await this.runStep(state, {
-        nodeKey: "publish",
-        kind: "publish",
-        title: "发布 GitLab 评论",
-        sequence: 500,
-      }, publishCommentStep));
-      
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      await reviewWorkflowRecorder.upsertNode({
-        reviewLogId: state.reviewLogId,
-        nodeKey: "finish:completed",
-        kind: "finish",
-        status: "success",
-        title: "审查完成",
-        summary: `共 ${result.statistics.total} 条问题`,
-        detail: "动态审查流程已完成",
-        sequence: 9000,
-        metrics: result.statistics,
+      const initialState = createInitialReviewState({
+        reviewLogId,
+        gitlabService,
+        reviewLog,
       });
 
-      log.info(`✅ [ReviewService] Review completed successfully`);
-      return {
-        success: true,
-        totalComments: result.statistics.total,
-        criticalIssues: result.statistics.critical,
-        normalIssues: result.statistics.normal,
-        suggestions: result.statistics.suggestion,
-      };
+      if (isReviewCancelledStatus(reviewLog.status)) {
+        log.info(`🛑 [ReviewService] Review already cancelled: ${reviewLogId}`);
+        return publishReviewTerminalFailureNotification(initialState, "cancelled", new ReviewCancelledError(reviewLogId))
+          .catch((notifyError) => logError(log, notifyError, "Failed to publish already-cancelled review notification"))
+          .then(() => ({
+            success: false,
+            totalComments: 0,
+            criticalIssues: 0,
+            normalIssues: 0,
+            suggestions: 0,
+          }));
+      }
 
-    } catch (error) {
-      if (error instanceof ReviewCancelledError) {
-        log.info(`🛑 [ReviewService] Review cancelled: ${reviewLogId}`);
-        await reviewWorkflowRecorder.cancelRunningNodes(reviewLogId)
-          .catch((cancelError) => logError(log, cancelError, "Failed to cancel workflow nodes"));
-        await publishReviewTerminalFailureNotification(state, "cancelled", error)
-          .catch((notifyError) => logError(log, notifyError, "Failed to publish cancelled review notification"));
-        return {
+      log.info(`🚀 [ReviewService] Running review steps`);
+
+      return REVIEW_AGENT_STAGES.reduce((chain, stage) => (
+        chain.then((state) => runReviewAgentStage(state, stage))
+      ), Promise.resolve(initialState)).then((result) => {
+        return reviewWorkflowRecorder.upsertNode({
+          reviewLogId: result.reviewLogId,
+          nodeKey: "finish:completed",
+          kind: "finish",
+          status: "success",
+          title: "审查完成",
+          summary: `共 ${result.statistics.total} 条问题`,
+          detail: "动态审查流程已完成",
+          sequence: 9000,
+          metrics: result.statistics,
+        }).then(() => {
+          log.info(`✅ [ReviewService] Review completed successfully`);
+          return {
+            success: true,
+            totalComments: result.statistics.total,
+            criticalIssues: result.statistics.critical,
+            normalIssues: result.statistics.normal,
+            suggestions: result.statistics.suggestion,
+          };
+        });
+      }).catch((error) => this.handleReviewFailure(reviewLogId, initialState, error));
+    });
+  }
+
+  private handleReviewFailure(reviewLogId: string, state: ReviewState, error: unknown) {
+    if (error instanceof ReviewCancelledError) {
+      log.info(`🛑 [ReviewService] Review cancelled: ${reviewLogId}`);
+      return reviewWorkflowRecorder.cancelRunningNodes(reviewLogId)
+        .catch((cancelError) => logError(log, cancelError, "Failed to cancel workflow nodes"))
+        .then(() => publishReviewTerminalFailureNotification(state, "cancelled", error))
+        .catch((notifyError) => logError(log, notifyError, "Failed to publish cancelled review notification"))
+        .then(() => ({
           success: false,
           totalComments: 0,
           criticalIssues: 0,
           normalIssues: 0,
           suggestions: 0,
-        };
-      }
-
-      logError(log, error, "Review failed");
-      await reviewWorkflowRecorder.upsertNode({
-        reviewLogId,
-        nodeKey: "finish:failed",
-        kind: "finish",
-        status: "failed",
-        title: "审查失败",
-        summary: error instanceof Error ? error.message : "Unknown error",
-        detail: error instanceof Error ? error.stack || error.message : "Unknown error",
-        sequence: 9000,
-      }).catch((workflowError) => {
-        logError(log, workflowError, "Failed to write failed workflow node");
-      });
-      await prisma.reviewLog.updateMany({
-        where: { id: reviewLogId, status: { not: "cancelled" } },
-        data: {
-          status: "failed",
-          error: error instanceof Error ? error.message : "Unknown error",
-        },
-      }).catch((updateError) => {
-        logError(log, updateError, "Failed to mark review log failed");
-      });
-      await publishReviewTerminalFailureNotification(state, "failed", error)
-        .catch((notifyError) => logError(log, notifyError, "Failed to publish failed review notification"));
-      throw error;
+        }));
     }
+
+    logError(log, error, "Review failed");
+    return reviewWorkflowRecorder.upsertNode({
+      reviewLogId,
+      nodeKey: "finish:failed",
+      kind: "finish",
+      status: "failed",
+      title: "审查失败",
+      summary: error instanceof Error ? error.message : "Unknown error",
+      detail: error instanceof Error ? error.stack || error.message : "Unknown error",
+      sequence: 9000,
+    }).catch((workflowError) => {
+      logError(log, workflowError, "Failed to write failed workflow node");
+    }).then(() => prisma.reviewLog.updateMany({
+      where: { id: reviewLogId, status: { not: "cancelled" } },
+      data: {
+        status: "failed",
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+    })).catch((updateError) => {
+      logError(log, updateError, "Failed to mark review log failed");
+    }).then(() => publishReviewTerminalFailureNotification(state, "failed", error))
+      .catch((notifyError) => logError(log, notifyError, "Failed to publish failed review notification"))
+      .then(() => Promise.reject(error));
   }
 }
 

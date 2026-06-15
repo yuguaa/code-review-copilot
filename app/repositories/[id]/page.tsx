@@ -718,7 +718,7 @@ export default function RepositoryDetailPage() {
             <DialogHeader>
               <DialogTitle>{piProfileForm.id ? '编辑 Pi Profile' : '新增 Pi Profile'}</DialogTitle>
               <DialogDescription>
-                Pi 会在仓库绑定的 OpenSandbox VM 内运行，使用该 Profile 的模型、Prompt 和输出限制。
+                Pi 会在仓库绑定的 Bubblewrap 隔离运行时内运行，使用该 Profile 的模型、Prompt 和输出限制。
               </DialogDescription>
             </DialogHeader>
 

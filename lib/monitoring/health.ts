@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { readPiRuntimeConfig } from "@/lib/services/pi-runtime-config";
+import { checkPiRuntimePaths, readPiRuntimeConfig } from "@/lib/services/pi-runtime-config";
+import { runRuntimeCommand } from "@/lib/services/pi-runtime-process";
 
 type HealthStatus = "ok" | "failed";
 
@@ -16,7 +17,7 @@ export type HealthReport = {
   checkedAt: string;
   checks: {
     database: HealthCheck;
-    openSandbox: HealthCheck;
+    bubblewrap: HealthCheck;
     piRuntime: HealthCheck;
   };
 };
@@ -51,47 +52,42 @@ function checkPiRuntimeConfig(): Promise<HealthCheck> {
   const startedAt = nowMs();
   return Promise.resolve()
     .then(() => readPiRuntimeConfig())
+    .then((config) => checkPiRuntimePaths(config).then(() => config))
     .then((config) => ({
       status: "ok" as const,
       latencyMs: elapsedSince(startedAt),
-      message: `${config.piSandboxImage} ${config.piSandboxMountPath}`,
+      message: `${config.bubblewrapWorkspaceRoot} ${config.piSandboxMountPath}`,
     }))
     .catch((error) => failedCheck(error, startedAt));
 }
 
-function checkOpenSandbox(): Promise<HealthCheck> {
+function checkBubblewrap(): Promise<HealthCheck> {
   const startedAt = nowMs();
   return Promise.resolve()
     .then(() => readPiRuntimeConfig())
-    .then((config) => {
-      const endpoint = `${config.openSandboxProtocol}://${config.openSandboxDomain}/health`;
-      return fetch(endpoint, {
-        headers: config.openSandboxApiKey
-          ? { Authorization: `Bearer ${config.openSandboxApiKey}` }
-          : undefined,
-        signal: AbortSignal.timeout(5000),
-      }).then((response) => {
-        if (!response.ok) {
-          throw new Error(`OpenSandbox health returned ${response.status}`);
-        }
-
-        return {
-          status: "ok" as const,
-          latencyMs: elapsedSince(startedAt),
-          endpoint,
-        };
-      });
-    })
+    .then((config) => runRuntimeCommand(config.bubblewrapBin, ["--version"], {
+      timeoutSeconds: 5,
+      env: process.env,
+    }).then((execution) => {
+      if (execution.exitCode !== 0) {
+        throw new Error(execution.stderr || execution.stdout || `Bubblewrap exited ${execution.exitCode}`);
+      }
+      return {
+        status: "ok" as const,
+        latencyMs: elapsedSince(startedAt),
+        message: execution.stdout.trim() || config.bubblewrapBin,
+      };
+    }))
     .catch((error) => failedCheck(error, startedAt));
 }
 
 export function readHealthReport(): Promise<HealthReport> {
   return Promise.all([
     checkDatabase(),
-    checkOpenSandbox(),
+    checkBubblewrap(),
     checkPiRuntimeConfig(),
-  ]).then(([database, openSandbox, piRuntime]) => {
-    const checks = { database, openSandbox, piRuntime };
+  ]).then(([database, bubblewrap, piRuntime]) => {
+    const checks = { database, bubblewrap, piRuntime };
     const isOk = Object.values(checks).every((check) => check.status === "ok");
 
     return {

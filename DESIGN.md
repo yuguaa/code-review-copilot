@@ -631,9 +631,9 @@ When photography is used (rare — mostly testimonials), avatars crop to perfect
 Diff → Summary → Pi Runtime → Aggregate → Publish
 ```
 
-Pi Runtime 区域展示 OpenSandbox 会话事实：
+Pi Runtime 区域展示 Bubblewrap 会话事实：
 
-- sandbox id、VM 状态、镜像和 Pi 挂载路径。
+- sandbox id、runtime 状态和 Pi 挂载路径。
 - 当前 review 的 worktree 路径、开始时间、结束时间和错误。
 - Pi Profile 名称、模型、Prompt 模式、输出问题数和运行摘要。
 
@@ -645,4 +645,4 @@ Pi Runtime 区域展示 OpenSandbox 会话事实：
 - `cancelled`：用户停止审查。
 
 这些文案面向排障，不面向用户增长。维护者应能一眼判断卡点是在
-OpenSandbox 连接、Git fetch/worktree、Pi JSON 输出、Finding 校验，还是 GitLab 发布。
+Bubblewrap 启动、Git fetch/worktree、Pi JSON 输出、Finding 校验，还是 GitLab 发布。

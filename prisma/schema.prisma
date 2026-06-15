@@ -63,7 +63,7 @@ model Repository {
   @@map("repositories")
 }
 
-// 仓库与 OpenSandbox VM 的绑定；同一仓库复用同一个 sandbox。
+// 仓库与 Bubblewrap runtime workspace 的绑定；同一仓库复用一个仓库缓存。
 model RepositorySandboxBinding {
   id                 String     @id @default(cuid())
   repositoryId       String     @unique

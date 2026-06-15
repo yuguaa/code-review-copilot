@@ -1,14 +1,22 @@
-import { ConnectionConfig } from "@alibaba-group/opensandbox";
+import { access } from "fs/promises";
+import { constants } from "fs";
+
+const DEFAULT_BUBBLEWRAP_BIN = "bwrap";
+const DEFAULT_BUBBLEWRAP_WORKSPACE_ROOT = "/var/lib/code-review-copilot/runtime";
+const DEFAULT_PI_SANDBOX_MOUNT_PATH = "/opt/pi";
+const DEFAULT_PI_SANDBOX_TIMEOUT_SECONDS = 7200;
 
 export type PiRuntimeConfig = {
-  openSandboxDomain: string;
-  openSandboxProtocol: "http" | "https";
-  openSandboxApiKey: string | null;
+  bubblewrapBin: string;
+  bubblewrapWorkspaceRoot: string;
   piHostPath: string;
   piSandboxMountPath: string;
-  piSandboxImage: string;
   piSandboxTimeoutSeconds: number;
 };
+
+function optionalTextEnv(name: string, fallback: string): string {
+  return process.env[name]?.trim() || fallback;
+}
 
 function requireTextEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -18,16 +26,8 @@ function requireTextEnv(name: string): string {
   return value;
 }
 
-function readProtocol(): "http" | "https" {
-  const protocol = (process.env.OPEN_SANDBOX_PROTOCOL || "http").trim();
-  if (protocol === "http" || protocol === "https") {
-    return protocol;
-  }
-  throw new Error("OPEN_SANDBOX_PROTOCOL must be http or https");
-}
-
 function readTimeoutSeconds(): number {
-  const raw = process.env.PI_SANDBOX_TIMEOUT_SECONDS || "7200";
+  const raw = process.env.PI_SANDBOX_TIMEOUT_SECONDS || String(DEFAULT_PI_SANDBOX_TIMEOUT_SECONDS);
   const value = Number.parseInt(raw, 10);
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error("PI_SANDBOX_TIMEOUT_SECONDS must be a positive integer");
@@ -37,22 +37,17 @@ function readTimeoutSeconds(): number {
 
 export function readPiRuntimeConfig(): PiRuntimeConfig {
   return {
-    openSandboxDomain: requireTextEnv("OPEN_SANDBOX_DOMAIN"),
-    openSandboxProtocol: readProtocol(),
-    openSandboxApiKey: process.env.OPEN_SANDBOX_API_KEY?.trim() || null,
+    bubblewrapBin: optionalTextEnv("BUBBLEWRAP_BIN", DEFAULT_BUBBLEWRAP_BIN),
+    bubblewrapWorkspaceRoot: optionalTextEnv("BUBBLEWRAP_WORKSPACE_ROOT", DEFAULT_BUBBLEWRAP_WORKSPACE_ROOT),
     piHostPath: requireTextEnv("PI_HOST_PATH"),
-    piSandboxMountPath: requireTextEnv("PI_SANDBOX_MOUNT_PATH"),
-    piSandboxImage: requireTextEnv("PI_SANDBOX_IMAGE"),
+    piSandboxMountPath: optionalTextEnv("PI_SANDBOX_MOUNT_PATH", DEFAULT_PI_SANDBOX_MOUNT_PATH),
     piSandboxTimeoutSeconds: readTimeoutSeconds(),
   };
 }
 
-export function createOpenSandboxConnectionConfig(config: PiRuntimeConfig): ConnectionConfig {
-  return new ConnectionConfig({
-    domain: config.openSandboxDomain,
-    protocol: config.openSandboxProtocol,
-    apiKey: config.openSandboxApiKey || undefined,
-    requestTimeoutSeconds: 60,
-    useServerProxy: true,
-  });
+export function checkPiRuntimePaths(config: PiRuntimeConfig): Promise<void> {
+  return Promise.all([
+    access(config.piHostPath, constants.R_OK),
+    access(config.bubblewrapWorkspaceRoot, constants.R_OK | constants.W_OK),
+  ]).then(() => undefined);
 }

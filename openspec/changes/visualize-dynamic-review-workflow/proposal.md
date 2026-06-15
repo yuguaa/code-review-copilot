@@ -1,6 +1,6 @@
 ## Why
 
-当前审查详情需要直接呈现 Pi + OpenSandbox 主链路，用户要能在 review 进行中看到流程推进、节点状态、sandbox 会话和失败位置。动态过程图可以把 review 从“事后读日志”变成“实时看链路”，尤其适合排查 OpenSandbox、Git fetch/worktree、Pi 输出、Finding 校验和发布卡点。
+当前审查详情需要直接呈现 Pi + Bubblewrap 主链路，用户要能在 review 进行中看到流程推进、节点状态、sandbox 会话和失败位置。动态过程图可以把 review 从“事后读日志”变成“实时看链路”，尤其适合排查 Bubblewrap、Git fetch/worktree、Pi 输出、Finding 校验和发布卡点。
 
 ## What Changes
 

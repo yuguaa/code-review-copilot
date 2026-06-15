@@ -1,8 +1,8 @@
 # Code Review Copilot
 
 私有化部署的 GitLab 代码审查工具。应用监听 GitLab MR / Push 事件，
-为每次审查拉起独立 Pi 进程，并通过 OpenSandbox 把仓库运行时隔离在宿主机
-Docker sandbox 中。
+为每次审查拉起独立 Pi 进程，并通过 Bubblewrap 把 Pi 运行时限制在本次仓库
+worktree 和只读 Pi 安装目录中。
 
 ## 功能特性
 
@@ -11,8 +11,8 @@ Docker sandbox 中。
 - **私有工作台登录**：由环境变量初始化唯一登录账号，页面和业务 API 默认需要登录。
 - **GitLab 集成**：支持多个 GitLab 实例、多个仓库、MR 事件和 Push 事件。
 - **Pi 审查运行时**：排序第一的启用 Pi Profile 提供模型、Prompt 和输出限制，Pi 在 sandbox 内执行审查。
-- **OpenSandbox 隔离**：应用不挂载 Docker socket，只通过 OpenSandbox API 创建、恢复、暂停 review sandbox。
-- **仓库 VM 复用**：不同仓库绑定不同 sandbox；同仓库复用同一 sandbox，并发 review 使用不同 worktree 和 Pi 进程。
+- **Bubblewrap 隔离**：应用不挂载 Docker socket，Pi 进程通过 Bubblewrap 只读访问当前仓库 worktree、仓库 bare repo 和 Pi 安装目录。
+- **仓库缓存复用**：不同仓库绑定不同 runtime workspace；同仓库复用 bare repo 缓存，并发 review 使用不同 worktree 和 Pi 进程。
 - **三级问题分类**：严重 / 一般 / 建议。
 - **审查历史**：保存 ReviewLog、PiReviewRun、ReviewComment、Workflow 和 sandbox session。
 - **终态通知**：审查完成、失败或停止后，发布一条 GitLab 总评并发送钉钉通知。
@@ -22,13 +22,13 @@ Docker sandbox 中。
 
 - 基于 shadcn/ui、Tailwind CSS 和 React Flow。
 - 独立登录页，登录成功后进入带侧边栏的工作台。
-- 审查详情页展示过程图、问题清单、Pi Runtime 会话、OpenSandbox 状态和原始材料。
+- 审查详情页展示过程图、问题清单、Pi Runtime 会话、Bubblewrap 状态和原始材料。
 
 ## 技术栈
 
 - **框架**：Next.js 16 App Router
 - **数据库**：PostgreSQL + Prisma ORM
-- **运行时隔离**：OpenSandbox Server + Docker runtime
+- **运行时隔离**：Bubblewrap + 本地 Git worktree
 - **审查智能体**：Pi
 - **模型连通性测试**：OpenAI SDK + Anthropic HTTP API
 - **UI**：shadcn/ui + Tailwind CSS
@@ -77,7 +77,7 @@ GRAFANA_ADMIN_USER="admin"
 GRAFANA_ADMIN_PASSWORD="change-me-grafana-password"
 ```
 
-### 2. 单机部署 OpenSandbox + Pi
+### 2. 单机部署 Bubblewrap + Pi
 
 推荐在同一台服务器上部署：
 
@@ -86,46 +86,20 @@ GRAFANA_ADMIN_PASSWORD="change-me-grafana-password"
 ├── Docker daemon
 │   ├── code-review-copilot-app
 │   ├── code-review-copilot-postgres
-│   └── OpenSandbox 创建的 review sandbox 容器
-├── OpenSandbox Server
-│   └── localhost:8080
+│   └── pi_runtime_workspace volume
 ├── Pi 安装目录
 │   └── /opt/pi
 └── 持久化目录
     ├── postgres_data
-    └── OpenSandbox / Docker volumes
+    └── pi_runtime_workspace
 ```
 
 基础依赖：
 
 - Docker / Docker Compose
-- Python 3.10+
 - Node.js，用于安装 Pi
-- `uv` 或 `pipx`，用于运行 OpenSandbox Server
-- `opensandbox-cli`，用于执行 `osb` 验证命令
-
-初始化并启动 OpenSandbox Server：
-
-```bash
-sudo mkdir -p /etc/opensandbox
-uvx opensandbox-server init-config /etc/opensandbox/sandbox.toml --example docker
-uvx opensandbox-server --config /etc/opensandbox/sandbox.toml
-```
-
-确认可用后交给 systemd：
-
-```bash
-sudo cp deploy/systemd/opensandbox-server.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now opensandbox-server
-sudo systemctl status opensandbox-server
-```
-
-安装 `osb`：
-
-```bash
-pipx install opensandbox-cli
-```
+- Bubblewrap，Docker 镜像内会安装 `bubblewrap`
+- Git，Docker 镜像内会安装 `git`
 
 安装 Pi：
 
@@ -138,29 +112,17 @@ sudo npm install -g --prefix /opt/pi --ignore-scripts @earendil-works/pi-coding-
 在 `.env` 中补充运行时配置：
 
 ```env
-OPEN_SANDBOX_DOMAIN="host.docker.internal:8080"
-OPEN_SANDBOX_PROTOCOL="http"
-OPEN_SANDBOX_API_KEY=""
-
+BUBBLEWRAP_BIN="bwrap"
+BUBBLEWRAP_WORKSPACE_ROOT="/var/lib/code-review-copilot/runtime"
 PI_HOST_PATH="/opt/pi"
 PI_SANDBOX_MOUNT_PATH="/opt/pi"
-PI_SANDBOX_IMAGE="node:24-bookworm"
 PI_SANDBOX_TIMEOUT_SECONDS="7200"
 ```
 
-验证 OpenSandbox：
+验证 Bubblewrap 和 Pi：
 
 ```bash
-osb config set connection.domain localhost:8080
-osb sandbox create --image node:24-bookworm --timeout 10m -o json
-docker compose exec app sh -lc 'wget -qO- http://host.docker.internal:8080/health || true'
-```
-
-创建 review sandbox 时，应用会把宿主机 `/opt/pi` 只读挂载到 sandbox 内
-`/opt/pi`。可在 sandbox 内验证：
-
-```bash
-/opt/pi/bin/pi --version
+docker compose exec app sh -lc 'bwrap --version && /opt/pi/bin/pi --version'
 ```
 
 ### 3. 本地开发
@@ -176,13 +138,13 @@ npm run dev
 
 ## 运行时策略
 
-- 不同仓库对应不同 OpenSandbox sandbox。
-- 同仓库复用同一个 sandbox。
-- 同仓库并发 review 共享 VM，但每次 review 使用独立 `git worktree` 和独立 Pi 进程。
-- VM 内用 bare repo 保存仓库；fetch、worktree add/remove 通过仓库级 `flock` 串行化。
+- 不同仓库对应不同 Bubblewrap workspace 绑定。
+- 同仓库复用同一个 bare repo 缓存。
+- 同仓库并发 review 共享仓库缓存，但每次 review 使用独立 `git worktree` 和独立 Pi 进程。
+- workspace 内用 bare repo 保存仓库；fetch、worktree add/remove 通过仓库级 `flock` 串行化。
 - 每次 review 创建 `ReviewSandboxSession`，记录独立 worktree 和 Pi command，完成后清理 worktree。
-- sandbox 空闲后执行 `pause`，不 `kill`，以保留仓库绑定和降低下一次启动成本。
-- GitLab Token 和模型 API Key 只通过命令环境变量传入 sandbox，不写入 clone URL、prompt 或 review input JSON。
+- sandbox 空闲后标记为 `paused`，保留仓库绑定和 bare repo 缓存，降低下一次启动成本。
+- GitLab Token 和模型 API Key 只通过命令环境变量传入 git / Pi 进程，不写入 clone URL、prompt 或 review input JSON。
 - Pi 输出必须是严格 JSON；provider 不支持、自定义 endpoint 未接入或 JSON 不合法时快速失败。
 
 ## 使用指南
@@ -231,7 +193,7 @@ GitLab Webhook：
 - **仪表盘**：查看整体统计和趋势。
 - **审查历史**：查看每次审查的详情。
 - **过程图**：查看 fetch diff、summary、Pi review、aggregate、publish 等步骤。
-- **Pi Runtime**：查看 OpenSandbox sandbox、worktree、会话状态和错误。
+- **Pi Runtime**：查看 Bubblewrap runtime、worktree、会话状态和错误。
 - **GitLab**：审查完成、失败或停止后，总评会发布到 MR 或 Commit。
 
 ## 数据库模型
@@ -240,7 +202,7 @@ GitLab Webhook：
 - `AIModel`：供 Pi Profile 引用的模型凭据。
 - `Repository`：仓库配置，关联 GitLab 账号。
 - `RepositoryPiProfile`：Pi Profile 配置，保存模型、Prompt、启停状态、排序和输出限制。
-- `RepositorySandboxBinding`：仓库到 OpenSandbox sandbox 的唯一绑定。
+- `RepositorySandboxBinding`：仓库到 Bubblewrap runtime workspace 的唯一绑定。
 - `ReviewSandboxSession`：单次 review 在 sandbox 内的 worktree、Pi command 和状态。
 - `ReviewLog`：审查日志，记录每次审查的统计信息。
 - `PiReviewRun`：单次审查中的 Pi 运行快照。
@@ -257,13 +219,10 @@ APP_AUTH_SECRET="change-me-login-secret"
 APP_AUTH_SESSION_SECRET="change-me-session-signing-secret"
 APP_AUTH_IP_WHITELIST="127.0.0.1,::1"
 
-OPEN_SANDBOX_DOMAIN="host.docker.internal:8080"
-OPEN_SANDBOX_PROTOCOL="http"
-OPEN_SANDBOX_API_KEY=""
-
+BUBBLEWRAP_BIN="bwrap"
+BUBBLEWRAP_WORKSPACE_ROOT="/var/lib/code-review-copilot/runtime"
 PI_HOST_PATH="/opt/pi"
 PI_SANDBOX_MOUNT_PATH="/opt/pi"
-PI_SANDBOX_IMAGE="node:24-bookworm"
 PI_SANDBOX_TIMEOUT_SECONDS="7200"
 
 DINGTALK_WEBHOOK_URL="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
@@ -345,10 +304,10 @@ npm run db:migrate:sqlite -- --source prisma/dev.db --force
 2. `ReviewService.performReview` 串行执行 review steps，触发阶段不向 GitLab 发送评论。
 3. `fetch_diff` 获取 MR / Commit diff。
 4. `generate_summary` 根据 diff 生成确定性公共变更摘要。
-5. `run_pi_runtime` 选择排序第一的启用 Profile，连接仓库 sandbox，创建 worktree，运行 Pi。
+5. `run_pi_runtime` 选择排序第一的启用 Profile，准备仓库缓存，创建 worktree，通过 Bubblewrap 运行 Pi。
 6. `aggregate_results` 校验 finding 是否命中本次 diff，并写入评论。
 7. `publish_comment` 是唯一终态通知出口，`completed` / `failed` / `cancelled` 都会发布 GitLab 总评并发送钉钉通知。
-8. sandbox 内 worktree 清理完成后，如果没有 running session，暂停仓库 VM。
+8. worktree 清理完成后，如果没有 running session，仓库 runtime 绑定标记为 paused。
 
 ## 质量门禁
 

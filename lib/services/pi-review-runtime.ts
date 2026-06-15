@@ -1,9 +1,11 @@
-import { Sandbox, SandboxException } from "@alibaba-group/opensandbox";
+import { mkdir, rm, writeFile } from "fs/promises";
+import path from "path";
 import type { RepositorySandboxBinding, ReviewSandboxSession } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { ReviewState, FileReviewResult } from "@/lib/review/types";
 import { generatePatch, toPrismaJsonInput } from "@/lib/review/utils";
-import { createOpenSandboxConnectionConfig, readPiRuntimeConfig, type PiRuntimeConfig } from "@/lib/services/pi-runtime-config";
+import { checkPiRuntimePaths, readPiRuntimeConfig, type PiRuntimeConfig } from "@/lib/services/pi-runtime-config";
+import { runRuntimeCommand, type RuntimeCommandExecution } from "@/lib/services/pi-runtime-process";
 import {
   bindRunningPiCommandId,
   registerRunningPiCommand,
@@ -17,6 +19,12 @@ import { PI_REVIEW_JSON_OUTPUT_FORMAT } from "@/lib/prompts";
 const log = createLogger("PiReviewRuntime");
 const SANDBOX_SESSION_RESERVABLE_STATUSES = ["running", "paused", "error"];
 const SANDBOX_SESSION_ACTIVE_STATUSES = ["running", "cancelling"];
+const REPOSITORY_LOCK_TIMEOUT_SECONDS = 1800;
+const WORKTREE_LOCK_TIMEOUT_SECONDS = 600;
+const CLEANUP_TIMEOUT_SECONDS = 180;
+const BUBBLEWRAP_RUNTIME_LABEL = "bubblewrap";
+const SANDBOX_REVIEW_INPUT_PATH = "/tmp/pi-review-input.json";
+const SANDBOX_REVIEW_PROMPT_PATH = "/tmp/pi-review-prompt.txt";
 
 export type PiReviewInput = {
   reviewLogId: string;
@@ -73,6 +81,17 @@ type PiReviewPayload = {
   comments?: unknown;
 };
 
+type RuntimePaths = {
+  workspaceRoot: string;
+  repositoryRoot: string;
+  bareRepoPath: string;
+  lockPath: string;
+  reviewsRoot: string;
+  worktreePath: string;
+  inputPath: string;
+  promptPath: string;
+};
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -81,20 +100,13 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function stdoutText(execution: Awaited<ReturnType<Sandbox["commands"]["run"]>>): string {
-  return execution.logs.stdout.map((item) => item.text).join("");
+function commandOutput(execution: RuntimeCommandExecution): string {
+  return execution.stderr || execution.stdout || `exitCode=${execution.exitCode ?? "null"}`;
 }
 
-function stderrText(execution: Awaited<ReturnType<Sandbox["commands"]["run"]>>): string {
-  return execution.logs.stderr.map((item) => item.text).join("");
-}
-
-function ensureSuccessfulCommand(execution: Awaited<ReturnType<Sandbox["commands"]["run"]>>, label: string): typeof execution {
-  if (execution.exitCode && execution.exitCode !== 0) {
-    throw new Error(`${label} failed: ${stderrText(execution) || stdoutText(execution) || `exitCode=${execution.exitCode}`}`);
-  }
-  if (execution.error) {
-    throw new Error(`${label} failed: ${execution.error.value}`);
+function ensureSuccessfulCommand(execution: RuntimeCommandExecution, label: string): RuntimeCommandExecution {
+  if (execution.exitCode !== 0) {
+    throw new Error(`${label} failed: ${commandOutput(execution)}`);
   }
   return execution;
 }
@@ -111,20 +123,20 @@ function modelEnv(provider: string, apiKey: string): Record<string, string> {
   throw new Error(`Pi runtime does not support AI provider: ${provider}`);
 }
 
-function piCommand(config: PiRuntimeConfig, modelConfig: PiModelConfig): string {
+function piCommand(config: PiRuntimeConfig, modelConfig: PiModelConfig): string[] {
   if (modelConfig.apiEndpoint) {
     throw new Error("Pi runtime does not support custom AI apiEndpoint yet");
   }
   return [
-    shellQuote(`${config.piSandboxMountPath}/bin/pi`),
+    `${config.piSandboxMountPath}/bin/pi`,
     "-p",
     "--no-context-files",
     "--no-session",
     "--provider",
-    shellQuote(modelProvider(modelConfig.provider)),
+    modelProvider(modelConfig.provider),
     "--model",
-    shellQuote(modelConfig.modelId),
-  ].join(" ");
+    modelConfig.modelId,
+  ];
 }
 
 function repositoryCloneUrl(input: PiReviewInput): string {
@@ -134,7 +146,7 @@ function repositoryCloneUrl(input: PiReviewInput): string {
 
 function reviewPrompt(input: PiReviewInput, profilePrompt: string | null, profilePromptMode: string): string {
   return [
-    "你是运行在隔离 sandbox 内的代码审查 Pi 智能体。",
+    "你是运行在 Bubblewrap 隔离环境内的代码审查 Pi 智能体。",
     "只审查当前变更，不要修改代码，不要执行破坏性命令。",
     "输出必须是严格 JSON，不要使用 Markdown 代码块，不要输出 JSON 以外的文字。",
     "",
@@ -155,7 +167,7 @@ function reviewPrompt(input: PiReviewInput, profilePrompt: string | null, profil
       profilePrompt ? `额外要求：${profilePrompt}` : "",
     ].filter(Boolean).join("\n"),
     "",
-    "必须先读取 /tmp/pi-review-input.json 中的变更文件和 patch，再按需读取工作区文件进行上下文确认。",
+    `必须先读取 ${SANDBOX_REVIEW_INPUT_PATH} 中的变更文件和 patch，再按需读取工作区文件进行上下文确认。`,
   ].join("\n");
 }
 
@@ -301,44 +313,145 @@ export function buildPiReviewInput(state: ReviewState): PiReviewInput {
   };
 }
 
-function createSandbox(input: PiReviewInput, config: PiRuntimeConfig): Promise<Sandbox> {
-  return Sandbox.create({
-    connectionConfig: createOpenSandboxConnectionConfig(config),
-    image: config.piSandboxImage,
-    timeoutSeconds: config.piSandboxTimeoutSeconds,
-    metadata: {
-      app: "code-review-copilot",
-      repositoryId: input.repositoryId,
-      repositoryPath: input.repositoryPath,
-    },
-    volumes: [{
-      name: "pi",
-      host: { path: config.piHostPath },
-      mountPath: config.piSandboxMountPath,
-      readOnly: true,
-    }],
+function runtimePaths(config: PiRuntimeConfig, input: PiReviewInput): RuntimePaths {
+  const workspaceRoot = path.resolve(config.bubblewrapWorkspaceRoot);
+  const repositoryRoot = path.join(workspaceRoot, "repos", input.repositoryId);
+  return {
+    workspaceRoot,
+    repositoryRoot,
+    bareRepoPath: path.join(repositoryRoot, "repo.git"),
+    lockPath: path.join(repositoryRoot, "repo.lock"),
+    reviewsRoot: path.join(workspaceRoot, "reviews"),
+    worktreePath: path.join(workspaceRoot, "reviews", input.reviewLogId),
+    inputPath: path.join(workspaceRoot, "tmp", input.reviewLogId, "pi-review-input.json"),
+    promptPath: path.join(workspaceRoot, "tmp", input.reviewLogId, "pi-review-prompt.txt"),
+  };
+}
+
+function createWorkspace(config: PiRuntimeConfig, input: PiReviewInput): Promise<RuntimePaths> {
+  const paths = runtimePaths(config, input);
+  return mkdir(paths.repositoryRoot, { recursive: true })
+    .then(() => mkdir(paths.reviewsRoot, { recursive: true }))
+    .then(() => mkdir(path.dirname(paths.inputPath), { recursive: true }))
+    .then(() => paths);
+}
+
+function runShell(command: string, timeoutSeconds: number, env?: Record<string, string>): Promise<RuntimeCommandExecution> {
+  return runRuntimeCommand("sh", ["-lc", command], {
+    timeoutSeconds,
     env: {
-      PI_OFFLINE: "0",
-      PI_SKIP_VERSION_CHECK: "1",
-      PI_TELEMETRY: "0",
-    },
+      ...process.env,
+      ...env,
+    } as NodeJS.ProcessEnv,
   });
 }
 
-function connectSandbox(sandboxId: string, config: PiRuntimeConfig): Promise<Sandbox> {
-  return Sandbox.connect({
-    sandboxId,
-    connectionConfig: createOpenSandboxConnectionConfig(config),
-    readyTimeoutSeconds: 60,
-  });
+function bubblewrapSandboxPath(config: PiRuntimeConfig, hostPath: string): string {
+  const workspaceRoot = path.resolve(config.bubblewrapWorkspaceRoot);
+  const resolvedHostPath = path.resolve(hostPath);
+  if (resolvedHostPath === workspaceRoot) {
+    return workspaceRoot;
+  }
+  const relative = path.relative(workspaceRoot, resolvedHostPath);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Path is outside Bubblewrap workspace: ${hostPath}`);
+  }
+  return path.posix.join(workspaceRoot.split(path.sep).join(path.posix.sep), relative.split(path.sep).join(path.posix.sep));
 }
 
-function resumeSandbox(sandboxId: string, config: PiRuntimeConfig): Promise<Sandbox> {
-  return Sandbox.resume({
-    sandboxId,
-    connectionConfig: createOpenSandboxConnectionConfig(config),
-    readyTimeoutSeconds: 60,
+function bubblewrapParentDirMounts(paths: string[]): string[] {
+  const dirs = new Set<string>();
+  paths.forEach((targetPath) => {
+    const parts = path.resolve(targetPath).split(path.sep).filter(Boolean);
+    for (let index = 1; index < parts.length; index += 1) {
+      dirs.add(path.sep + parts.slice(0, index).join(path.sep));
+    }
   });
+  return [...dirs].sort((a, b) => a.length - b.length).flatMap((dir) => ["--dir", dir]);
+}
+
+function bubblewrapArgs(
+  config: PiRuntimeConfig,
+  repositoryRoot: string,
+  worktreePath: string,
+  inputPath: string,
+  promptPath: string,
+  modelConfig: PiModelConfig,
+): string[] {
+  const workdir = bubblewrapSandboxPath(config, worktreePath);
+  const piArgs = piCommand(config, modelConfig);
+
+  return [
+    "--clearenv",
+    "--die-with-parent",
+    "--new-session",
+    "--unshare-pid",
+    "--unshare-ipc",
+    "--ro-bind",
+    "/usr",
+    "/usr",
+    "--ro-bind-try",
+    "/bin",
+    "/bin",
+    "--ro-bind-try",
+    "/lib",
+    "/lib",
+    "--ro-bind-try",
+    "/lib64",
+    "/lib64",
+    "--ro-bind",
+    "/etc",
+    "/etc",
+    "--ro-bind",
+    config.piHostPath,
+    config.piSandboxMountPath,
+    ...bubblewrapParentDirMounts([repositoryRoot, worktreePath]),
+    "--ro-bind",
+    repositoryRoot,
+    repositoryRoot,
+    "--ro-bind",
+    worktreePath,
+    worktreePath,
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--tmpfs",
+    "/tmp",
+    "--dir",
+    "/run",
+    "--ro-bind",
+    inputPath,
+    SANDBOX_REVIEW_INPUT_PATH,
+    "--ro-bind",
+    promptPath,
+    SANDBOX_REVIEW_PROMPT_PATH,
+    "--setenv",
+    "HOME",
+    "/tmp",
+    "--setenv",
+    "PATH",
+    "/usr/local/bin:/usr/bin:/bin",
+    "--setenv",
+    "PI_SKIP_VERSION_CHECK",
+    "1",
+    "--setenv",
+    "PI_TELEMETRY",
+    "0",
+    ...Object.entries(modelEnv(modelConfig.provider, modelConfig.apiKey)).flatMap(([key, value]) => [
+      "--setenv",
+      key,
+      value,
+    ]),
+    "--chdir",
+    workdir,
+    "--",
+    ...piArgs,
+  ];
+}
+
+function bindingId(input: PiReviewInput): string {
+  return `bwrap:${input.repositoryId}`;
 }
 
 function markBindingError(repositoryId: string, error: unknown) {
@@ -346,96 +459,68 @@ function markBindingError(repositoryId: string, error: unknown) {
     where: { repositoryId },
     data: {
       status: "error",
-      error: error instanceof Error ? error.message : "Unknown sandbox error",
+      error: error instanceof Error ? error.message : "Unknown Bubblewrap runtime error",
     },
   });
-}
-
-function cleanupDuplicateSandbox(sandbox: Sandbox): Promise<void> {
-  return sandbox.kill()
-    .catch((error) => {
-      logWarn(log, error, "Failed to remove duplicate sandbox", { sandboxId: sandbox.id });
-    })
-    .then(() => closeSandboxClient(sandbox));
 }
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function ensureRepositorySandboxBinding(input: PiReviewInput, config: PiRuntimeConfig): Promise<{
-  binding: RepositorySandboxBinding;
-  sandbox: Sandbox | null;
-}> {
+function ensureRepositorySandboxBinding(input: PiReviewInput, config: PiRuntimeConfig): Promise<RepositorySandboxBinding> {
   return prisma.repositorySandboxBinding.findUnique({
     where: { repositoryId: input.repositoryId },
   }).then((binding) => {
-    if (!binding) {
-      return createSandbox(input, config).then((sandbox) => {
-        return prisma.repositorySandboxBinding.create({
-          data: {
-            repositoryId: input.repositoryId,
-            sandboxId: sandbox.id,
-            status: "running",
-            image: config.piSandboxImage,
-            piHostPath: config.piHostPath,
-            piSandboxMountPath: config.piSandboxMountPath,
-            metadataJson: toPrismaJsonInput({
-              repositoryPath: input.repositoryPath,
-              gitLabProjectId: input.gitLabProjectId,
-            }),
-          },
-        }).then((created) => ({ binding: created, sandbox }))
-          .catch((error) => {
-            return prisma.repositorySandboxBinding.findUnique({
-              where: { repositoryId: input.repositoryId },
-            }).then((existingBinding) => {
-              if (!existingBinding) {
-                return cleanupDuplicateSandbox(sandbox)
-                  .then(() => Promise.reject(error));
-              }
-              return cleanupDuplicateSandbox(sandbox)
-                .then(() => {
-                  logWarn(log, error, "Repository sandbox binding create raced, reconnecting existing binding", {
-                    repositoryId: input.repositoryId,
-                    sandboxId: existingBinding.sandboxId,
-                  });
-                  return { binding: existingBinding, sandbox: null };
-                });
-              });
-          });
+    if (binding) {
+      return prisma.repositorySandboxBinding.update({
+        where: { id: binding.id },
+        data: {
+          sandboxId: binding.sandboxId.startsWith("bwrap:") ? binding.sandboxId : bindingId(input),
+          status: "running",
+          image: BUBBLEWRAP_RUNTIME_LABEL,
+          piHostPath: config.piHostPath,
+          piSandboxMountPath: config.piSandboxMountPath,
+          lastUsedAt: new Date(),
+          pausedAt: null,
+          error: null,
+          metadataJson: toPrismaJsonInput({
+            repositoryPath: input.repositoryPath,
+            gitLabProjectId: input.gitLabProjectId,
+            workspaceRoot: config.bubblewrapWorkspaceRoot,
+            runtime: BUBBLEWRAP_RUNTIME_LABEL,
+          }),
+        },
       });
     }
 
-    return { binding, sandbox: null };
-  });
-}
-
-function connectRepositorySandbox(
-  binding: RepositorySandboxBinding,
-  input: PiReviewInput,
-  config: PiRuntimeConfig,
-  sandbox: Sandbox | null,
-): Promise<Sandbox> {
-  const connect = sandbox
-    ? Promise.resolve(sandbox)
-    : binding.status === "paused"
-      ? resumeSandbox(binding.sandboxId, config)
-      : connectSandbox(binding.sandboxId, config);
-
-  return connect.then((connectedSandbox) => {
-    return prisma.repositorySandboxBinding.update({
-      where: { id: binding.id },
+    return prisma.repositorySandboxBinding.create({
       data: {
+        repositoryId: input.repositoryId,
+        sandboxId: bindingId(input),
         status: "running",
-        lastUsedAt: new Date(),
-        pausedAt: null,
-        error: null,
+        image: BUBBLEWRAP_RUNTIME_LABEL,
+        piHostPath: config.piHostPath,
+        piSandboxMountPath: config.piSandboxMountPath,
+        metadataJson: toPrismaJsonInput({
+          repositoryPath: input.repositoryPath,
+          gitLabProjectId: input.gitLabProjectId,
+          workspaceRoot: config.bubblewrapWorkspaceRoot,
+          runtime: BUBBLEWRAP_RUNTIME_LABEL,
+        }),
       },
-    }).then(() => connectedSandbox);
-  }).catch((error) => {
-    return markBindingError(input.repositoryId, error)
-      .then(() => Promise.reject(error));
+    }).catch((error) => {
+      return prisma.repositorySandboxBinding.findUnique({
+        where: { repositoryId: input.repositoryId },
+      }).then((existingBinding) => {
+        if (!existingBinding) return Promise.reject(error);
+        logWarn(log, error, "Repository sandbox binding create raced, reusing existing binding", {
+          repositoryId: input.repositoryId,
+          sandboxId: existingBinding.sandboxId,
+        });
+        return existingBinding;
+      });
+    });
   });
 }
 
@@ -480,64 +565,42 @@ function reserveReviewSandboxSession(
   });
 }
 
-function prepareRepository(sandbox: Sandbox, input: PiReviewInput, gitLabToken: string): Promise<void> {
-  const repoRoot = `/workspace/repos/${input.repositoryId}`;
-  const bareRepoPath = `${repoRoot}/repo.git`;
-  const lockPath = `${repoRoot}/repo.lock`;
+function prepareRepository(input: PiReviewInput, gitLabToken: string, paths: RuntimePaths): Promise<void> {
   const cloneUrl = repositoryCloneUrl(input);
   const lockedCommand = [
-    `mkdir -p ${shellQuote(repoRoot)}`,
-    `if [ ! -d ${shellQuote(bareRepoPath)} ]; then git -c "http.extraHeader=PRIVATE-TOKEN: $GITLAB_PRIVATE_TOKEN" clone --bare ${shellQuote(cloneUrl)} ${shellQuote(bareRepoPath)}; fi`,
-    `git -C ${shellQuote(bareRepoPath)} -c "http.extraHeader=PRIVATE-TOKEN: $GITLAB_PRIVATE_TOKEN" fetch --prune origin '+refs/heads/*:refs/heads/*' '+refs/merge-requests/*/head:refs/merge-requests/*/head'`,
+    `mkdir -p ${shellQuote(paths.repositoryRoot)}`,
+    `if [ ! -d ${shellQuote(paths.bareRepoPath)} ]; then git -c "http.extraHeader=PRIVATE-TOKEN: $GITLAB_PRIVATE_TOKEN" clone --bare ${shellQuote(cloneUrl)} ${shellQuote(paths.bareRepoPath)}; fi`,
+    `git -C ${shellQuote(paths.bareRepoPath)} -c "http.extraHeader=PRIVATE-TOKEN: $GITLAB_PRIVATE_TOKEN" fetch --prune origin '+refs/heads/*:refs/heads/*' '+refs/merge-requests/*/head:refs/merge-requests/*/head'`,
   ].join("\n");
-  const command = [
-    `mkdir -p ${shellQuote(repoRoot)}`,
-    `flock -w 1800 ${shellQuote(lockPath)} sh -lc ${shellQuote(lockedCommand)}`,
-  ].join("\n");
+  const command = `flock -w ${REPOSITORY_LOCK_TIMEOUT_SECONDS} ${shellQuote(paths.lockPath)} sh -lc ${shellQuote(lockedCommand)}`;
 
-  return sandbox.commands.run(command, {
-    timeoutSeconds: 1800,
-    envs: {
-      GIT_TERMINAL_PROMPT: "0",
-      GITLAB_PRIVATE_TOKEN: gitLabToken,
-    },
+  return runShell(command, REPOSITORY_LOCK_TIMEOUT_SECONDS, {
+    GIT_TERMINAL_PROMPT: "0",
+    GITLAB_PRIVATE_TOKEN: gitLabToken,
   }).then((execution) => {
     ensureSuccessfulCommand(execution, "Prepare sandbox repository");
   });
 }
 
-function reviewWorktreePath(input: PiReviewInput): string {
-  return `/workspace/reviews/${input.reviewLogId}`;
-}
-
-function createReviewWorktree(sandbox: Sandbox, input: PiReviewInput): Promise<string> {
-  const worktreePath = `/workspace/reviews/${input.reviewLogId}`;
-  const bareRepoPath = `/workspace/repos/${input.repositoryId}/repo.git`;
-  const lockPath = `/workspace/repos/${input.repositoryId}/repo.lock`;
+function createReviewWorktree(input: PiReviewInput, paths: RuntimePaths): Promise<string> {
   const lockedCommand = [
-    `git -C ${shellQuote(bareRepoPath)} worktree remove --force ${shellQuote(worktreePath)} 2>/dev/null || rm -rf ${shellQuote(worktreePath)}`,
-    `git -C ${shellQuote(bareRepoPath)} worktree prune`,
-    `git -C ${shellQuote(bareRepoPath)} worktree add --detach ${shellQuote(worktreePath)} ${shellQuote(input.commitSha)}`,
+    `git -C ${shellQuote(paths.bareRepoPath)} worktree remove --force ${shellQuote(paths.worktreePath)} 2>/dev/null || rm -rf ${shellQuote(paths.worktreePath)}`,
+    `git -C ${shellQuote(paths.bareRepoPath)} worktree prune`,
+    `git -C ${shellQuote(paths.bareRepoPath)} worktree add --detach ${shellQuote(paths.worktreePath)} ${shellQuote(input.commitSha)}`,
   ].join("\n");
   const command = [
-    `mkdir -p ${shellQuote("/workspace/reviews")}`,
-    `flock -w 600 ${shellQuote(lockPath)} sh -lc ${shellQuote(lockedCommand)}`,
+    `mkdir -p ${shellQuote(paths.reviewsRoot)}`,
+    `flock -w ${WORKTREE_LOCK_TIMEOUT_SECONDS} ${shellQuote(paths.lockPath)} sh -lc ${shellQuote(lockedCommand)}`,
   ].join("\n");
 
-  return sandbox.commands.run(command, { timeoutSeconds: 600 }).then((execution) => {
+  return runShell(command, WORKTREE_LOCK_TIMEOUT_SECONDS).then((execution) => {
     ensureSuccessfulCommand(execution, "Create review worktree");
-    return worktreePath;
+    return paths.worktreePath;
   });
 }
 
-function writeReviewInput(sandbox: Sandbox, input: PiReviewInput): Promise<void> {
-  return sandbox.files.writeFiles([
-    {
-      path: "/tmp/pi-review-input.json",
-      data: JSON.stringify(input, null, 2),
-      mode: 0o600,
-    },
-  ]).then(() => undefined);
+function writeReviewInput(input: PiReviewInput, paths: RuntimePaths): Promise<void> {
+  return writeFile(paths.inputPath, JSON.stringify(input, null, 2), { mode: 0o600 });
 }
 
 function bindReviewSandboxCommandId(reviewLogId: string, commandId: string): Promise<void> {
@@ -553,37 +616,30 @@ function bindReviewSandboxCommandId(reviewLogId: string, commandId: string): Pro
 }
 
 function runPiCommand(
-  sandbox: Sandbox,
   params: RunPiReviewParams,
   config: PiRuntimeConfig,
-  worktreePath: string,
+  paths: RuntimePaths,
 ): Promise<PiReviewResult> {
   const prompt = reviewPrompt(params.input, params.profilePrompt, params.profilePromptMode);
-  const promptPath = "/tmp/pi-review-prompt.txt";
-  const controller = registerRunningPiCommand(params.input.reviewLogId, sandbox.id);
-  return sandbox.files.writeFiles([{
-    path: promptPath,
-    data: prompt,
-    mode: 0o600,
-  }]).then(() => {
-    const command = `${piCommand(config, params.modelConfig)} < ${shellQuote(promptPath)}`;
-    return sandbox.commands.run(command, {
-      workingDirectory: worktreePath,
-      timeoutSeconds: Math.min(config.piSandboxTimeoutSeconds, 3600),
-      envs: {
-        ...modelEnv(params.modelConfig.provider, params.modelConfig.apiKey),
-        PI_SKIP_VERSION_CHECK: "1",
-        PI_TELEMETRY: "0",
-      },
-    }, {
-      onInit: (init) => {
-        bindRunningPiCommandId(params.input.reviewLogId, init.id);
-        return bindReviewSandboxCommandId(params.input.reviewLogId, init.id);
-      },
-    }, controller.signal);
+  const controller = registerRunningPiCommand(params.input.reviewLogId, bindingId(params.input));
+  return writeFile(paths.promptPath, prompt, { mode: 0o600 }).then(() => {
+    return runRuntimeCommand(config.bubblewrapBin, bubblewrapArgs(
+      config,
+      paths.repositoryRoot,
+      paths.worktreePath,
+      paths.inputPath,
+      paths.promptPath,
+      params.modelConfig,
+    ), {
+      timeoutSeconds: config.piSandboxTimeoutSeconds,
+      stdinPath: paths.promptPath,
+      signal: controller.signal,
+      onStart: (commandId) => bindRunningPiCommandId(params.input.reviewLogId, commandId)
+        .then(() => bindReviewSandboxCommandId(params.input.reviewLogId, commandId)),
+    });
   }).then((execution) => {
     ensureSuccessfulCommand(execution, "Pi review");
-    return parsePiReviewResult(extractJsonOutput(stdoutText(execution)));
+    return parsePiReviewResult(extractJsonOutput(execution.stdout));
   }).finally(() => {
     unregisterRunningPiCommand(params.input.reviewLogId);
   });
@@ -617,23 +673,27 @@ function completeSession(sessionId: string, reviewLogId: string, status: "comple
   }).then(() => undefined);
 }
 
-function cleanupWorktree(sandbox: Sandbox, input: PiReviewInput, worktreePath: string): Promise<void> {
-  const bareRepoPath = `/workspace/repos/${input.repositoryId}/repo.git`;
-  const lockPath = `/workspace/repos/${input.repositoryId}/repo.lock`;
+function cleanupWorktree(input: PiReviewInput, paths: RuntimePaths): Promise<void> {
   const lockedCommand = [
-    `git -C ${shellQuote(bareRepoPath)} worktree remove --force ${shellQuote(worktreePath)} 2>/dev/null || rm -rf ${shellQuote(worktreePath)}`,
-    `git -C ${shellQuote(bareRepoPath)} worktree prune`,
+    `git -C ${shellQuote(paths.bareRepoPath)} worktree remove --force ${shellQuote(paths.worktreePath)} 2>/dev/null || rm -rf ${shellQuote(paths.worktreePath)}`,
+    `git -C ${shellQuote(paths.bareRepoPath)} worktree prune`,
   ].join("\n");
-  return sandbox.commands.run(`flock -w 120 ${shellQuote(lockPath)} sh -lc ${shellQuote(lockedCommand)}`, { timeoutSeconds: 180 })
+  return runShell(`flock -w 120 ${shellQuote(paths.lockPath)} sh -lc ${shellQuote(lockedCommand)}`, CLEANUP_TIMEOUT_SECONDS)
     .then((execution) => {
       ensureSuccessfulCommand(execution, "Cleanup review worktree");
     })
     .catch((error) => {
-      logWarn(log, error, "Failed to cleanup review worktree", { worktreePath });
-    });
+      logWarn(log, error, "Failed to cleanup review worktree", {
+        reviewLogId: input.reviewLogId,
+        worktreePath: paths.worktreePath,
+      });
+    })
+    .then(() => rm(path.dirname(paths.inputPath), { recursive: true, force: true }).catch((error) => {
+      logWarn(log, error, "Failed to cleanup review runtime files", { reviewLogId: input.reviewLogId });
+    }));
 }
 
-function pauseSandboxIfIdle(sandbox: Sandbox, bindingId: string): Promise<void> {
+function pauseSandboxIfIdle(bindingId: string): Promise<void> {
   return prisma.repositorySandboxBinding.updateMany({
     where: {
       id: bindingId,
@@ -643,105 +703,61 @@ function pauseSandboxIfIdle(sandbox: Sandbox, bindingId: string): Promise<void> 
       },
     },
     data: {
-      status: "pausing",
+      status: "paused",
+      pausedAt: new Date(),
       lastUsedAt: new Date(),
+      error: null,
     },
-  }).then((reserved) => {
-    if (reserved.count === 0) return undefined;
-
-    return sandbox.pause()
-      .then(() => prisma.repositorySandboxBinding.updateMany({
-        where: {
-          id: bindingId,
-          status: "pausing",
-          sessions: {
-            none: { status: { in: SANDBOX_SESSION_ACTIVE_STATUSES } },
-          },
-        },
-        data: {
-          status: "paused",
-          pausedAt: new Date(),
-          lastUsedAt: new Date(),
-          error: null,
-        },
-      }))
-      .then(() => undefined)
-      .catch((error) => {
-        return prisma.repositorySandboxBinding.updateMany({
-          where: {
-            id: bindingId,
-            status: "pausing",
-          },
-          data: {
-            status: "error",
-            error: error instanceof Error ? error.message : "Failed to pause sandbox",
-          },
-        }).then(() => Promise.reject(error));
-      })
-      .then(() => undefined);
-  }).catch((error) => {
-    logWarn(log, error, "Failed to pause idle sandbox", { sandboxId: sandbox.id });
-  });
-}
-
-function closeSandboxClient(sandbox: Sandbox): Promise<void> {
-  return sandbox.close().catch((error) => {
-    if (error instanceof SandboxException) {
-      logWarn(log, error, "Failed to close sandbox client", { code: error.error.code });
-      return;
-    }
-    logWarn(log, error, "Failed to close sandbox client");
+  }).then(() => undefined).catch((error) => {
+    logWarn(log, error, "Failed to mark idle sandbox", { bindingId });
   });
 }
 
 export function runPiReview(params: RunPiReviewParams): Promise<PiReviewResult> {
   const config = readPiRuntimeConfig();
-  let activeSandbox: Sandbox | null = null;
   let activeBindingId: string | null = null;
   let activeSessionId: string | null = null;
-  const activeWorktreePath = reviewWorktreePath(params.input);
+  let activePaths: RuntimePaths | null = null;
   const finalizeReviewRuntime = (status: "completed" | "failed", error?: unknown): Promise<void> => {
-    const sandbox = activeSandbox;
-    const bindingId = activeBindingId;
-    const sessionId = activeSessionId;
-    const completeActiveSession = sessionId
-      ? () => completeSession(sessionId, params.input.reviewLogId, status, error)
+    const binding = activeBindingId;
+    const session = activeSessionId;
+    const paths = activePaths;
+    const completeActiveSession = session
+      ? () => completeSession(session, params.input.reviewLogId, status, error)
       : () => Promise.resolve();
 
-    if (!sandbox || !bindingId) {
+    if (!binding || !paths) {
       return completeActiveSession();
     }
 
-    return cleanupWorktree(sandbox, params.input, activeWorktreePath)
+    return cleanupWorktree(params.input, paths)
       .then(() => completeActiveSession())
-      .then(() => pauseSandboxIfIdle(sandbox, bindingId))
-      .then(() => closeSandboxClient(sandbox));
+      .then(() => pauseSandboxIfIdle(binding));
   };
 
-  return ensureRepositorySandboxBinding(params.input, config).then(({ binding, sandbox }) => {
-    activeSandbox = sandbox;
-    activeBindingId = binding.id;
-    return reserveReviewSandboxSession(binding, params.input, activeWorktreePath).then((session) => {
-      activeSessionId = session.id;
-      return prisma.repositorySandboxBinding.findUniqueOrThrow({
-        where: { id: binding.id },
-      }).then((latestBinding) => connectRepositorySandbox(latestBinding, params.input, config, sandbox))
-        .then((connectedSandbox) => {
-          activeSandbox = connectedSandbox;
-          return connectedSandbox;
-        })
-        .then((connectedSandbox) => assertReviewNotCancelled(params.input.reviewLogId)
-          .then(() => prepareRepository(connectedSandbox, params.input, params.gitLabAccessToken))
-          .then(() => assertReviewNotCancelled(params.input.reviewLogId))
-          .then(() => createReviewWorktree(connectedSandbox, params.input))
-          .then(() => assertReviewNotCancelled(params.input.reviewLogId))
-          .then(() => writeReviewInput(connectedSandbox, params.input))
-          .then(() => assertReviewNotCancelled(params.input.reviewLogId))
-          .then(() => runPiCommand(connectedSandbox, params, config, activeWorktreePath)));
+  return createWorkspace(config, params.input)
+    .then((paths) => checkPiRuntimePaths(config).then(() => paths))
+    .then((paths) => {
+      activePaths = paths;
+      return ensureRepositorySandboxBinding(params.input, config).then((binding) => {
+        activeBindingId = binding.id;
+        return reserveReviewSandboxSession(binding, params.input, paths.worktreePath).then((session) => {
+          activeSessionId = session.id;
+          return assertReviewNotCancelled(params.input.reviewLogId)
+            .then(() => prepareRepository(params.input, params.gitLabAccessToken, paths))
+            .then(() => assertReviewNotCancelled(params.input.reviewLogId))
+            .then(() => createReviewWorktree(params.input, paths))
+            .then(() => assertReviewNotCancelled(params.input.reviewLogId))
+            .then(() => writeReviewInput(params.input, paths))
+            .then(() => assertReviewNotCancelled(params.input.reviewLogId))
+            .then(() => runPiCommand(params, config, paths));
+        });
+      });
+    }).then((result) => {
+      return finalizeReviewRuntime("completed").then(() => result);
+    }).catch((error) => {
+      return markBindingError(params.input.repositoryId, error)
+        .then(() => finalizeReviewRuntime("failed", error))
+        .then(() => Promise.reject(error));
     });
-  }).then((result) => {
-    return finalizeReviewRuntime("completed").then(() => result);
-  }).catch((error) => {
-    return finalizeReviewRuntime("failed", error).then(() => Promise.reject(error));
-  });
 }

@@ -1,7 +1,6 @@
-import { Sandbox } from "@alibaba-group/opensandbox";
 import { createLogger, logWarn } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { createOpenSandboxConnectionConfig, readPiRuntimeConfig } from "@/lib/services/pi-runtime-config";
+import { interruptRuntimeCommand } from "@/lib/services/pi-runtime-process";
 
 const log = createLogger("PiRuntimeCommandRegistry");
 
@@ -15,29 +14,8 @@ type RunningPiCommand = {
 const runningPiCommands = new Map<string, RunningPiCommand>();
 
 function interruptSandboxCommand(reviewLogId: string, sandboxId: string, commandId: string): Promise<void> {
-  const config = readPiRuntimeConfig();
-  return Sandbox.connect({
-    sandboxId,
-    connectionConfig: createOpenSandboxConnectionConfig(config),
-    readyTimeoutSeconds: 60,
-  }).then((sandbox) => {
-    return sandbox.commands.interrupt(commandId)
-      .catch((error) => {
-        logWarn(log, error, "Failed to interrupt running Pi command", {
-          reviewLogId,
-          sandboxId,
-          commandId,
-        });
-      })
-      .then(() => sandbox.close())
-      .catch((error) => {
-        logWarn(log, error, "Failed to close sandbox client after interrupt", {
-          reviewLogId,
-          sandboxId,
-        });
-      });
-  }).catch((error) => {
-    logWarn(log, error, "Failed to connect sandbox for Pi interrupt", {
+  return interruptRuntimeCommand(commandId).catch((error) => {
+    logWarn(log, error, "Failed to interrupt running Pi command", {
       reviewLogId,
       sandboxId,
       commandId,

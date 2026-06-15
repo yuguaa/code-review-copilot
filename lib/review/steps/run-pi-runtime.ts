@@ -1,6 +1,6 @@
 /**
  * @file run-pi-runtime.ts
- * @description 使用 Pi + OpenSandbox 执行审查
+ * @description 使用 Pi + Bubblewrap 执行审查
  */
 
 import { prisma } from "@/lib/prisma";
@@ -172,9 +172,9 @@ function runPiProfile(state: ReviewState, profile: PiProfile): Promise<{
       detail: profile.prompt || null,
       sequence: 410,
       metrics: {
-        openSandboxDomain: runtimeConfig.openSandboxDomain,
-        openSandboxProtocol: runtimeConfig.openSandboxProtocol,
-        piSandboxImage: runtimeConfig.piSandboxImage,
+        runtime: "bubblewrap",
+        bubblewrapBin: runtimeConfig.bubblewrapBin,
+        bubblewrapWorkspaceRoot: runtimeConfig.bubblewrapWorkspaceRoot,
         piSandboxTimeoutSeconds: runtimeConfig.piSandboxTimeoutSeconds,
         repositoryId: piInput.repositoryId,
         changedFiles: piInput.changedFiles.length,

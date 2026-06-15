@@ -408,7 +408,7 @@ function formatUnfinishedComment(
     lines.push("2. 如需重新审查，请使用 Retry 重新触发。");
   } else {
     lines.push("1. 先查看失败原因和 Pi Runtime 记录。");
-    lines.push("2. 修复配置、GitLab、OpenSandbox 或 Pi 输出问题后重新触发。");
+    lines.push("2. 修复配置、GitLab、Bubblewrap 或 Pi 输出问题后重新触发。");
   }
   lines.push("");
   lines.push(`<sub>结束时间：${formatShanghaiTime(new Date())}</sub>`);

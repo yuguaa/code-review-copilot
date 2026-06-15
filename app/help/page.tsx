@@ -152,7 +152,7 @@ export default function HelpPage() {
         },
         {
           question: '如何查看历史审查记录？',
-          answer: '在审查历史页面，你可以查看所有历史审查，包括：\n• 审查状态（进行中/完成/失败/已停止）\n• 审查的仓库和分支\n• 发现的问题统计\n• 详细的审查评论\n• Pi 原始输出、Prompt 和 OpenSandbox 会话\n\n支持分页浏览，每页显示 20 条记录'
+          answer: '在审查历史页面，你可以查看所有历史审查，包括：\n• 审查状态（进行中/完成/失败/已停止）\n• 审查的仓库和分支\n• 发现的问题统计\n• 详细的审查评论\n• Pi 原始输出、Prompt 和 Bubblewrap 会话\n\n支持分页浏览，每页显示 20 条记录'
         },
         {
           question: 'GitLab 上会留下什么样的评论？',
@@ -175,7 +175,7 @@ export default function HelpPage() {
         },
         {
           question: '审查结果不如预期？',
-          answer: '可以尝试：\n1. 检查 OpenSandbox Server 是否可用\n2. 检查 /opt/pi 是否已挂载进 sandbox\n3. 更换 Pi Profile 引用的模型凭据\n4. 优化 Profile Prompt，明确审查重点'
+          answer: '可以尝试：\n1. 检查 bubblewrap 是否可用\n2. 检查 /opt/pi 是否已挂载进 sandbox\n3. 检查 Bubblewrap workspace 是否可读写\n4. 更换 Pi Profile 引用的模型凭据\n5. 优化 Profile Prompt，明确审查重点'
         },
         {
           question: '如何删除不需要的配置？',
@@ -183,7 +183,7 @@ export default function HelpPage() {
         },
         {
           question: '系统性能和限制？',
-          answer: '• 审查历史支持分页，每页 20 条记录\n• 不同仓库使用不同 OpenSandbox VM\n• 同仓库并发 review 复用同一 VM，但使用独立 worktree 和 Pi 进程\n• API 调用受限于 Pi Profile 引用模型的速率限制'
+          answer: '• 审查历史支持分页，每页 20 条记录\n• 不同仓库使用不同 Bubblewrap workspace 绑定\n• 同仓库并发 review 复用仓库缓存，但使用独立 worktree 和 Pi 进程\n• API 调用受限于 Pi Profile 引用模型的速率限制'
         }
       ]
     }

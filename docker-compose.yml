@@ -18,17 +18,21 @@ services:
       APP_AUTH_IP_WHITELIST: ${APP_AUTH_IP_WHITELIST:-}
       DINGTALK_WEBHOOK_URL: ${DINGTALK_WEBHOOK_URL:-}
       DINGTALK_SECRET: ${DINGTALK_SECRET:-}
-      OPEN_SANDBOX_DOMAIN: ${OPEN_SANDBOX_DOMAIN:-host.docker.internal:8080}
-      OPEN_SANDBOX_PROTOCOL: ${OPEN_SANDBOX_PROTOCOL:-http}
-      OPEN_SANDBOX_API_KEY: ${OPEN_SANDBOX_API_KEY:-}
+      BUBBLEWRAP_BIN: ${BUBBLEWRAP_BIN:-bwrap}
+      BUBBLEWRAP_WORKSPACE_ROOT: ${BUBBLEWRAP_WORKSPACE_ROOT:-/var/lib/code-review-copilot/runtime}
       PI_HOST_PATH: ${PI_HOST_PATH:-/opt/pi}
       PI_SANDBOX_MOUNT_PATH: ${PI_SANDBOX_MOUNT_PATH:-/opt/pi}
-      PI_SANDBOX_IMAGE: ${PI_SANDBOX_IMAGE:-node:24-bookworm}
       PI_SANDBOX_TIMEOUT_SECONDS: ${PI_SANDBOX_TIMEOUT_SECONDS:-7200}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
     ports:
       - "3000:3000"
+    volumes:
+      - pi_runtime_workspace:/var/lib/code-review-copilot/runtime
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS -H \"Authorization: Bearer $$APP_AUTH_SECRET\" 'http://localhost:3000/api/health?scope=liveness' >/dev/null || exit 1"]
       interval: 30s
@@ -56,3 +60,4 @@ services:
 
 volumes:
   postgres_data:
+  pi_runtime_workspace:
