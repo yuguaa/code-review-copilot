@@ -1,11 +1,8 @@
 #!/bin/sh
-set -eu
+set -e
 
-echo "Generating Prisma Client..."
-./node_modules/.bin/prisma generate
+echo "[entrypoint] applying database migrations…"
+npx prisma migrate deploy
 
-echo "Running database migrations..."
-./node_modules/.bin/prisma migrate deploy
-
-echo "Starting Code Review Copilot..."
-exec "$@"
+echo "[entrypoint] starting server on :${PORT:-8787}"
+exec node --import tsx server/index.ts

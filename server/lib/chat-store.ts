@@ -1,0 +1,82 @@
+import type { UIMessage } from 'ai';
+import { prisma } from './prisma';
+
+/** 会话 + 仓库（含模型配置），供 chat route / agent 使用。 */
+export function getSessionWithRepository(id: string) {
+  return prisma.session.findUnique({
+    where: { id },
+    include: { repository: { include: { gitLabAccount: true } } },
+  });
+}
+
+export type SessionWithRepository = NonNullable<
+  Awaited<ReturnType<typeof getSessionWithRepository>>
+>;
+
+/** 会话列表（侧栏用），按更新时间倒序，带最后一条消息预览。 */
+export async function listSessions(kind?: string) {
+  const sessions = await prisma.session.findMany({
+    where: kind ? { kind } : undefined,
+    orderBy: { updatedAt: 'desc' },
+    include: {
+      repository: { select: { name: true, path: true } },
+      messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+    },
+    take: 200,
+  });
+  return sessions.map((s) => ({
+    id: s.id,
+    kind: s.kind,
+    title: s.title,
+    status: s.status,
+    mrIid: s.mrIid,
+    sourceBranch: s.sourceBranch,
+    targetBranch: s.targetBranch,
+    repository: s.repository,
+    updatedAt: s.updatedAt,
+    preview: previewOf(s.messages[0]?.parts),
+  }));
+}
+
+/** 读取会话的线性消息（映射为 AI SDK UIMessage）。 */
+export async function loadMessages(sessionId: string): Promise<UIMessage[]> {
+  const rows = await prisma.message.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: 'asc' },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    role: r.role as UIMessage['role'],
+    parts: r.parts as UIMessage['parts'],
+  }));
+}
+
+/**
+ * 持久化会话消息：整组替换（onFinish 给的是完整 messages 数组）。
+ * 用事务保证一致性，并刷新 session.updatedAt。
+ */
+export async function saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
+  await prisma.$transaction([
+    prisma.message.deleteMany({ where: { sessionId } }),
+    prisma.message.createMany({
+      data: messages.map((m) => ({
+        id: m.id,
+        sessionId,
+        role: m.role,
+        parts: m.parts as object,
+      })),
+    }),
+    prisma.session.update({ where: { id: sessionId }, data: { updatedAt: new Date() } }),
+  ]);
+}
+
+/** 从 UIMessage.parts 里抽一段纯文本预览。 */
+function previewOf(parts: unknown): string {
+  if (!Array.isArray(parts)) return '';
+  const text = parts
+    .filter((p): p is { type: 'text'; text: string } => p?.type === 'text' && typeof p.text === 'string')
+    .map((p) => p.text)
+    .join(' ')
+    .trim();
+  return text.slice(0, 120);
+}

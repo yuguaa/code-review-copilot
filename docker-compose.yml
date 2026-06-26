@@ -11,32 +11,14 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      PORT: 8787
       DATABASE_URL: postgresql://code_review:code_review@postgres:5432/code_review_copilot?schema=public
       APP_AUTH_USERNAME: ${APP_AUTH_USERNAME:?APP_AUTH_USERNAME is required}
       APP_AUTH_SECRET: ${APP_AUTH_SECRET:?APP_AUTH_SECRET is required}
       APP_AUTH_SESSION_SECRET: ${APP_AUTH_SESSION_SECRET:?APP_AUTH_SESSION_SECRET is required}
       APP_AUTH_IP_WHITELIST: ${APP_AUTH_IP_WHITELIST:-}
-      DINGTALK_WEBHOOK_URL: ${DINGTALK_WEBHOOK_URL:-}
-      DINGTALK_SECRET: ${DINGTALK_SECRET:-}
-      CODE_GRAPH_CRON_SECRET: ${CODE_GRAPH_CRON_SECRET:?CODE_GRAPH_CRON_SECRET is required}
     ports:
-      - "3000:3000"
-
-  code-graph-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: code-graph-cron
-    container_name: code-review-copilot-code-graph-cron
-    restart: unless-stopped
-    depends_on:
-      app:
-        condition: service_started
-    environment:
-      TZ: Asia/Shanghai
-      APP_BASE_URL: http://app:3000
-      CODE_GRAPH_CRON_SECRET: ${CODE_GRAPH_CRON_SECRET:?CODE_GRAPH_CRON_SECRET is required}
-      CODE_GRAPH_CRON_SCHEDULE: ${CODE_GRAPH_CRON_SCHEDULE:-0 23 * * *}
+      - "8787:8787"
 
   postgres:
     image: postgres:16-alpine

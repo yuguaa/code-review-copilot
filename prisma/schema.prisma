@@ -1,5 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// 会话式代码审查 Agent —— 精简数据模型（4 表）
+// 设计原则：review = session，线性 UIMessage 持久化，按仓库配模型/提示词。
 
 generator client {
   provider = "prisma-client-js"
@@ -10,379 +10,82 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// GitLab 账号配置
+/// GitLab 接入凭证
 model GitLabAccount {
-  id                String        @id @default(cuid())
-  url               String        // GitLab 实例 URL，如 https://gitlab.com
-  accessToken       String        // 访问令牌
-  webhookSecret     String?       // Webhook 密钥（可选）
-  isActive          Boolean       @default(true)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  repositories      Repository[]  // 关联的仓库
+  id            String       @id @default(cuid())
+  url           String // GitLab 实例地址，如 https://gitlab.com
+  accessToken   String // 个人访问令牌
+  webhookSecret String? // Webhook 签名密钥（X-Gitlab-Token 比对）
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  repositories  Repository[]
 
   @@map("gitlab_accounts")
 }
 
-// AI 模型配置
-model AIModel {
-  id                String        @id @default(cuid())
-  provider          String        // 提供商: openai, claude, custom
-  modelId           String        // 模型 ID，如 "gpt-4", "claude-3-5-sonnet"
-  apiKey            String        // API 密钥
-  apiEndpoint       String?       // 自定义 API 端点（仅用于自定义模型）
-  maxTokens         Int?          // 最大 token 数（可选）
-  temperature       Float?        // 温度参数（可选）
-  isActive          Boolean       @default(true)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  repositories      Repository[]  // 使用此模型作为默认的仓库
-  reviewBots        RepositoryReviewBot[]
-
-  @@map("ai_models")
-}
-
-// 仓库配置
+/// 仓库 + 按仓库的模型/提示词配置
 model Repository {
-  id                String        @id @default(cuid())
-  gitLabProjectId   Int           // GitLab 项目 ID
-  name              String        // 仓库名称
-  path              String        // 仓库路径，如 namespace/project-name
-  description       String?       // 仓库描述（可选）
-  gitLabAccountId   String
-  gitLabAccount     GitLabAccount @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
-  isActive          Boolean       @default(true)
-  autoReview        Boolean       @default(false) // 是否自动审查
-  defaultAIModelId  String?       // 默认 AI 模型 ID（可选，为空时使用全局默认）
-  defaultAIModel    AIModel?      @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
-  watchBranches     String?       // 监听的分支（逗号分隔或通配符，如 "main,develop,feature/*"）
-  customPrompt      String?       // 自定义审查 Prompt（可选，为空时使用全局默认）
-  customPromptMode  String?       @default("extend") // 自定义提示词模式: "extend"(扩展) 或 "replace"(替换)
-  // 自定义 AI 模型配置（优先级高于 defaultAIModelId）
-  customProvider    String?       // 自定义提供商: openai, claude, custom
-  customModelId     String?       // 自定义模型 ID
-  customApiKey      String?       // 自定义 API 密钥
-  customApiEndpoint String?       // 自定义 API 端点（仅用于 custom 提供商）
-  customMaxTokens   Int?          // 自定义最大 token 数
-  customTemperature Float?        // 自定义温度参数
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  reviewLogs        ReviewLog[]   // 关联的审查日志
-  reviewBots        RepositoryReviewBot[]
-  memorySnapshots   RepositoryMemorySnapshot[]
-  codeFileNodes     CodeFileNode[]
-  codeRelationEdges CodeRelationEdge[]
-  memoryFacts       RepositoryMemoryFact[]
+  id              String        @id @default(cuid())
+  gitLabAccountId String
+  gitLabAccount   GitLabAccount @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
+  gitLabProjectId Int
+  name            String
+  path            String // namespace/project
+  description     String?
+  watchBranches   String? // "main,develop,feature/*"，空=全部
+  autoReview      Boolean       @default(true)
+  // 模型配置（按仓库）
+  modelProvider   String // openai | anthropic | openai-compatible
+  modelId         String // 如 gpt-4o / claude-3-5-sonnet
+  apiKey          String
+  apiBaseUrl      String? // 自定义端点（openai-compatible 用）
+  maxSteps        Int           @default(16) // agent loop 步数上限
+  // 默认审查提示词（webhook 首轮），空则用内置
+  defaultReviewPrompt String?
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  sessions        Session[]
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@map("repositories")
 }
 
-// 审查日志
-model ReviewLog {
-  id                String          @id @default(cuid())
-  repositoryId      String
-  repository        Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  mergeRequestId    Int             // GitLab MR ID
-  mergeRequestIid   Int             // GitLab MR 内部 ID
-  sourceBranch      String          // 源分支
-  targetBranch      String          // 目标分支
-  author            String          // 作者姓名
-  authorUsername    String?         // 作者工号/用户名
-  title             String          // MR 标题
-  description       String?         // MR 描述（可选）
-  commitSha         String          // 提交的 SHA
-  commitShortId     String          // 提交的短 ID
-  baseCommitSha     String?         // Push 事件的起始 SHA，用于覆盖一次 push 的多 commit diff
-  pushCommitShasJson Json?          // Push 事件包含的 commit SHA 列表，用于新分支等无 before 场景
-  status            String          // 状态: pending, completed, failed
-  error             String?         // 错误信息（如果有）
-  totalFiles        Int             // 总文件数
-  reviewedFiles     Int             @default(0) // 已审查文件数
-  criticalIssues    Int             @default(0) // 严重问题数
-  normalIssues      Int             @default(0) // 一般问题数
-  suggestions       Int             @default(0) // 建议数
-  aiSummary         String?         // AI 生成的代码变更总结
-  aiResponse        String?         // AI 完整审查回复（JSON 格式，按文件存储）
-  reviewPrompts     String?         // 发送给 AI 的完整 Prompt（用于追溯）
-  aiModelProvider   String?         // 使用的 AI 模型提供商
-  aiModelId         String?         // 使用的 AI 模型 ID
-  gitlabDiscussionId String?        // GitLab MR Discussion ID（用于更新占位评论）
-  gitlabNoteId      Int?            // GitLab Note ID（用于更新占位评论）
-  startedAt         DateTime        @default(now())
-  completedAt       DateTime?       // 完成时间
-  botRuns           ReviewBotRun[]
-  comments          ReviewComment[] // 关联的审查评论
-  agentTraces       ReviewAgentTrace[]
-  workflowNodes     ReviewWorkflowNode[]
+/// 一次会话：审查会话（webhook 触发）或普通会话
+model Session {
+  id           String      @id @default(cuid())
+  kind         String      @default("review") // review | chat
+  title        String?
+  repositoryId String?
+  repository   Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  // 审查会话的 MR 元信息（普通会话为空）
+  mrIid        Int?
+  mrTitle      String?
+  sourceBranch String?
+  targetBranch String?
+  commitSha    String?
+  author       String?
+  status       String      @default("running") // running | completed | failed
+  error        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  messages     Message[]
 
-  @@index([repositoryId, mergeRequestIid, commitSha])
-  @@map("review_logs")
+  @@index([kind, updatedAt])
+  @@index([repositoryId])
+  @@map("sessions")
 }
 
-// 仓库审查机器人配置
-model RepositoryReviewBot {
-  id                String        @id @default(cuid())
-  repositoryId      String
-  repository        Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  aiModelId         String
-  aiModel           AIModel       @relation(fields: [aiModelId], references: [id], onDelete: Restrict)
-  name              String
-  description       String?
-  prompt            String?
-  promptMode        String        @default("extend")
-  isActive          Boolean       @default(true)
-  sortOrder         Int           @default(0)
-  maxIterations     Int           @default(5)
-  maxContextFiles   Int           @default(12)
-  maxCallGraphDepth Int           @default(2)
-  maxFindings       Int           @default(50)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  botRuns           ReviewBotRun[]
+/// 线性 UIMessage 持久化
+model Message {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String // user | assistant | system
+  parts     Json // UIMessage.parts（text / tool-call / tool-result / reasoning）
+  createdAt DateTime @default(now())
 
-  @@index([repositoryId, isActive, sortOrder])
-  @@index([aiModelId])
-  @@map("repository_review_bots")
-}
-
-// 单次审查中的机器人执行记录
-model ReviewBotRun {
-  id                String          @id @default(cuid())
-  reviewLogId       String
-  reviewLog         ReviewLog       @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotId       String?
-  reviewBot         RepositoryReviewBot? @relation(fields: [reviewBotId], references: [id], onDelete: SetNull)
-  status            String
-  error             String?
-  summary           String?
-  aiModelProvider   String
-  aiModelId         String
-  aiModelName       String
-  promptSnapshot    String?
-  promptMode        String
-  startedAt         DateTime        @default(now())
-  completedAt       DateTime?
-  comments          ReviewComment[]
-  agentTrace        ReviewAgentTrace?
-  workflowNodes     ReviewWorkflowNode[]
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@unique([reviewLogId, reviewBotId])
-  @@index([reviewLogId, status])
-  @@index([reviewBotId])
-  @@map("review_bot_runs")
-}
-
-// 审查评论
-model ReviewComment {
-  id                String        @id @default(cuid())
-  reviewLogId       String
-  reviewLog         ReviewLog     @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotRunId    String?
-  reviewBotRun      ReviewBotRun? @relation(fields: [reviewBotRunId], references: [id], onDelete: SetNull)
-  filePath          String        // 文件路径
-  lineNumber        Int           // 行号
-  lineRangeEnd      Int?          // 行范围结束（可选，用于多行评论）
-  severity          String        // 严重级别: critical, normal, suggestion
-  content           String        // 评论内容
-  sourceBotName     String?
-  sourceBotModel    String?
-  sourceBotsJson    Json?
-  diffHunk          String?       // diff 片段（可选）
-  confidence        Float?        // AI 置信度（0-1）
-  gitlabCommentId   String?       // GitLab 评论 ID（已创建后）
-  isPosted          Boolean       @default(false) // 是否已发布到 GitLab
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  @@index([reviewLogId, reviewBotRunId, severity])
-  @@index([reviewBotRunId, isPosted])
-  @@map("review_comments")
-}
-
-// 通知配置（全局）
-model NotificationSetting {
-  id                  String   @id @default(cuid())
-  scope               String   @unique @default("global")
-  dingtalkWebhookUrl  String?
-  dingtalkSecret      String?
-  dingtalkEnabled     Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@map("notification_settings")
-}
-
-// 仓库 Code Graph 快照
-model RepositoryMemorySnapshot {
-  id                  String     @id @default(cuid())
-  repositoryId        String
-  repository          Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  branch              String
-  commitSha           String
-  status              String
-  architectureSummary String
-  memoryJson          Json?
-  entrypointsJson     Json?
-  layersJson          Json?
-  conventionsJson     Json?
-  risksJson           Json?
-  confidence          Float      @default(0.7)
-  lastIndexedAt       DateTime   @default(now())
-  error               String?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
-  agentTraces         ReviewAgentTrace[]
-
-  @@unique([repositoryId, branch, commitSha])
-  @@index([repositoryId, branch, status])
-  @@map("repository_memory_snapshots")
-}
-
-// 代码文件节点
-model CodeFileNode {
-  id                String             @id @default(cuid())
-  repositoryId      String
-  repository        Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  branch            String
-  commitSha         String
-  filePath          String
-  contentHash       String
-  language          String
-  role              String
-  summary           String
-  importsJson       Json?
-  exportsJson       Json?
-  lastIndexedAt     DateTime           @default(now())
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  symbols           CodeSymbolNode[]
-  outgoingRelations CodeRelationEdge[] @relation("FromFile")
-  incomingRelations CodeRelationEdge[] @relation("ToFile")
-
-  @@unique([repositoryId, branch, commitSha, filePath])
-  @@index([repositoryId, branch, commitSha])
-  @@index([repositoryId, branch, role])
-  @@map("code_file_nodes")
-}
-
-// 代码符号节点
-model CodeSymbolNode {
-  id                String             @id @default(cuid())
-  fileNodeId        String
-  fileNode          CodeFileNode       @relation(fields: [fileNodeId], references: [id], onDelete: Cascade)
-  name              String
-  kind              String
-  signature         String?
-  startLine         Int
-  endLine           Int
-  summary           String
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  outgoingRelations CodeRelationEdge[] @relation("FromSymbol")
-  incomingRelations CodeRelationEdge[] @relation("ToSymbol")
-
-  @@index([fileNodeId, kind])
-  @@index([name])
-  @@map("code_symbol_nodes")
-}
-
-// 代码关系边
-model CodeRelationEdge {
-  id               String          @id @default(cuid())
-  repositoryId     String
-  repository       Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  branch           String
-  fromFileNodeId   String
-  fromFileNode     CodeFileNode    @relation("FromFile", fields: [fromFileNodeId], references: [id], onDelete: Cascade)
-  fromSymbolNodeId String?
-  fromSymbolNode   CodeSymbolNode? @relation("FromSymbol", fields: [fromSymbolNodeId], references: [id], onDelete: SetNull)
-  toFileNodeId     String?
-  toFileNode       CodeFileNode?   @relation("ToFile", fields: [toFileNodeId], references: [id], onDelete: SetNull)
-  toSymbolNodeId   String?
-  toSymbolNode     CodeSymbolNode? @relation("ToSymbol", fields: [toSymbolNodeId], references: [id], onDelete: SetNull)
-  relationType     String
-  confidence       Float           @default(0.7)
-  evidence         String
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-
-  @@index([repositoryId, branch, fromFileNodeId])
-  @@index([repositoryId, branch, toFileNodeId])
-  @@index([repositoryId, branch, relationType])
-  @@map("code_relation_edges")
-}
-
-// 可持续更新的仓库记忆事实
-model RepositoryMemoryFact {
-  id                 String     @id @default(cuid())
-  repositoryId       String
-  repository         Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  branch             String
-  type               String
-  content            String
-  source             String
-  confidence         Float
-  evidence           String
-  lastVerifiedCommit String
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-
-  @@unique([repositoryId, branch, type, content])
-  @@index([repositoryId, branch, type])
-  @@map("repository_memory_facts")
-}
-
-// Agent 审查轨迹
-model ReviewAgentTrace {
-  id                   String                    @id @default(cuid())
-  reviewLogId          String
-  reviewLog            ReviewLog                 @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotRunId       String?                   @unique
-  reviewBotRun         ReviewBotRun?             @relation(fields: [reviewBotRunId], references: [id], onDelete: Cascade)
-  memorySnapshotId     String?
-  memorySnapshot       RepositoryMemorySnapshot? @relation(fields: [memorySnapshotId], references: [id], onDelete: SetNull)
-  loopIterationsJson   Json?
-  retrievedContextJson Json?
-  finalPlanJson        Json?
-  criticJson           Json?
-  memoryUpdatesJson    Json?
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
-
-  @@index([reviewLogId])
-  @@index([memorySnapshotId])
-  @@map("review_agent_traces")
-}
-
-// 动态审查过程图节点
-model ReviewWorkflowNode {
-  id              String        @id @default(cuid())
-  reviewLogId     String
-  reviewLog       ReviewLog     @relation(fields: [reviewLogId], references: [id], onDelete: Cascade)
-  reviewBotRunId  String?
-  reviewBotRun    ReviewBotRun? @relation(fields: [reviewBotRunId], references: [id], onDelete: Cascade)
-  nodeKey         String
-  parentNodeKey   String?
-  kind            String
-  status          String
-  title           String
-  summary         String?
-  detail          String?
-  sequence        Int
-  startedAt       DateTime?
-  completedAt     DateTime?
-  durationMs      Int?
-  metricsJson     Json?
-  rawJson         Json?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  @@unique([reviewLogId, nodeKey])
-  @@index([reviewLogId, sequence])
-  @@index([reviewLogId, status])
-  @@index([reviewBotRunId])
-  @@map("review_workflow_nodes")
+  @@index([sessionId, createdAt])
+  @@map("messages")
 }
