@@ -105,18 +105,15 @@ webhookRoutes.post('/gitlab', async (c) => {
   return c.json({ triggered: true, sessionId: session.id });
 });
 
-/** 种子提示词：把 MR 上下文交给 agent，指引它走「列变更→审查→发评论」。 */
+/** 种子提示词：只给 MR 上下文，审查策略由 agent 自主决定（不写死步骤）。 */
 function buildSeedPrompt(attrs: MergeRequestHook['object_attributes']): string {
   return [
-    '请审查本次 Merge Request 的代码变更。',
+    '请审查本次 Merge Request。工作区已就绪，当前目录即仓库根。',
     '',
     `- 标题：${attrs.title}`,
     attrs.description ? `- 描述：${attrs.description}` : '',
     `- 分支：${attrs.source_branch} → ${attrs.target_branch}`,
     attrs.last_commit?.id ? `- 最新提交：${attrs.last_commit.id}` : '',
-    '',
-    '请先用 list_changed_files 查看变更范围，再用 fetch_diff / read_file 审查关键文件，',
-    '最后用 post_review_comment 把结论作为一条 Markdown 总评发布到本 MR。',
   ]
     .filter(Boolean)
     .join('\n');

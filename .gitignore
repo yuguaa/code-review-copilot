@@ -45,6 +45,9 @@ next-env.d.ts
 /dev.db
 /prisma/dev.db
 
+# 审查工作区（运行时 clone）
+/.workspaces
+
 # local env
 .env
 .env.local

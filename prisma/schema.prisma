@@ -43,6 +43,13 @@ model Repository {
   maxSteps        Int           @default(16) // agent loop 步数上限
   // 默认审查提示词（webhook 首轮），空则用内置
   defaultReviewPrompt String?
+  // 输出渠道开关与钉钉配置
+  enableMrComment Boolean       @default(true) // 是否回写 MR 评论
+  enableDingtalk  Boolean       @default(false) // 是否推送钉钉
+  dingtalkWebhook String? // 钉钉机器人 webhook 地址
+  dingtalkSecret  String? // 钉钉加签密钥
+  // 项目记忆：跨次审查沉淀的约定/架构/历史问题（agent 读写）
+  memory          String?
   isActive        Boolean       @default(true)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

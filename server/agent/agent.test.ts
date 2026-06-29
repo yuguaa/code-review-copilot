@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { resolveModel } from './model';
-import { buildTools, buildReviewContext, type ReviewContext } from './tools';
+import { buildTools, isReadOnlyCommand, type ReviewContext } from './tools';
+import { signedUrl } from '../lib/dingtalk';
 import type { GitLabService } from '../lib/gitlab';
 
 // 工具执行时 AI SDK 传入的 options（这里只需占位）。
@@ -10,15 +11,11 @@ describe('resolveModel', () => {
   it('缺配置/缺 key/未知 provider 时快速失败', () => {
     expect(() => resolveModel(null)).toThrow();
     expect(() => resolveModel({ modelProvider: 'openai', modelId: 'gpt-4o', apiKey: '' })).toThrow();
-    expect(() =>
-      resolveModel({ modelProvider: 'unknown', modelId: 'x', apiKey: 'k' }),
-    ).toThrow();
+    expect(() => resolveModel({ modelProvider: 'unknown', modelId: 'x', apiKey: 'k' })).toThrow();
   });
 
   it('openai-compatible 缺 baseUrl 抛错，齐全则返回模型', () => {
-    expect(() =>
-      resolveModel({ modelProvider: 'openai-compatible', modelId: 'm', apiKey: 'k' }),
-    ).toThrow();
+    expect(() => resolveModel({ modelProvider: 'openai-compatible', modelId: 'm', apiKey: 'k' })).toThrow();
     const model = resolveModel({
       modelProvider: 'openai-compatible',
       modelId: 'm',
@@ -29,71 +26,105 @@ describe('resolveModel', () => {
   });
 });
 
+describe('isReadOnlyCommand（bash 安全门禁）', () => {
+  it('放行只读命令与只读管道', () => {
+    expect(isReadOnlyCommand('grep -n foo src')).toBe(true);
+    expect(isReadOnlyCommand('rg -n TODO')).toBe(true);
+    expect(isReadOnlyCommand('cat a.ts | head -20')).toBe(true);
+    expect(isReadOnlyCommand('find . -name "*.ts"')).toBe(true);
+    expect(isReadOnlyCommand('cat a 2>/dev/null')).toBe(true);
+    expect(isReadOnlyCommand('git log --oneline -5')).toBe(true);
+    expect(isReadOnlyCommand('git diff main...HEAD')).toBe(true);
+  });
+
+  it('拒绝写/网络/重定向/命令替换', () => {
+    expect(isReadOnlyCommand('rm -rf /')).toBe(false);
+    expect(isReadOnlyCommand('mv a b')).toBe(false);
+    expect(isReadOnlyCommand('curl http://x')).toBe(false);
+    expect(isReadOnlyCommand('npm install')).toBe(false);
+    expect(isReadOnlyCommand('git push')).toBe(false);
+    expect(isReadOnlyCommand('git commit -m x')).toBe(false);
+    expect(isReadOnlyCommand('echo x > f')).toBe(false);
+    expect(isReadOnlyCommand('cat $(whoami)')).toBe(false);
+    expect(isReadOnlyCommand('grep foo `ls`')).toBe(false);
+    expect(isReadOnlyCommand('cat a && rm b')).toBe(false);
+    expect(isReadOnlyCommand('')).toBe(false);
+  });
+});
+
+describe('signedUrl（钉钉加签）', () => {
+  it('无 secret 时返回原始 webhook', () => {
+    expect(signedUrl('https://oapi.dingtalk.com/robot/send?access_token=abc')).toBe(
+      'https://oapi.dingtalk.com/robot/send?access_token=abc',
+    );
+  });
+
+  it('有 secret 时追加 timestamp 与 sign', () => {
+    const url = signedUrl('https://oapi.dingtalk.com/robot/send?access_token=abc', 'SECxx');
+    expect(url).toMatch(/&timestamp=\d+&sign=/);
+    // sign 经 urlencode 的 base64，解码后非空
+    const sign = new URL(url).searchParams.get('sign');
+    expect(sign && sign.length).toBeTruthy();
+  });
+});
+
 function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
   const gitlab = {
-    getMergeRequestChanges: vi.fn().mockResolvedValue([
-      { new_path: 'a.ts', old_path: 'a.ts', new_file: false, deleted_file: false, renamed_file: false, diff: '@@ -1 +1 @@\n-old\n+new' },
-      { new_path: 'b.ts', old_path: 'b.ts', new_file: true, deleted_file: false, renamed_file: false, diff: '@@ +1 @@\n+b' },
-    ]),
-    getRepositoryFileRaw: vi.fn().mockResolvedValue('file-content'),
     createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'disc-1' }),
   } as unknown as GitLabService;
-  return { gitlab, projectId: 1, mrIid: 42, ref: 'sha', sourceBranch: 'feat', targetBranch: 'main', ...overrides };
+  return {
+    gitlab,
+    projectId: 1,
+    mrIid: 42,
+    repoId: 'r1',
+    workdir: '/tmp/wt',
+    targetRef: 'origin/main',
+    diffRefs: { base_sha: 'b', head_sha: 'h', start_sha: 's' },
+    enableMrComment: true,
+    enableDingtalk: false,
+    dingtalk: null,
+    ...overrides,
+  };
 }
 
-describe('buildTools', () => {
-  it('list_changed_files 返回映射后的文件清单', async () => {
-    const tools = buildTools(fakeContext());
-    const out = await tools.list_changed_files.execute!({}, toolOpts);
-    expect(out).toEqual([
-      { path: 'a.ts', oldPath: 'a.ts', newFile: false, deletedFile: false, renamedFile: false },
-      { path: 'b.ts', oldPath: 'b.ts', newFile: true, deletedFile: false, renamedFile: false },
-    ]);
-  });
-
-  it('fetch_diff 按 paths 过滤', async () => {
-    const tools = buildTools(fakeContext());
-    const out = (await tools.fetch_diff.execute!({ paths: ['b.ts'] }, toolOpts)) as string;
-    expect(out).toContain('b.ts');
-    expect(out).not.toContain('a.ts');
-  });
-
-  it('read_file 返回内容', async () => {
-    const tools = buildTools(fakeContext());
-    const out = await tools.read_file.execute!({ path: 'a.ts' }, toolOpts);
-    expect(out).toBe('file-content');
-  });
-
-  it('post_review_comment 返回 discussionId', async () => {
+describe('输出工具的开关控制', () => {
+  it('开启时 post_review_comment 返回 discussionId', async () => {
     const tools = buildTools(fakeContext());
     const out = (await tools.post_review_comment.execute!({ markdown: '# 审查' }, toolOpts)) as {
-      discussionId: string;
+      discussionId: string | number;
     };
     expect(out.discussionId).toBe('disc-1');
   });
 
-  it('无 MR 时变更类工具返回提示', async () => {
-    const tools = buildTools(fakeContext({ mrIid: null }));
-    const out = await tools.list_changed_files.execute!({}, toolOpts);
-    expect(out).toContain('未绑定 Merge Request');
+  it('关闭 MR 评论时跳过且不调用 GitLab', async () => {
+    const ctx = fakeContext({ enableMrComment: false });
+    const tools = buildTools(ctx);
+    const out = await tools.post_review_comment.execute!({ markdown: 'x' }, toolOpts);
+    expect(out).toContain('未开启');
+    expect(ctx.gitlab.createMergeRequestComment).not.toHaveBeenCalled();
   });
-});
 
-describe('buildReviewContext', () => {
-  it('从会话构造上下文，ref 优先取 commitSha', () => {
-    const session = {
-      mrIid: 7,
-      commitSha: 'abc',
-      sourceBranch: 'feat',
-      targetBranch: 'main',
-      repository: {
-        gitLabProjectId: 99,
-        gitLabAccount: { url: 'https://gitlab.com', accessToken: 'tok' },
-      },
-    } as never;
-    const ctx = buildReviewContext(session);
-    expect(ctx.projectId).toBe(99);
-    expect(ctx.mrIid).toBe(7);
-    expect(ctx.ref).toBe('abc');
+  it('行级评论缺 diff_refs 时提示', async () => {
+    const tools = buildTools(fakeContext({ diffRefs: null }));
+    const out = await tools.post_inline_comment.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
+    expect(out).toContain('diff_refs');
+  });
+
+  it('行级评论携带 position 调用 GitLab', async () => {
+    const ctx = fakeContext();
+    const tools = buildTools(ctx);
+    await tools.post_inline_comment.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
+    expect(ctx.gitlab.createMergeRequestComment).toHaveBeenCalledWith(
+      1,
+      42,
+      'x',
+      expect.objectContaining({ new_path: 'a.ts', new_line: 3, position_type: 'text', base_sha: 'b' }),
+    );
+  });
+
+  it('关闭钉钉时跳过推送', async () => {
+    const tools = buildTools(fakeContext({ enableDingtalk: false }));
+    const out = await tools.notify_dingtalk.execute!({ title: 't', text: 'x' }, toolOpts);
+    expect(out).toContain('未开启');
   });
 });

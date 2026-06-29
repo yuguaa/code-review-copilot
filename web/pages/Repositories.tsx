@@ -29,6 +29,10 @@ const emptyForm = {
   apiBaseUrl: '',
   maxSteps: 16,
   defaultReviewPrompt: '',
+  enableMrComment: true,
+  enableDingtalk: false,
+  dingtalkWebhook: '',
+  dingtalkSecret: '',
 };
 
 export function Repositories() {
@@ -189,15 +193,43 @@ export function Repositories() {
               />
             </Field>
 
-            <label className="flex items-center gap-2 text-sm text-neutral-300">
-              <input
-                type="checkbox"
-                checked={form.autoReview}
-                onChange={(e) => set('autoReview', e.target.checked)}
-                className="h-4 w-4 rounded border-neutral-700 bg-neutral-950"
-              />
-              开启 Webhook 自动审查
-            </label>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {([
+                ['autoReview', '开启 Webhook 自动审查'],
+                ['enableMrComment', '回写 MR 评论'],
+                ['enableDingtalk', '推送钉钉'],
+              ] as const).map(([k, label]) => (
+                <label key={k} className="flex items-center gap-2 text-sm text-neutral-300">
+                  <input
+                    type="checkbox"
+                    checked={form[k]}
+                    onChange={(e) => set(k, e.target.checked)}
+                    className="h-4 w-4 rounded border-neutral-700 bg-neutral-950"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            {form.enableDingtalk && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="钉钉机器人 Webhook">
+                  <Input
+                    value={form.dingtalkWebhook}
+                    onChange={(e) => set('dingtalkWebhook', e.target.value)}
+                    placeholder="https://oapi.dingtalk.com/robot/send?access_token=…"
+                  />
+                </Field>
+                <Field label="钉钉加签密钥（可选）">
+                  <Input
+                    type="password"
+                    value={form.dingtalkSecret}
+                    onChange={(e) => set('dingtalkSecret', e.target.value)}
+                    placeholder="SEC…"
+                  />
+                </Field>
+              </div>
+            )}
 
             <Button onClick={submit} disabled={saving}>
               {saving ? '保存中…' : '添加仓库'}

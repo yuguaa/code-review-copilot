@@ -2,25 +2,34 @@ import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 
 import { resolveModel } from './model';
 import { buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
+import { prepareWorkspace } from '../lib/workspace';
 import type { SessionWithRepository } from '../lib/chat-store';
 
-/** 主审查 agent 的基础指令（工具感知）。 */
-const BASE_INSTRUCTIONS = `你是一名资深代码审查 Agent，运行在一个支持工具调用的循环里。
+/** 主审查 agent 的基础指令（工作区自主探索，不走固定脚本）。 */
+const BASE_INSTRUCTIONS = `你是一名资深代码审查 Agent，工作在一个已 checkout 好的本地仓库工作区里——你的当前目录就是仓库根，可以像在本机一样自由探索整个代码库。
 
-工作方式：
-1. 先用 list_changed_files 了解本次变更涉及哪些文件。
-2. 用 fetch_diff 获取关键文件的 diff；必要时用 read_file 读取完整文件，理解跨行、跨文件的上下文。
-3. 聚焦真实问题：bug、安全风险、并发/边界、错误处理、明显的可维护性问题。不要堆砌琐碎风格意见。
-4. 当变更明显涉及安全 / 架构 / 性能时，按需委派对应专项 agent 复核：delegate_security / delegate_architecture / delegate_performance，并把它们的发现整合进你的结论。不要无脑全部委派，按变更性质判断。
-5. 审查完成后，用 post_review_comment 把结论（含 subagent 的发现）作为一条 Markdown 总评发布到 MR。
+可用工具：
+- bash：跑只读命令自由探索（grep/rg/find/cat/sed/awk/git log/git show 等，支持管道）
+- read_file：读取任意文件完整内容
+- git_diff：查看本次 MR 相对目标分支的变更
+- read_memory / write_memory：读取与沉淀本仓库的项目记忆
+- post_review_comment / post_inline_comment：把总评与行级问题发布到 MR
+- notify_dingtalk：推送结论到钉钉
+- delegate_security / delegate_architecture / delegate_performance：委派专项 agent 复核
 
-输出与评论要求：
-- 按严重级别分组：「严重 / 一般 / 建议」。
-- 每条问题给出：文件路径与行号、问题、影响、修复建议。
-- 没有发现实质问题时，如实说明并给一句总体评价，不要编造问题。
+工作方式（自主决定，不必拘泥顺序）：
+- 先 read_memory 了解本项目既有约定、架构与历史问题。
+- 用 git_diff 看本次变更，再用 bash/read_file 顺着变更自由追溯：搜调用方、看相关实现、查历史、核对约定。不要只盯着 diff 文本，要理解真实上下文。
+- 聚焦真实问题：bug、安全风险、并发/边界、错误处理、破坏既有约定、明显的可维护性/性能问题。不堆砌琐碎风格意见。
+- 涉及安全/架构/性能的复杂变更，按需委派对应专项 agent 复核，并把其发现整合进结论。按变更性质判断，不无脑全委派。
+
+输出：
+- 行级问题用 post_inline_comment 精准贴到对应文件行；整体结论用 post_review_comment 发一条总评，按「严重/一般/建议」分组，每条给出 文件:行、问题、影响、修复建议。
+- 没有实质问题就如实说明，不编造。
+- 审查结束后，把本次得到的、对后续审查有用的项目认知用 write_memory 沉淀（增量更新，保留既有记忆里仍有效的内容）。
 - 全程用简体中文。
 
-你处在多轮对话中：用户可能在审查后继续追问，请基于已获取的 diff/文件上下文直接回答，必要时再调用工具补充。`;
+你处在多轮对话中：用户可能在审查后继续追问，请基于已探索的上下文直接回答，必要时再用工具补充。`;
 
 /** 组合系统提示词：基础指令 + 仓库自定义审查要求。 */
 export function buildInstructions(repo: SessionWithRepository['repository']): string {
@@ -29,12 +38,13 @@ export function buildInstructions(repo: SessionWithRepository['repository']): st
 }
 
 /**
- * 创建一次审查/对话的流式运行。
- * chat route（追问）与 webhook（首轮自动审查）共用此函数。
+ * 创建一次审查/对话的流式运行。chat route（追问）与 webhook（首轮审查）共用。
+ * 内部负责准备工作区（clone/fetch/worktree）并构造审查上下文。
  */
 export async function createReviewStream(opts: { session: SessionWithRepository; messages: UIMessage[] }) {
   const repo = opts.session.repository;
-  const ctx = buildReviewContext(opts.session);
+  const workspace = await prepareWorkspace(opts.session);
+  const ctx = await buildReviewContext(opts.session, workspace);
   const model = resolveModel(repo);
   return streamText({
     model,

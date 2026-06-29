@@ -27,7 +27,13 @@ chatRoutes.post('/', async (c) => {
   const session = await getSessionWithRepository(sessionId);
   if (!session) return c.json({ error: '会话不存在' }, 404);
 
-  const result = await createReviewStream({ session, messages });
+  let result: Awaited<ReturnType<typeof createReviewStream>>;
+  try {
+    result = await createReviewStream({ session, messages });
+  } catch (err) {
+    log.error(`创建审查流失败 session=${sessionId}`, err);
+    return c.json({ error: err instanceof Error ? err.message : '审查流创建失败' }, 500);
+  }
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,

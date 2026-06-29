@@ -2,17 +2,19 @@ import { ToolLoopAgent, tool, stepCountIs, type LanguageModel } from 'ai';
 import { z } from 'zod';
 import { buildReadTools, type ReviewContext } from './tools';
 
+const RECON = '你工作在一个已 checkout 好的本地仓库（cwd 即仓库根），用 bash（grep/rg/find/cat/git log 等只读命令）、read_file、git_diff 在工作区自行取证。';
+
 const SECURITY_INSTRUCTIONS = `你是安全专项代码审查 Agent。只关注安全风险：
 注入（SQL/命令/路径）、认证与鉴权缺陷、越权/水平垂直权限、敏感信息泄露、不安全的反序列化/加密、SSRF/CSRF/XSS、依赖与配置风险。
-用 list_changed_files / fetch_diff / read_file 自行取证。只报真实、可定位、可修复的安全问题，给出文件路径、行号、风险与修复建议。无安全问题就如实说明。用简体中文，输出精炼结论。`;
+${RECON}只报真实、可定位、可修复的安全问题，给出文件路径、行号、风险与修复建议。无安全问题就如实说明。用简体中文，输出精炼结论。`;
 
 const ARCH_INSTRUCTIONS = `你是架构专项代码审查 Agent。只关注架构与可维护性：
 模块边界与分层、循环依赖、职责单一、抽象是否合理、是否破坏既有约定、跨文件影响面、可扩展性与重复代码。
-用工具自行取证。只报真实、可定位的问题，给出文件路径与改进建议。无问题就如实说明。用简体中文，输出精炼结论。`;
+${RECON}只报真实、可定位的问题，给出文件路径与改进建议。无问题就如实说明。用简体中文，输出精炼结论。`;
 
 const PERF_INSTRUCTIONS = `你是性能专项代码审查 Agent。只关注性能：
 N+1 查询、不必要的循环/重复计算、阻塞 IO、内存泄漏、大对象拷贝、缓存缺失、前端重渲染/包体积。
-用工具自行取证。只报真实、可定位、影响明显的性能问题，给出文件路径、行号与优化建议。无问题就如实说明。用简体中文，输出精炼结论。`;
+${RECON}只报真实、可定位、影响明显的性能问题，给出文件路径、行号与优化建议。无问题就如实说明。用简体中文，输出精炼结论。`;
 
 function makeSubagent(model: LanguageModel, instructions: string, ctx: ReviewContext) {
   return new ToolLoopAgent({

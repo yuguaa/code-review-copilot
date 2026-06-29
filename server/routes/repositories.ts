@@ -35,6 +35,10 @@ repositoryRoutes.post('/', async (c) => {
       apiBaseUrl: b.apiBaseUrl ?? null,
       maxSteps: b.maxSteps ?? 16,
       defaultReviewPrompt: b.defaultReviewPrompt ?? null,
+      enableMrComment: b.enableMrComment ?? true,
+      enableDingtalk: b.enableDingtalk ?? false,
+      dingtalkWebhook: b.dingtalkWebhook || null,
+      dingtalkSecret: b.dingtalkSecret || null,
     },
   });
   return c.json({ repository: maskRepo(repo) });
@@ -48,6 +52,7 @@ repositoryRoutes.patch('/:id', async (c) => {
   for (const k of [
     'name', 'path', 'description', 'watchBranches', 'autoReview',
     'modelProvider', 'modelId', 'apiBaseUrl', 'maxSteps', 'defaultReviewPrompt', 'isActive',
+    'enableMrComment', 'enableDingtalk', 'dingtalkWebhook', 'dingtalkSecret',
   ]) {
     if (b[k] !== undefined) data[k] = b[k];
   }

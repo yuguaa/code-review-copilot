@@ -19,7 +19,8 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8787
-RUN apk add --no-cache openssl
+# openssl 供 prisma；git 供 agent clone 仓库工作区
+RUN apk add --no-cache openssl git
 # 运行时需要：完整 node_modules（含 tsx 以直接跑 TS server）、server、shared、prisma、前端产物
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
