@@ -29,21 +29,21 @@ export function Login() {
     <div className="flex h-full items-center justify-center px-4">
       <form
         onSubmit={submit}
-        className="w-full max-w-sm space-y-5 rounded-2xl border border-neutral-800 bg-neutral-900/60 p-8"
+        className="w-full max-w-sm space-y-5 rounded-2xl bg-white p-8 shadow-xl shadow-slate-200/80 ring-1 ring-slate-200"
       >
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold">代码审查 Agent</h1>
-          <p className="text-sm text-neutral-500">请输入账号与密钥登录</p>
+          <h1 className="text-lg font-semibold text-slate-950">代码审查 Agent</h1>
+          <p className="text-sm text-slate-500">请输入账号与密钥登录</p>
         </div>
         <input
-          className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-600"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
           placeholder="账号"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoFocus
         />
         <input
-          className="w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-600"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
           placeholder="密钥"
           type="password"
           value={secret}
@@ -52,7 +52,7 @@ export function Login() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-neutral-200 disabled:opacity-50"
+          className="w-full rounded-lg bg-slate-950 px-3 py-2 text-sm font-medium text-white shadow-sm transition-[background-color,transform] hover:bg-slate-800 active:scale-95 disabled:opacity-50"
         >
           {loading ? '登录中…' : '登录'}
         </button>

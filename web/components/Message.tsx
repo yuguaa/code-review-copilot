@@ -23,22 +23,22 @@ function ToolPart({ part }: { part: Record<string, unknown> }) {
   const errored = state === 'output-error';
 
   return (
-    <div className="my-1.5 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900/50 text-xs">
+    <div className="my-1.5 overflow-hidden rounded-lg bg-white text-xs shadow-sm ring-1 ring-slate-200/80">
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
         <Wrench size={13} className={cn(errored ? 'text-rose-400' : done ? 'text-emerald-400' : 'text-amber-400')} />
-        <span className="font-medium text-neutral-300">{TOOL_LABEL[name] ?? name}</span>
-        <span className="text-neutral-600">{errored ? '失败' : done ? '完成' : '执行中…'}</span>
-        <ChevronRight size={13} className={cn('ml-auto text-neutral-600 transition', open && 'rotate-90')} />
+        <span className="font-medium text-slate-700">{TOOL_LABEL[name] ?? name}</span>
+        <span className="text-slate-400">{errored ? '失败' : done ? '完成' : '执行中…'}</span>
+        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="space-y-2 border-t border-neutral-800 px-3 py-2">
+        <div className="space-y-2 border-t border-slate-100 bg-slate-50 px-3 py-2">
           {part.input != null && (
-            <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-neutral-400">
+            <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-slate-500">
               入参：{JSON.stringify(part.input, null, 2)}
             </pre>
           )}
           {part.output != null && (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-[11px] text-neutral-500">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-[11px] text-slate-600">
               {typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2)}
             </pre>
           )}
@@ -58,7 +58,7 @@ export function Message({ message }: { message: UIMessage }) {
       <div
         className={cn(
           'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-          isUser ? 'bg-neutral-700' : 'bg-emerald-900/60',
+          isUser ? 'bg-slate-950 text-white' : 'bg-emerald-100 text-emerald-700',
         )}
       >
         {isUser ? <User size={15} /> : <Bot size={15} />}
@@ -71,7 +71,7 @@ export function Message({ message }: { message: UIMessage }) {
                 key={i}
                 className={cn(
                   'inline-block whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm leading-relaxed',
-                  isUser ? 'bg-neutral-700 text-neutral-100' : 'bg-neutral-900 text-neutral-200',
+                  isUser ? 'bg-slate-950 text-white' : 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/80',
                 )}
               >
                 {part.text}
@@ -80,7 +80,7 @@ export function Message({ message }: { message: UIMessage }) {
           }
           if (part.type === 'reasoning') {
             return (
-              <div key={i} className="rounded-lg bg-neutral-900/40 px-3 py-2 text-xs italic text-neutral-500">
+              <div key={i} className="rounded-lg bg-slate-100 px-3 py-2 text-xs italic text-slate-500">
                 {part.text}
               </div>
             );

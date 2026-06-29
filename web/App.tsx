@@ -13,7 +13,7 @@ export const useAuth = () => useContext(AuthContext);
 function RequireAuth({ children }: { children: ReactNode }) {
   const { authed, ready } = useAuth();
   const location = useLocation();
-  if (!ready) return <div className="flex h-full items-center justify-center text-sm text-neutral-500">加载中…</div>;
+  if (!ready) return <div className="flex h-full items-center justify-center text-sm text-slate-500">加载中…</div>;
   if (!authed) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <>{children}</>;
 }

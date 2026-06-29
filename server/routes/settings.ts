@@ -9,6 +9,11 @@ function maskAccount(a: { accessToken?: string; webhookSecret?: string | null; [
   return { ...rest, hasAccessToken: Boolean(accessToken), hasWebhookSecret: Boolean(webhookSecret) };
 }
 
+function maskModel(m: { apiKey?: string; [k: string]: unknown }) {
+  const { apiKey, ...rest } = m;
+  return { ...rest, hasApiKey: Boolean(apiKey) };
+}
+
 /** GitLab 账号列表。 */
 settingsRoutes.get('/gitlab', async (c) => {
   const accounts = await prisma.gitLabAccount.findMany({ orderBy: { createdAt: 'desc' } });
@@ -64,4 +69,92 @@ settingsRoutes.get('/gitlab/:id/projects', async (c) => {
       defaultBranch: p.default_branch,
     })),
   });
+});
+
+/** 全局 AI 模型列表。 */
+settingsRoutes.get('/models', async (c) => {
+  const models = await prisma.aIModel.findMany({ orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }] });
+  return c.json({ models: models.map(maskModel) });
+});
+
+/** 系统配置与审查数据概览。 */
+settingsRoutes.get('/stats', async (c) => {
+  const [
+    repositoryCount,
+    activeRepositoryCount,
+    modelCount,
+    gitLabAccountCount,
+    sessionCount,
+    reviewSessionCount,
+    chatSessionCount,
+    messageCount,
+    latestSession,
+  ] = await prisma.$transaction([
+    prisma.repository.count(),
+    prisma.repository.count({ where: { isActive: true } }),
+    prisma.aIModel.count({ where: { isActive: true } }),
+    prisma.gitLabAccount.count({ where: { isActive: true } }),
+    prisma.session.count(),
+    prisma.session.count({ where: { kind: 'review' } }),
+    prisma.session.count({ where: { kind: 'chat' } }),
+    prisma.message.count(),
+    prisma.session.findFirst({ orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
+  ]);
+  return c.json({
+    stats: {
+      repositoryCount,
+      activeRepositoryCount,
+      modelCount,
+      gitLabAccountCount,
+      sessionCount,
+      reviewSessionCount,
+      chatSessionCount,
+      messageCount,
+      latestSessionAt: latestSession?.updatedAt ?? null,
+    },
+  });
+});
+
+/** 新增全局 AI 模型。 */
+settingsRoutes.post('/models', async (c) => {
+  const b = await c.req.json();
+  const model = await prisma.$transaction(async (tx) => {
+    if (b.isDefault === true) {
+      await tx.aIModel.updateMany({ data: { isDefault: false } });
+    }
+    return tx.aIModel.create({
+      data: {
+        provider: b.provider,
+        modelId: b.modelId,
+        apiKey: b.apiKey,
+        apiBaseUrl: b.apiBaseUrl || null,
+        maxSteps: b.maxSteps ?? 16,
+        isDefault: b.isDefault ?? false,
+        isActive: b.isActive ?? true,
+      },
+    });
+  });
+  return c.json({ model: maskModel(model) });
+});
+
+settingsRoutes.patch('/models/:id', async (c) => {
+  const id = c.req.param('id');
+  const b = await c.req.json();
+  const model = await prisma.$transaction(async (tx) => {
+    if (b.isDefault === true) {
+      await tx.aIModel.updateMany({ where: { id: { not: id } }, data: { isDefault: false } });
+    }
+    const data: Record<string, unknown> = {};
+    for (const k of ['provider', 'modelId', 'apiBaseUrl', 'maxSteps', 'isDefault', 'isActive']) {
+      if (b[k] !== undefined) data[k] = b[k];
+    }
+    if (typeof b.apiKey === 'string' && b.apiKey.length > 0) data.apiKey = b.apiKey;
+    return tx.aIModel.update({ where: { id }, data });
+  });
+  return c.json({ model: maskModel(model) });
+});
+
+settingsRoutes.delete('/models/:id', async (c) => {
+  await prisma.aIModel.delete({ where: { id: c.req.param('id') } }).catch(() => undefined);
+  return c.json({ success: true });
 });

@@ -1,5 +1,5 @@
-// 会话式代码审查 Agent —— 精简数据模型（4 表）
-// 设计原则：review = session，线性 UIMessage 持久化，按仓库配模型/提示词。
+// 会话式代码审查 Agent
+// 设计原则：review = session，线性 UIMessage 持久化，全局模型配置 + 仓库级覆盖。
 
 generator client {
   provider = "prisma-client-js"
@@ -24,7 +24,24 @@ model GitLabAccount {
   @@map("gitlab_accounts")
 }
 
-/// 仓库 + 按仓库的模型/提示词配置
+/// 全局 AI 模型配置
+model AIModel {
+  id          String       @id @default(cuid())
+  provider    String // openai | anthropic | openai-compatible
+  modelId     String // 如 gpt-4o / claude-3-5-sonnet
+  apiKey      String
+  apiBaseUrl  String?
+  maxSteps    Int          @default(16)
+  isDefault   Boolean      @default(false)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  repositories Repository[]
+
+  @@map("ai_models")
+}
+
+/// 仓库配置：多仓库列表 + 可选模型覆盖
 model Repository {
   id              String        @id @default(cuid())
   gitLabAccountId String
@@ -35,12 +52,14 @@ model Repository {
   description     String?
   watchBranches   String? // "main,develop,feature/*"，空=全部
   autoReview      Boolean       @default(true)
-  // 模型配置（按仓库）
-  modelProvider   String // openai | anthropic | openai-compatible
-  modelId         String // 如 gpt-4o / claude-3-5-sonnet
-  apiKey          String
-  apiBaseUrl      String? // 自定义端点（openai-compatible 用）
-  maxSteps        Int           @default(16) // agent loop 步数上限
+  defaultAIModelId String?
+  defaultAIModel   AIModel?     @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
+  // 仓库级自定义模型配置：全部为空时使用 defaultAIModel
+  customProvider   String?
+  customModelId    String?
+  customApiKey     String?
+  customApiBaseUrl String?
+  customMaxSteps   Int?
   // 默认审查提示词（webhook 首轮），空则用内置
   defaultReviewPrompt String?
   // 输出渠道开关与钉钉配置
@@ -56,6 +75,7 @@ model Repository {
   sessions        Session[]
 
   @@unique([gitLabProjectId, gitLabAccountId])
+  @@index([defaultAIModelId])
   @@map("repositories")
 }
 

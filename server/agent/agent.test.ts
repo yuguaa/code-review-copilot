@@ -10,17 +10,18 @@ const toolOpts = { toolCallId: 't1', messages: [] } as never;
 describe('resolveModel', () => {
   it('缺配置/缺 key/未知 provider 时快速失败', () => {
     expect(() => resolveModel(null)).toThrow();
-    expect(() => resolveModel({ modelProvider: 'openai', modelId: 'gpt-4o', apiKey: '' })).toThrow();
-    expect(() => resolveModel({ modelProvider: 'unknown', modelId: 'x', apiKey: 'k' })).toThrow();
+    expect(() => resolveModel({ provider: 'openai', modelId: 'gpt-4o', apiKey: '', maxSteps: 16 })).toThrow();
+    expect(() => resolveModel({ provider: 'unknown', modelId: 'x', apiKey: 'k', maxSteps: 16 })).toThrow();
   });
 
   it('openai-compatible 缺 baseUrl 抛错，齐全则返回模型', () => {
-    expect(() => resolveModel({ modelProvider: 'openai-compatible', modelId: 'm', apiKey: 'k' })).toThrow();
+    expect(() => resolveModel({ provider: 'openai-compatible', modelId: 'm', apiKey: 'k', maxSteps: 16 })).toThrow();
     const model = resolveModel({
-      modelProvider: 'openai-compatible',
+      provider: 'openai-compatible',
       modelId: 'm',
       apiKey: 'k',
       apiBaseUrl: 'https://example.com/v1',
+      maxSteps: 16,
     });
     expect(model).toBeTruthy();
   });

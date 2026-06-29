@@ -5,7 +5,7 @@ import { prisma } from './prisma';
 export function getSessionWithRepository(id: string) {
   return prisma.session.findUnique({
     where: { id },
-    include: { repository: { include: { gitLabAccount: true } } },
+    include: { repository: { include: { gitLabAccount: true, defaultAIModel: true } } },
   });
 }
 

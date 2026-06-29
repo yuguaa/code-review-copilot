@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { Button, Card, Field, Input, Select, Textarea, PageShell } from '../components/ui';
 
 type Account = { id: string; url: string };
+type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean };
 type Project = { id: number; name: string; path: string; defaultBranch: string };
 type Repo = {
   id: string;
@@ -12,8 +13,10 @@ type Repo = {
   gitLabProjectId: number;
   watchBranches: string | null;
   autoReview: boolean;
-  modelProvider: string;
-  modelId: string;
+  defaultAIModelId: string | null;
+  customProvider: string | null;
+  customModelId: string | null;
+  defaultAIModel: AIModel | null;
 };
 
 const emptyForm = {
@@ -23,11 +26,13 @@ const emptyForm = {
   path: '',
   watchBranches: 'main',
   autoReview: true,
-  modelProvider: 'openai',
-  modelId: 'gpt-4o',
-  apiKey: '',
-  apiBaseUrl: '',
-  maxSteps: 16,
+  defaultAIModelId: '',
+  useCustomModel: false,
+  customProvider: 'openai',
+  customModelId: '',
+  customApiKey: '',
+  customApiBaseUrl: '',
+  customMaxSteps: 16,
   defaultReviewPrompt: '',
   enableMrComment: true,
   enableDingtalk: false,
@@ -38,6 +43,7 @@ const emptyForm = {
 export function Repositories() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [models, setModels] = useState<AIModel[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
@@ -47,13 +53,18 @@ export function Repositories() {
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const load = useCallback(async () => {
-    const [r, a] = await Promise.all([
+    const [repositoryResult, accountResult, modelResult] = await Promise.all([
       api<{ repositories: Repo[] }>('/api/repositories').catch(() => ({ repositories: [] })),
       api<{ accounts: Account[] }>('/api/settings/gitlab').catch(() => ({ accounts: [] })),
+      api<{ models: AIModel[] }>('/api/settings/models').catch(() => ({ models: [] })),
     ]);
-    setRepos(r.repositories);
-    setAccounts(a.accounts);
-    if (a.accounts[0] && !form.gitLabAccountId) set('gitLabAccountId', a.accounts[0].id);
+    setRepos(repositoryResult.repositories);
+    setAccounts(accountResult.accounts);
+    setModels(modelResult.models);
+    if (accountResult.accounts[0] && !form.gitLabAccountId) set('gitLabAccountId', accountResult.accounts[0].id);
+    if (modelResult.models[0] && !form.defaultAIModelId) {
+      set('defaultAIModelId', modelResult.models.find((m) => m.isDefault)?.id ?? modelResult.models[0].id);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     void load();
@@ -76,13 +87,24 @@ export function Repositories() {
   };
 
   const submit = async () => {
-    if (!form.gitLabAccountId || !form.gitLabProjectId || !form.apiKey) {
-      return toast.error('请填写账号、项目与模型 API Key');
+    if (!form.gitLabAccountId || !form.gitLabProjectId || (!form.defaultAIModelId && !form.useCustomModel)) {
+      return toast.error('请填写账号、项目与默认模型');
+    }
+    if (form.useCustomModel && (!form.customProvider || !form.customModelId || !form.customApiKey)) {
+      return toast.error('请填写完整的仓库自定义模型配置');
     }
     setSaving(true);
+    const payload = {
+      ...form,
+      customProvider: form.useCustomModel ? form.customProvider : null,
+      customModelId: form.useCustomModel ? form.customModelId : null,
+      customApiKey: form.useCustomModel ? form.customApiKey : null,
+      customApiBaseUrl: form.useCustomModel ? form.customApiBaseUrl : null,
+      customMaxSteps: form.useCustomModel ? form.customMaxSteps : null,
+    };
     try {
-      await api('/api/repositories', { method: 'POST', body: JSON.stringify(form) });
-      setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId });
+      await api('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
+      setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
       await load();
       toast.success('已添加仓库');
     } catch (e) {
@@ -100,15 +122,15 @@ export function Repositories() {
   return (
     <PageShell title="仓库配置">
       <Card className="space-y-2">
-        <p className="text-xs text-neutral-400">在 GitLab 项目里添加 Webhook（Merge Request events），URL 指向：</p>
-        <code className="block break-all rounded-md bg-neutral-950 px-3 py-2 text-xs text-emerald-300">{webhookUrl}</code>
-        <p className="text-[11px] text-neutral-600">Secret Token 与对应账号的 Webhook 密钥一致即可验签。</p>
+        <p className="text-xs text-slate-500">在 GitLab 项目里添加 Webhook（Merge Request events），URL 指向：</p>
+        <code className="block break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-emerald-700">{webhookUrl}</code>
+        <p className="text-[11px] text-slate-400">Secret Token 与对应账号的 Webhook 密钥一致即可验签。</p>
       </Card>
 
       <Card className="space-y-4">
         <h2 className="text-sm font-semibold">添加仓库</h2>
         {accounts.length === 0 ? (
-          <p className="text-xs text-amber-400">请先到「设置」添加 GitLab 账号</p>
+          <p className="text-xs text-amber-600">请先到「设置」添加 GitLab 账号</p>
         ) : (
           <>
             <Field label="GitLab 账号">
@@ -130,14 +152,14 @@ export function Repositories() {
               </div>
             </Field>
             {projects.length > 0 && (
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-neutral-800 p-1">
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
                 {projects.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => pickProject(p)}
-                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-neutral-300 hover:bg-neutral-800"
+                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
                   >
-                    {p.path} <span className="text-neutral-600">#{p.id}</span>
+                    {p.path} <span className="text-slate-400">#{p.id}</span>
                   </button>
                 ))}
               </div>
@@ -155,30 +177,55 @@ export function Repositories() {
               </Field>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="模型 Provider">
-                <Select value={form.modelProvider} onChange={(e) => set('modelProvider', e.target.value)}>
-                  <option value="openai">openai</option>
-                  <option value="anthropic">anthropic</option>
-                  <option value="openai-compatible">openai-compatible</option>
-                </Select>
-              </Field>
-              <Field label="模型 ID">
-                <Input value={form.modelId} onChange={(e) => set('modelId', e.target.value)} placeholder="gpt-4o / claude-3-5-sonnet" />
-              </Field>
-              <Field label="最大步数">
-                <Input type="number" value={form.maxSteps} onChange={(e) => set('maxSteps', Number(e.target.value))} />
-              </Field>
-            </div>
+            <Field label="默认模型" hint="使用「设置」里的全局模型；需要特殊模型时再开启仓库自定义模型">
+              <Select value={form.defaultAIModelId} onChange={(e) => set('defaultAIModelId', e.target.value)}>
+                <option value="">请选择模型</option>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.provider}/{m.modelId}{m.isDefault ? '（默认）' : ''}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="模型 API Key">
-                <Input type="password" value={form.apiKey} onChange={(e) => set('apiKey', e.target.value)} />
-              </Field>
-              <Field label="API Base URL（openai-compatible 必填）">
-                <Input value={form.apiBaseUrl} onChange={(e) => set('apiBaseUrl', e.target.value)} placeholder="https://…/v1" />
-              </Field>
-            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={form.useCustomModel}
+                onChange={(e) => set('useCustomModel', e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 bg-white"
+              />
+              使用仓库自定义模型
+            </label>
+
+            {form.useCustomModel && (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="模型 Provider">
+                    <Select value={form.customProvider} onChange={(e) => set('customProvider', e.target.value)}>
+                      <option value="openai">openai</option>
+                      <option value="anthropic">anthropic</option>
+                      <option value="openai-compatible">openai-compatible</option>
+                    </Select>
+                  </Field>
+                  <Field label="模型 ID">
+                    <Input value={form.customModelId} onChange={(e) => set('customModelId', e.target.value)} placeholder="gpt-4o" />
+                  </Field>
+                  <Field label="最大步数">
+                    <Input type="number" value={form.customMaxSteps} onChange={(e) => set('customMaxSteps', Number(e.target.value))} />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="模型 API Key">
+                    <Input type="password" value={form.customApiKey} onChange={(e) => set('customApiKey', e.target.value)} />
+                  </Field>
+                  <Field label="API Base URL（openai-compatible 必填）">
+                    <Input value={form.customApiBaseUrl} onChange={(e) => set('customApiBaseUrl', e.target.value)} placeholder="https://.../v1" />
+                  </Field>
+                </div>
+              </>
+            )}
 
             <Field label="监听分支" hint="逗号分隔，支持通配符，如 main,release-*；留空=全部">
               <Input value={form.watchBranches} onChange={(e) => set('watchBranches', e.target.value)} />
@@ -199,12 +246,12 @@ export function Repositories() {
                 ['enableMrComment', '回写 MR 评论'],
                 ['enableDingtalk', '推送钉钉'],
               ] as const).map(([k, label]) => (
-                <label key={k} className="flex items-center gap-2 text-sm text-neutral-300">
+                <label key={k} className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
                     checked={form[k]}
                     onChange={(e) => set(k, e.target.checked)}
-                    className="h-4 w-4 rounded border-neutral-700 bg-neutral-950"
+                    className="h-4 w-4 rounded border-slate-300 bg-white"
                   />
                   {label}
                 </label>
@@ -242,9 +289,9 @@ export function Repositories() {
         {repos.map((r) => (
           <Card key={r.id} className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-neutral-200">{r.path}</p>
-              <p className="text-[11px] text-neutral-500">
-                {r.modelProvider}/{r.modelId} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
+              <p className="truncate text-sm text-slate-900">{r.path}</p>
+              <p className="text-[11px] text-slate-500">
+                模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : `${r.defaultAIModel?.provider ?? '未配置'}/${r.defaultAIModel?.modelId ?? '-'}`} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
               </p>
             </div>
             <Button variant="danger" onClick={() => remove(r.id)}>
@@ -252,7 +299,7 @@ export function Repositories() {
             </Button>
           </Card>
         ))}
-        {repos.length === 0 && <p className="text-center text-xs text-neutral-600">还没有配置仓库</p>}
+        {repos.length === 0 && <p className="text-center text-xs text-slate-400">还没有配置仓库</p>}
       </div>
     </PageShell>
   );

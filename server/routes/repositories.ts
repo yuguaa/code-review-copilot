@@ -5,15 +5,24 @@ import { createGitLabService } from '../lib/gitlab';
 export const repositoryRoutes = new Hono();
 
 /** 不回传敏感字段 apiKey（列表查询里 gitLabAccount 仅含 id/url，不含 token）。 */
-function maskRepo<T extends { apiKey?: string }>(r: T) {
-  const { apiKey, ...rest } = r;
-  return { ...rest, hasApiKey: Boolean(apiKey) };
+function maskRepo<T extends { customApiKey?: string | null; defaultAIModel?: { apiKey?: string } | null }>(r: T) {
+  const { customApiKey, defaultAIModel, ...rest } = r;
+  const maskedModel = defaultAIModel
+    ? (() => {
+        const { apiKey, ...modelRest } = defaultAIModel;
+        return { ...modelRest, hasApiKey: Boolean(apiKey) };
+      })()
+    : null;
+  return { ...rest, defaultAIModel: maskedModel, hasCustomApiKey: Boolean(customApiKey) };
 }
 
 repositoryRoutes.get('/', async (c) => {
   const repos = await prisma.repository.findMany({
     orderBy: { updatedAt: 'desc' },
-    include: { gitLabAccount: { select: { id: true, url: true } } },
+    include: {
+      gitLabAccount: { select: { id: true, url: true } },
+      defaultAIModel: true,
+    },
   });
   return c.json({ repositories: repos.map(maskRepo) });
 });
@@ -29,11 +38,12 @@ repositoryRoutes.post('/', async (c) => {
       description: b.description ?? null,
       watchBranches: b.watchBranches ?? null,
       autoReview: b.autoReview ?? true,
-      modelProvider: b.modelProvider,
-      modelId: b.modelId,
-      apiKey: b.apiKey,
-      apiBaseUrl: b.apiBaseUrl ?? null,
-      maxSteps: b.maxSteps ?? 16,
+      defaultAIModelId: b.defaultAIModelId || null,
+      customProvider: b.customProvider || null,
+      customModelId: b.customModelId || null,
+      customApiKey: b.customApiKey || null,
+      customApiBaseUrl: b.customApiBaseUrl || null,
+      customMaxSteps: b.customMaxSteps ?? null,
       defaultReviewPrompt: b.defaultReviewPrompt ?? null,
       enableMrComment: b.enableMrComment ?? true,
       enableDingtalk: b.enableDingtalk ?? false,
@@ -51,12 +61,13 @@ repositoryRoutes.patch('/:id', async (c) => {
   const data: Record<string, unknown> = {};
   for (const k of [
     'name', 'path', 'description', 'watchBranches', 'autoReview',
-    'modelProvider', 'modelId', 'apiBaseUrl', 'maxSteps', 'defaultReviewPrompt', 'isActive',
+    'defaultAIModelId', 'customProvider', 'customModelId', 'customApiBaseUrl', 'customMaxSteps',
+    'defaultReviewPrompt', 'isActive',
     'enableMrComment', 'enableDingtalk', 'dingtalkWebhook', 'dingtalkSecret',
   ]) {
     if (b[k] !== undefined) data[k] = b[k];
   }
-  if (typeof b.apiKey === 'string' && b.apiKey.length > 0) data.apiKey = b.apiKey;
+  if (typeof b.customApiKey === 'string' && b.customApiKey.length > 0) data.customApiKey = b.customApiKey;
   const repo = await prisma.repository.update({ where: { id }, data });
   return c.json({ repository: maskRepo(repo) });
 });

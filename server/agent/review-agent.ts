@@ -1,5 +1,5 @@
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
-import { resolveModel } from './model';
+import { resolveModel, resolveRepositoryModelConfig } from './model';
 import { buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
 import { prepareWorkspace } from '../lib/workspace';
@@ -45,12 +45,13 @@ export async function createReviewStream(opts: { session: SessionWithRepository;
   const repo = opts.session.repository;
   const workspace = await prepareWorkspace(opts.session);
   const ctx = await buildReviewContext(opts.session, workspace);
-  const model = resolveModel(repo);
+  const modelConfig = resolveRepositoryModelConfig(repo);
+  const model = resolveModel(modelConfig);
   return streamText({
     model,
     system: buildInstructions(repo),
     messages: await convertToModelMessages(opts.messages),
     tools: { ...buildTools(ctx), ...buildDelegateTools(ctx, model) },
-    stopWhen: stepCountIs(repo?.maxSteps ?? 16),
+    stopWhen: stepCountIs(modelConfig.maxSteps),
   });
 }
