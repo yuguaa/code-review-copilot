@@ -50,8 +50,8 @@ function worktreeKey(session: SessionWithRepository): string {
 export type Workspace = {
   /** worktree 绝对路径（agent 所有工具的 cwd） */
   dir: string;
-  /** git diff 的基准远程分支引用，如 origin/main */
-  targetRef: string;
+  /** git diff 的基准引用，如 origin/main 或 Push 事件的 before sha */
+  diffRef: string;
 };
 
 /**
@@ -71,6 +71,7 @@ export function prepareWorkspace(session: SessionWithRepository): Promise<Worksp
   const sourceBranch = session.sourceBranch ?? '';
   const targetBranch = session.targetBranch ?? '';
   const checkoutRef = session.commitSha?.trim() || `origin/${sourceBranch}`;
+  const diffRef = session.baseCommitSha?.trim() || (targetBranch ? `origin/${targetBranch}` : '');
 
   return withRepoLock(repoId, async () => {
     await cleanupExpired(baseDir).catch((err) => log.warn('清理过期工作区失败', err));
@@ -82,7 +83,7 @@ export function prepareWorkspace(session: SessionWithRepository): Promise<Worksp
       await git([...auth, 'clone', '--no-tags', url, gitDir]);
     }
 
-    // 2. fetch 最新 source/target（target 供 diff 基准）
+    // 2. fetch 最新 source/target（target 供 MR diff 基准；Push 可只有 source）
     const branches = [sourceBranch, targetBranch].filter(Boolean);
     await git(['-C', gitDir, ...auth, 'fetch', 'origin', ...branches, '--prune']);
 
@@ -96,7 +97,8 @@ export function prepareWorkspace(session: SessionWithRepository): Promise<Worksp
       await git(['-C', gitDir, 'worktree', 'add', '--detach', wtDir, checkoutRef]);
     }
 
-    return { dir: wtDir, targetRef: `origin/${targetBranch}` };
+    if (!diffRef) throw new Error('会话缺少 diff 基准，无法准备审查工作区');
+    return { dir: wtDir, diffRef };
   });
 }
 

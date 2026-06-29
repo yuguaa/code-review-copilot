@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import { Button, Card, Field, Input, Select, Textarea, PageShell } from '../components/ui';
+import { Button, Card, Field, Input, Select, Textarea, PageShell, Modal } from '../components/ui';
 
 type Account = { id: string; url: string };
 type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean };
@@ -56,6 +56,7 @@ export function Repositories() {
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const webhookUrl = `${location.origin}/api/webhook/gitlab`;
 
@@ -95,9 +96,18 @@ export function Repositories() {
     setProjects([]);
   };
 
-  const resetForm = () => {
+  const openAdd = () => {
     setEditingId(null);
     setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
+    setProjects([]);
+    setSearch('');
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    if (saving) return;
+    setModalOpen(false);
+    setEditingId(null);
     setProjects([]);
   };
 
@@ -125,6 +135,7 @@ export function Repositories() {
       dingtalkSecret: '',
     });
     setProjects([]);
+    setModalOpen(true);
   };
 
   const submit = () => {
@@ -150,6 +161,7 @@ export function Repositories() {
       .then(() => {
         setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
         setEditingId(null);
+        setModalOpen(false);
         return load();
       })
       .then(() => toast.success(editingId ? '已更新仓库' : '已添加仓库'))
@@ -164,25 +176,25 @@ export function Repositories() {
 
   return (
     <PageShell title="仓库配置">
-      <Card className="space-y-2">
-        <p className="text-xs text-slate-500">在 GitLab 项目里添加 Webhook（Merge Request events），URL 指向：</p>
+      <Card className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold text-slate-950">Webhook 接入</h2>
+            <p className="text-xs text-slate-500">在 GitLab 项目里添加 Webhook，勾选 Merge Request events 和 Push events。</p>
+          </div>
+          <Button onClick={openAdd} type="button">
+            添加仓库
+          </Button>
+        </div>
         <code className="block break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-emerald-700">{webhookUrl}</code>
         <p className="text-[11px] text-slate-400">Secret Token 与对应账号的 Webhook 密钥一致即可验签。</p>
       </Card>
 
-      <Card className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold">{editingId ? '编辑仓库' : '添加仓库'}</h2>
-          {editingId && (
-            <Button variant="ghost" onClick={resetForm} type="button">
-              取消编辑
-            </Button>
-          )}
-        </div>
+      <Modal open={modalOpen} title={editingId ? '编辑仓库' : '添加仓库'} onClose={closeModal}>
         {accounts.length === 0 ? (
           <p className="text-xs text-amber-600">请先到「设置」添加 GitLab 账号</p>
         ) : (
-          <>
+          <div className="space-y-4">
             <Field label="GitLab 账号">
               <Select value={form.gitLabAccountId} onChange={(e) => set('gitLabAccountId', e.target.value)}>
                 {accounts.map((a) => (
@@ -202,12 +214,12 @@ export function Repositories() {
               </div>
             </Field>
             {projects.length > 0 && (
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-sky-50 p-1 shadow-inner ring-1 ring-sky-100">
                 {projects.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => pickProject(p)}
-                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-slate-700 transition-[background-color] hover:bg-white"
                   >
                     {p.path} <span className="text-slate-400">#{p.id}</span>
                   </button>
@@ -215,7 +227,7 @@ export function Repositories() {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-3 md:grid-cols-3">
               <Field label="项目 ID">
                 <Input value={form.gitLabProjectId} onChange={(e) => set('gitLabProjectId', e.target.value)} />
               </Field>
@@ -250,7 +262,7 @@ export function Repositories() {
 
             {form.useCustomModel && (
               <>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-3 md:grid-cols-3">
                   <Field label="模型 Provider">
                     <Select value={form.customProvider} onChange={(e) => set('customProvider', e.target.value)}>
                       <option value="openai">openai</option>
@@ -266,7 +278,7 @@ export function Repositories() {
                   </Field>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <Field label="模型 API Key">
                     <Input type="password" value={form.customApiKey} onChange={(e) => set('customApiKey', e.target.value)} />
                   </Field>
@@ -293,7 +305,7 @@ export function Repositories() {
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {([
                 ['autoReview', '开启 Webhook 自动审查'],
-                ['enableMrComment', '回写 MR 评论'],
+                ['enableMrComment', '回写平台评论'],
                 ['enableDingtalk', '推送钉钉'],
               ] as const).map(([k, label]) => (
                 <label key={k} className="flex items-center gap-2 text-sm text-slate-700">
@@ -309,7 +321,7 @@ export function Repositories() {
             </div>
 
             {form.enableDingtalk && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 md:grid-cols-2">
                 <Field label="钉钉机器人 Webhook">
                   <Input
                     value={form.dingtalkWebhook}
@@ -328,19 +340,31 @@ export function Repositories() {
               </div>
             )}
 
-            <Button onClick={submit} disabled={saving}>
-              {saving ? '保存中…' : editingId ? '保存修改' : '添加仓库'}
-            </Button>
-          </>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+              <Button variant="ghost" onClick={closeModal} type="button" disabled={saving}>
+                取消
+              </Button>
+              <Button onClick={submit} disabled={saving}>
+                {saving ? '保存中…' : editingId ? '保存修改' : '添加仓库'}
+              </Button>
+            </div>
+          </div>
         )}
-      </Card>
+      </Modal>
 
       <div className="space-y-3">
         {repos.map((r) => (
           <Card key={r.id} className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-slate-900">{r.path}</p>
-              <p className="text-[11px] text-slate-500">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="truncate text-sm font-medium text-slate-900">{r.path}</p>
+                <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700">
+                  {r.autoReview ? '自动审查' : '手动'}
+                </span>
+                {r.enableMrComment && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700">平台评论</span>}
+                {r.enableDingtalk && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">钉钉</span>}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500">
                 模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : `${r.defaultAIModel?.provider ?? '未配置'}/${r.defaultAIModel?.modelId ?? '-'}`} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
               </p>
             </div>

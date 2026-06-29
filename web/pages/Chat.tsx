@@ -15,7 +15,7 @@ export function Chat() {
   return (
     <div className="flex h-full">
       <Sidebar refreshKey={refreshKey} />
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col bg-sky-50/40">
         {sessionId ? (
           <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
         ) : (
@@ -78,7 +78,7 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
 
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-3 shadow-sm">
+      <header className="flex items-center gap-3 border-b border-sky-100 bg-white/90 px-5 py-3 shadow-sm backdrop-blur">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold text-slate-950">
             {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '对话'}
@@ -92,9 +92,9 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl py-4">
+      <div className="relative min-h-0 flex-1">
+        <div ref={scrollRef} className="h-full min-w-0 overflow-y-auto">
+          <div className="mx-auto max-w-3xl py-4 xl:mr-[23rem]">
             {messages.length === 0 && (
               <p className="px-4 py-12 text-center text-sm text-slate-400">开始对话吧</p>
             )}
@@ -108,11 +108,11 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
             )}
           </div>
         </div>
-        <aside className="hidden w-80 shrink-0 border-l border-slate-200 bg-slate-50/80 p-4 xl:block">
-          <div className="sticky top-4 space-y-4 rounded-2xl bg-white p-4 shadow-lg shadow-slate-200/70 ring-1 ring-slate-200">
+        <aside className="pointer-events-none absolute right-5 top-5 z-20 hidden w-80 xl:block">
+          <div className="pointer-events-auto space-y-4 rounded-2xl bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.14)] ring-1 ring-sky-100 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-slate-950">环境信息</h2>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-500">{s.kind}</span>
+              <span className="rounded-full bg-teal-50 px-2 py-1 text-[11px] text-teal-700">{s.kind}</span>
             </div>
             <div className="space-y-3 text-sm">
               <InfoRow icon={<FolderGit2 size={15} />} label="仓库" value={s.repository?.path ?? '未绑定仓库'} />
@@ -127,26 +127,26 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
         </aside>
       </div>
 
-      <div className="border-t border-slate-200 bg-white p-4">
+      <div className="border-t border-sky-100 bg-white/95 p-4 shadow-[0_-8px_30px_rgba(15,23,42,0.04)]">
         <div className="mx-auto max-w-3xl space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
             {s.repository && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-sky-700">
                 <FolderGit2 size={12} /> {s.repository.path}
               </span>
             )}
             {(s.sourceBranch || s.targetBranch) && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-1 text-teal-700">
                 <GitBranch size={12} /> {s.sourceBranch ?? '-'} → {s.targetBranch ?? '-'}
               </span>
             )}
             {shortHash && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 font-mono">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 font-mono text-slate-700">
                 <Hash size={12} /> {shortHash}
               </span>
             )}
             {s.author && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700">
                 <UserRound size={12} /> {s.author}
               </span>
             )}
@@ -163,12 +163,12 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
               }}
               rows={1}
               placeholder="继续追问，或要求重新审查…（Enter 发送，Shift+Enter 换行）"
-              className="max-h-40 flex-1 resize-none rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              className="max-h-40 flex-1 resize-none rounded-xl border border-sky-100 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-teal-400 focus:ring-4 focus:ring-teal-100"
             />
             <button
               onClick={submit}
               disabled={busy || !input.trim()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm transition-[background-color,transform] hover:bg-slate-800 active:scale-95 disabled:opacity-40"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm shadow-teal-700/20 transition-[background-color,transform] hover:bg-teal-700 active:scale-95 disabled:opacity-40"
             >
               <SendHorizontal size={17} />
             </button>

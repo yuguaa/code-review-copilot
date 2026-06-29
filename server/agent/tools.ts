@@ -25,7 +25,8 @@ export type ReviewContext = {
   mrIid: number | null;
   repoId: string;
   workdir: string; // worktree 绝对路径，所有只读工具的 cwd
-  targetRef: string; // git diff 基准，如 origin/main
+  diffRef: string; // git diff 基准，如 origin/main 或 Push before sha
+  commitSha: string | null;
   diffRefs: { base_sha: string; head_sha: string; start_sha: string } | null;
   enableMrComment: boolean;
   enableDingtalk: boolean;
@@ -56,7 +57,8 @@ export async function buildReviewContext(
     mrIid: session.mrIid,
     repoId: repo.id,
     workdir: workspace.dir,
-    targetRef: workspace.targetRef,
+    diffRef: workspace.diffRef,
+    commitSha: session.commitSha,
     diffRefs: mr?.diff_refs ?? null,
     enableMrComment: repo.enableMrComment,
     enableDingtalk: repo.enableDingtalk,
@@ -140,10 +142,10 @@ export function buildReadTools(ctx: ReviewContext) {
     }),
 
     git_diff: tool({
-      description: '查看本次 MR 相对目标分支的代码变更（git diff）。可传 paths 只看指定文件。',
+      description: '查看本次审查的代码变更（MR 为目标分支到当前 HEAD；Push 为 before 到 after）。可传 paths 只看指定文件。',
       inputSchema: z.object({ paths: z.array(z.string()).optional().describe('只看这些文件路径') }),
       execute: async ({ paths }) => {
-        const args = ['-C', ctx.workdir, 'diff', `${ctx.targetRef}...HEAD`];
+        const args = ['-C', ctx.workdir, 'diff', `${ctx.diffRef}...HEAD`];
         if (paths?.length) args.push('--', ...paths);
         return exec('git', args, { timeout: CMD_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 })
           .then((r) => truncate(r.stdout || '（无变更）'))
@@ -177,11 +179,15 @@ export function buildTools(ctx: ReviewContext) {
     }),
 
     post_review_comment: tool({
-      description: '把审查总评作为一条 Markdown 评论发布到 MR。完成审查、整理好所有问题后调用一次。',
+      description: '把审查总评作为一条 Markdown 评论发布到 MR 或 Push commit。完成审查、整理好所有问题后调用一次。',
       inputSchema: z.object({ markdown: z.string().describe('完整的 Markdown 审查总评，按严重级别分组') }),
       execute: async ({ markdown }) => {
-        if (!ctx.enableMrComment) return '该仓库未开启 MR 评论，已跳过发布。';
-        if (ctx.mrIid == null) return '当前会话未绑定 MR，无法发布评论。';
+        if (!ctx.enableMrComment) return '该仓库未开启平台评论，已跳过发布。';
+        if (ctx.mrIid == null) {
+          if (!ctx.commitSha) return '当前会话未绑定 commit，无法发布评论。';
+          const res = await ctx.gitlab.createCommitComment(ctx.projectId, ctx.commitSha, markdown);
+          return { posted: true, noteId: res.id ?? res.note_id };
+        }
         const res = await ctx.gitlab.createMergeRequestComment(ctx.projectId, ctx.mrIid, markdown);
         return { posted: true, discussionId: res.id };
       },
@@ -195,8 +201,12 @@ export function buildTools(ctx: ReviewContext) {
         body: z.string().describe('该行的评论内容（Markdown）'),
       }),
       execute: async ({ path: p, line, body }) => {
-        if (!ctx.enableMrComment) return '该仓库未开启 MR 评论，已跳过。';
-        if (ctx.mrIid == null) return '当前会话未绑定 MR，无法发布行级评论。';
+        if (!ctx.enableMrComment) return '该仓库未开启平台评论，已跳过。';
+        if (ctx.mrIid == null) {
+          if (!ctx.commitSha) return '当前会话未绑定 commit，无法发布行级评论。';
+          const res = await ctx.gitlab.createCommitComment(ctx.projectId, ctx.commitSha, body, { path: p, line, line_type: 'new' });
+          return { posted: true, noteId: res.id ?? res.note_id };
+        }
         if (!ctx.diffRefs) return '缺少 MR diff_refs，无法定位行级评论。';
         const res = await ctx.gitlab.createMergeRequestComment(ctx.projectId, ctx.mrIid, body, {
           ...ctx.diffRefs,

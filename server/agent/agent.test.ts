@@ -72,6 +72,7 @@ describe('signedUrl（钉钉加签）', () => {
 function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
   const gitlab = {
     createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'disc-1' }),
+    createCommitComment: vi.fn().mockResolvedValue({ id: 'note-1' }),
   } as unknown as GitLabService;
   return {
     gitlab,
@@ -79,7 +80,8 @@ function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
     mrIid: 42,
     repoId: 'r1',
     workdir: '/tmp/wt',
-    targetRef: 'origin/main',
+    diffRef: 'origin/main',
+    commitSha: 'h',
     diffRefs: { base_sha: 'b', head_sha: 'h', start_sha: 's' },
     enableMrComment: true,
     enableDingtalk: false,
@@ -121,6 +123,16 @@ describe('输出工具的开关控制', () => {
       'x',
       expect.objectContaining({ new_path: 'a.ts', new_line: 3, position_type: 'text', base_sha: 'b' }),
     );
+  });
+
+  it('Push 会话评论发布到 commit', async () => {
+    const ctx = fakeContext({ mrIid: null, diffRefs: null, commitSha: 'abc123' });
+    const tools = buildTools(ctx);
+    const out = (await tools.post_review_comment.execute!({ markdown: '# 审查' }, toolOpts)) as {
+      noteId: string | number;
+    };
+    expect(out.noteId).toBe('note-1');
+    expect(ctx.gitlab.createCommitComment).toHaveBeenCalledWith(1, 'abc123', '# 审查');
   });
 
   it('关闭钉钉时跳过推送', async () => {

@@ -558,7 +558,7 @@ export class GitLabService {
       const response = await this.client.post(`/projects/${projectId}/hooks`, {
         url: webhookUrl,
         merge_requests_events: true,
-        push_events: false,
+        push_events: true,
         token: webhookSecret,
       })
       return response.data

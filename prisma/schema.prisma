@@ -63,7 +63,7 @@ model Repository {
   // 默认审查提示词（webhook 首轮），空则用内置
   defaultReviewPrompt String?
   // 输出渠道开关与钉钉配置
-  enableMrComment Boolean       @default(false) // 是否回写 MR 评论
+  enableMrComment Boolean       @default(false) // 是否回写代码平台评论（MR / Push）
   enableDingtalk  Boolean       @default(true) // 是否推送钉钉
   dingtalkWebhook String? // 钉钉机器人 webhook 地址
   dingtalkSecret  String? // 钉钉加签密钥
@@ -91,6 +91,7 @@ model Session {
   mrTitle      String?
   sourceBranch String?
   targetBranch String?
+  baseCommitSha String?
   commitSha    String?
   author       String?
   status       String      @default("running") // running | completed | failed
