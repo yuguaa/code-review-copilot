@@ -17,8 +17,12 @@ services:
       APP_AUTH_SECRET: ${APP_AUTH_SECRET:?APP_AUTH_SECRET is required}
       APP_AUTH_SESSION_SECRET: ${APP_AUTH_SESSION_SECRET:?APP_AUTH_SESSION_SECRET is required}
       APP_AUTH_IP_WHITELIST: ${APP_AUTH_IP_WHITELIST:-}
+      # 审查工作区：agent clone 仓库并按 commit 建 worktree（持久化避免重启重 clone）
+      WORKSPACE_ROOT: /app/.workspaces
     ports:
       - "8787:8787"
+    volumes:
+      - workspace_data:/app/.workspaces
 
   postgres:
     image: postgres:16-alpine
@@ -40,3 +44,4 @@ services:
 
 volumes:
   postgres_data:
+  workspace_data:
