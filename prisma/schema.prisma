@@ -63,8 +63,8 @@ model Repository {
   // 默认审查提示词（webhook 首轮），空则用内置
   defaultReviewPrompt String?
   // 输出渠道开关与钉钉配置
-  enableMrComment Boolean       @default(true) // 是否回写 MR 评论
-  enableDingtalk  Boolean       @default(false) // 是否推送钉钉
+  enableMrComment Boolean       @default(false) // 是否回写 MR 评论
+  enableDingtalk  Boolean       @default(true) // 是否推送钉钉
   dingtalkWebhook String? // 钉钉机器人 webhook 地址
   dingtalkSecret  String? // 钉钉加签密钥
   // 项目记忆：跨次审查沉淀的约定/架构/历史问题（agent 读写）
@@ -115,4 +115,17 @@ model Message {
 
   @@index([sessionId, createdAt])
   @@map("messages")
+}
+
+/// 全局通知配置
+model NotificationSetting {
+  id                 String   @id @default(cuid())
+  scope              String   @unique @default("global")
+  dingtalkWebhookUrl String?
+  dingtalkSecret     String?
+  dingtalkEnabled    Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("notification_settings")
 }

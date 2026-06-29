@@ -45,8 +45,8 @@ repositoryRoutes.post('/', async (c) => {
       customApiBaseUrl: b.customApiBaseUrl || null,
       customMaxSteps: b.customMaxSteps ?? null,
       defaultReviewPrompt: b.defaultReviewPrompt ?? null,
-      enableMrComment: b.enableMrComment ?? true,
-      enableDingtalk: b.enableDingtalk ?? false,
+      enableMrComment: b.enableMrComment ?? false,
+      enableDingtalk: b.enableDingtalk ?? true,
       dingtalkWebhook: b.dingtalkWebhook || null,
       dingtalkSecret: b.dingtalkSecret || null,
     },
@@ -60,14 +60,18 @@ repositoryRoutes.patch('/:id', async (c) => {
   // 只更新传入的字段；apiKey 为空串时不覆盖
   const data: Record<string, unknown> = {};
   for (const k of [
-    'name', 'path', 'description', 'watchBranches', 'autoReview',
+    'gitLabAccountId', 'name', 'path', 'description', 'watchBranches', 'autoReview',
     'defaultAIModelId', 'customProvider', 'customModelId', 'customApiBaseUrl', 'customMaxSteps',
     'defaultReviewPrompt', 'isActive',
-    'enableMrComment', 'enableDingtalk', 'dingtalkWebhook', 'dingtalkSecret',
+    'enableMrComment', 'enableDingtalk', 'dingtalkWebhook',
   ]) {
     if (b[k] !== undefined) data[k] = b[k];
   }
+  if (b.gitLabProjectId !== undefined) data.gitLabProjectId = Number(b.gitLabProjectId);
+  if (b.customApiKey === null) data.customApiKey = null;
   if (typeof b.customApiKey === 'string' && b.customApiKey.length > 0) data.customApiKey = b.customApiKey;
+  if (b.dingtalkSecret === null) data.dingtalkSecret = null;
+  if (typeof b.dingtalkSecret === 'string' && b.dingtalkSecret.length > 0) data.dingtalkSecret = b.dingtalkSecret;
   const repo = await prisma.repository.update({ where: { id }, data });
   return c.json({ repository: maskRepo(repo) });
 });

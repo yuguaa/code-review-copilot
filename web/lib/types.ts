@@ -24,6 +24,9 @@ export type SessionDetail = {
     sourceBranch: string | null;
     targetBranch: string | null;
     commitSha: string | null;
+    author: string | null;
+    error: string | null;
+    updatedAt: string;
     repository: { id: string; name: string; path: string } | null;
   };
   messages: UIMessage[];

@@ -34,6 +34,12 @@ type Stats = {
   latestSessionAt: string | null;
 };
 
+type NotificationSetting = {
+  dingtalkEnabled: boolean;
+  dingtalkWebhookUrl: string | null;
+  hasDingtalkSecret: boolean;
+};
+
 const emptyModelForm = {
   provider: 'openai',
   modelId: 'gpt-4o',
@@ -47,22 +53,36 @@ export function Settings() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [models, setModels] = useState<AIModel[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [notification, setNotification] = useState({
+    dingtalkEnabled: true,
+    dingtalkWebhookUrl: '',
+    dingtalkSecret: '',
+  });
   const [url, setUrl] = useState('https://gitlab.com');
   const [accessToken, setAccessToken] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [modelForm, setModelForm] = useState({ ...emptyModelForm });
   const [saving, setSaving] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
+  const [savingNotification, setSavingNotification] = useState(false);
 
   const load = useCallback(async () => {
-    const [gitlab, ai, overview] = await Promise.all([
+    const [gitlab, ai, overview, notice] = await Promise.all([
       api<{ accounts: Account[] }>('/api/settings/gitlab').catch(() => ({ accounts: [] })),
       api<{ models: AIModel[] }>('/api/settings/models').catch(() => ({ models: [] })),
       api<{ stats: Stats }>('/api/settings/stats').catch(() => ({ stats: null })),
+      api<{ notification: NotificationSetting }>('/api/settings/notification').catch(() => ({
+        notification: { dingtalkEnabled: false, dingtalkWebhookUrl: null, hasDingtalkSecret: false },
+      })),
     ]);
     setAccounts(gitlab.accounts);
     setModels(ai.models);
     setStats(overview.stats);
+    setNotification((current) => ({
+      dingtalkEnabled: notice.notification.dingtalkEnabled,
+      dingtalkWebhookUrl: notice.notification.dingtalkWebhookUrl ?? '',
+      dingtalkSecret: current.dingtalkSecret,
+    }));
   }, []);
   useEffect(() => {
     void load();
@@ -129,6 +149,21 @@ export function Settings() {
     api(`/api/settings/models/${id}`, { method: 'DELETE' }).then(load);
   };
 
+  const saveNotification = () => {
+    setSavingNotification(true);
+    api('/api/settings/notification', {
+      method: 'PATCH',
+      body: JSON.stringify(notification),
+    })
+      .then(load)
+      .then(() => {
+        setNotification((current) => ({ ...current, dingtalkSecret: '' }));
+        toast.success('已保存全局钉钉配置');
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '保存失败'))
+      .finally(() => setSavingNotification(false));
+  };
+
   return (
     <PageShell title="设置">
       {stats && (
@@ -147,6 +182,37 @@ export function Settings() {
           ))}
         </div>
       )}
+
+      <Card className="space-y-4">
+        <h2 className="text-sm font-semibold">全局钉钉配置</h2>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={notification.dingtalkEnabled}
+            onChange={(e) => setNotification((current) => ({ ...current, dingtalkEnabled: e.target.checked }))}
+            className="h-4 w-4 rounded border-slate-300 bg-white"
+          />
+          开启全局钉钉推送
+        </label>
+        <Field label="钉钉机器人 Webhook">
+          <Input
+            value={notification.dingtalkWebhookUrl}
+            onChange={(e) => setNotification((current) => ({ ...current, dingtalkWebhookUrl: e.target.value }))}
+            placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."
+          />
+        </Field>
+        <Field label="钉钉加签密钥" hint="留空不会覆盖已有密钥">
+          <Input
+            type="password"
+            value={notification.dingtalkSecret}
+            onChange={(e) => setNotification((current) => ({ ...current, dingtalkSecret: e.target.value }))}
+            placeholder="SEC..."
+          />
+        </Field>
+        <Button onClick={saveNotification} disabled={savingNotification}>
+          {savingNotification ? '保存中…' : '保存钉钉配置'}
+        </Button>
+      </Card>
 
       <Card className="space-y-4">
         <h2 className="text-sm font-semibold">全局模型配置</h2>

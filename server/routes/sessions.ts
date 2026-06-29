@@ -27,6 +27,9 @@ sessionRoutes.get('/:id', async (c) => {
       sourceBranch: session.sourceBranch,
       targetBranch: session.targetBranch,
       commitSha: session.commitSha,
+      author: session.author,
+      error: session.error,
+      updatedAt: session.updatedAt,
       repository: session.repository
         ? { id: session.repository.id, name: session.repository.name, path: session.repository.path }
         : null,

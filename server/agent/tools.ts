@@ -44,6 +44,12 @@ export async function buildReviewContext(
   if (!repo) throw new Error('会话未绑定仓库，无法构造审查上下文');
   const gitlab = createGitLabService(repo.gitLabAccount.url, repo.gitLabAccount.accessToken);
   const mr = session.mrIid != null ? await gitlab.getMergeRequest(repo.gitLabProjectId, session.mrIid) : null;
+  const notification = await prisma.notificationSetting.findUnique({ where: { scope: 'global' } });
+  const dingtalk = repo.dingtalkWebhook
+    ? { webhook: repo.dingtalkWebhook, secret: repo.dingtalkSecret }
+    : notification?.dingtalkEnabled && notification.dingtalkWebhookUrl
+      ? { webhook: notification.dingtalkWebhookUrl, secret: notification.dingtalkSecret }
+      : null;
   return {
     gitlab,
     projectId: repo.gitLabProjectId,
@@ -54,7 +60,7 @@ export async function buildReviewContext(
     diffRefs: mr?.diff_refs ?? null,
     enableMrComment: repo.enableMrComment,
     enableDingtalk: repo.enableDingtalk,
-    dingtalk: repo.dingtalkWebhook ? { webhook: repo.dingtalkWebhook, secret: repo.dingtalkSecret } : null,
+    dingtalk,
   };
 }
 

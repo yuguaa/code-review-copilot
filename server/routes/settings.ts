@@ -14,6 +14,14 @@ function maskModel(m: { apiKey?: string; [k: string]: unknown }) {
   return { ...rest, hasApiKey: Boolean(apiKey) };
 }
 
+function maskNotification(n: { dingtalkSecret?: string | null; [k: string]: unknown } | null) {
+  return {
+    dingtalkEnabled: n?.dingtalkEnabled ?? false,
+    dingtalkWebhookUrl: n?.dingtalkWebhookUrl ?? null,
+    hasDingtalkSecret: Boolean(n?.dingtalkSecret),
+  };
+}
+
 /** GitLab 账号列表。 */
 settingsRoutes.get('/gitlab', async (c) => {
   const accounts = await prisma.gitLabAccount.findMany({ orderBy: { createdAt: 'desc' } });
@@ -75,6 +83,31 @@ settingsRoutes.get('/gitlab/:id/projects', async (c) => {
 settingsRoutes.get('/models', async (c) => {
   const models = await prisma.aIModel.findMany({ orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }] });
   return c.json({ models: models.map(maskModel) });
+});
+
+/** 全局通知配置。 */
+settingsRoutes.get('/notification', async (c) => {
+  const setting = await prisma.notificationSetting.findUnique({ where: { scope: 'global' } });
+  return c.json({ notification: maskNotification(setting) });
+});
+
+settingsRoutes.patch('/notification', async (c) => {
+  const b = await c.req.json();
+  const data: Record<string, unknown> = {};
+  if (b.dingtalkEnabled !== undefined) data.dingtalkEnabled = b.dingtalkEnabled;
+  if (b.dingtalkWebhookUrl !== undefined) data.dingtalkWebhookUrl = b.dingtalkWebhookUrl || null;
+  if (typeof b.dingtalkSecret === 'string' && b.dingtalkSecret.length > 0) data.dingtalkSecret = b.dingtalkSecret;
+  const setting = await prisma.notificationSetting.upsert({
+    where: { scope: 'global' },
+    create: {
+      scope: 'global',
+      dingtalkEnabled: Boolean(data.dingtalkEnabled),
+      dingtalkWebhookUrl: typeof data.dingtalkWebhookUrl === 'string' ? data.dingtalkWebhookUrl : null,
+      dingtalkSecret: typeof data.dingtalkSecret === 'string' ? data.dingtalkSecret : null,
+    },
+    update: data,
+  });
+  return c.json({ notification: maskNotification(setting) });
 });
 
 /** 系统配置与审查数据概览。 */

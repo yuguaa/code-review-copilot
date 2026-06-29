@@ -8,6 +8,7 @@ type AIModel = { id: string; provider: string; modelId: string; isDefault: boole
 type Project = { id: number; name: string; path: string; defaultBranch: string };
 type Repo = {
   id: string;
+  gitLabAccountId: string;
   name: string;
   path: string;
   gitLabProjectId: number;
@@ -16,7 +17,14 @@ type Repo = {
   defaultAIModelId: string | null;
   customProvider: string | null;
   customModelId: string | null;
+  customApiBaseUrl: string | null;
+  customMaxSteps: number | null;
+  defaultReviewPrompt: string | null;
+  enableMrComment: boolean;
+  enableDingtalk: boolean;
+  dingtalkWebhook: string | null;
   defaultAIModel: AIModel | null;
+  hasCustomApiKey: boolean;
 };
 
 const emptyForm = {
@@ -34,8 +42,8 @@ const emptyForm = {
   customApiBaseUrl: '',
   customMaxSteps: 16,
   defaultReviewPrompt: '',
-  enableMrComment: true,
-  enableDingtalk: false,
+  enableMrComment: false,
+  enableDingtalk: true,
   dingtalkWebhook: '',
   dingtalkSecret: '',
 };
@@ -47,6 +55,7 @@ export function Repositories() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const webhookUrl = `${location.origin}/api/webhook/gitlab`;
 
@@ -86,11 +95,43 @@ export function Repositories() {
     setProjects([]);
   };
 
-  const submit = async () => {
+  const resetForm = () => {
+    setEditingId(null);
+    setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
+    setProjects([]);
+  };
+
+  const edit = (repo: Repo) => {
+    setEditingId(repo.id);
+    setForm({
+      ...emptyForm,
+      gitLabAccountId: repo.gitLabAccountId,
+      gitLabProjectId: String(repo.gitLabProjectId),
+      name: repo.name,
+      path: repo.path,
+      watchBranches: repo.watchBranches ?? '',
+      autoReview: repo.autoReview,
+      defaultAIModelId: repo.defaultAIModelId ?? '',
+      useCustomModel: Boolean(repo.customProvider || repo.customModelId || repo.hasCustomApiKey),
+      customProvider: repo.customProvider ?? 'openai',
+      customModelId: repo.customModelId ?? '',
+      customApiKey: '',
+      customApiBaseUrl: repo.customApiBaseUrl ?? '',
+      customMaxSteps: repo.customMaxSteps ?? 16,
+      defaultReviewPrompt: repo.defaultReviewPrompt ?? '',
+      enableMrComment: repo.enableMrComment,
+      enableDingtalk: repo.enableDingtalk,
+      dingtalkWebhook: repo.dingtalkWebhook ?? '',
+      dingtalkSecret: '',
+    });
+    setProjects([]);
+  };
+
+  const submit = () => {
     if (!form.gitLabAccountId || !form.gitLabProjectId || (!form.defaultAIModelId && !form.useCustomModel)) {
       return toast.error('请填写账号、项目与默认模型');
     }
-    if (form.useCustomModel && (!form.customProvider || !form.customModelId || !form.customApiKey)) {
+    if (form.useCustomModel && (!form.customProvider || !form.customModelId || (!editingId && !form.customApiKey))) {
       return toast.error('请填写完整的仓库自定义模型配置');
     }
     setSaving(true);
@@ -102,16 +143,18 @@ export function Repositories() {
       customApiBaseUrl: form.useCustomModel ? form.customApiBaseUrl : null,
       customMaxSteps: form.useCustomModel ? form.customMaxSteps : null,
     };
-    try {
-      await api('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
-      setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
-      await load();
-      toast.success('已添加仓库');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '添加失败');
-    } finally {
-      setSaving(false);
-    }
+    const request = editingId
+      ? api(`/api/repositories/${editingId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      : api('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
+    request
+      .then(() => {
+        setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
+        setEditingId(null);
+        return load();
+      })
+      .then(() => toast.success(editingId ? '已更新仓库' : '已添加仓库'))
+      .catch((e) => toast.error(e instanceof Error ? e.message : editingId ? '更新失败' : '添加失败'))
+      .finally(() => setSaving(false));
   };
 
   const remove = async (id: string) => {
@@ -128,7 +171,14 @@ export function Repositories() {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="text-sm font-semibold">添加仓库</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">{editingId ? '编辑仓库' : '添加仓库'}</h2>
+          {editingId && (
+            <Button variant="ghost" onClick={resetForm} type="button">
+              取消编辑
+            </Button>
+          )}
+        </div>
         {accounts.length === 0 ? (
           <p className="text-xs text-amber-600">请先到「设置」添加 GitLab 账号</p>
         ) : (
@@ -279,7 +329,7 @@ export function Repositories() {
             )}
 
             <Button onClick={submit} disabled={saving}>
-              {saving ? '保存中…' : '添加仓库'}
+              {saving ? '保存中…' : editingId ? '保存修改' : '添加仓库'}
             </Button>
           </>
         )}
@@ -294,6 +344,9 @@ export function Repositories() {
                 模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : `${r.defaultAIModel?.provider ?? '未配置'}/${r.defaultAIModel?.modelId ?? '-'}`} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
               </p>
             </div>
+            <Button variant="ghost" onClick={() => edit(r)}>
+              编辑
+            </Button>
             <Button variant="danger" onClick={() => remove(r.id)}>
               删除
             </Button>
