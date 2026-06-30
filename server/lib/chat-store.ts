@@ -38,6 +38,34 @@ export async function listSessions(kind?: string) {
   }));
 }
 
+/** 从首条用户消息抽取一个简洁标题，供 chat 会话自动命名。 */
+export function deriveChatTitle(messages: UIMessage[]): string | null {
+  const firstUser = messages.find((m) => m.role === 'user');
+  if (!firstUser) return null;
+  const text = (firstUser.parts ?? [])
+    .map((part) => {
+      const p = part as { type?: unknown; text?: unknown };
+      return p.type === 'text' && typeof p.text === 'string' ? p.text : '';
+    })
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return null;
+  return text.length > 24 ? `${text.slice(0, 24)}…` : text;
+}
+
+/** chat 会话若仍是空标题，则用首条用户消息自动命名（只命名一次）。 */
+export async function ensureChatTitle(sessionId: string, messages: UIMessage[]): Promise<void> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { kind: true, title: true },
+  });
+  if (!session || session.kind !== 'chat' || session.title) return;
+  const title = deriveChatTitle(messages);
+  if (!title) return;
+  await prisma.session.update({ where: { id: sessionId }, data: { title } });
+}
+
 /** 读取会话的线性消息（映射为 AI SDK UIMessage）。 */
 export async function loadMessages(sessionId: string): Promise<UIMessage[]> {
   const rows = await prisma.message.findMany({

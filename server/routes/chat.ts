@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { parseJsonEventStream, readUIMessageStream, uiMessageChunkSchema, type UIMessage } from 'ai';
-import { getSessionWithRepository, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
+import { ensureChatTitle, getSessionWithRepository, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
 import { publishSessionListChanged, publishSessionMessages } from '../lib/session-events';
 import { createReviewStream } from '../agent/review-agent';
 import { createLogger } from '../lib/logger';
@@ -69,6 +69,7 @@ function consumeChatStream(
       publishSessionMessages(sessionId, finalMessages);
     }
     await saveMessages(sessionId, finalMessages);
+    await ensureChatTitle(sessionId, finalMessages);
     publishSessionListChanged();
   })().catch((err) => log.error(`消费追问流失败 session=${sessionId}`, err));
 }

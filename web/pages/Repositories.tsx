@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
+import { cn } from '../lib/cn';
 import { Button, Card, Field, Input, Select, Textarea, PageShell, Modal } from '../components/ui';
 
 type Account = { id: string; url: string };
@@ -186,7 +187,7 @@ export function Repositories() {
             添加仓库
           </Button>
         </div>
-        <code className="block break-all rounded-md bg-slate-100 px-3 py-2 text-xs text-emerald-700">{webhookUrl}</code>
+        <code className="block break-all rounded-lg bg-slate-900 px-3 py-2.5 font-mono text-xs text-indigo-300">{webhookUrl}</code>
         <p className="text-[11px] text-slate-400">Secret Token 与对应账号的 Webhook 密钥一致即可验签。</p>
       </Card>
 
@@ -214,12 +215,12 @@ export function Repositories() {
               </div>
             </Field>
             {projects.length > 0 && (
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-sky-50 p-1 shadow-inner ring-1 ring-sky-100">
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-slate-50 p-1 shadow-inner ring-1 ring-slate-200">
                 {projects.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => pickProject(p)}
-                    className="block w-full rounded px-2 py-1.5 text-left text-xs text-slate-700 transition-[background-color] hover:bg-white"
+                    className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-700 transition-[background-color] hover:bg-white hover:text-indigo-700"
                   >
                     {p.path} <span className="text-slate-400">#{p.id}</span>
                   </button>
@@ -255,7 +256,7 @@ export function Repositories() {
                 type="checkbox"
                 checked={form.useCustomModel}
                 onChange={(e) => set('useCustomModel', e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 bg-white"
+                className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
               />
               使用仓库自定义模型
             </label>
@@ -313,7 +314,7 @@ export function Repositories() {
                     type="checkbox"
                     checked={form[k]}
                     onChange={(e) => set(k, e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 bg-white"
+                    className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
                   />
                   {label}
                 </label>
@@ -358,10 +359,15 @@ export function Repositories() {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-medium text-slate-900">{r.path}</p>
-                <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700">
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                    r.autoReview ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500',
+                  )}
+                >
                   {r.autoReview ? '自动审查' : '手动'}
                 </span>
-                {r.enableMrComment && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700">平台评论</span>}
+                {r.enableMrComment && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">平台评论</span>}
                 {r.enableDingtalk && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">钉钉</span>}
               </div>
               <p className="mt-1 text-[11px] text-slate-500">

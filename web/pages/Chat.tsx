@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { SendHorizontal, Loader2, FolderGit2, GitBranch, Hash, UserRound } from 'lucide-react';
+import { SendHorizontal, Loader2, FolderGit2, GitBranch, Hash, UserRound, MessageSquare } from 'lucide-react';
 import { api } from '../lib/api';
 import type { SessionDetail } from '../lib/types';
 import { Sidebar } from '../components/Sidebar';
@@ -15,13 +15,18 @@ export function Chat() {
   return (
     <div className="flex h-full">
       <Sidebar refreshKey={refreshKey} />
-      <main className="flex min-w-0 flex-1 flex-col bg-sky-50/40">
+      <main className="flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
         {sessionId ? (
           <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-500">
-            <p className="text-sm">选择左侧会话，或点击 + 新建对话</p>
-            <p className="text-xs text-slate-400">每个 webhook 触发的审查都会成为一个可追问的会话</p>
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-[var(--shadow-sm)] ring-1 ring-slate-200/70">
+              <MessageSquare size={24} />
+            </div>
+            <p className="text-sm font-medium text-slate-700">选择左侧会话，或新建一个对话</p>
+            <p className="max-w-xs text-xs leading-relaxed text-slate-400">
+              每个 Webhook 触发的审查都会成为一个可追问的会话，按仓库归类在左侧。
+            </p>
           </div>
         )}
       </main>
@@ -125,27 +130,31 @@ function ChatThread({
 
   return (
     <>
-      <header className="border-b border-sky-100 bg-white/90 px-6 py-3 shadow-sm backdrop-blur">
+      <header className="border-b border-slate-200/80 bg-white/80 px-6 py-3 backdrop-blur-md">
         <div className="flex min-w-0 items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-slate-950">
-              {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '对话'}
+            <h1 className="truncate text-sm font-semibold text-slate-900">
+              {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '新对话'}
             </h1>
-            {s.repository && <p className="truncate text-xs text-slate-500">{s.repository.path}</p>}
+            {s.repository && (
+              <p className="flex items-center gap-1 truncate text-xs text-slate-500">
+                <FolderGit2 size={11} className="shrink-0 text-slate-400" /> {s.repository.path}
+              </p>
+            )}
           </div>
           <div className="hidden shrink-0 items-center gap-2 text-[11px] text-slate-500 lg:flex">
             {branchText && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-teal-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
                 <GitBranch size={12} /> {branchText}
               </span>
             )}
             {shortHash && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-mono text-slate-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-mono text-slate-600">
                 <Hash size={12} /> {shortHash}
               </span>
             )}
             {s.author && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
                 <UserRound size={12} /> {s.author}
               </span>
             )}
@@ -176,28 +185,28 @@ function ChatThread({
         </div>
       </div>
 
-      <div className="border-t border-sky-100 bg-white/95 p-4 shadow-[0_-8px_30px_rgba(15,23,42,0.04)]">
+      <div className="border-t border-slate-200/80 bg-white/90 p-4 backdrop-blur-md">
         <div className="mx-auto max-w-3xl space-y-2">
-          <div className="flex min-h-6 flex-wrap items-center justify-center gap-2 text-[11px] text-slate-500">
+          <div className="flex min-h-5 flex-wrap items-center justify-center gap-2 text-[11px] text-slate-500">
             {s.repository && (
-              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-sky-700">
+              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-indigo-700">
                 <FolderGit2 size={12} /> {s.repository.path}
               </span>
             )}
             {branchText && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-1 text-teal-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-600">
                 <GitBranch size={12} /> {branchText}
               </span>
             )}
             {(shortHash || s.author) && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-600">
                 {shortHash && <span className="font-mono">{shortHash}</span>}
-                {shortHash && s.author ? <span className="text-slate-400">·</span> : null}
+                {shortHash && s.author ? <span className="text-slate-300">·</span> : null}
                 {s.author}
               </span>
             )}
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-100">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -209,14 +218,14 @@ function ChatThread({
               }}
               rows={1}
               placeholder="继续追问，或要求重新审查…（Enter 发送，Shift+Enter 换行）"
-              className="max-h-40 flex-1 resize-none rounded-xl border border-sky-100 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-teal-400 focus:ring-4 focus:ring-teal-100"
+              className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
             />
             <button
               onClick={submit}
               disabled={busy || !input.trim()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm shadow-teal-700/20 transition-[background-color,transform] hover:bg-teal-700 active:scale-95 disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/25 transition-[background-color,transform] hover:bg-indigo-700 active:scale-95 disabled:opacity-40"
             >
-              <SendHorizontal size={17} />
+              <SendHorizontal size={16} />
             </button>
           </div>
         </div>

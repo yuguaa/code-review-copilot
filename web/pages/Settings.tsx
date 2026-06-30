@@ -190,7 +190,7 @@ export function Settings() {
             type="checkbox"
             checked={notification.dingtalkEnabled}
             onChange={(e) => setNotification((current) => ({ ...current, dingtalkEnabled: e.target.checked }))}
-            className="h-4 w-4 rounded border-slate-300 bg-white"
+            className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
           />
           开启全局钉钉推送
         </label>
@@ -244,7 +244,7 @@ export function Settings() {
             type="checkbox"
             checked={modelForm.isDefault}
             onChange={(e) => setModel('isDefault', e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 bg-white"
+            className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
           />
           设为默认模型
         </label>

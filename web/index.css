@@ -1,7 +1,24 @@
 @import 'tailwindcss';
 
+/* 设计 token：通体精致浅色 + 靛蓝主色，集中托管易于统一调整。 */
 :root {
   color-scheme: light;
+
+  --bg: #f6f7f9; /* 页面底色：极浅冷灰，衬托纯白卡片 */
+  --surface: #ffffff; /* 卡片/浮层 */
+  --border: #e6e8ee; /* 1px 描边 */
+  --text: #1d2433; /* 主文字 */
+  --muted: #6b7280; /* 次要文字 */
+
+  --accent: #4f46e5; /* indigo-600 主强调 */
+  --accent-strong: #4338ca; /* indigo-700 hover */
+  --accent-soft: #eef2ff; /* indigo-50 选中底 */
+  --ring: rgba(99, 102, 241, 0.18); /* focus ring */
+
+  /* 阴影系统：克制、分层 */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 24px 60px rgba(16, 24, 40, 0.16);
 }
 
 html,
@@ -12,10 +29,58 @@ body,
 }
 
 body {
-  background: #f4f7fb;
-  color: #172033;
+  background: var(--bg);
+  color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
     'Microsoft YaHei', sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 选区色：与主强调一致 */
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* 滚动条：纤细低调，hover 才显现 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+  background-color: transparent;
+}
+:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.3);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.5);
+}
+
+/* 轻量进入动画，供浮层/列表使用 */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.18s ease-out;
 }
