@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
@@ -33,26 +33,44 @@ function ChatView({ sessionId, onActivity }: { sessionId: string; onActivity: ()
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const loadDetail = useCallback(() => {
+    return api<SessionDetail>(`/api/sessions/${sessionId}`)
+      .then((next) => {
+        setDetail(next);
+        return next;
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : '加载失败');
+        return null;
+      });
+  }, [sessionId]);
+
   useEffect(() => {
     setDetail(null);
     setError(null);
-    api<SessionDetail>(`/api/sessions/${sessionId}`)
-      .then(setDetail)
-      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'));
-  }, [sessionId]);
+    void loadDetail();
+  }, [loadDetail]);
 
   if (error) return <div className="flex h-full items-center justify-center text-sm text-rose-400">{error}</div>;
   if (!detail) return <div className="flex h-full items-center justify-center text-sm text-slate-500">加载中…</div>;
-  return <ChatThread detail={detail} onActivity={onActivity} />;
+  return <ChatThread detail={detail} onActivity={onActivity} reloadDetail={loadDetail} />;
 }
 
-function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity: () => void }) {
+function ChatThread({
+  detail,
+  onActivity,
+  reloadDetail,
+}: {
+  detail: SessionDetail;
+  onActivity: () => void;
+  reloadDetail: () => Promise<SessionDetail | null>;
+}) {
   const sessionId = detail.session.id;
   const transport = useMemo(
     () => new DefaultChatTransport({ api: '/api/chat', body: { sessionId } }),
     [sessionId],
   );
-  const { messages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status } = useChat({
     id: sessionId,
     messages: detail.messages,
     transport,
@@ -65,6 +83,24 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, status]);
+
+  useEffect(() => {
+    if (detail.session.status !== 'running' || status !== 'ready') return;
+    let stopped = false;
+    const sync = () => {
+      reloadDetail().then((next) => {
+        if (!next || stopped) return;
+        setMessages(next.messages);
+        if (next.session.status !== 'running') onActivity();
+      });
+    };
+    sync();
+    const timer = window.setInterval(sync, 1500);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [detail.session.status, onActivity, reloadDetail, setMessages, status]);
 
   const submit = () => {
     const text = input.trim();
@@ -84,7 +120,7 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
         <div className="flex min-w-0 items-center justify-between gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold text-slate-950">
-            {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '对话'}
+              {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '对话'}
             </h1>
             {s.repository && <p className="truncate text-xs text-slate-500">{s.repository.path}</p>}
           </div>
@@ -120,6 +156,11 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
             {busy && (
               <div className="flex items-center gap-2 px-5 py-2 text-xs text-slate-500">
                 <Loader2 size={13} className="animate-spin" /> Agent 思考中…
+              </div>
+            )}
+            {!busy && s.status === 'running' && (
+              <div className="flex items-center gap-2 px-5 py-2 text-xs text-slate-500">
+                <Loader2 size={13} className="animate-spin" /> 后台审查进行中，正在同步模型回复…
               </div>
             )}
           </div>
