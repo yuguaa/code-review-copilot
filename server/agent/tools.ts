@@ -9,6 +9,7 @@ import { sendDingtalk } from '../lib/dingtalk';
 import { prisma } from '../lib/prisma';
 import type { SessionWithRepository } from '../lib/chat-store';
 import type { Workspace } from '../lib/workspace';
+import { resolveDingtalkConfig } from './review-notification';
 
 const exec = promisify(execFile);
 const MAX_CHARS = 30_000; // 单次工具返回上限，避免撑爆上下文
@@ -46,11 +47,7 @@ export async function buildReviewContext(
   const gitlab = createGitLabService(repo.gitLabAccount.url, repo.gitLabAccount.accessToken);
   const mr = session.mrIid != null ? await gitlab.getMergeRequest(repo.gitLabProjectId, session.mrIid) : null;
   const notification = await prisma.notificationSetting.findUnique({ where: { scope: 'global' } });
-  const dingtalk = repo.dingtalkWebhook
-    ? { webhook: repo.dingtalkWebhook, secret: repo.dingtalkSecret }
-    : notification?.dingtalkEnabled && notification.dingtalkWebhookUrl
-      ? { webhook: notification.dingtalkWebhookUrl, secret: notification.dingtalkSecret }
-      : null;
+  const dingtalk = resolveDingtalkConfig(repo, notification);
   return {
     gitlab,
     projectId: repo.gitLabProjectId,

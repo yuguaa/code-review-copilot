@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { getSessionWithRepository, loadMessages, saveMessages } from '../lib/chat-store';
 import { createReviewStream } from './review-agent';
+import { notifyReviewCompleted } from './review-notification';
 import { createLogger } from '../lib/logger';
 
 const log = createLogger('run-review');
@@ -19,16 +20,19 @@ export async function runReviewSession(sessionId: string): Promise<void> {
   try {
     const initial = await loadMessages(sessionId);
     const result = await createReviewStream({ session, messages: initial });
+    let finalMessages = initial;
 
     // 复用 chat route 的同一条 UI message 流；read 到底以驱动 onFinish 落库。
     const response = result.toUIMessageStreamResponse({
       originalMessages: initial,
       onFinish: async ({ messages }) => {
+        finalMessages = messages;
         await saveMessages(sessionId, messages);
       },
     });
     await response.text();
 
+    await notifyReviewCompleted(session, finalMessages);
     await prisma.session.update({ where: { id: sessionId }, data: { status: 'completed' } });
     log.info(`审查完成 session=${sessionId}`);
   } catch (err) {
