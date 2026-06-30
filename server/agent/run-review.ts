@@ -4,6 +4,13 @@ import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
 import { notifyReviewCompleted } from './review-notification';
 import { createLogger } from '../lib/logger';
+import {
+  publishSessionError,
+  publishSessionListChanged,
+  publishSessionMessages,
+  publishSessionStatus,
+} from '../lib/session-events';
+import { readUIMessageStream, type UIMessage } from 'ai';
 
 const log = createLogger('run-review');
 
@@ -23,28 +30,46 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     const result = await createReviewStream({ session, messages: initial });
     let finalMessages = initial;
 
-    // 复用 chat route 的同一条 UI message 流；read 到底以驱动 onFinish 落库。
-    const response = result.toUIMessageStreamResponse({
+    const uiStream = result.toUIMessageStream({
       originalMessages: initial,
-      onFinish: async ({ messages }) => {
+      onEnd: async ({ messages }) => {
         finalMessages = messages;
         await saveMessages(sessionId, messages);
       },
     });
-    await response.text();
+
+    for await (const message of readUIMessageStream<UIMessage>({ stream: uiStream })) {
+      finalMessages = mergeStreamingMessage(initial, message);
+      publishSessionMessages(sessionId, finalMessages);
+    }
 
     finalMessages = ensureVisibleAssistantReply(finalMessages);
     await saveMessages(sessionId, finalMessages);
     await notifyReviewCompleted(session, finalMessages);
     await prisma.session.update({ where: { id: sessionId }, data: { status: 'completed' } });
+    publishSessionMessages(sessionId, finalMessages);
+    publishSessionStatus(sessionId, 'completed');
+    publishSessionListChanged();
     log.info(`审查完成 session=${sessionId}`);
   } catch (err) {
     log.error(`审查失败 session=${sessionId}`, err);
+    const message = err instanceof Error ? err.message : String(err);
     await prisma.session
       .update({
         where: { id: sessionId },
-        data: { status: 'failed', error: err instanceof Error ? err.message : String(err) },
+        data: { status: 'failed', error: message },
       })
       .catch(() => undefined);
+    publishSessionError(sessionId, message);
+    publishSessionStatus(sessionId, 'failed');
+    publishSessionListChanged();
   }
+}
+
+function mergeStreamingMessage(baseMessages: UIMessage[], message: UIMessage): UIMessage[] {
+  const last = baseMessages.at(-1);
+  if (last?.role === 'assistant' && last.id === message.id) {
+    return [...baseMessages.slice(0, -1), message];
+  }
+  return [...baseMessages, message];
 }

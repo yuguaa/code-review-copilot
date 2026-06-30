@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { matchesWatchBranches } from '../lib/branch-match';
 import { runReviewSession } from '../agent/run-review';
 import { createLogger } from '../lib/logger';
+import { publishSessionListChanged } from '../lib/session-events';
 
 const log = createLogger('webhook');
 export const webhookRoutes = new Hono();
@@ -136,6 +137,7 @@ async function handleMergeRequestHook(body: MergeRequestHook, repo: RepositoryFo
 
   // 后台跑审查，不阻塞 GitLab 回调
   void runReviewSession(session.id);
+  publishSessionListChanged();
 
   log.info(`已触发 MR 审查 project=${repo.gitLabProjectId} mr=!${attrs.iid} session=${session.id}`);
   return json({ triggered: true, kind: 'merge_request', sessionId: session.id });
@@ -180,6 +182,7 @@ async function handlePushHook(body: PushHook, repo: RepositoryForWebhook) {
   });
 
   void runReviewSession(session.id);
+  publishSessionListChanged();
 
   log.info(`已触发 Push 审查 project=${repo.gitLabProjectId} branch=${branch} session=${session.id}`);
   return json({ triggered: true, kind: 'push', sessionId: session.id });

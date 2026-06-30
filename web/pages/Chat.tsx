@@ -53,17 +53,17 @@ function ChatView({ sessionId, onActivity }: { sessionId: string; onActivity: ()
 
   if (error) return <div className="flex h-full items-center justify-center text-sm text-rose-400">{error}</div>;
   if (!detail) return <div className="flex h-full items-center justify-center text-sm text-slate-500">加载中…</div>;
-  return <ChatThread detail={detail} onActivity={onActivity} reloadDetail={loadDetail} />;
+  return <ChatThread detail={detail} onActivity={onActivity} updateDetail={setDetail} />;
 }
 
 function ChatThread({
   detail,
   onActivity,
-  reloadDetail,
+  updateDetail,
 }: {
   detail: SessionDetail;
   onActivity: () => void;
-  reloadDetail: () => Promise<SessionDetail | null>;
+  updateDetail: React.Dispatch<React.SetStateAction<SessionDetail | null>>;
 }) {
   const sessionId = detail.session.id;
   const transport = useMemo(
@@ -85,22 +85,31 @@ function ChatThread({
   }, [messages, status]);
 
   useEffect(() => {
-    if (detail.session.status !== 'running' || status !== 'ready') return;
-    let stopped = false;
-    const sync = () => {
-      reloadDetail().then((next) => {
-        if (!next || stopped) return;
-        setMessages(next.messages);
-        if (next.session.status !== 'running') onActivity();
-      });
-    };
-    sync();
-    const timer = window.setInterval(sync, 1500);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, [detail.session.status, onActivity, reloadDetail, setMessages, status]);
+    const events = new EventSource(`/api/sessions/${sessionId}/events`);
+
+    events.addEventListener('messages', (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as Pick<SessionDetail, 'messages'>;
+      setMessages(payload.messages);
+    });
+
+    events.addEventListener('status', (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as { status: string };
+      updateDetail((current) =>
+        current ? { ...current, session: { ...current.session, status: payload.status } } : current,
+      );
+      if (payload.status !== 'running') onActivity();
+    });
+
+    events.addEventListener('review-error', (event) => {
+      if (!(event instanceof MessageEvent)) return;
+      const payload = JSON.parse(event.data) as { error: string };
+      updateDetail((current) =>
+        current ? { ...current, session: { ...current.session, error: payload.error } } : current,
+      );
+    });
+
+    return () => events.close();
+  }, [onActivity, sessionId, setMessages, updateDetail]);
 
   const submit = () => {
     const text = input.trim();

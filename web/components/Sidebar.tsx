@@ -16,7 +16,6 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const navigate = useNavigate();
   const { sessionId } = useParams();
-  const hasRunningSession = sessions.some((s) => s.status === 'running');
 
   const load = useCallback(async () => {
     const data = await api<{ sessions: SessionListItem[] }>('/api/sessions').catch(() => ({ sessions: [] }));
@@ -28,12 +27,12 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   }, [load, refreshKey]);
 
   useEffect(() => {
-    if (!hasRunningSession) return;
-    const timer = window.setInterval(() => {
+    const events = new EventSource('/api/sessions/events');
+    events.addEventListener('changed', () => {
       void load();
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [hasRunningSession, load]);
+    });
+    return () => events.close();
+  }, [load]);
 
   const newChat = async () => {
     const repos = await api<{ repositories: RepositoryItem[] }>('/api/repositories').catch(() => ({ repositories: [] }));
