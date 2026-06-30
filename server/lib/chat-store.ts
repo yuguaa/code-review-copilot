@@ -84,6 +84,14 @@ export function dedupeMessages(messages: UIMessage[]): UIMessage[] {
   return Array.from(byId.values());
 }
 
+export function mergeStreamingMessage(baseMessages: UIMessage[], message: UIMessage): UIMessage[] {
+  const last = baseMessages.at(-1);
+  if (last?.role === 'assistant' && last.id === message.id) {
+    return [...baseMessages.slice(0, -1), message];
+  }
+  return [...baseMessages, message];
+}
+
 /** 从 UIMessage.parts 里抽一段纯文本预览。 */
 function previewOf(parts: unknown): string {
   if (!Array.isArray(parts)) return '';

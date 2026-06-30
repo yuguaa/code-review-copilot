@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { getSessionWithRepository, loadMessages, saveMessages } from '../lib/chat-store';
+import { getSessionWithRepository, loadMessages, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
 import { notifyReviewCompleted } from './review-notification';
@@ -63,12 +63,4 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     publishSessionStatus(sessionId, 'failed');
     publishSessionListChanged();
   }
-}
-
-function mergeStreamingMessage(baseMessages: UIMessage[], message: UIMessage): UIMessage[] {
-  const last = baseMessages.at(-1);
-  if (last?.role === 'assistant' && last.id === message.id) {
-    return [...baseMessages.slice(0, -1), message];
-  }
-  return [...baseMessages, message];
 }

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import type { UIMessage } from 'ai';
-import { getSessionWithRepository, saveMessages } from '../lib/chat-store';
+import { parseJsonEventStream, readUIMessageStream, uiMessageChunkSchema, type UIMessage } from 'ai';
+import { getSessionWithRepository, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
+import { publishSessionListChanged, publishSessionMessages } from '../lib/session-events';
 import { createReviewStream } from '../agent/review-agent';
 import { createLogger } from '../lib/logger';
 
@@ -37,10 +38,37 @@ chatRoutes.post('/', async (c) => {
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
-    onFinish: ({ messages: finalMessages }) => {
-      saveMessages(sessionId, finalMessages).catch((err) =>
-        log.error(`保存会话消息失败 session=${sessionId}`, err),
-      );
+    consumeSseStream: ({ stream }) => {
+      consumeChatStream(sessionId, messages, stream);
     },
   });
 });
+
+function consumeChatStream(
+  sessionId: string,
+  initialMessages: UIMessage[],
+  stream: ReadableStream<string>,
+): void {
+  const parsedStream = parseJsonEventStream({
+    stream: stream.pipeThrough(new TextEncoderStream()),
+    schema: uiMessageChunkSchema,
+  });
+  const chunkStream = parsedStream.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        if (!chunk.success) throw chunk.error;
+        controller.enqueue(chunk.value);
+      },
+    }),
+  );
+
+  void (async () => {
+    let finalMessages = initialMessages;
+    for await (const message of readUIMessageStream<UIMessage>({ stream: chunkStream })) {
+      finalMessages = mergeStreamingMessage(initialMessages, message);
+      publishSessionMessages(sessionId, finalMessages);
+    }
+    await saveMessages(sessionId, finalMessages);
+    publishSessionListChanged();
+  })().catch((err) => log.error(`消费追问流失败 session=${sessionId}`, err));
+}
