@@ -74,9 +74,20 @@ export async function saveMessages(sessionId: string, messages: UIMessage[]): Pr
 function previewOf(parts: unknown): string {
   if (!Array.isArray(parts)) return '';
   const text = parts
-    .filter((p): p is { type: 'text'; text: string } => p?.type === 'text' && typeof p.text === 'string')
-    .map((p) => p.text)
+    .map((p) => previewPart(p))
+    .filter(Boolean)
     .join(' ')
     .trim();
   return text.slice(0, 120);
+}
+
+function previewPart(part: unknown): string {
+  if (!part || typeof part !== 'object') return '';
+  const p = part as { type?: unknown; text?: unknown; toolName?: unknown; state?: unknown };
+  if (p.type === 'text' && typeof p.text === 'string') return p.text;
+  if (p.type === 'reasoning' && typeof p.text === 'string') return `推理：${p.text}`;
+  if (p.type === 'step-start') return '模型开始生成';
+  if (p.type === 'dynamic-tool') return `调用工具：${String(p.toolName ?? '未知工具')}`;
+  if (typeof p.type === 'string' && p.type.startsWith('tool-')) return `调用工具：${p.type.replace(/^tool-/, '')}`;
+  return typeof p.type === 'string' ? `模型事件：${p.type}` : '';
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { UIMessage } from 'ai';
-import { ChevronRight, Wrench, User, Bot } from 'lucide-react';
+import { ChevronRight, Wrench, User, Bot, Sparkles } from 'lucide-react';
 import { cn } from '../lib/cn';
 
 const TOOL_LABEL: Record<string, string> = {
@@ -8,9 +8,21 @@ const TOOL_LABEL: Record<string, string> = {
   fetch_diff: '获取 diff',
   read_file: '读取文件',
   post_review_comment: '发布审查评论',
+  post_inline_comment: '发布行级评论',
+  notify_dingtalk: '推送钉钉通知',
+  read_memory: '读取项目记忆',
+  write_memory: '更新项目记忆',
   delegate_security: '委派安全审查',
   delegate_architecture: '委派架构审查',
   delegate_performance: '委派性能审查',
+};
+
+const EVENT_LABEL: Record<string, string> = {
+  'step-start': '模型开始生成',
+  'step-finish': '模型完成一步',
+  'source-url': '引用链接',
+  'source-document': '引用文档',
+  file: '生成文件',
 };
 
 function ToolPart({ part }: { part: Record<string, unknown> }) {
@@ -46,6 +58,30 @@ function ToolPart({ part }: { part: Record<string, unknown> }) {
             <pre className="whitespace-pre-wrap text-[11px] text-rose-400">{String(part.errorText)}</pre>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function EventPart({ part }: { part: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+  const type = String(part.type ?? 'unknown');
+  const label = EVENT_LABEL[type] ?? `模型事件：${type}`;
+  return (
+    <div className="my-1.5 overflow-hidden rounded-xl bg-white/80 text-xs shadow-sm ring-1 ring-sky-100">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-600 transition-[background-color] hover:bg-sky-50"
+      >
+        <Sparkles size={13} className="text-teal-500" />
+        <span className="font-medium">{label}</span>
+        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <pre className="max-h-64 overflow-auto border-t border-sky-50 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+          {JSON.stringify(part, null, 2)}
+        </pre>
       )}
     </div>
   );
@@ -90,7 +126,7 @@ export function Message({ message }: { message: UIMessage }) {
           if (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) {
             return <ToolPart key={i} part={part as unknown as Record<string, unknown>} />;
           }
-          return null;
+          return <EventPart key={i} part={part as unknown as Record<string, unknown>} />;
         })}
       </div>
     </div>
