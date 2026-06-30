@@ -19,9 +19,9 @@ export function resolveDingtalkConfig(repo: RepositoryForDingtalk, notification:
 }
 
 function textOf(messages: UIMessage[]): string {
-  return messages
-    .filter((m) => m.role === 'assistant')
-    .flatMap((m) => m.parts)
+  const message = [...messages].reverse().find((m) => m.role === 'assistant');
+  if (!message) return '';
+  return message.parts
     .filter((p): p is { type: 'text'; text: string } => p.type === 'text' && typeof p.text === 'string')
     .map((p) => p.text.trim())
     .filter(Boolean)

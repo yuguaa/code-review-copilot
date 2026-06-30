@@ -113,6 +113,34 @@ describe('notifyReviewCompleted', () => {
     );
   });
 
+  it('只把最后一条 assistant 文本作为完成通知正文', async () => {
+    vi.mocked(prisma.notificationSetting.findUnique).mockResolvedValue({
+      id: 'n1',
+      scope: 'global',
+      dingtalkEnabled: true,
+      dingtalkWebhookUrl: 'https://oapi.dingtalk.com/robot/send?access_token=x',
+      dingtalkSecret: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await notifyReviewCompleted(session(), [
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: '旧回复' }] },
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: '追问' }] },
+      { id: 'a2', role: 'assistant', parts: [{ type: 'text', text: '最新首答' }] },
+    ]);
+    expect(sendDingtalk).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.not.stringContaining('旧回复'),
+    );
+    expect(sendDingtalk).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('最新首答'),
+    );
+  });
+
   it('仓库关闭钉钉时跳过', async () => {
     const s = session({
       repository: { ...session().repository!, enableDingtalk: false },
