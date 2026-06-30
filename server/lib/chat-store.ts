@@ -56,18 +56,32 @@ export async function loadMessages(sessionId: string): Promise<UIMessage[]> {
  * 用事务保证一致性，并刷新 session.updatedAt。
  */
 export async function saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
+  const uniqueMessages = dedupeMessages(messages);
+
   await prisma.$transaction([
     prisma.message.deleteMany({ where: { sessionId } }),
     prisma.message.createMany({
-      data: messages.map((m) => ({
+      data: uniqueMessages.map((m) => ({
         id: m.id,
         sessionId,
         role: m.role,
         parts: m.parts as object,
       })),
+      skipDuplicates: true,
     }),
     prisma.session.update({ where: { id: sessionId }, data: { updatedAt: new Date() } }),
   ]);
+}
+
+export function dedupeMessages(messages: UIMessage[]): UIMessage[] {
+  const byId = new Map<string, UIMessage>();
+
+  for (const message of messages) {
+    if (!message.id) continue;
+    byId.set(message.id, message);
+  }
+
+  return Array.from(byId.values());
 }
 
 /** 从 UIMessage.parts 里抽一段纯文本预览。 */

@@ -32,9 +32,8 @@ export async function runReviewSession(sessionId: string): Promise<void> {
 
     const uiStream = result.toUIMessageStream({
       originalMessages: initial,
-      onEnd: async ({ messages }) => {
+      onEnd: ({ messages }) => {
         finalMessages = messages;
-        await saveMessages(sessionId, messages);
       },
     });
 
