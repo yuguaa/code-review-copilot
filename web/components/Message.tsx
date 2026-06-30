@@ -54,24 +54,26 @@ function ToolPart({ part }: { part: Record<string, unknown> }) {
 export function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user';
   return (
-    <div className={cn('flex gap-3 px-4 py-3', isUser && 'flex-row-reverse')}>
+    <div className={cn('flex gap-3 py-3', isUser ? 'justify-end pl-16' : 'justify-start pr-16')}>
       <div
         className={cn(
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-          isUser ? 'bg-slate-950 text-white' : 'bg-emerald-100 text-emerald-700',
+          'mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-sm',
+          isUser ? 'order-2 bg-slate-950 text-white' : 'bg-emerald-100 text-emerald-700',
         )}
       >
         {isUser ? <User size={15} /> : <Bot size={15} />}
       </div>
-      <div className={cn('min-w-0 max-w-[80%] space-y-1', isUser && 'items-end text-right')}>
+      <div className={cn('flex min-w-0 max-w-[72%] flex-col space-y-1', isUser ? 'items-end text-right' : 'items-start')}>
         {message.parts.map((part, i) => {
           if (part.type === 'text') {
             return (
               <div
                 key={i}
                 className={cn(
-                  'inline-block whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm leading-relaxed',
-                  isUser ? 'bg-slate-950 text-white' : 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/80',
+                  'inline-block whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed shadow-sm',
+                  isUser
+                    ? 'rounded-2xl rounded-tr-md bg-slate-950 text-white'
+                    : 'rounded-2xl rounded-tl-md bg-white text-slate-800 ring-1 ring-slate-200/80',
                 )}
               >
                 {part.text}
@@ -80,7 +82,7 @@ export function Message({ message }: { message: UIMessage }) {
           }
           if (part.type === 'reasoning') {
             return (
-              <div key={i} className="rounded-lg bg-slate-100 px-3 py-2 text-xs italic text-slate-500">
+              <div key={i} className="rounded-lg bg-slate-100 px-3 py-2 text-xs italic text-slate-500 shadow-sm">
                 {part.text}
               </div>
             );

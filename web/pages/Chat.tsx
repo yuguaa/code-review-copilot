@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { SendHorizontal, Loader2, FolderGit2, GitBranch, Hash, UserRound, GitPullRequest, Clock3, AlertCircle } from 'lucide-react';
+import { SendHorizontal, Loader2, FolderGit2, GitBranch, Hash, UserRound } from 'lucide-react';
 import { api } from '../lib/api';
 import type { SessionDetail } from '../lib/types';
 import { Sidebar } from '../components/Sidebar';
@@ -75,26 +75,42 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
 
   const s = detail.session;
   const shortHash = s.commitSha ? s.commitSha.slice(0, 8) : null;
+  const branchText =
+    s.sourceBranch && s.targetBranch ? `${s.sourceBranch} → ${s.targetBranch}` : s.sourceBranch ?? s.targetBranch ?? null;
 
   return (
     <>
-      <header className="flex items-center gap-3 border-b border-sky-100 bg-white/90 px-5 py-3 shadow-sm backdrop-blur">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold text-slate-950">
+      <header className="border-b border-sky-100 bg-white/90 px-6 py-3 shadow-sm backdrop-blur">
+        <div className="flex min-w-0 items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold text-slate-950">
             {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '对话'}
-          </h1>
-          {s.repository && (
-            <p className="truncate text-xs text-slate-500">
-              {s.repository.path}
-              {s.sourceBranch && s.targetBranch ? ` · ${s.sourceBranch} → ${s.targetBranch}` : ''}
-            </p>
-          )}
+            </h1>
+            {s.repository && <p className="truncate text-xs text-slate-500">{s.repository.path}</p>}
+          </div>
+          <div className="hidden shrink-0 items-center gap-2 text-[11px] text-slate-500 lg:flex">
+            {branchText && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-teal-700">
+                <GitBranch size={12} /> {branchText}
+              </span>
+            )}
+            {shortHash && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-mono text-slate-700">
+                <Hash size={12} /> {shortHash}
+              </span>
+            )}
+            {s.author && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-amber-700">
+                <UserRound size={12} /> {s.author}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1">
+      <div className="min-h-0 flex-1">
         <div ref={scrollRef} className="h-full min-w-0 overflow-y-auto">
-          <div className="mx-auto max-w-3xl py-4 xl:mr-[23rem]">
+          <div className="mx-auto max-w-5xl space-y-1 px-6 py-6">
             {messages.length === 0 && (
               <p className="px-4 py-12 text-center text-sm text-slate-400">开始对话吧</p>
             )}
@@ -108,46 +124,26 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
             )}
           </div>
         </div>
-        <aside className="pointer-events-none absolute right-5 top-5 z-20 hidden w-80 xl:block">
-          <div className="pointer-events-auto space-y-4 rounded-2xl bg-white/95 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.14)] ring-1 ring-sky-100 backdrop-blur">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-slate-950">环境信息</h2>
-              <span className="rounded-full bg-teal-50 px-2 py-1 text-[11px] text-teal-700">{s.kind}</span>
-            </div>
-            <div className="space-y-3 text-sm">
-              <InfoRow icon={<FolderGit2 size={15} />} label="仓库" value={s.repository?.path ?? '未绑定仓库'} />
-              <InfoRow icon={<GitBranch size={15} />} label="分支" value={s.sourceBranch && s.targetBranch ? `${s.sourceBranch} → ${s.targetBranch}` : s.sourceBranch ?? s.targetBranch ?? '暂无分支'} />
-              <InfoRow icon={<Hash size={15} />} label="Commit" value={shortHash ?? '暂无 hash'} mono />
-              <InfoRow icon={<UserRound size={15} />} label="提交者" value={s.author ?? '暂无提交者'} />
-              <InfoRow icon={<GitPullRequest size={15} />} label="MR" value={s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : '未绑定 MR'} />
-              <InfoRow icon={<Clock3 size={15} />} label="更新时间" value={new Date(s.updatedAt).toLocaleString()} />
-              {s.error && <InfoRow icon={<AlertCircle size={15} />} label="错误" value={s.error} tone="danger" />}
-            </div>
-          </div>
-        </aside>
       </div>
 
       <div className="border-t border-sky-100 bg-white/95 p-4 shadow-[0_-8px_30px_rgba(15,23,42,0.04)]">
         <div className="mx-auto max-w-3xl space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+          <div className="flex min-h-6 flex-wrap items-center justify-center gap-2 text-[11px] text-slate-500">
             {s.repository && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-sky-700">
+              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-sky-50 px-2 py-1 text-sky-700">
                 <FolderGit2 size={12} /> {s.repository.path}
               </span>
             )}
-            {(s.sourceBranch || s.targetBranch) && (
+            {branchText && (
               <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-1 text-teal-700">
-                <GitBranch size={12} /> {s.sourceBranch ?? '-'} → {s.targetBranch ?? '-'}
+                <GitBranch size={12} /> {branchText}
               </span>
             )}
-            {shortHash && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 font-mono text-slate-700">
-                <Hash size={12} /> {shortHash}
-              </span>
-            )}
-            {s.author && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700">
-                <UserRound size={12} /> {s.author}
+            {(shortHash || s.author) && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                {shortHash && <span className="font-mono">{shortHash}</span>}
+                {shortHash && s.author ? <span className="text-slate-400">·</span> : null}
+                {s.author}
               </span>
             )}
           </div>
@@ -176,31 +172,5 @@ function ChatThread({ detail, onActivity }: { detail: SessionDetail; onActivity:
         </div>
       </div>
     </>
-  );
-}
-
-function InfoRow({
-  icon,
-  label,
-  value,
-  mono,
-  tone = 'default',
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  mono?: boolean;
-  tone?: 'default' | 'danger';
-}) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className={tone === 'danger' ? 'mt-0.5 text-rose-500' : 'mt-0.5 text-slate-400'}>{icon}</span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] text-slate-400">{label}</p>
-        <p className={`break-words text-sm ${mono ? 'font-mono' : ''} ${tone === 'danger' ? 'text-rose-600' : 'text-slate-800'}`}>
-          {value}
-        </p>
-      </div>
-    </div>
   );
 }
