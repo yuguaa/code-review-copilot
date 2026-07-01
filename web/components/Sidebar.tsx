@@ -10,6 +10,7 @@ import {
   Trash2,
   ChevronRight,
   ScanSearch,
+  GitBranch,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
@@ -17,8 +18,8 @@ import { cn } from '../lib/cn';
 import type { SessionListItem, RepositoryItem } from '../lib/types';
 
 const statusColor: Record<string, string> = {
-  running: 'bg-amber-400',
-  completed: 'bg-emerald-400',
+  running: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.14)]',
+  completed: 'bg-emerald-500',
   failed: 'bg-rose-500',
 };
 
@@ -44,6 +45,18 @@ function sessionLabel(s: SessionListItem): string {
     return `${prefix}${s.title || '代码审查'}`;
   }
   return s.title || '新对话';
+}
+
+function sessionMeta(s: SessionListItem): string {
+  const branch =
+    s.sourceBranch && s.targetBranch ? `${s.sourceBranch} → ${s.targetBranch}` : s.sourceBranch ?? s.targetBranch;
+  const time = new Date(s.createdAt).toLocaleString(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return [branch, time].filter(Boolean).join(' · ');
 }
 
 /** 按仓库把会话聚成有序分组（沿用 createdAt 倒序，最新触发的仓库在前）。 */
@@ -129,24 +142,29 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-slate-200/80 bg-white">
-      <div className="flex items-center justify-between gap-2 px-4 py-3.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm shadow-indigo-600/30">
-            <ScanSearch size={16} />
-          </span>
-          <span className="truncate text-sm font-semibold text-slate-900">代码审查 Agent</span>
+    <aside className="flex h-full w-80 shrink-0 flex-col border-r border-[var(--border)] bg-[linear-gradient(180deg,#fff,oklch(0.975_0.008_255))] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
+      <div className="border-b border-slate-100 px-4 py-4 max-md:py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-white shadow-[var(--shadow-control)]">
+              <ScanSearch size={16} />
+            </span>
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-slate-950">代码审查 Agent</span>
+              <span className="block truncate text-[11px] text-slate-500">Review sessions</span>
+            </div>
+          </div>
+          <button
+            onClick={newChat}
+            title="新对话"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-slate-600 shadow-[var(--shadow-control)] transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-95"
+          >
+            <Plus size={17} />
+          </button>
         </div>
-        <button
-          onClick={newChat}
-          title="新对话"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-95"
-        >
-          <Plus size={17} />
-        </button>
       </div>
 
-      <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 space-y-1 overflow-y-auto px-2.5 py-3 max-md:max-h-56">
         {sessions.length === 0 && (
           <p className="px-3 py-10 text-center text-xs leading-relaxed text-slate-400">
             暂无会话。
@@ -161,23 +179,18 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
           const isCollapsed = collapsed.has(group.key);
           const hasActive = group.sessions.some((s) => s.id === sessionId);
           return (
-            <div key={group.key} className="select-none">
+            <div key={group.key} className="select-none rounded-xl">
               <button
                 onClick={() => toggle(group.key)}
                 title={group.path ?? group.name}
-                className="group/header flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-left transition-[background-color] hover:bg-slate-50"
+                className="group/header flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-[background-color] hover:bg-slate-100/70"
               >
                 <ChevronRight
                   size={14}
                   className={cn('shrink-0 text-slate-400 transition-transform', !isCollapsed && 'rotate-90')}
                 />
                 <FolderGit2 size={14} className={cn('shrink-0', hasActive ? 'text-indigo-600' : 'text-slate-400')} />
-                <span
-                  className={cn(
-                    'truncate text-xs font-semibold',
-                    hasActive ? 'text-indigo-700' : 'text-slate-700',
-                  )}
-                >
+                <span className={cn('truncate text-xs font-semibold', hasActive ? 'text-indigo-700' : 'text-slate-800')}>
                   {group.name}
                 </span>
                 <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-500">
@@ -186,23 +199,25 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
               </button>
 
               {!isCollapsed && (
-                <div className="mb-0.5 ml-[15px] space-y-0.5 border-l border-slate-200/70 pl-1.5">
+                <div className="mb-1 ml-[15px] space-y-1 border-l border-slate-200/80 pl-1.5">
                   {group.sessions.map((s) => {
                     const active = s.id === sessionId;
                     return (
                       <div
                         key={s.id}
                         className={cn(
-                          'group relative rounded-lg transition-[background-color]',
-                          active ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                          'group relative rounded-lg transition-[background-color,box-shadow]',
+                          active
+                            ? 'bg-white shadow-[var(--shadow-sm)] ring-1 ring-indigo-100'
+                            : 'hover:bg-white/80 hover:shadow-[var(--shadow-sm)]',
                         )}
                       >
                         {active && (
-                          <span className="absolute -left-[7px] top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-indigo-600" />
+                          <span className="absolute -left-[7px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-[var(--accent)]" />
                         )}
                         <button
                           onClick={() => navigate(`/c/${s.id}`)}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 pr-8 text-left"
+                          className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2.5 py-2 pr-8 text-left"
                         >
                           {s.kind === 'review' ? (
                             <GitPullRequest
@@ -215,13 +230,19 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                               className={cn('shrink-0', active ? 'text-indigo-500' : 'text-slate-400')}
                             />
                           )}
-                          <span
-                            className={cn(
-                              'truncate text-xs',
-                              active ? 'font-medium text-indigo-900' : 'text-slate-700',
-                            )}
-                          >
-                            {sessionLabel(s)}
+                          <span className="min-w-0">
+                            <span
+                              className={cn(
+                                'block truncate text-xs',
+                                active ? 'font-semibold text-indigo-950' : 'font-medium text-slate-800',
+                              )}
+                            >
+                              {sessionLabel(s)}
+                            </span>
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-[10px] text-slate-500">
+                              {s.sourceBranch || s.targetBranch ? <GitBranch size={10} className="shrink-0" /> : null}
+                              <span className="truncate">{sessionMeta(s)}</span>
+                            </span>
                           </span>
                           <span
                             title={statusLabel[s.status] ?? s.status}
@@ -254,22 +275,22 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
         })}
       </div>
 
-      <div className="space-y-0.5 border-t border-slate-200/80 px-2 py-2 text-sm">
+      <div className="space-y-0.5 border-t border-[var(--border)] px-2.5 py-3 text-sm max-md:grid max-md:grid-cols-3 max-md:gap-1 max-md:space-y-0">
         <Link
           to="/repositories"
-          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-slate-600 transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
+          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
         >
           <FolderGit2 size={15} /> 仓库配置
         </Link>
         <Link
           to="/settings"
-          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-slate-600 transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
+          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
         >
           <SettingsIcon size={15} /> 设置
         </Link>
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-slate-600 transition-[background-color,color,transform] hover:bg-rose-50 hover:text-rose-600 active:scale-[0.98]"
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 transition-[background-color,color,transform] hover:bg-rose-50 hover:text-rose-700 active:scale-[0.98]"
         >
           <LogOut size={15} /> 退出登录
         </button>
