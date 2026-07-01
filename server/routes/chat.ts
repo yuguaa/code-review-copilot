@@ -31,7 +31,7 @@ chatRoutes.post('/', async (c) => {
 
   let result: Awaited<ReturnType<typeof createReviewStream>>;
   try {
-    result = await createReviewStream({ session, messages });
+    result = await createReviewStream({ session, messages, mode: 'chat' });
   } catch (err) {
     log.error(`创建审查流失败 session=${sessionId}`, err);
     return c.json({ error: err instanceof Error ? err.message : '审查流创建失败' }, 500);
