@@ -3,6 +3,7 @@ import { parseJsonEventStream, readUIMessageStream, uiMessageChunkSchema, type U
 import { ensureChatTitle, getSessionWithRepository, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
 import { publishSessionListChanged, publishSessionMessages } from '../lib/session-events';
 import { createReviewStream } from '../agent/review-agent';
+import { ensureVisibleAssistantReply } from '../agent/review-message';
 import { createLogger } from '../lib/logger';
 
 const log = createLogger('chat');
@@ -68,8 +69,10 @@ function consumeChatStream(
       finalMessages = mergeStreamingMessage(initialMessages, message);
       publishSessionMessages(sessionId, finalMessages);
     }
+    finalMessages = ensureVisibleAssistantReply(finalMessages);
     await saveMessages(sessionId, finalMessages);
     await ensureChatTitle(sessionId, finalMessages);
+    publishSessionMessages(sessionId, finalMessages);
     publishSessionListChanged();
   })().catch((err) => log.error(`消费追问流失败 session=${sessionId}`, err));
 }
