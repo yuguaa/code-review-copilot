@@ -142,22 +142,22 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-r border-[var(--border)] bg-[linear-gradient(180deg,#fff,oklch(0.975_0.008_255))] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
-      <div className="border-b border-slate-100 px-4 py-4 max-md:py-3">
+    <aside className="glass-panel relative z-20 flex h-full w-80 shrink-0 flex-col border-r border-white/70 max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
+      <div className="border-b border-white/70 px-4 py-4 max-md:py-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-white shadow-[var(--shadow-control)]">
+            <span className="scan-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-[0_12px_28px_rgba(37,99,235,0.24)]">
               <ScanSearch size={16} />
             </span>
             <div className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-slate-950">代码审查 Agent</span>
-              <span className="block truncate text-[11px] text-slate-500">Review sessions</span>
+              <span className="block truncate text-sm font-semibold tracking-[0.01em] text-slate-950">代码审查 Agent</span>
+              <span className="block truncate text-[11px] text-slate-500">Review command center</span>
             </div>
           </div>
           <button
             onClick={newChat}
             title="新对话"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-white text-slate-600 shadow-[var(--shadow-control)] transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-95"
+            className="interactive-lift flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/80 bg-white/78 text-slate-600 shadow-[var(--shadow-control)] hover:bg-[var(--cyan-soft)] hover:text-cyan-700 active:scale-95"
           >
             <Plus size={17} />
           </button>
@@ -179,27 +179,27 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
           const isCollapsed = collapsed.has(group.key);
           const hasActive = group.sessions.some((s) => s.id === sessionId);
           return (
-            <div key={group.key} className="select-none rounded-xl">
+            <div key={group.key} className="surface-enter select-none rounded-xl">
               <button
                 onClick={() => toggle(group.key)}
                 title={group.path ?? group.name}
-                className="group/header flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-[background-color] hover:bg-slate-100/70"
+                className="interactive-lift group/header flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-white/70 hover:shadow-[var(--shadow-sm)]"
               >
                 <ChevronRight
                   size={14}
-                  className={cn('shrink-0 text-slate-400 transition-transform', !isCollapsed && 'rotate-90')}
+                  className={cn('shrink-0 text-slate-400 transition-transform duration-200', !isCollapsed && 'rotate-90')}
                 />
                 <FolderGit2 size={14} className={cn('shrink-0', hasActive ? 'text-indigo-600' : 'text-slate-400')} />
                 <span className={cn('truncate text-xs font-semibold', hasActive ? 'text-indigo-700' : 'text-slate-800')}>
                   {group.name}
                 </span>
-                <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-500">
+                <span className="ml-auto shrink-0 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-500 ring-1 ring-white/80">
                   {group.sessions.length}
                 </span>
               </button>
 
               {!isCollapsed && (
-                <div className="mb-1 ml-[15px] space-y-1 border-l border-slate-200/80 pl-1.5">
+                <div className="mb-1 ml-[15px] space-y-1 border-l border-cyan-200/70 pl-1.5">
                   {group.sessions.map((s) => {
                     const active = s.id === sessionId;
                     return (
@@ -208,33 +208,33 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                         className={cn(
                           'group relative rounded-lg transition-[background-color,box-shadow]',
                           active
-                            ? 'bg-white shadow-[var(--shadow-sm)] ring-1 ring-indigo-100'
-                            : 'hover:bg-white/80 hover:shadow-[var(--shadow-sm)]',
+                            ? 'bg-white/88 shadow-[var(--shadow-glow)] ring-1 ring-cyan-100'
+                            : 'hover:bg-white/76 hover:shadow-[var(--shadow-sm)]',
                         )}
                       >
                         {active && (
-                          <span className="absolute -left-[7px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-[var(--accent)]" />
+                          <span className="absolute -left-[7px] top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-full bg-[linear-gradient(180deg,var(--cyan),var(--accent))] shadow-[0_0_18px_rgba(14,165,233,0.46)]" />
                         )}
                         <button
                           onClick={() => navigate(`/c/${s.id}`)}
-                          className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2.5 py-2 pr-8 text-left"
+                          className="interactive-lift grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2.5 py-2 pr-8 text-left"
                         >
                           {s.kind === 'review' ? (
                             <GitPullRequest
                               size={13}
-                              className={cn('shrink-0', active ? 'text-indigo-500' : 'text-slate-400')}
+                              className={cn('shrink-0', active ? 'text-cyan-600' : 'text-slate-400')}
                             />
                           ) : (
                             <MessageSquare
                               size={13}
-                              className={cn('shrink-0', active ? 'text-indigo-500' : 'text-slate-400')}
+                              className={cn('shrink-0', active ? 'text-cyan-600' : 'text-slate-400')}
                             />
                           )}
                           <span className="min-w-0">
                             <span
                               className={cn(
                                 'block truncate text-xs',
-                                active ? 'font-semibold text-indigo-950' : 'font-medium text-slate-800',
+                                active ? 'font-semibold text-slate-950' : 'font-medium text-slate-800',
                               )}
                             >
                               {sessionLabel(s)}
@@ -275,22 +275,22 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
         })}
       </div>
 
-      <div className="space-y-0.5 border-t border-[var(--border)] px-2.5 py-3 text-sm max-md:grid max-md:grid-cols-3 max-md:gap-1 max-md:space-y-0">
+      <div className="space-y-0.5 border-t border-white/70 px-2.5 py-3 text-sm max-md:grid max-md:grid-cols-3 max-md:gap-1 max-md:space-y-0">
         <Link
           to="/repositories"
-          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
+          className="interactive-lift flex items-center gap-2.5 rounded-xl px-3 py-2 text-slate-700 hover:bg-[var(--cyan-soft)] hover:text-cyan-700 active:scale-[0.98]"
         >
           <FolderGit2 size={15} /> 仓库配置
         </Link>
         <Link
           to="/settings"
-          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 transition-[background-color,color,transform] hover:bg-indigo-50 hover:text-indigo-700 active:scale-[0.98]"
+          className="interactive-lift flex items-center gap-2.5 rounded-xl px-3 py-2 text-slate-700 hover:bg-[var(--cyan-soft)] hover:text-cyan-700 active:scale-[0.98]"
         >
           <SettingsIcon size={15} /> 设置
         </Link>
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 transition-[background-color,color,transform] hover:bg-rose-50 hover:text-rose-700 active:scale-[0.98]"
+          className="interactive-lift flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-slate-700 hover:bg-rose-50 hover:text-rose-700 active:scale-[0.98]"
         >
           <LogOut size={15} /> 退出登录
         </button>

@@ -35,22 +35,22 @@ function ToolPart({ part }: { part: Record<string, unknown> }) {
   const errored = state === 'output-error';
 
   return (
-    <div className="my-2 overflow-hidden rounded-xl bg-white text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+    <div className="my-2 overflow-hidden rounded-xl bg-white/82 text-xs shadow-[var(--shadow-sm)] ring-1 ring-white/80 backdrop-blur">
+      <button onClick={() => setOpen((v) => !v)} className="interactive-lift flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-cyan-50/70">
         <span
           className={cn(
             'flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
-            errored ? 'bg-rose-50 text-rose-600' : done ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600',
+            errored ? 'bg-rose-50 text-rose-600' : done ? 'bg-emerald-50 text-emerald-600' : 'thinking-pulse bg-amber-50 text-amber-600',
           )}
         >
           <Wrench size={13} />
         </span>
         <span className="font-semibold text-slate-800">{TOOL_LABEL[name] ?? name}</span>
         <span className="text-slate-500">{errored ? '失败' : done ? '完成' : '执行中'}</span>
-        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform', open && 'rotate-90')} />
+        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform duration-200', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="space-y-2 border-t border-slate-100 bg-slate-50/80 px-3 py-2">
+        <div className="animate-fade-in space-y-2 border-t border-slate-100 bg-slate-50/80 px-3 py-2">
           {part.input != null && (
             <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-600">
               入参：{JSON.stringify(part.input, null, 2)}
@@ -75,20 +75,20 @@ function EventPart({ part }: { part: Record<string, unknown> }) {
   const type = String(part.type ?? 'unknown');
   const label = EVENT_LABEL[type] ?? `模型事件：${type}`;
   return (
-    <div className="my-2 overflow-hidden rounded-xl bg-white text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
+    <div className="my-2 overflow-hidden rounded-xl bg-white/82 text-xs shadow-[var(--shadow-sm)] ring-1 ring-white/80 backdrop-blur">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 transition-[background-color] hover:bg-indigo-50/60"
+        className="interactive-lift flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-cyan-50/70"
       >
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600">
+        <span className="scan-accent flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-soft)] text-[var(--accent)]">
           <Sparkles size={13} />
         </span>
         <span className="font-semibold">{label}</span>
-        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform', open && 'rotate-90')} />
+        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform duration-200', open && 'rotate-90')} />
       </button>
       {open && (
-        <pre className="max-h-64 overflow-auto border-t border-slate-100 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+        <pre className="animate-fade-in max-h-64 overflow-auto border-t border-slate-100 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
           {JSON.stringify(part, null, 2)}
         </pre>
       )}
@@ -99,13 +99,13 @@ function EventPart({ part }: { part: Record<string, unknown> }) {
 export function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === 'user';
   return (
-    <div className={cn('flex gap-3 py-3.5', isUser ? 'justify-end pl-16' : 'justify-start pr-16')}>
+    <div className={cn('surface-enter flex gap-3 py-3.5', isUser ? 'justify-end pl-16' : 'justify-start pr-16')}>
       <div
         className={cn(
-          'mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-[var(--shadow-control)]',
+          'mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-[var(--shadow-control)]',
           isUser
-            ? 'order-2 bg-[var(--accent)] text-white'
-            : 'bg-white text-indigo-600 ring-1 ring-[var(--border)]',
+            ? 'order-2 bg-[var(--accent)] text-white shadow-[0_10px_22px_rgba(37,99,235,0.2)]'
+            : 'scan-accent bg-white/88 text-[var(--accent)] ring-1 ring-white/80',
         )}
       >
         {isUser ? <User size={15} /> : <Bot size={15} />}
@@ -117,10 +117,10 @@ export function Message({ message }: { message: UIMessage }) {
               <div
                 key={i}
                 className={cn(
-                  'inline-block whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed',
+                  'inline-block whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed backdrop-blur',
                   isUser
-                    ? 'rounded-xl rounded-tr-md bg-[var(--accent)] text-white shadow-[var(--shadow-sm)]'
-                    : 'rounded-xl rounded-tl-md bg-white text-slate-800 shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]',
+                    ? 'rounded-2xl rounded-tr-md bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(37,99,235,0.18)]'
+                    : 'rounded-2xl rounded-tl-md bg-white/86 text-slate-800 shadow-[var(--shadow-sm)] ring-1 ring-white/80',
                 )}
               >
                 {part.text}
@@ -129,7 +129,7 @@ export function Message({ message }: { message: UIMessage }) {
           }
           if (part.type === 'reasoning') {
             return (
-              <div key={i} className="rounded-lg bg-indigo-50 px-3 py-2 text-xs leading-relaxed text-indigo-800 ring-1 ring-indigo-100">
+              <div key={i} className="rounded-xl bg-[var(--accent-soft)] px-3 py-2 text-xs leading-relaxed text-[var(--accent-strong)] ring-1 ring-white/80">
                 {part.text}
               </div>
             );

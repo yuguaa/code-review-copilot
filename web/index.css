@@ -1,33 +1,40 @@
 @import 'tailwindcss';
 
-/* 设计 token：浅色工程工作台 + 靛蓝主色，集中托管易于统一调整。 */
+/* 设计 token：浅色 Agent 指挥台，集中托管易于统一调整。 */
 :root {
   color-scheme: light;
 
-  --bg: oklch(0.975 0.008 255); /* 页面底色：冷白灰，压住噪声 */
-  --bg-panel: oklch(0.955 0.012 255);
+  --bg: oklch(0.972 0.01 245);
+  --bg-panel: oklch(0.95 0.014 245);
   --surface: oklch(1 0 0);
-  --surface-2: oklch(0.985 0.006 255);
-  --border: oklch(0.9 0.018 255);
-  --border-strong: oklch(0.82 0.026 255);
-  --text: oklch(0.22 0.035 260);
-  --muted: oklch(0.46 0.038 255);
-  --muted-2: oklch(0.58 0.032 255);
+  --surface-2: oklch(0.985 0.007 245);
+  --glass: rgba(255, 255, 255, 0.78);
+  --border: oklch(0.89 0.02 245);
+  --border-strong: oklch(0.79 0.035 245);
+  --text: oklch(0.21 0.038 250);
+  --muted: oklch(0.45 0.036 250);
+  --muted-2: oklch(0.58 0.03 250);
 
-  --accent: oklch(0.55 0.21 275);
-  --accent-strong: oklch(0.47 0.22 275);
-  --accent-soft: oklch(0.95 0.035 275);
-  --accent-quiet: oklch(0.985 0.018 275);
-  --info: oklch(0.58 0.15 230);
+  --accent: oklch(0.56 0.19 262);
+  --accent-strong: oklch(0.47 0.2 262);
+  --accent-soft: oklch(0.95 0.038 262);
+  --accent-quiet: oklch(0.985 0.018 262);
+  --cyan: oklch(0.68 0.14 210);
+  --cyan-soft: oklch(0.95 0.04 210);
+  --mint: oklch(0.7 0.15 160);
+  --info: oklch(0.6 0.15 220);
   --success: oklch(0.61 0.15 155);
   --warning: oklch(0.72 0.16 82);
   --danger: oklch(0.58 0.2 25);
-  --ring: rgba(99, 102, 241, 0.18); /* focus ring */
+  --ring: rgba(37, 99, 235, 0.18);
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 8px 16px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 18px 38px rgba(15, 23, 42, 0.14);
+  --shadow-glow: 0 18px 50px rgba(14, 116, 144, 0.14);
   --shadow-control: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 1px 2px rgba(15, 23, 42, 0.06);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html,
@@ -39,8 +46,13 @@ body,
 
 body {
   background:
-    radial-gradient(circle at 22% -10%, rgba(79, 70, 229, 0.1), transparent 28rem),
-    linear-gradient(180deg, var(--bg), oklch(0.955 0.014 255));
+    linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, oklch(0.99 0.006 240), var(--bg) 42%, oklch(0.955 0.018 220));
+  background-size:
+    36px 36px,
+    36px 36px,
+    auto;
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
     'Microsoft YaHei', sans-serif;
@@ -101,7 +113,7 @@ select:focus-visible {
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(2px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -109,7 +121,123 @@ select:focus-visible {
   }
 }
 .animate-fade-in {
-  animation: fade-in 0.18s ease-out;
+  animation: fade-in 0.22s var(--ease-out-quart);
+}
+
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes scan-line {
+  0% {
+    transform: translateX(-35%);
+    opacity: 0;
+  }
+  18%,
+  72% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+@keyframes thinking-bar {
+  0% {
+    transform: translateX(-45%);
+  }
+  100% {
+    transform: translateX(145%);
+  }
+}
+
+.tech-workbench {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.16)),
+    linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.035) 1px, transparent 1px),
+    var(--bg);
+  background-size:
+    auto,
+    32px 32px,
+    32px 32px,
+    auto;
+}
+
+.tech-workbench::before {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 0 30%, rgba(14, 165, 233, 0.08) 45%, transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 22%);
+  mask-image: linear-gradient(180deg, #000, transparent 70%);
+}
+
+.glass-panel {
+  background: var(--glass);
+  box-shadow: var(--shadow-sm);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.surface-enter {
+  animation: surface-in 0.32s var(--ease-out-quint) both;
+}
+
+.interactive-lift {
+  transition:
+    transform 0.22s var(--ease-out-quart),
+    box-shadow 0.22s var(--ease-out-quart),
+    background-color 0.22s var(--ease-out-quart),
+    border-color 0.22s var(--ease-out-quart),
+    color 0.22s var(--ease-out-quart);
+}
+
+.interactive-lift:hover {
+  transform: translateY(-1px);
+}
+
+.scan-accent {
+  overflow: hidden;
+  position: relative;
+}
+
+.scan-accent::after {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.2), transparent);
+  animation: scan-line 4.8s var(--ease-out-quart) infinite;
+}
+
+.thinking-pulse {
+  overflow: hidden;
+  position: relative;
+}
+
+.thinking-pulse::before {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.14), transparent);
+  animation: thinking-bar 1.15s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -120,5 +248,11 @@ select:focus-visible {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .scan-accent::after,
+  .thinking-pulse::before {
+    animation: none !important;
   }
 }

@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  Activity,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { SessionDetail } from '../lib/types';
@@ -25,17 +26,17 @@ export function Chat() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="flex h-full min-h-0 max-md:flex-col">
+    <div className="tech-workbench flex h-full min-h-0 max-md:flex-col">
       <Sidebar refreshKey={refreshKey} />
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {sessionId ? (
           <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-[var(--shadow-md)] ring-1 ring-[var(--border)]">
-              <MessageSquare size={24} />
+          <div className="surface-enter relative z-10 flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+            <div className="scan-accent flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[var(--accent)] shadow-[var(--shadow-glow)] ring-1 ring-[var(--border)]">
+              <MessageSquare size={26} />
             </div>
-            <p className="text-sm font-semibold text-slate-800">选择左侧会话，或新建一个对话</p>
+            <p className="text-sm font-semibold text-slate-900">选择左侧会话，或新建一个对话</p>
             <p className="max-w-sm text-xs leading-relaxed text-slate-500">
               每个 Webhook 触发的审查都会成为一个可追问的会话，按仓库归类在左侧。
             </p>
@@ -148,39 +149,39 @@ function ChatThread({
 
   return (
     <>
-      <header className="border-b border-[var(--border)] bg-white/85 px-6 py-4 backdrop-blur-md">
+      <header className="glass-panel relative z-10 border-b border-white/70 px-6 py-4">
         <div className="mx-auto flex max-w-6xl min-w-0 items-center justify-between gap-5">
           <div className="min-w-0 space-y-1">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">
+              <span className="scan-accent inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--accent)] shadow-[var(--shadow-control)] ring-1 ring-[var(--border)]">
                 <Sparkles size={14} />
               </span>
-              <h1 className="truncate text-base font-semibold text-slate-950">
-              {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '新对话'}
+              <h1 className="truncate text-base font-semibold tracking-[0.01em] text-slate-950">
+                {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '新对话'}
               </h1>
             </div>
             {s.repository && (
-              <p className="flex items-center gap-1.5 truncate pl-9 text-xs text-slate-500">
+              <p className="flex items-center gap-1.5 truncate pl-10 text-xs text-slate-500">
                 <FolderGit2 size={12} className="shrink-0 text-slate-400" /> {s.repository.path}
               </p>
             )}
           </div>
           <div className="hidden shrink-0 items-center gap-2 text-[11px] text-slate-600 lg:flex">
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold ring-1 ${statusView.className}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold shadow-[var(--shadow-control)] ring-1 ${statusView.className}`}>
               <StatusIcon size={12} className={s.status === 'running' ? 'animate-spin' : undefined} /> {statusView.label}
             </span>
             {branchText && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 font-medium text-slate-700 ring-1 ring-slate-200">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 font-medium text-slate-700 shadow-[var(--shadow-control)] ring-1 ring-slate-200">
                 <GitBranch size={12} /> {branchText}
               </span>
             )}
             {shortHash && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 font-mono text-slate-700 ring-1 ring-slate-200">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 font-mono text-slate-700 shadow-[var(--shadow-control)] ring-1 ring-slate-200">
                 <Hash size={12} /> {shortHash}
               </span>
             )}
             {s.author && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-slate-700 ring-1 ring-slate-200">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-slate-700 shadow-[var(--shadow-control)] ring-1 ring-slate-200">
                 <UserRound size={12} /> {s.author}
               </span>
             )}
@@ -188,11 +189,11 @@ function ChatThread({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1">
+      <div className="relative z-10 min-h-0 flex-1">
         <div ref={scrollRef} className="h-full min-w-0 overflow-y-auto">
           <div className="mx-auto max-w-6xl space-y-1 px-6 py-7">
             {messages.length === 0 && (
-              <div className="mx-auto mt-10 max-w-md rounded-xl bg-white px-6 py-8 text-center shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
+              <div className="surface-enter mx-auto mt-10 max-w-md rounded-2xl bg-white/82 px-6 py-8 text-center shadow-[var(--shadow-glow)] ring-1 ring-white/80 backdrop-blur-xl">
                 <p className="text-sm font-semibold text-slate-800">开始对话吧</p>
                 <p className="mt-1 text-xs leading-relaxed text-slate-500">问一次审查结论、变更风险或某个文件的实现细节。</p>
               </div>
@@ -201,41 +202,41 @@ function ChatThread({
               <Message key={m.id} message={m} />
             ))}
             {busy && (
-              <div className="mx-5 inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-slate-600 shadow-[var(--shadow-sm)] ring-1 ring-slate-200">
+              <div className="thinking-pulse mx-5 inline-flex items-center gap-2 rounded-full bg-white/82 px-3 py-2 text-xs text-slate-600 shadow-[var(--shadow-sm)] ring-1 ring-slate-200 backdrop-blur">
                 <Loader2 size={13} className="animate-spin" /> Agent 思考中…
               </div>
             )}
             {!busy && s.status === 'running' && (
-              <div className="mx-5 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-200">
-                <Loader2 size={13} className="animate-spin" /> 后台审查进行中，正在同步模型回复…
+              <div className="thinking-pulse mx-5 inline-flex items-center gap-2 rounded-full bg-amber-50/85 px-3 py-2 text-xs text-amber-700 shadow-[var(--shadow-sm)] ring-1 ring-amber-200 backdrop-blur">
+                <Activity size={13} /> 后台审查进行中，正在同步模型回复…
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="border-t border-[var(--border)] bg-white/90 p-4 backdrop-blur-md">
+      <div className="glass-panel relative z-10 border-t border-white/70 p-4">
         <div className="mx-auto max-w-4xl space-y-2">
           <div className="flex min-h-5 flex-wrap items-center justify-center gap-2 text-[11px] text-slate-600">
             {s.repository && (
-              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 font-medium text-indigo-700">
+              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-1 font-medium text-[var(--accent-strong)] ring-1 ring-white/70">
                 <FolderGit2 size={12} /> {s.repository.path}
               </span>
             )}
             {branchText && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/72 px-2 py-1 text-slate-700 ring-1 ring-slate-200">
                 <GitBranch size={12} /> {branchText}
               </span>
             )}
             {(shortHash || s.author) && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/72 px-2 py-1 text-slate-700 ring-1 ring-slate-200">
                 {shortHash && <span className="font-mono">{shortHash}</span>}
                 {shortHash && s.author ? <span className="text-slate-300">·</span> : null}
                 {s.author}
               </span>
             )}
           </div>
-          <div className="flex items-end gap-2 rounded-xl border border-[var(--border)] bg-white p-1.5 shadow-[var(--shadow-md)] transition-[border-color,box-shadow] focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-100">
+          <div className="interactive-lift flex items-end gap-2 rounded-2xl border border-white/80 bg-white/86 p-1.5 shadow-[var(--shadow-glow)] backdrop-blur-xl focus-within:border-[var(--cyan)] focus-within:ring-4 focus-within:ring-cyan-100/80">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -252,7 +253,7 @@ function ChatThread({
             <button
               onClick={submit}
               disabled={busy || !input.trim()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-white shadow-[var(--shadow-control)] transition-[background-color,transform] hover:bg-[var(--accent-strong)] active:scale-95 disabled:opacity-40"
+              className="interactive-lift flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-[0_10px_24px_rgba(37,99,235,0.22)] hover:bg-[var(--accent-strong)] active:scale-95 disabled:opacity-40"
             >
               <SendHorizontal size={16} />
             </button>

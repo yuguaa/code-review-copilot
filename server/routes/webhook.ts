@@ -156,7 +156,7 @@ async function handlePushHook(body: PushHook, repo: RepositoryForWebhook) {
     return json({ ignored: true, reason: `分支 ${branch} 不在监听范围` });
   }
 
-  const title = buildPushTitle(branch, body);
+  const title = buildPushSessionTitle(branch, body);
   const session = await prisma.session.create({
     data: {
       kind: 'review',
@@ -224,9 +224,14 @@ function firstLine(text: string): string {
   return text.trim().split(/\r?\n/)[0] ?? '';
 }
 
-function buildPushTitle(branch: string, body: PushHook): string {
+export function buildPushSessionTitle(branch: string, body: PushHook): string {
   const count = body.total_commits_count ?? body.commits?.length ?? 0;
-  return `Push ${branch} (${count} commits)`;
+  const latestCommit = body.commits?.find((commit) => commit.id === body.checkout_sha || commit.id === body.after) ?? body.commits?.at(-1);
+  const commitTitle = firstLine(latestCommit?.message ?? latestCommit?.title ?? '');
+
+  if (!commitTitle) return `Push ${branch} (${count} commits)`;
+  if (count > 1) return `${commitTitle} 等 ${count} 个提交`;
+  return commitTitle;
 }
 
 function json(body: unknown, status = 200): Response {
