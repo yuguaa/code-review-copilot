@@ -46,7 +46,7 @@ function sessionLabel(s: SessionListItem): string {
   return s.title || '新对话';
 }
 
-/** 按仓库把会话聚成有序分组（沿用 updatedAt 倒序，最近活跃的仓库在前）。 */
+/** 按仓库把会话聚成有序分组（沿用 createdAt 倒序，最新触发的仓库在前）。 */
 function groupByRepo(sessions: SessionListItem[]): RepoGroup[] {
   const groups = new Map<string, RepoGroup>();
   for (const s of sessions) {

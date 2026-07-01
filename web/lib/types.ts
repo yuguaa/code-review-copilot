@@ -9,6 +9,7 @@ export type SessionListItem = {
   sourceBranch: string | null;
   targetBranch: string | null;
   repository: { name: string; path: string } | null;
+  createdAt: string;
   updatedAt: string;
   preview: string;
 };
