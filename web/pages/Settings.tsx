@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import { Button, Card, Checkbox, Field, FeatureCard, Input, PageShell, Select, SectionLabel, useConfirm } from '../components/ui';
+import { Button, Card, Checkbox, ColorBlock, Field, Input, PageShell, Select, useConfirm } from '../components/ui';
 
 type Account = {
   id: string;
@@ -191,13 +191,13 @@ export function Settings() {
             ['仓库', `${stats.activeRepositoryCount}/${stats.repositoryCount}`, '启用 / 总数', 'pink'],
             ['模型', String(stats.modelCount), '可用全局模型', 'lavender'],
             ['会话', String(stats.sessionCount), `审查 ${stats.reviewSessionCount} · 对话 ${stats.chatSessionCount}`, 'peach'],
-            ['消息', String(stats.messageCount), stats.latestSessionAt ? `最近 ${new Date(stats.latestSessionAt).toLocaleString()}` : '暂无会话', 'ochre'],
+            ['消息', String(stats.messageCount), stats.latestSessionAt ? `最近 ${new Date(stats.latestSessionAt).toLocaleString()}` : '暂无会话', 'cream'],
           ] as const).map(([label, value, hint, tone]) => (
-            <FeatureCard key={label} tone={tone} className="space-y-1 p-5">
-              <p className="text-xs font-semibold opacity-70">{label}</p>
+            <ColorBlock key={label} tone={tone === 'lavender' ? 'lilac' : tone === 'peach' ? 'mint' : tone} className="space-y-1 p-5">
+              <p className="eyebrow opacity-70">{label}</p>
               <p className="font-display text-3xl tabular-nums">{value}</p>
-              <p className="truncate text-[11px] opacity-70">{hint}</p>
-            </FeatureCard>
+              <p className="caption truncate opacity-70">{hint}</p>
+            </ColorBlock>
           ))}
         </div>
       )}
@@ -263,8 +263,7 @@ export function Settings() {
       <div className="space-y-3">
         {models.map((m) =>
           m.isDefault ? (
-            // 默认模型：teal pricing-tier 高亮，teal 底色即「默认」信号
-            <FeatureCard key={m.id} tone="teal" className="flex items-center gap-3 p-5">
+            <ColorBlock key={m.id} tone="navy" className="flex items-center gap-3 p-5">
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-2 truncate text-sm font-semibold">
                   {m.provider}/{m.modelId}
@@ -277,7 +276,7 @@ export function Settings() {
               <Button variant="danger" onClick={() => removeModel(m)}>
                 删除
               </Button>
-            </FeatureCard>
+            </ColorBlock>
           ) : (
             <Card key={m.id} className="flex items-center gap-3">
               <div className="min-w-0 flex-1">

@@ -20,7 +20,7 @@ import { Button, Modal, useConfirm } from './ui';
 import type { SessionListItem, RepositoryItem } from '../lib/types';
 
 const statusColor: Record<string, string> = {
-  running: 'bg-[var(--warning)]',
+  running: 'bg-[var(--brand-cream)]',
   completed: 'bg-[var(--success)]',
   failed: 'bg-[var(--brand-coral)]',
 };
@@ -139,7 +139,7 @@ function NewChatModal({ open, onClose }: { open: boolean; onClose: () => void })
                 className={cn(
                   'flex cursor-pointer items-center gap-2.5 rounded-[var(--r-md)] border px-3 py-2.5 text-sm transition-colors',
                   selected === r.id
-                    ? 'border-[var(--ink)] bg-[var(--accent-soft)] text-[var(--ink)]'
+                    ? 'border-[var(--ink)] bg-[var(--surface-card)] text-[var(--ink)]'
                     : 'border-[var(--hairline)] text-[var(--body)] hover:bg-[var(--surface-card)]',
                 )}
               >
@@ -148,7 +148,7 @@ function NewChatModal({ open, onClose }: { open: boolean; onClose: () => void })
                   name="new-chat-repo"
                   checked={selected === r.id}
                   onChange={() => setSelected(r.id)}
-                  className="accent-[var(--brand-pink)]"
+                  className="accent-[var(--ink)]"
                 />
                 <FolderGit2 size={14} className="shrink-0 text-[var(--muted)]" />
                 <span className="min-w-0">
@@ -240,23 +240,23 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   return (
-    <aside className="z-20 flex h-full w-80 shrink-0 flex-col border-r border-[var(--hairline)] bg-[var(--surface-soft)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
+    <aside className="z-20 flex h-full w-80 shrink-0 flex-col border-r border-[var(--hairline)] bg-[var(--canvas)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
       <div className="px-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--brand-pink)] text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--ink)] text-white">
               <ScanSearch size={16} />
             </span>
             <div className="min-w-0">
               <span className="font-display block truncate text-[15px] text-[var(--ink)]">代码审查 Agent</span>
-              <span className="block truncate text-[11px] text-[var(--muted)]">审查会话工作台</span>
+              <span className="caption block truncate text-[var(--muted)]">REVIEW WORKSPACE</span>
             </div>
           </div>
           <button
             onClick={() => setNewChatOpen(true)}
             title="新对话"
             aria-label="新对话"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95"
           >
             <Plus size={17} />
           </button>
@@ -293,23 +293,23 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
               <button
                 onClick={() => toggle(group.key)}
                 title={group.path ?? group.name}
-                className="flex w-full items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-card)]"
+              className="flex w-full items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-card)]"
               >
                 <ChevronRight
                   size={14}
                   className={cn('shrink-0 text-[var(--muted-soft)] transition-transform duration-200', !isCollapsed && 'rotate-90')}
                 />
-                <FolderGit2 size={14} className={cn('shrink-0', hasActive ? 'text-[var(--brand-pink)]' : 'text-[var(--muted)]')} />
-                <span className={cn('truncate text-xs font-semibold', hasActive ? 'text-[var(--ink)]' : 'text-[var(--body-strong)]')}>
+                <FolderGit2 size={14} className={cn('shrink-0', hasActive ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
+                <span className={cn('eyebrow truncate', hasActive ? 'text-[var(--ink)]' : 'text-[var(--body-strong)]')}>
                   {group.name}
                 </span>
-                <span className="ml-auto shrink-0 rounded-full bg-[var(--surface-strong)] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-[var(--muted)]">
+                <span className="caption ml-auto shrink-0 rounded-[var(--r-pill)] bg-[var(--surface-strong)] px-1.5 py-0.5 tabular-nums text-[var(--muted)]">
                   {group.sessions.length}
                 </span>
               </button>
 
               {!isCollapsed && (
-                <div className="mb-1 ml-[19px] space-y-0.5 border-l border-[var(--hairline)] pl-2">
+                <div className="mb-1 ml-[19px] space-y-0.5 pl-2">
                   {group.sessions.map((s) => {
                     const active = s.id === sessionId;
                     return (
@@ -317,20 +317,20 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                         key={s.id}
                         className={cn(
                           'group relative rounded-[var(--r-md)] transition-colors',
-                          active ? 'bg-white shadow-[var(--shadow-sm)]' : 'hover:bg-[var(--surface-card)]',
+                          active ? 'bg-[var(--surface-card)]' : 'hover:bg-[var(--surface-card)]',
                         )}
                       >
                         {active && (
-                          <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-[var(--brand-pink)]" />
+                          <span className="absolute left-0 top-1/2 h-6 w-[2px] -translate-y-1/2 rounded-full bg-[var(--ink)]" />
                         )}
                         <button
                           onClick={() => navigate(`/c/${s.id}`)}
                           className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2 pr-8 text-left"
                         >
                           {s.kind === 'review' ? (
-                            <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--brand-pink)]' : 'text-[var(--muted)]')} />
+                            <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
                           ) : (
-                            <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--brand-pink)]' : 'text-[var(--muted)]')} />
+                            <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
                           )}
                           <span className="min-w-0">
                             <span
@@ -341,7 +341,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                             >
                               {sessionLabel(s)}
                             </span>
-                            <span className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-[10px] text-[var(--muted)]">
+                            <span className="caption mt-0.5 flex min-w-0 items-center gap-1 truncate text-[var(--muted)]">
                               {s.sourceBranch || s.targetBranch ? <GitBranch size={10} className="shrink-0" /> : null}
                               <span className="truncate">{sessionMeta(s)}</span>
                             </span>
@@ -363,7 +363,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                             e.stopPropagation();
                             removeSession(s);
                           }}
-                          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[var(--r-sm)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] group-focus-within:opacity-100 group-hover:opacity-100"
+                          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] group-focus-within:opacity-100 group-hover:opacity-100"
                         >
                           <Trash2 size={13} />
                         </button>

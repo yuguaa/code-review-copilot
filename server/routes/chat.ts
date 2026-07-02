@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { parseJsonEventStream, readUIMessageStream, uiMessageChunkSchema, type UIMessage } from 'ai';
 import { ensureChatTitle, getSessionWithRepository, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
-import { publishSessionListChanged, publishSessionMessages } from '../lib/session-events';
+import { publishSessionListChanged } from '../lib/session-events';
 import { createChatStream } from '../agent/chat-agent';
 import { ensureVisibleAssistantReply } from '../agent/review-message';
 import { createLogger } from '../lib/logger';
@@ -72,15 +72,15 @@ function consumeChatStream(
   );
 
   void (async () => {
+    // 交互追问由前端 useChat 独占流式渲染；服务端只负责把最终结果落库，
+    // 不再逐 chunk 回显，避免两个来源双写同一会话造成重复/闪跳。
     let finalMessages = initialMessages;
     for await (const message of readUIMessageStream<UIMessage>({ stream: chunkStream })) {
       finalMessages = mergeStreamingMessage(initialMessages, message);
-      publishSessionMessages(sessionId, finalMessages);
     }
     finalMessages = ensureVisibleAssistantReply(finalMessages);
     await saveMessages(sessionId, finalMessages);
     await ensureChatTitle(sessionId, finalMessages);
-    publishSessionMessages(sessionId, finalMessages);
     publishSessionListChanged();
   })().catch((err) => log.error(`消费追问流失败 session=${sessionId}`, err));
 }

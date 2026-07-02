@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
-import { Button, Card, Checkbox, Field, FeatureCard, Input, Select, Textarea, PageShell, Modal, useConfirm } from '../components/ui';
+import { Button, Card, Checkbox, ColorBlock, Field, Input, Select, Textarea, PageShell, Modal, useConfirm } from '../components/ui';
 
 type Account = { id: string; url: string };
 type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean };
@@ -186,7 +186,7 @@ export function Repositories() {
 
   return (
     <PageShell title="仓库配置">
-      <FeatureCard tone="peach" className="space-y-3">
+      <ColorBlock tone="lime" className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <h2 className="font-display text-2xl">Webhook 接入</h2>
@@ -198,7 +198,7 @@ export function Repositories() {
         </div>
         <code className="block break-all rounded-[var(--r-md)] bg-[var(--surface-dark)] px-3 py-2.5 font-mono text-xs text-[var(--brand-mint)]">{webhookUrl}</code>
         <p className="text-xs opacity-70">Secret Token 与对应账号的 Webhook 密钥一致即可验签。</p>
-      </FeatureCard>
+      </ColorBlock>
 
       <Modal open={modalOpen} title={editingId ? '编辑仓库' : '添加仓库'} onClose={closeModal}>
         {accounts.length === 0 ? (
@@ -229,7 +229,7 @@ export function Repositories() {
                   <button
                     key={p.id}
                     onClick={() => pickProject(p)}
-                    className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color] hover:bg-white hover:text-[var(--ink)]"
+                  className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color] hover:bg-white hover:text-[var(--ink)]"
                   >
                     {p.path} <span className="text-[var(--muted-soft)]">#{p.id}</span>
                   </button>
@@ -365,8 +365,8 @@ export function Repositories() {
                 >
                   {r.autoReview ? '自动审查' : '手动'}
                 </span>
-                {r.enableMrComment && <span className="rounded-full bg-[var(--brand-lavender)]/25 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">平台评论</span>}
-                {r.enableDingtalk && <span className="rounded-full bg-[var(--brand-ochre)]/25 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">钉钉</span>}
+                {r.enableMrComment && <span className="rounded-full bg-[var(--brand-lilac)]/45 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">平台评论</span>}
+                {r.enableDingtalk && <span className="rounded-full bg-[var(--brand-cream)] px-2 py-0.5 text-[11px] text-[var(--body-strong)]">钉钉</span>}
               </div>
               <p className="mt-1 text-[11px] text-[var(--muted)]">
                 模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : r.defaultAIModel ? `${r.defaultAIModel.provider}/${r.defaultAIModel.modelId}` : '全局默认'} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}

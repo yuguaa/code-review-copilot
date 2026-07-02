@@ -21,7 +21,7 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-semibold text-[var(--body-strong)]">{label}</span>
+      <span className="eyebrow text-[var(--body-strong)]">{label}</span>
       {children}
       {hint && <span className="block text-xs leading-relaxed text-[var(--muted)]">{hint}</span>}
     </label>
@@ -43,28 +43,24 @@ export function Checkbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded-[var(--r-xs)] accent-[var(--brand-pink)]"
+        className="h-4 w-4 rounded-[var(--r-xs)] accent-[var(--ink)]"
       />
       {label}
     </label>
   );
 }
 
-/** 小标签：section 上方的 uppercase 提示 / FEATURED 徽标。 */
+/** 小标签：section 上方的 uppercase taxonomy。 */
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={cn('text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]', className)}>
-      {children}
-    </span>
-  );
+  return <span className={cn('eyebrow text-[var(--muted)]', className)}>{children}</span>;
 }
 
-/** 奶油胶囊徽标。 */
+/** 胶囊徽标。 */
 export function BadgePill({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full bg-[var(--surface-card)] px-2.5 py-1 text-[13px] font-medium text-[var(--body-strong)]',
+        'inline-flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-card)] px-2.5 py-1 text-[13px] font-medium text-[var(--body-strong)]',
         className,
       )}
     >
@@ -77,18 +73,20 @@ export function Button({
   variant = 'primary',
   className,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'onColor' | 'danger' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'onColor' | 'danger' | 'magenta' | 'icon' }) {
   const styles = {
-    primary: 'bg-[var(--primary)] text-[var(--on-primary)] hover:opacity-90',
-    secondary: 'border border-[var(--hairline)] bg-[var(--canvas)] text-[var(--ink)] hover:bg-[var(--surface-card)]',
-    onColor: 'bg-white text-[var(--ink)] hover:opacity-90',
-    danger: 'border border-[var(--error)]/30 bg-white text-[var(--error)] hover:bg-[var(--error)]/8',
+    primary: 'bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--body-strong)]',
+    secondary: 'border border-[var(--hairline)] bg-white text-[var(--ink)] hover:bg-[var(--surface-card)]',
+    onColor: 'bg-white text-[var(--ink)] hover:bg-white/90',
+    danger: 'border border-[var(--error)]/25 bg-white text-[var(--error)] hover:bg-[var(--error)]/8',
+    magenta: 'bg-[var(--brand-pink)] text-[var(--ink)] hover:brightness-95',
+    icon: 'h-10 w-10 rounded-[var(--r-pill)] bg-[var(--primary)] p-0 text-[var(--on-primary)] hover:bg-[var(--body-strong)]',
   }[variant];
   return (
     <button
       {...props}
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-[var(--r-md)] px-5 py-2.5 text-sm font-semibold transition-[background-color,opacity,transform] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45',
+        'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[var(--r-pill)] px-5 py-2.5 text-sm font-semibold transition-[background-color,filter,opacity,transform] active:scale-[0.96] disabled:pointer-events-none disabled:opacity-45',
         styles,
         className,
       )}
@@ -96,33 +94,34 @@ export function Button({
   );
 }
 
-/** 内容卡：奶油底，rounded-lg，无重阴影。 */
+/** 内容卡：只用于真正需要框定的内容块。 */
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded-[var(--r-lg)] border border-[var(--hairline)] bg-white p-6', className)}>{children}</div>
+    <div className={cn('rounded-[var(--r-md)] border border-[var(--hairline)] bg-white p-6', className)}>{children}</div>
   );
 }
 
-/** 饱和 6 色特征卡。文字色按底色深浅自动切换。 */
-const FEATURE_SURFACE: Record<string, { bg: string; dark: boolean }> = {
-  pink: { bg: 'var(--brand-pink)', dark: true },
+const COLOR_BLOCK_SURFACE: Record<string, { bg: string; dark: boolean }> = {
+  lime: { bg: 'var(--brand-lime)', dark: false },
+  lilac: { bg: 'var(--brand-lilac)', dark: false },
+  cream: { bg: 'var(--brand-cream)', dark: false },
+  mint: { bg: 'var(--brand-mint)', dark: false },
+  pink: { bg: 'var(--brand-pink)', dark: false },
+  coral: { bg: 'var(--brand-coral)', dark: true },
+  navy: { bg: 'var(--brand-navy)', dark: true },
   teal: { bg: 'var(--brand-teal)', dark: true },
-  lavender: { bg: 'var(--brand-lavender)', dark: false },
-  peach: { bg: 'var(--brand-peach)', dark: false },
-  ochre: { bg: 'var(--brand-ochre)', dark: false },
-  cream: { bg: 'var(--surface-card)', dark: false },
 };
 
-export function FeatureCard({
+export function ColorBlock({
   tone = 'cream',
   className,
   children,
 }: {
-  tone?: 'pink' | 'teal' | 'lavender' | 'peach' | 'ochre' | 'cream';
+  tone?: 'lime' | 'lilac' | 'cream' | 'mint' | 'pink' | 'coral' | 'navy' | 'teal';
   className?: string;
   children: ReactNode;
 }) {
-  const surface = FEATURE_SURFACE[tone];
+  const surface = COLOR_BLOCK_SURFACE[tone];
   return (
     <div
       className={cn('rounded-[var(--r-xl)] p-8', surface.dark ? 'text-white' : 'text-[var(--ink)]', className)}
@@ -154,14 +153,14 @@ export function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={cn('animate-fade-in w-full rounded-[var(--r-lg)] bg-[var(--canvas)] shadow-[var(--shadow-lg)]', maxWidth)}>
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-lg)] border-b border-[var(--hairline)] bg-[var(--canvas)] px-6 py-4">
+      <div className={cn('animate-fade-in w-full rounded-[var(--r-md)] bg-[var(--canvas)] shadow-[var(--shadow-lg)]', maxWidth)}>
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-md)] border-b border-[var(--hairline)] bg-[var(--canvas)] px-6 py-4">
           <h2 className="font-display text-lg text-[var(--ink)]">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="关闭弹窗"
-            className="flex h-8 w-8 items-center justify-center rounded-[var(--r-md)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
+            className="flex h-8 w-8 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
           >
             <X size={16} />
           </button>
@@ -196,9 +195,9 @@ export function ConfirmDialog({
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div className="animate-fade-in w-full max-w-sm rounded-[var(--r-lg)] bg-[var(--canvas)] p-6 shadow-[var(--shadow-lg)]">
+      <div className="animate-fade-in w-full max-w-sm rounded-[var(--r-md)] bg-[var(--canvas)] p-6 shadow-[var(--shadow-lg)]">
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]">
             <TriangleAlert size={18} />
           </span>
           <div className="min-w-0 space-y-1">
@@ -258,11 +257,11 @@ export function useConfirm() {
 export function PageShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="h-full overflow-y-auto bg-[var(--canvas)]">
-      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--hairline)] bg-[var(--canvas)]/95 px-6 py-4 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--hairline)] bg-[var(--canvas)] px-6 py-4">
         <Link
           to="/"
           aria-label="返回"
-          className="flex h-9 w-9 items-center justify-center rounded-[var(--r-md)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
+          className="flex h-9 w-9 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
         >
           <ArrowLeft size={16} />
         </Link>

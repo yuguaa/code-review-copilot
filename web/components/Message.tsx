@@ -63,8 +63,8 @@ function ProcessStep({ part }: { part: Part }) {
           onClick={() => setOpen((v) => !v)}
           className="flex w-full items-center gap-2 text-left text-[var(--muted)] transition-colors hover:text-[var(--body-strong)]"
         >
-          <Brain size={13} className="shrink-0 text-[var(--brand-lavender)]" />
-          <span className="truncate">思考{open ? '' : `：${text.slice(0, 60)}`}</span>
+          <Brain size={13} className="shrink-0 text-[var(--brand-navy)]" />
+          <span className="caption truncate">思考{open ? '' : `：${text.slice(0, 60)}`}</span>
           <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
         </button>
         {open && <p className="mt-1.5 whitespace-pre-wrap pl-[21px] leading-relaxed text-[var(--muted)]">{text}</p>}
@@ -85,7 +85,7 @@ function ProcessStep({ part }: { part: Part }) {
           <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
         </button>
         {open && (
-          <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words pl-[21px] text-[11px] text-[var(--muted)]">
+            <pre className="caption mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words pl-[21px] text-[var(--muted)]">
             {JSON.stringify(part, null, 2)}
           </pre>
         )}
@@ -113,19 +113,19 @@ function ProcessStep({ part }: { part: Part }) {
             errored ? 'text-[var(--error)]' : done ? 'text-[var(--success)]' : 'animate-spin text-[var(--warning)]',
           )}
         />
-        <span className={cn('truncate font-medium', errored ? 'text-[var(--error)]' : 'text-[var(--body-strong)]')}>{toolName(record)}</span>
+        <span className={cn('caption truncate', errored ? 'text-[var(--error)]' : 'text-[var(--body-strong)]')}>{toolName(record)}</span>
         {running && <span className="shrink-0 text-[var(--muted-soft)]">执行中</span>}
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
         <div className="mt-1.5 space-y-1.5 pl-[21px]">
           {record.input != null && (
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-white px-2.5 py-2 text-[11px] leading-relaxed text-[var(--body)] ring-1 ring-[var(--hairline)]">
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[var(--surface-soft)] px-2.5 py-2 font-mono text-[11px] leading-relaxed text-[var(--body)] ring-1 ring-[var(--hairline)]">
               {JSON.stringify(record.input, null, 2)}
             </pre>
           )}
           {record.output != null && (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-white px-2.5 py-2 text-[11px] leading-relaxed text-[var(--body-strong)] ring-1 ring-[var(--hairline)]">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[var(--surface-soft)] px-2.5 py-2 font-mono text-[11px] leading-relaxed text-[var(--body-strong)] ring-1 ring-[var(--hairline)]">
               {typeof record.output === 'string' ? record.output : JSON.stringify(record.output, null, 2)}
             </pre>
           )}
@@ -149,15 +149,15 @@ function ProcessGroup({ parts }: { parts: Part[] }) {
   const erroredCount = tools.filter((t) => String(t.state ?? '') === 'output-error').length;
 
   return (
-    <div className="my-2 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-card)] text-xs">
+    <div className="my-3 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-white text-xs">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-strong)]"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-soft)]"
       >
         <ChevronRight size={13} className={cn('shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
-        <span className="font-semibold text-[var(--body-strong)]">执行过程</span>
-        <span className="text-[var(--muted)]">{parts.length} 步</span>
+        <span className="eyebrow text-[var(--body-strong)]">执行过程</span>
+        <span className="caption text-[var(--muted)]">{parts.length} 步</span>
         {erroredCount > 0 && <span className="text-[var(--error)]">{erroredCount} 步失败</span>}
         {runningTool && (
           <span className="ml-auto inline-flex min-w-0 items-center gap-1.5 text-[var(--warning)]">
@@ -189,19 +189,19 @@ function TriggerCard({ message }: { message: UIMessage }) {
   const [open, setOpen] = useState(false);
   const text = messageText(message);
   return (
-    <div className="my-2 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-card)] text-xs">
+    <div className="my-3 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--brand-lime)] text-xs text-[var(--ink)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-strong)]"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-black/5"
       >
-        <Webhook size={13} className="shrink-0 text-[var(--brand-pink)]" />
-        <span className="font-semibold text-[var(--body-strong)]">Webhook 触发审查</span>
-        <span className="truncate text-[var(--muted)]">{open ? '' : text.split('\n')[0]}</span>
+        <Webhook size={13} className="shrink-0 text-[var(--ink)]" />
+        <span className="eyebrow text-[var(--ink)]">Webhook 触发审查</span>
+        <span className="truncate text-[var(--body)]">{open ? '' : text.split('\n')[0]}</span>
         <ChevronRight size={13} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <pre className="animate-fade-in whitespace-pre-wrap break-words border-t border-[var(--hairline)] bg-[var(--canvas)] px-3 py-2.5 leading-relaxed text-[var(--body)]">
+        <pre className="animate-fade-in whitespace-pre-wrap break-words border-t border-black/15 bg-white/50 px-3 py-2.5 font-mono leading-relaxed text-[var(--body)]">
           {text}
         </pre>
       )}
@@ -223,25 +223,23 @@ export function Message({ message, isTrigger }: { message: UIMessage; isTrigger?
   if (message.role === 'user') {
     const text = messageText(message);
     return (
-      <div className="flex justify-end py-2 pl-14">
-        <div className="max-w-full whitespace-pre-wrap break-words rounded-[var(--r-lg)] rounded-br-md bg-[var(--accent-soft)] px-4 py-2.5 text-sm leading-relaxed text-[var(--ink)]">
+      <div className="flex justify-end py-3 pl-14">
+        <div className="max-w-full whitespace-pre-wrap break-words rounded-[var(--r-md)] bg-[var(--ink)] px-4 py-2.5 text-sm leading-relaxed text-white">
           {text}
         </div>
       </div>
     );
   }
 
-  // assistant：正文走 Markdown，过程性 parts 聚合折叠，整体奶白卡承载
+  // assistant：正文走文档流，过程性 parts 聚合折叠。
   const segments = segmentParts(message.parts);
   if (segments.length === 0) return null;
   return (
-    <div className="py-2">
-      <div className="rounded-[var(--r-lg)] border border-[var(--hairline)] bg-white px-5 py-4">
-        {segments.map((seg, i): ReactNode => {
-          if (seg.kind === 'text') return <Markdown key={i}>{seg.text}</Markdown>;
-          return <ProcessGroup key={i} parts={seg.parts} />;
-        })}
-      </div>
+    <div className="py-4 pr-8 max-md:pr-0">
+      {segments.map((seg, i): ReactNode => {
+        if (seg.kind === 'text') return <Markdown key={i}>{seg.text}</Markdown>;
+        return <ProcessGroup key={i} parts={seg.parts} />;
+      })}
     </div>
   );
 }

@@ -1,61 +1,57 @@
 @import 'tailwindcss';
 
-/* 设计 token：Clay.com 风格——奶油暖底 + 饱和多色卡片 + 圆润 display 字体。 */
+/* 设计 token：Figma 语法的高密度审查工作台。 */
 :root {
   color-scheme: light;
 
-  /* 画布与表面（暖奶油） */
-  --canvas: #fffaf0;
-  --surface-soft: #faf5e8;
-  --surface-card: #f5f0e0;
-  --surface-strong: #ebe6d6;
-  --surface-dark: #0a1a1a;
-  --hairline: #e8e0cf;
+  --canvas: #ffffff;
+  --surface-soft: #f7f7f5;
+  --surface-card: #f1f1ee;
+  --surface-strong: #e7e7e3;
+  --surface-dark: #0a0a0a;
+  --hairline: #deded8;
 
-  /* 品牌 6 色饱和卡片 + 点缀 */
-  --brand-pink: #ff4d8b;
-  --brand-teal: #1a3a3a;
-  --brand-lavender: #b8a4ed;
-  --brand-peach: #ffb084;
-  --brand-ochre: #e8b94a;
-  --brand-mint: #a4d4c5;
-  --brand-coral: #ff6b5a;
+  --brand-lime: #d7ff38;
+  --brand-lilac: #c7b8ff;
+  --brand-cream: #fff2b8;
+  --brand-mint: #b8f3d3;
+  --brand-pink: #ff7ab6;
+  --brand-coral: #ff5f57;
+  --brand-navy: #0d1b3d;
+  --brand-teal: #0f3b35;
 
-  /* 主色 / 文本（近黑带暖） */
   --primary: #0a0a0a;
   --ink: #0a0a0a;
   --body-strong: #1a1a1a;
-  --body: #3a3a3a;
-  --muted: #6a6a6a;
-  --muted-soft: #9a9a9a;
+  --body: #3c3c37;
+  --muted: #6f6f68;
+  --muted-soft: #a5a59c;
   --on-primary: #ffffff;
 
-  /* 语义色 */
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
+  --success: #148f4f;
+  --warning: #b66d00;
+  --error: #d7352f;
 
-  /* accent 别名：主强调走近黑，柔和强调走 peach 系（供选中/hover 底色） */
   --accent: #0a0a0a;
-  --accent-soft: #fdeede;
-  --ring: rgba(255, 176, 132, 0.45);
+  --ring: rgba(10, 10, 10, 0.12);
 
-  /* 圆角 */
-  --r-xs: 6px;
+  --r-xs: 4px;
   --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-md: 8px;
+  --r-lg: 12px;
   --r-xl: 24px;
+  --r-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(40, 30, 10, 0.05);
-  --shadow-md: 0 6px 20px rgba(40, 30, 10, 0.08);
-  --shadow-lg: 0 20px 48px rgba(40, 30, 10, 0.16);
+  --shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.06);
+  --shadow-md: 0 8px 24px rgba(10, 10, 10, 0.08);
+  --shadow-lg: 0 24px 64px rgba(10, 10, 10, 0.18);
 
-  --font-display: 'Fredoka', 'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
     'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html,
@@ -74,11 +70,30 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* 圆润 display 字体：标题专用，负字距带来紧致暖感 */
+/* 产品 UI 标题：用字重与紧凑行高建层级，不靠营销式大标题。 */
 .font-display {
   font-family: var(--font-display);
+  font-weight: 540;
+  letter-spacing: 0;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.caption {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.04em;
 }
 
 @layer base {
@@ -95,19 +110,18 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--brand-peach);
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--brand-peach);
+  background: var(--brand-lime);
   color: var(--ink);
 }
 
-/* 滚动条：暖调纤细 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(120, 100, 60, 0.28) transparent;
+  scrollbar-color: rgba(10, 10, 10, 0.24) transparent;
 }
 ::-webkit-scrollbar {
   width: 8px;
@@ -117,10 +131,10 @@ select:focus-visible {
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 9999px;
-  background-color: rgba(120, 100, 60, 0.28);
+  background-color: rgba(10, 10, 10, 0.24);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(120, 100, 60, 0.5);
+  background-color: rgba(10, 10, 10, 0.44);
 }
 
 @keyframes fade-in {
@@ -137,7 +151,6 @@ select:focus-visible {
   animation: fade-in 0.18s var(--ease-out);
 }
 
-/* 会话滚动区上下边缘渐隐 */
 .conversation-frame {
   position: relative;
   min-height: 0;
@@ -171,10 +184,10 @@ select:focus-visible {
   scrollbar-gutter: stable;
 }
 
-/* Markdown 正文排版（审查结论）——暖奶油调 */
+/* Markdown 正文排版：assistant 像文档流，不像卡片墙。 */
 .markdown-body {
   font-size: 0.9375rem;
-  line-height: 1.7;
+  line-height: 1.72;
   overflow-wrap: break-word;
   color: var(--body-strong);
 }
@@ -193,8 +206,8 @@ select:focus-visible {
 .markdown-body h4 {
   margin: 1.1em 0 0.45em;
   font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: 0;
   line-height: 1.25;
   color: var(--ink);
 }
@@ -229,9 +242,9 @@ select:focus-visible {
   padding: 0.1em 0.35em;
   border-radius: var(--r-xs);
   background: var(--surface-strong);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.86em;
-  color: var(--brand-coral);
+  color: var(--brand-navy);
 }
 .markdown-body pre {
   margin: 0.7em 0;
@@ -243,14 +256,14 @@ select:focus-visible {
 .markdown-body pre code {
   padding: 0;
   background: transparent;
-  color: #e8e0d0;
+  color: #f2f2ef;
   font-size: 0.8125rem;
   line-height: 1.6;
 }
 .markdown-body blockquote {
   margin: 0.7em 0;
   padding: 0.1em 0.9em;
-  border-left: 3px solid var(--brand-peach);
+  border-left: 1px solid var(--ink);
   color: var(--muted);
 }
 .markdown-body table {
@@ -272,7 +285,7 @@ select:focus-visible {
   font-weight: 600;
 }
 .markdown-body a {
-  color: var(--brand-coral);
+  color: var(--brand-navy);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
