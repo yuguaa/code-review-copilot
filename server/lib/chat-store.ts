@@ -121,6 +121,17 @@ export function mergeStreamingMessage(baseMessages: UIMessage[], message: UIMess
   return [...baseMessages, message];
 }
 
+/**
+ * 追问请求的历史事实源是数据库，不信任浏览器回传的整组 messages。
+ * AI SDK 请求里可能是完整前端态，也可能只包含本轮消息；这里仅提取最后一条新 user 消息追加。
+ */
+export function mergeIncomingUserMessage(storedMessages: UIMessage[], incomingMessages: UIMessage[]): UIMessage[] {
+  const latestUserMessage = incomingMessages.findLast((message) => message.role === 'user');
+  if (!latestUserMessage) return storedMessages;
+  if (storedMessages.some((message) => message.id === latestUserMessage.id)) return storedMessages;
+  return [...storedMessages, latestUserMessage];
+}
+
 /** 从 UIMessage.parts 里抽一段纯文本预览。 */
 function previewOf(parts: unknown): string {
   if (!Array.isArray(parts)) return '';

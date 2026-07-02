@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { parseJsonEventStream, readUIMessageStream, uiMessageChunkSchema, type UIMessage } from 'ai';
-import { ensureChatTitle, getSessionWithRepository, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
+import { ensureChatTitle, getSessionWithRepository, loadMessages, mergeIncomingUserMessage, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
 import { publishSessionListChanged } from '../lib/session-events';
 import { createChatStream } from '../agent/chat-agent';
 import { ensureVisibleAssistantReply } from '../agent/review-message';
@@ -24,7 +24,7 @@ chatRoutes.post('/', async (c) => {
   }
 
   const sessionId = body.sessionId;
-  const messages = body.messages ?? [];
+  const incomingMessages = body.messages ?? [];
   if (!sessionId) return c.json({ error: '缺少 sessionId' }, 400);
 
   const session = await getSessionWithRepository(sessionId);
@@ -34,6 +34,8 @@ chatRoutes.post('/', async (c) => {
   if (session.status === 'running') {
     return c.json({ error: '本次审查正在进行中，请等待审查完成后再追问。' }, 409);
   }
+
+  const messages = mergeIncomingUserMessage(await loadMessages(sessionId), incomingMessages);
 
   let result: Awaited<ReturnType<typeof createChatStream>>;
   try {

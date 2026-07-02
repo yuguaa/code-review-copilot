@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { dedupeMessages, mergeStreamingMessage } from './chat-store';
+import { dedupeMessages, mergeIncomingUserMessage, mergeStreamingMessage } from './chat-store';
 
 describe('dedupeMessages', () => {
   it('keeps the last message when duplicate ids appear', () => {
@@ -44,5 +44,35 @@ describe('mergeStreamingMessage', () => {
       { id: 'user-1', role: 'user', parts: [{ type: 'text', text: '继续解释' }] },
       { id: 'assistant-1', role: 'assistant', parts: [{ type: 'text', text: '流式新内容' }] },
     ]);
+  });
+});
+
+describe('mergeIncomingUserMessage', () => {
+  it('以数据库历史为事实源，只追加请求里的最新用户消息', () => {
+    const storedMessages: UIMessage[] = [
+      { id: 'seed', role: 'user', parts: [{ type: 'text', text: '请审查' }] },
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: '审查完成' }] },
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: '第一个追问' }] },
+      { id: 'a2', role: 'assistant', parts: [{ type: 'text', text: '第一个回答' }] },
+    ];
+    const incomingMessages: UIMessage[] = [
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: '第二个追问' }] },
+    ];
+
+    expect(mergeIncomingUserMessage(storedMessages, incomingMessages).map((message) => message.id)).toEqual([
+      'seed',
+      'a1',
+      'u1',
+      'a2',
+      'u2',
+    ]);
+  });
+
+  it('请求里的最新用户消息已存在时不重复追加', () => {
+    const storedMessages: UIMessage[] = [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: '第一个追问' }] },
+    ];
+
+    expect(mergeIncomingUserMessage(storedMessages, storedMessages)).toEqual(storedMessages);
   });
 });
