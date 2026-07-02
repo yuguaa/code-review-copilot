@@ -4,8 +4,8 @@
 :root {
   color-scheme: light;
 
-  --bg: oklch(0.972 0.01 245);
-  --bg-panel: oklch(0.95 0.014 245);
+  --bg: oklch(0.965 0.012 238);
+  --bg-panel: oklch(0.948 0.014 238);
   --surface: oklch(1 0 0);
   --surface-2: oklch(0.985 0.007 245);
   --glass: rgba(255, 255, 255, 0.78);
@@ -15,10 +15,10 @@
   --muted: oklch(0.45 0.036 250);
   --muted-2: oklch(0.58 0.03 250);
 
-  --accent: oklch(0.56 0.19 262);
-  --accent-strong: oklch(0.47 0.2 262);
-  --accent-soft: oklch(0.95 0.038 262);
-  --accent-quiet: oklch(0.985 0.018 262);
+  --accent: oklch(0.54 0.18 247);
+  --accent-strong: oklch(0.43 0.18 247);
+  --accent-soft: oklch(0.95 0.034 247);
+  --accent-quiet: oklch(0.984 0.014 247);
   --cyan: oklch(0.68 0.14 210);
   --cyan-soft: oklch(0.95 0.04 210);
   --mint: oklch(0.7 0.15 160);
@@ -31,7 +31,8 @@
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 8px 16px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 18px 38px rgba(15, 23, 42, 0.14);
-  --shadow-glow: 0 18px 50px rgba(14, 116, 144, 0.14);
+  --shadow-glow: 0 18px 50px rgba(30, 64, 175, 0.12);
+  --shadow-rail: 0 16px 38px rgba(15, 23, 42, 0.08);
   --shadow-control: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 1px 2px rgba(15, 23, 42, 0.06);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
@@ -46,10 +47,14 @@ body,
 
 body {
   background:
-    linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.035) 1px, transparent 1px),
-    linear-gradient(135deg, oklch(0.99 0.006 240), var(--bg) 42%, oklch(0.955 0.018 220));
+    radial-gradient(circle at 14% 18%, rgba(34, 197, 194, 0.1), transparent 30%),
+    radial-gradient(circle at 82% 8%, rgba(59, 130, 246, 0.12), transparent 28%),
+    linear-gradient(rgba(37, 99, 235, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.022) 1px, transparent 1px),
+    linear-gradient(135deg, oklch(0.99 0.006 240), var(--bg) 42%, oklch(0.952 0.016 222));
   background-size:
+    auto,
+    auto,
     36px 36px,
     36px 36px,
     auto;
@@ -135,38 +140,30 @@ select:focus-visible {
   }
 }
 
-@keyframes scan-line {
+@keyframes soft-breathe {
   0% {
-    transform: translateX(-35%);
-    opacity: 0;
+    box-shadow: 0 0 0 rgba(59, 130, 246, 0);
   }
-  18%,
-  72% {
-    opacity: 1;
+  50% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
   }
   100% {
-    transform: translateX(120%);
-    opacity: 0;
-  }
-}
-
-@keyframes thinking-bar {
-  0% {
-    transform: translateX(-45%);
-  }
-  100% {
-    transform: translateX(145%);
+    box-shadow: 0 0 0 rgba(59, 130, 246, 0);
   }
 }
 
 .tech-workbench {
   position: relative;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.16)),
-    linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at 18% 18%, rgba(14, 165, 233, 0.12), transparent 28%),
+    radial-gradient(circle at 88% 12%, rgba(34, 197, 194, 0.1), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.22)),
+    linear-gradient(rgba(37, 99, 235, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.022) 1px, transparent 1px),
     var(--bg);
   background-size:
+    auto,
+    auto,
     auto,
     32px 32px,
     32px 32px,
@@ -179,8 +176,8 @@ select:focus-visible {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(115deg, transparent 0 30%, rgba(14, 165, 233, 0.08) 45%, transparent 62%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 22%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), transparent 24%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.62), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.52));
   mask-image: linear-gradient(180deg, #000, transparent 70%);
 }
 
@@ -217,27 +214,69 @@ select:focus-visible {
   pointer-events: none;
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 42%;
-  background: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.2), transparent);
-  animation: scan-line 4.8s var(--ease-out-quart) infinite;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.52), transparent 42%);
+  opacity: 0.72;
 }
 
 .thinking-pulse {
   overflow: hidden;
   position: relative;
+  animation: soft-breathe 2.8s var(--ease-out-quart) infinite;
 }
 
 .thinking-pulse::before {
+  display: none;
+}
+
+.conversation-frame {
+  position: relative;
+  min-height: 0;
+}
+
+.conversation-frame::before,
+.conversation-frame::after {
   pointer-events: none;
   content: '';
   position: absolute;
-  inset: 0;
-  width: 42%;
-  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.14), transparent);
-  animation: thinking-bar 1.15s linear infinite;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  height: 42px;
+  opacity: 0;
+  transition: opacity 0.24s var(--ease-out-quart);
+}
+
+.conversation-frame::before {
+  top: 0;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(239, 246, 255, 0));
+}
+
+.conversation-frame::after {
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(239, 246, 255, 0.96), rgba(239, 246, 255, 0));
+}
+
+.conversation-frame.is-scrolled::before,
+.conversation-frame.can-scroll-more::after {
+  opacity: 1;
+}
+
+.conversation-scroll {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+.message-surface {
+  transition:
+    transform 0.22s var(--ease-out-quart),
+    box-shadow 0.22s var(--ease-out-quart),
+    background-color 0.22s var(--ease-out-quart);
+}
+
+.message-surface:hover {
+  transform: translateY(-1px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -251,8 +290,7 @@ select:focus-visible {
     scroll-behavior: auto !important;
   }
 
-  .scan-accent::after,
-  .thinking-pulse::before {
+  .thinking-pulse {
     animation: none !important;
   }
 }

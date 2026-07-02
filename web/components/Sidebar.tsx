@@ -18,7 +18,7 @@ import { cn } from '../lib/cn';
 import type { SessionListItem, RepositoryItem } from '../lib/types';
 
 const statusColor: Record<string, string> = {
-  running: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.14)]',
+  running: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.12)]',
   completed: 'bg-emerald-500',
   failed: 'bg-rose-500',
 };
@@ -183,7 +183,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
               <button
                 onClick={() => toggle(group.key)}
                 title={group.path ?? group.name}
-                className="interactive-lift group/header flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-white/70 hover:shadow-[var(--shadow-sm)]"
+                className="interactive-lift group/header flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-white/74 hover:shadow-[var(--shadow-sm)]"
               >
                 <ChevronRight
                   size={14}
@@ -249,7 +249,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                             className={cn(
                               'ml-auto h-1.5 w-1.5 shrink-0 rounded-full',
                               statusColor[s.status] ?? 'bg-slate-300',
-                              s.status === 'running' && 'animate-pulse',
+                              s.status === 'running' && 'thinking-pulse',
                             )}
                           />
                         </button>

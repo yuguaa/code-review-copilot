@@ -96,11 +96,51 @@ function ChatThread({
   });
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const nearBottomRef = useRef(true);
+  const [scrollState, setScrollState] = useState({ top: true, bottom: true, scrollable: false });
   const busy = status === 'submitted' || status === 'streaming';
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
+  const syncScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const bottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 3;
+    nearBottomRef.current = bottom;
+    setScrollState({
+      top: el.scrollTop <= 2,
+      bottom,
+      scrollable: el.scrollHeight > el.clientHeight + 3,
+    });
+  }, []);
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, status]);
+    const frame = requestAnimationFrame(() => {
+      if (nearBottomRef.current) scrollToBottom('smooth');
+      syncScrollState();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [busy, messages, scrollToBottom, status, syncScrollState]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      scrollToBottom('auto');
+      syncScrollState();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollToBottom, sessionId, syncScrollState]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 40), 160)}px`;
+  }, [input]);
 
   useEffect(() => {
     const events = new EventSource(`/api/sessions/${sessionId}/events`);
@@ -132,6 +172,7 @@ function ChatThread({
   const submit = () => {
     const text = input.trim();
     if (!text || busy) return;
+    nearBottomRef.current = true;
     setInput('');
     void sendMessage({ text });
   };
@@ -189,8 +230,14 @@ function ChatThread({
         </div>
       </header>
 
-      <div className="relative z-10 min-h-0 flex-1">
-        <div ref={scrollRef} className="h-full min-w-0 overflow-y-auto">
+      <div
+        className={[
+          'conversation-frame relative z-10 min-h-0 flex-1',
+          scrollState.scrollable && !scrollState.top ? 'is-scrolled' : '',
+          scrollState.scrollable && !scrollState.bottom ? 'can-scroll-more' : '',
+        ].join(' ')}
+      >
+        <div ref={scrollRef} onScroll={syncScrollState} className="conversation-scroll h-full min-w-0 overflow-y-auto">
           <div className="mx-auto max-w-6xl space-y-1 px-6 py-7">
             {messages.length === 0 && (
               <div className="surface-enter mx-auto mt-10 max-w-md rounded-2xl bg-white/82 px-6 py-8 text-center shadow-[var(--shadow-glow)] ring-1 ring-white/80 backdrop-blur-xl">
@@ -202,7 +249,7 @@ function ChatThread({
               <Message key={m.id} message={m} />
             ))}
             {busy && (
-              <div className="thinking-pulse mx-5 inline-flex items-center gap-2 rounded-full bg-white/82 px-3 py-2 text-xs text-slate-600 shadow-[var(--shadow-sm)] ring-1 ring-slate-200 backdrop-blur">
+              <div className="thinking-pulse mx-5 inline-flex items-center gap-2 rounded-full bg-white/88 px-3 py-2 text-xs text-slate-600 shadow-[var(--shadow-sm)] ring-1 ring-slate-200 backdrop-blur">
                 <Loader2 size={13} className="animate-spin" /> Agent 思考中…
               </div>
             )}
@@ -238,6 +285,7 @@ function ChatThread({
           </div>
           <div className="interactive-lift flex items-end gap-2 rounded-2xl border border-white/80 bg-white/86 p-1.5 shadow-[var(--shadow-glow)] backdrop-blur-xl focus-within:border-[var(--cyan)] focus-within:ring-4 focus-within:ring-cyan-100/80">
             <textarea
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
