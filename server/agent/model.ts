@@ -3,6 +3,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
 import type { SessionWithRepository } from '../lib/chat-store';
+import { prisma } from '../lib/prisma';
 
 /** 解析模型所需的最小配置。 */
 export type ModelConfig = {
@@ -13,7 +14,20 @@ export type ModelConfig = {
   maxSteps: number;
 };
 
-export function resolveRepositoryModelConfig(repo: SessionWithRepository['repository']): ModelConfig {
+type RepositoryForModel = NonNullable<SessionWithRepository['repository']>;
+type GlobalDefaultModel = RepositoryForModel['defaultAIModel'];
+
+export function loadGlobalDefaultModel(): Promise<GlobalDefaultModel> {
+  return prisma.aIModel.findFirst({
+    where: { isDefault: true, isActive: true },
+    orderBy: { updatedAt: 'desc' },
+  });
+}
+
+export function resolveRepositoryModelConfig(
+  repo: SessionWithRepository['repository'],
+  globalDefaultModel: GlobalDefaultModel,
+): ModelConfig {
   if (!repo) {
     throw new Error('该会话未绑定仓库模型配置，无法解析模型');
   }
@@ -27,20 +41,19 @@ export function resolveRepositoryModelConfig(repo: SessionWithRepository['reposi
       modelId: repo.customModelId,
       apiKey: repo.customApiKey,
       apiBaseUrl: repo.customApiBaseUrl,
-      maxSteps: repo.customMaxSteps ?? repo.defaultAIModel?.maxSteps ?? 16,
+      maxSteps: repo.customMaxSteps ?? repo.defaultAIModel?.maxSteps ?? globalDefaultModel?.maxSteps ?? 16,
     };
   }
 
-  if (!repo.defaultAIModel) {
-    throw new Error('仓库未绑定全局模型配置');
-  }
+  const model = repo.defaultAIModel ?? globalDefaultModel;
+  if (!model) throw new Error('未配置全局默认模型，无法解析模型');
 
   return {
-    provider: repo.defaultAIModel.provider,
-    modelId: repo.defaultAIModel.modelId,
-    apiKey: repo.defaultAIModel.apiKey,
-    apiBaseUrl: repo.defaultAIModel.apiBaseUrl,
-    maxSteps: repo.defaultAIModel.maxSteps,
+    provider: model.provider,
+    modelId: model.modelId,
+    apiKey: model.apiKey,
+    apiBaseUrl: model.apiBaseUrl,
+    maxSteps: model.maxSteps,
   };
 }
 

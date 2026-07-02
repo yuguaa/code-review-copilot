@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveModel } from './model';
+import { resolveModel, resolveRepositoryModelConfig } from './model';
 import { buildTools, isReadOnlyCommand, type ReviewContext } from './tools';
 import { signedUrl } from '../lib/dingtalk';
 import type { GitLabService } from '../lib/gitlab';
+import type { SessionWithRepository } from '../lib/chat-store';
 
 // 工具执行时 AI SDK 传入的 options（这里只需占位）。
 const toolOpts = { toolCallId: 't1', messages: [] } as never;
@@ -24,6 +25,95 @@ describe('resolveModel', () => {
       maxSteps: 16,
     });
     expect(model).toBeTruthy();
+  });
+});
+
+type RepoForModel = SessionWithRepository['repository'];
+type GlobalModel = NonNullable<RepoForModel>['defaultAIModel'];
+
+function model(overrides: Partial<NonNullable<GlobalModel>> = {}): NonNullable<GlobalModel> {
+  return {
+    id: 'm1',
+    provider: 'openai-compatible',
+    modelId: 'glm-5.2',
+    apiKey: 'global-key',
+    apiBaseUrl: 'https://example.com/v1',
+    maxSteps: 16,
+    isDefault: true,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function repo(overrides: Partial<NonNullable<RepoForModel>> = {}): NonNullable<RepoForModel> {
+  return {
+    id: 'r1',
+    gitLabAccountId: 'g1',
+    gitLabAccount: { id: 'g1', url: 'https://gitlab.example.com', accessToken: 'token', webhookSecret: null, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+    gitLabProjectId: 1,
+    name: 'polit-agent',
+    path: 'group/polit-agent',
+    description: null,
+    watchBranches: 'main',
+    autoReview: true,
+    defaultAIModelId: null,
+    defaultAIModel: null,
+    customProvider: null,
+    customModelId: null,
+    customApiKey: null,
+    customApiBaseUrl: null,
+    customMaxSteps: null,
+    defaultReviewPrompt: null,
+    enableMrComment: false,
+    enableDingtalk: true,
+    dingtalkWebhook: null,
+    dingtalkSecret: null,
+    memory: null,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+describe('resolveRepositoryModelConfig', () => {
+  it('仓库未绑定模型时使用全局默认模型', () => {
+    expect(resolveRepositoryModelConfig(repo(), model())).toMatchObject({
+      provider: 'openai-compatible',
+      modelId: 'glm-5.2',
+      apiKey: 'global-key',
+      apiBaseUrl: 'https://example.com/v1',
+      maxSteps: 16,
+    });
+  });
+
+  it('仓库绑定模型优先于全局默认模型', () => {
+    expect(
+      resolveRepositoryModelConfig(
+        repo({
+          defaultAIModelId: 'repo-model',
+          defaultAIModel: model({ id: 'repo-model', provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' }),
+        }),
+        model({ id: 'global-model', modelId: 'global-model' }),
+      ),
+    ).toMatchObject({ provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' });
+  });
+
+  it('仓库自定义模型优先于仓库绑定和全局默认模型', () => {
+    expect(
+      resolveRepositoryModelConfig(
+        repo({
+          customProvider: 'anthropic',
+          customModelId: 'claude-sonnet-4',
+          customApiKey: 'custom-key',
+          customMaxSteps: 24,
+          defaultAIModel: model({ id: 'repo-model', modelId: 'repo-model' }),
+        }),
+        model(),
+      ),
+    ).toMatchObject({ provider: 'anthropic', modelId: 'claude-sonnet-4', apiKey: 'custom-key', maxSteps: 24 });
   });
 });
 

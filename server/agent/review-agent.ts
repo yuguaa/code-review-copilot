@@ -1,5 +1,5 @@
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
-import { resolveModel, resolveRepositoryModelConfig } from './model';
+import { loadGlobalDefaultModel, resolveModel, resolveRepositoryModelConfig } from './model';
 import { buildReadTools, buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
 import { prepareWorkspace } from '../lib/workspace';
@@ -70,7 +70,8 @@ export async function createReviewStream(opts: {
   const repo = opts.session.repository;
   const workspace = await prepareWorkspace(opts.session);
   const ctx = await buildReviewContext(opts.session, workspace);
-  const modelConfig = resolveRepositoryModelConfig(repo);
+  const globalDefaultModel = await loadGlobalDefaultModel();
+  const modelConfig = resolveRepositoryModelConfig(repo, globalDefaultModel);
   const model = resolveModel(modelConfig);
   const mode = opts.mode ?? 'review';
   const tools = mode === 'review' ? { ...buildTools(ctx), ...buildDelegateTools(ctx, model) } : buildReadTools(ctx);

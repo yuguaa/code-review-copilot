@@ -73,9 +73,6 @@ export function Repositories() {
     setAccounts(accountResult.accounts);
     setModels(modelResult.models);
     if (accountResult.accounts[0] && !form.gitLabAccountId) set('gitLabAccountId', accountResult.accounts[0].id);
-    if (modelResult.models[0] && !form.defaultAIModelId) {
-      set('defaultAIModelId', modelResult.models.find((m) => m.isDefault)?.id ?? modelResult.models[0].id);
-    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     void load();
@@ -99,7 +96,7 @@ export function Repositories() {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
+    setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId });
     setProjects([]);
     setSearch('');
     setModalOpen(true);
@@ -140,8 +137,8 @@ export function Repositories() {
   };
 
   const submit = () => {
-    if (!form.gitLabAccountId || !form.gitLabProjectId || (!form.defaultAIModelId && !form.useCustomModel)) {
-      return toast.error('请填写账号、项目与默认模型');
+    if (!form.gitLabAccountId || !form.gitLabProjectId) {
+      return toast.error('请填写账号与项目');
     }
     if (form.useCustomModel && (!form.customProvider || !form.customModelId || (!editingId && !form.customApiKey))) {
       return toast.error('请填写完整的仓库自定义模型配置');
@@ -160,7 +157,7 @@ export function Repositories() {
       : api('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
     request
       .then(() => {
-        setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId, defaultAIModelId: form.defaultAIModelId });
+        setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId });
         setEditingId(null);
         setModalOpen(false);
         return load();
@@ -240,9 +237,9 @@ export function Repositories() {
               </Field>
             </div>
 
-            <Field label="默认模型" hint="使用「设置」里的全局模型；需要特殊模型时再开启仓库自定义模型">
+            <Field label="仓库默认模型" hint="不选择时自动使用「设置」里的全局默认模型；需要特殊模型时再开启仓库自定义模型">
               <Select value={form.defaultAIModelId} onChange={(e) => set('defaultAIModelId', e.target.value)}>
-                <option value="">请选择模型</option>
+                <option value="">使用全局默认模型</option>
                 {models.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.provider}/{m.modelId}{m.isDefault ? '（默认）' : ''}
@@ -371,7 +368,7 @@ export function Repositories() {
                 {r.enableDingtalk && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">钉钉</span>}
               </div>
               <p className="mt-1 text-[11px] text-slate-500">
-                模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : `${r.defaultAIModel?.provider ?? '未配置'}/${r.defaultAIModel?.modelId ?? '-'}`} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
+                模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : r.defaultAIModel ? `${r.defaultAIModel.provider}/${r.defaultAIModel.modelId}` : '全局默认'} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
               </p>
             </div>
             <Button variant="ghost" onClick={() => edit(r)}>
