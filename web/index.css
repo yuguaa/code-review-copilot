@@ -1,41 +1,61 @@
 @import 'tailwindcss';
 
-/* 设计 token：浅色 Agent 指挥台，集中托管易于统一调整。 */
+/* 设计 token：Clay.com 风格——奶油暖底 + 饱和多色卡片 + 圆润 display 字体。 */
 :root {
   color-scheme: light;
 
-  --bg: oklch(0.965 0.012 238);
-  --bg-panel: oklch(0.948 0.014 238);
-  --surface: oklch(1 0 0);
-  --surface-2: oklch(0.985 0.007 245);
-  --glass: rgba(255, 255, 255, 0.78);
-  --border: oklch(0.89 0.02 245);
-  --border-strong: oklch(0.79 0.035 245);
-  --text: oklch(0.21 0.038 250);
-  --muted: oklch(0.45 0.036 250);
-  --muted-2: oklch(0.58 0.03 250);
+  /* 画布与表面（暖奶油） */
+  --canvas: #fffaf0;
+  --surface-soft: #faf5e8;
+  --surface-card: #f5f0e0;
+  --surface-strong: #ebe6d6;
+  --surface-dark: #0a1a1a;
+  --hairline: #e8e0cf;
 
-  --accent: oklch(0.54 0.18 247);
-  --accent-strong: oklch(0.43 0.18 247);
-  --accent-soft: oklch(0.95 0.034 247);
-  --accent-quiet: oklch(0.984 0.014 247);
-  --cyan: oklch(0.68 0.14 210);
-  --cyan-soft: oklch(0.95 0.04 210);
-  --mint: oklch(0.7 0.15 160);
-  --info: oklch(0.6 0.15 220);
-  --success: oklch(0.61 0.15 155);
-  --warning: oklch(0.72 0.16 82);
-  --danger: oklch(0.58 0.2 25);
-  --ring: rgba(37, 99, 235, 0.18);
+  /* 品牌 6 色饱和卡片 + 点缀 */
+  --brand-pink: #ff4d8b;
+  --brand-teal: #1a3a3a;
+  --brand-lavender: #b8a4ed;
+  --brand-peach: #ffb084;
+  --brand-ochre: #e8b94a;
+  --brand-mint: #a4d4c5;
+  --brand-coral: #ff6b5a;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 8px 16px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 18px 38px rgba(15, 23, 42, 0.14);
-  --shadow-glow: 0 18px 50px rgba(30, 64, 175, 0.12);
-  --shadow-rail: 0 16px 38px rgba(15, 23, 42, 0.08);
-  --shadow-control: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 1px 2px rgba(15, 23, 42, 0.06);
-  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 主色 / 文本（近黑带暖） */
+  --primary: #0a0a0a;
+  --ink: #0a0a0a;
+  --body-strong: #1a1a1a;
+  --body: #3a3a3a;
+  --muted: #6a6a6a;
+  --muted-soft: #9a9a9a;
+  --on-primary: #ffffff;
+
+  /* 语义色 */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+
+  /* accent 别名：主强调走近黑，柔和强调走 peach 系（供选中/hover 底色） */
+  --accent: #0a0a0a;
+  --accent-soft: #fdeede;
+  --ring: rgba(255, 176, 132, 0.45);
+
+  /* 圆角 */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+
+  --shadow-sm: 0 1px 2px rgba(40, 30, 10, 0.05);
+  --shadow-md: 0 6px 20px rgba(40, 30, 10, 0.08);
+  --shadow-lg: 0 20px 48px rgba(40, 30, 10, 0.16);
+
+  --font-display: 'Fredoka', 'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 html,
@@ -46,32 +66,28 @@ body,
 }
 
 body {
-  background:
-    radial-gradient(circle at 14% 18%, rgba(34, 197, 194, 0.1), transparent 30%),
-    radial-gradient(circle at 82% 8%, rgba(59, 130, 246, 0.12), transparent 28%),
-    linear-gradient(rgba(37, 99, 235, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.022) 1px, transparent 1px),
-    linear-gradient(135deg, oklch(0.99 0.006 240), var(--bg) 42%, oklch(0.952 0.016 222));
-  background-size:
-    auto,
-    auto,
-    36px 36px,
-    36px 36px,
-    auto;
-  color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
-    'Microsoft YaHei', sans-serif;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  background: var(--canvas);
+  color: var(--body);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+/* 圆润 display 字体：标题专用，负字距带来紧致暖感 */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 }
 
 button:focus-visible,
@@ -79,46 +95,38 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brand-peach);
   outline-offset: 2px;
 }
 
-/* 选区色：与主强调一致 */
 ::selection {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
+  background: var(--brand-peach);
+  color: var(--ink);
 }
 
-/* 滚动条：纤细低调，hover 才显现 */
+/* 滚动条：暖调纤细 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-*:hover {
-  scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+  scrollbar-color: rgba(120, 100, 60, 0.28) transparent;
 }
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 9999px;
-  background-color: transparent;
-}
-:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(100, 116, 139, 0.3);
+  background-color: rgba(120, 100, 60, 0.28);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(100, 116, 139, 0.5);
+  background-color: rgba(120, 100, 60, 0.5);
 }
 
-/* 轻量进入动画，供浮层/列表使用 */
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -126,115 +134,14 @@ select:focus-visible {
   }
 }
 .animate-fade-in {
-  animation: fade-in 0.22s var(--ease-out-quart);
+  animation: fade-in 0.18s var(--ease-out);
 }
 
-@keyframes surface-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.992);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes soft-breathe {
-  0% {
-    box-shadow: 0 0 0 rgba(59, 130, 246, 0);
-  }
-  50% {
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
-  }
-  100% {
-    box-shadow: 0 0 0 rgba(59, 130, 246, 0);
-  }
-}
-
-.tech-workbench {
-  position: relative;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(14, 165, 233, 0.12), transparent 28%),
-    radial-gradient(circle at 88% 12%, rgba(34, 197, 194, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.22)),
-    linear-gradient(rgba(37, 99, 235, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.022) 1px, transparent 1px),
-    var(--bg);
-  background-size:
-    auto,
-    auto,
-    auto,
-    32px 32px,
-    32px 32px,
-    auto;
-}
-
-.tech-workbench::before {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78), transparent 24%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.62), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.52));
-  mask-image: linear-gradient(180deg, #000, transparent 70%);
-}
-
-.glass-panel {
-  background: var(--glass);
-  box-shadow: var(--shadow-sm);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-}
-
-.surface-enter {
-  animation: surface-in 0.32s var(--ease-out-quint) both;
-}
-
-.interactive-lift {
-  transition:
-    transform 0.22s var(--ease-out-quart),
-    box-shadow 0.22s var(--ease-out-quart),
-    background-color 0.22s var(--ease-out-quart),
-    border-color 0.22s var(--ease-out-quart),
-    color 0.22s var(--ease-out-quart);
-}
-
-.interactive-lift:hover {
-  transform: translateY(-1px);
-}
-
-.scan-accent {
-  overflow: hidden;
-  position: relative;
-}
-
-.scan-accent::after {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.52), transparent 42%);
-  opacity: 0.72;
-}
-
-.thinking-pulse {
-  overflow: hidden;
-  position: relative;
-  animation: soft-breathe 2.8s var(--ease-out-quart) infinite;
-}
-
-.thinking-pulse::before {
-  display: none;
-}
-
+/* 会话滚动区上下边缘渐隐 */
 .conversation-frame {
   position: relative;
   min-height: 0;
 }
-
 .conversation-frame::before,
 .conversation-frame::after {
   pointer-events: none;
@@ -243,40 +150,136 @@ select:focus-visible {
   left: 0;
   right: 0;
   z-index: 5;
-  height: 42px;
+  height: 28px;
   opacity: 0;
-  transition: opacity 0.24s var(--ease-out-quart);
+  transition: opacity 0.2s var(--ease-out);
 }
-
 .conversation-frame::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(239, 246, 255, 0));
+  background: linear-gradient(180deg, var(--canvas), transparent);
 }
-
 .conversation-frame::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(239, 246, 255, 0.96), rgba(239, 246, 255, 0));
+  background: linear-gradient(0deg, var(--canvas), transparent);
 }
-
 .conversation-frame.is-scrolled::before,
 .conversation-frame.can-scroll-more::after {
   opacity: 1;
 }
-
 .conversation-scroll {
   scroll-behavior: smooth;
   scrollbar-gutter: stable;
 }
 
-.message-surface {
-  transition:
-    transform 0.22s var(--ease-out-quart),
-    box-shadow 0.22s var(--ease-out-quart),
-    background-color 0.22s var(--ease-out-quart);
+/* Markdown 正文排版（审查结论）——暖奶油调 */
+.markdown-body {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+  color: var(--body-strong);
 }
-
-.message-surface:hover {
-  transform: translateY(-1px);
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+.markdown-body p {
+  margin: 0.5em 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: 1.1em 0 0.45em;
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.markdown-body h1 {
+  font-size: 1.4em;
+}
+.markdown-body h2 {
+  font-size: 1.2em;
+}
+.markdown-body h3,
+.markdown-body h4 {
+  font-size: 1.05em;
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.markdown-body ul {
+  list-style: disc;
+}
+.markdown-body ol {
+  list-style: decimal;
+}
+.markdown-body li {
+  margin: 0.22em 0;
+}
+.markdown-body li::marker {
+  color: var(--muted);
+}
+.markdown-body code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--r-xs);
+  background: var(--surface-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  color: var(--brand-coral);
+}
+.markdown-body pre {
+  margin: 0.7em 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--r-md);
+  background: var(--surface-dark);
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  color: #e8e0d0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+.markdown-body blockquote {
+  margin: 0.7em 0;
+  padding: 0.1em 0.9em;
+  border-left: 3px solid var(--brand-peach);
+  color: var(--muted);
+}
+.markdown-body table {
+  margin: 0.7em 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.4em 0.75em;
+  border: 1px solid var(--hairline);
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--surface-card);
+  font-weight: 600;
+}
+.markdown-body a {
+  color: var(--brand-coral);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--hairline);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -287,10 +290,5 @@ select:focus-visible {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  .thinking-pulse {
-    animation: none !important;
   }
 }

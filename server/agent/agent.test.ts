@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { resolveModel, resolveRepositoryModelConfig } from './model';
 import { buildTools, isReadOnlyCommand, type ReviewContext } from './tools';
+import { buildInstructions } from './review-agent';
 import { signedUrl } from '../lib/dingtalk';
 import type { GitLabService } from '../lib/gitlab';
 import type { SessionWithRepository } from '../lib/chat-store';
@@ -123,12 +124,14 @@ describe('isReadOnlyCommand（bash 安全门禁）', () => {
     expect(isReadOnlyCommand('rg -n TODO')).toBe(true);
     expect(isReadOnlyCommand('cat a.ts | head -20')).toBe(true);
     expect(isReadOnlyCommand('find . -name "*.ts"')).toBe(true);
-    expect(isReadOnlyCommand('cat a 2>/dev/null')).toBe(true);
+    expect(isReadOnlyCommand('cat a 2>&1')).toBe(true); // fd 复制放行
+    expect(isReadOnlyCommand("sed -n '10,50p' a.ts")).toBe(true);
+    expect(isReadOnlyCommand("grep -n 'end$' a.ts")).toBe(true); // $ 作行尾锚点放行
     expect(isReadOnlyCommand('git log --oneline -5')).toBe(true);
     expect(isReadOnlyCommand('git diff main...HEAD')).toBe(true);
   });
 
-  it('拒绝写/网络/重定向/命令替换', () => {
+  it('拒绝写/网络/命令替换', () => {
     expect(isReadOnlyCommand('rm -rf /')).toBe(false);
     expect(isReadOnlyCommand('mv a b')).toBe(false);
     expect(isReadOnlyCommand('curl http://x')).toBe(false);
@@ -140,6 +143,37 @@ describe('isReadOnlyCommand（bash 安全门禁）', () => {
     expect(isReadOnlyCommand('grep foo `ls`')).toBe(false);
     expect(isReadOnlyCommand('cat a && rm b')).toBe(false);
     expect(isReadOnlyCommand('')).toBe(false);
+  });
+
+  it('堵住换行/单 & 分段绕过（多命令压平）', () => {
+    expect(isReadOnlyCommand('cat foo\nrm -rf x')).toBe(false);
+    expect(isReadOnlyCommand('cat foo & rm -rf x')).toBe(false);
+    expect(isReadOnlyCommand('echo hi\ntouch marker')).toBe(false);
+  });
+
+  it('堵住数字 fd 写重定向', () => {
+    expect(isReadOnlyCommand('echo pwned 1>/tmp/evil')).toBe(false);
+    expect(isReadOnlyCommand('echo hi 9>/tmp/z')).toBe(false);
+    expect(isReadOnlyCommand('cat a 2>/dev/null')).toBe(false); // 收紧：只放行 fd 复制
+  });
+
+  it('堵住变量展开泄漏环境变量', () => {
+    expect(isReadOnlyCommand('echo $DATABASE_URL')).toBe(false);
+    expect(isReadOnlyCommand('echo ${SECRET}')).toBe(false);
+    expect(isReadOnlyCommand('cat $HOME/.env')).toBe(false);
+  });
+
+  it('剔除解释器类命令（awk/xargs）', () => {
+    expect(isReadOnlyCommand("awk 'BEGIN{system(\"id\")}'")).toBe(false);
+    expect(isReadOnlyCommand('find . | xargs rm')).toBe(false);
+  });
+
+  it('拦白名单命令的写/执行参数', () => {
+    expect(isReadOnlyCommand('find . -delete')).toBe(false);
+    expect(isReadOnlyCommand('find . -exec rm {} ;')).toBe(false);
+    expect(isReadOnlyCommand("sed -i 's/a/b/' f")).toBe(false);
+    expect(isReadOnlyCommand("sed -i.bak 's/a/b/' f")).toBe(false);
+    expect(isReadOnlyCommand('sort -o out.txt f')).toBe(false);
   });
 });
 
@@ -174,8 +208,6 @@ function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
     commitSha: 'h',
     diffRefs: { base_sha: 'b', head_sha: 'h', start_sha: 's' },
     enableMrComment: true,
-    enableDingtalk: false,
-    dingtalk: null,
     ...overrides,
   };
 }
@@ -183,30 +215,29 @@ function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
 describe('输出工具的开关控制', () => {
   it('开启时 post_review_comment 返回 discussionId', async () => {
     const tools = buildTools(fakeContext());
-    const out = (await tools.post_review_comment.execute!({ markdown: '# 审查' }, toolOpts)) as {
+    const out = (await tools.post_review_comment!.execute!({ markdown: '# 审查' }, toolOpts)) as {
       discussionId: string | number;
     };
     expect(out.discussionId).toBe('disc-1');
   });
 
-  it('关闭 MR 评论时跳过且不调用 GitLab', async () => {
-    const ctx = fakeContext({ enableMrComment: false });
-    const tools = buildTools(ctx);
-    const out = await tools.post_review_comment.execute!({ markdown: 'x' }, toolOpts);
-    expect(out).toContain('未开启');
-    expect(ctx.gitlab.createMergeRequestComment).not.toHaveBeenCalled();
+  it('关闭平台评论时不提供发布工具', () => {
+    const tools = buildTools(fakeContext({ enableMrComment: false }));
+    expect('post_review_comment' in tools).toBe(false);
+    expect('post_inline_comment' in tools).toBe(false);
+    expect('write_memory' in tools).toBe(true);
   });
 
   it('行级评论缺 diff_refs 时提示', async () => {
     const tools = buildTools(fakeContext({ diffRefs: null }));
-    const out = await tools.post_inline_comment.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
+    const out = await tools.post_inline_comment!.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
     expect(out).toContain('diff_refs');
   });
 
   it('行级评论携带 position 调用 GitLab', async () => {
     const ctx = fakeContext();
     const tools = buildTools(ctx);
-    await tools.post_inline_comment.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
+    await tools.post_inline_comment!.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
     expect(ctx.gitlab.createMergeRequestComment).toHaveBeenCalledWith(
       1,
       42,
@@ -218,16 +249,40 @@ describe('输出工具的开关控制', () => {
   it('Push 会话评论发布到 commit', async () => {
     const ctx = fakeContext({ mrIid: null, diffRefs: null, commitSha: 'abc123' });
     const tools = buildTools(ctx);
-    const out = (await tools.post_review_comment.execute!({ markdown: '# 审查' }, toolOpts)) as {
+    const out = (await tools.post_review_comment!.execute!({ markdown: '# 审查' }, toolOpts)) as {
       noteId: string | number;
     };
     expect(out.noteId).toBe('note-1');
     expect(ctx.gitlab.createCommitComment).toHaveBeenCalledWith(1, 'abc123', '# 审查');
   });
 
-  it('关闭钉钉时跳过推送', async () => {
-    const tools = buildTools(fakeContext({ enableDingtalk: false }));
-    const out = await tools.notify_dingtalk.execute!({ title: 't', text: 'x' }, toolOpts);
-    expect(out).toContain('未开启');
+  it('无 diff 基准（纯对话工作区）时不提供 git_diff 工具', () => {
+    const tools = buildTools(fakeContext({ diffRef: null }));
+    expect('git_diff' in tools).toBe(false);
+    expect('bash' in tools).toBe(true);
+    expect('read_memory' in tools).toBe(true);
+  });
+});
+
+describe('buildInstructions（输出渠道按配置生成）', () => {
+  it('开启平台评论与钉钉时，指令包含发布工具与钉钉说明', () => {
+    const text = buildInstructions(repo({ enableMrComment: true, enableDingtalk: true }));
+    expect(text).toContain('post_review_comment');
+    expect(text).toContain('post_inline_comment');
+    expect(text).toContain('自动推送钉钉');
+  });
+
+  it('关闭平台评论与钉钉时，指令不出现任何发布渠道', () => {
+    const text = buildInstructions(repo({ enableMrComment: false, enableDingtalk: false }));
+    expect(text).not.toContain('post_review_comment');
+    expect(text).not.toContain('post_inline_comment');
+    expect(text).not.toContain('钉钉');
+    expect(text).toContain('审查结论会展示在会话页面');
+  });
+
+  it('仓库自定义审查要求追加在指令末尾', () => {
+    const text = buildInstructions(repo({ defaultReviewPrompt: '重点关注鉴权' }));
+    expect(text).toContain('本仓库的额外审查要求');
+    expect(text).toContain('重点关注鉴权');
   });
 });

@@ -37,25 +37,25 @@ function authArgs(token: string): string[] {
   return ['-c', `http.extraHeader=Authorization: Basic ${basic}`];
 }
 
-/** worktree 目录名：commitSha 是 40 位 hex，安全；缺失时退回 sanitized 分支名。 */
+/** worktree 目录名：commitSha 是 40 位 hex，安全；缺失时退回 sanitized 分支名；纯对话会话共用 default。 */
 function worktreeKey(session: SessionWithRepository): string {
   const sha = session.commitSha?.trim();
   if (sha) return sha;
   const branch = session.sourceBranch?.trim();
-  if (!branch) throw new Error('会话缺少 commitSha 与 sourceBranch，无法定位工作区');
-  return `branch-${branch.replace(/[^\w.-]/g, '_')}`;
+  return branch ? `branch-${branch.replace(/[^\w.-]/g, '_')}` : 'default';
 }
 
-/** 审查工作区准备结果。 */
+/** 工作区准备结果。 */
 export type Workspace = {
   /** worktree 绝对路径（agent 所有工具的 cwd） */
   dir: string;
-  /** git diff 的基准引用，如 origin/main 或 Push 事件的 before sha */
-  diffRef: string;
+  /** git diff 的基准引用（origin/main 或 Push 的 before sha）；纯对话会话没有 diff 概念，为 null */
+  diffRef: string | null;
 };
 
 /**
- * 准备一次审查/追问的工作区：clone（首次）→ fetch → worktree add（按 commit）。
+ * 准备一次会话的工作区：clone（首次）→ fetch → worktree add。
+ * 审查会话按 commit 固定；纯对话会话跟随远端默认分支（origin/HEAD）。
  * 命中已存在的 worktree 直接复用（追问保活）。同仓库串行、不同 MR 各自独立 worktree。
  */
 export function prepareWorkspace(session: SessionWithRepository): Promise<Workspace> {
@@ -68,10 +68,11 @@ export function prepareWorkspace(session: SessionWithRepository): Promise<Worksp
   const wtDir = path.join(baseDir, 'wt', worktreeKey(session));
   const auth = authArgs(repo.gitLabAccount.accessToken);
   const url = cloneUrl(repo.gitLabAccount.url, repo.path);
-  const sourceBranch = session.sourceBranch ?? '';
-  const targetBranch = session.targetBranch ?? '';
-  const checkoutRef = session.commitSha?.trim() || `origin/${sourceBranch}`;
-  const diffRef = session.baseCommitSha?.trim() || (targetBranch ? `origin/${targetBranch}` : '');
+  const sourceBranch = session.sourceBranch?.trim() ?? '';
+  const targetBranch = session.targetBranch?.trim() ?? '';
+  const pinnedSha = session.commitSha?.trim() || '';
+  const checkoutRef = pinnedSha || (sourceBranch ? `origin/${sourceBranch}` : 'origin/HEAD');
+  const diffRef = session.baseCommitSha?.trim() || (targetBranch ? `origin/${targetBranch}` : null);
 
   return withRepoLock(repoId, async () => {
     await cleanupExpired(baseDir).catch((err) => log.warn('清理过期工作区失败', err));
@@ -83,21 +84,29 @@ export function prepareWorkspace(session: SessionWithRepository): Promise<Worksp
       await git([...auth, 'clone', '--no-tags', url, gitDir]);
     }
 
-    // 2. fetch 最新 source/target（target 供 MR diff 基准；Push 可只有 source）
+    // 2. fetch 最新 source/target（target 供 MR diff 基准）；无具体分支时按默认 refspec 全量更新。
+    // MR 合并后源分支常被删除，fetch 会 fatal——但按 commitSha 固定、worktree 已存在的会话根本不需要新引用，
+    // 此时 fetch 失败仅告警、继续复用旧 worktree；只有需要新建 worktree 时缺引用才是硬错误。
+    const wtReady = await exists(wtDir);
     const branches = [sourceBranch, targetBranch].filter(Boolean);
-    await git(['-C', gitDir, ...auth, 'fetch', 'origin', ...branches, '--prune']);
+    try {
+      await git(['-C', gitDir, ...auth, 'fetch', 'origin', ...branches, '--prune']);
+    } catch (err) {
+      if (!wtReady) throw err;
+      log.warn(`fetch 失败，复用已存在的 worktree ${wtDir}`, err);
+    }
 
-    // 3. worktree：命中复用并 touch；否则按 commit 创建
-    if (await exists(wtDir)) {
+    // 3. worktree：命中复用并 touch；否则创建。跟随分支（非固定 sha）的 worktree 复用时刷新到最新
+    if (wtReady) {
       const now = new Date();
       await utimes(wtDir, now, now).catch(() => undefined);
+      if (!pinnedSha) await git(['-C', wtDir, 'reset', '--hard', checkoutRef]);
     } else {
       await mkdir(path.dirname(wtDir), { recursive: true }); // git worktree add 要求父目录存在
       log.info(`worktree add ${wtDir} @ ${checkoutRef}`);
       await git(['-C', gitDir, 'worktree', 'add', '--detach', wtDir, checkoutRef]);
     }
 
-    if (!diffRef) throw new Error('会话缺少 diff 基准，无法准备审查工作区');
     return { dir: wtDir, diffRef };
   });
 }

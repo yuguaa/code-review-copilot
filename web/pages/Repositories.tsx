@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
-import { Button, Card, Field, Input, Select, Textarea, PageShell, Modal } from '../components/ui';
+import { Button, Card, Checkbox, Field, FeatureCard, Input, Select, Textarea, PageShell, Modal, useConfirm } from '../components/ui';
 
 type Account = { id: string; url: string };
 type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean };
@@ -59,20 +59,24 @@ export function Repositories() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { confirm, element: confirmElement } = useConfirm();
   const webhookUrl = `${location.origin}/api/webhook/gitlab`;
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
 
-  const load = useCallback(async () => {
-    const [repositoryResult, accountResult, modelResult] = await Promise.all([
-      api<{ repositories: Repo[] }>('/api/repositories').catch(() => ({ repositories: [] })),
-      api<{ accounts: Account[] }>('/api/settings/gitlab').catch(() => ({ accounts: [] })),
-      api<{ models: AIModel[] }>('/api/settings/models').catch(() => ({ models: [] })),
-    ]);
-    setRepos(repositoryResult.repositories);
-    setAccounts(accountResult.accounts);
-    setModels(modelResult.models);
-    if (accountResult.accounts[0] && !form.gitLabAccountId) set('gitLabAccountId', accountResult.accounts[0].id);
+  const load = useCallback(() => {
+    return Promise.all([
+      api<{ repositories: Repo[] }>('/api/repositories'),
+      api<{ accounts: Account[] }>('/api/settings/gitlab'),
+      api<{ models: AIModel[] }>('/api/settings/models'),
+    ])
+      .then(([repositoryResult, accountResult, modelResult]) => {
+        setRepos(repositoryResult.repositories);
+        setAccounts(accountResult.accounts);
+        setModels(modelResult.models);
+        if (accountResult.accounts[0] && !form.gitLabAccountId) set('gitLabAccountId', accountResult.accounts[0].id);
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '配置加载失败'));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     void load();
@@ -167,30 +171,38 @@ export function Repositories() {
       .finally(() => setSaving(false));
   };
 
-  const remove = async (id: string) => {
-    await api(`/api/repositories/${id}`, { method: 'DELETE' });
-    await load();
+  const remove = (repo: Repo) => {
+    void confirm({
+      title: '删除仓库',
+      description: `「${repo.path}」的配置与关联会话记录将被删除，Webhook 触发也会失效。`,
+    }).then((ok) => {
+      if (!ok) return;
+      api(`/api/repositories/${repo.id}`, { method: 'DELETE' })
+        .then(load)
+        .then(() => toast.success('已删除仓库'))
+        .catch((e) => toast.error(e instanceof Error ? e.message : '删除失败'));
+    });
   };
 
   return (
     <PageShell title="仓库配置">
-      <Card className="space-y-3">
+      <FeatureCard tone="peach" className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold text-slate-950">Webhook 接入</h2>
-            <p className="text-xs text-slate-500">在 GitLab 项目里添加 Webhook，勾选 Merge Request events 和 Push events。</p>
+            <h2 className="font-display text-2xl">Webhook 接入</h2>
+            <p className="text-sm opacity-80">在 GitLab 项目里添加 Webhook，勾选 Merge Request events 和 Push events。</p>
           </div>
           <Button onClick={openAdd} type="button">
             添加仓库
           </Button>
         </div>
-        <code className="block break-all rounded-lg bg-slate-900 px-3 py-2.5 font-mono text-xs text-indigo-300">{webhookUrl}</code>
-        <p className="text-[11px] text-slate-400">Secret Token 与对应账号的 Webhook 密钥一致即可验签。</p>
-      </Card>
+        <code className="block break-all rounded-[var(--r-md)] bg-[var(--surface-dark)] px-3 py-2.5 font-mono text-xs text-[var(--brand-mint)]">{webhookUrl}</code>
+        <p className="text-xs opacity-70">Secret Token 与对应账号的 Webhook 密钥一致即可验签。</p>
+      </FeatureCard>
 
       <Modal open={modalOpen} title={editingId ? '编辑仓库' : '添加仓库'} onClose={closeModal}>
         {accounts.length === 0 ? (
-          <p className="text-xs text-amber-600">请先到「设置」添加 GitLab 账号</p>
+          <p className="text-xs text-[var(--warning)]">请先到「设置」添加 GitLab 账号</p>
         ) : (
           <div className="space-y-4">
             <Field label="GitLab 账号">
@@ -206,20 +218,20 @@ export function Repositories() {
             <Field label="选择项目" hint="按名称搜索后从下方点击选中，自动填入项目 ID / 名称 / 路径">
               <div className="flex gap-2">
                 <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索项目名…" />
-                <Button variant="ghost" onClick={fetchProjects} type="button">
+                <Button variant="secondary" onClick={fetchProjects} type="button">
                   拉取
                 </Button>
               </div>
             </Field>
             {projects.length > 0 && (
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg bg-slate-50 p-1 shadow-inner ring-1 ring-slate-200">
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-[var(--r-md)] bg-[var(--surface-card)] p-1 ring-1 ring-[var(--hairline)]">
                 {projects.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => pickProject(p)}
-                    className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-700 transition-[background-color] hover:bg-white hover:text-indigo-700"
+                    className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color] hover:bg-white hover:text-[var(--ink)]"
                   >
-                    {p.path} <span className="text-slate-400">#{p.id}</span>
+                    {p.path} <span className="text-[var(--muted-soft)]">#{p.id}</span>
                   </button>
                 ))}
               </div>
@@ -248,15 +260,7 @@ export function Repositories() {
               </Select>
             </Field>
 
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={form.useCustomModel}
-                onChange={(e) => set('useCustomModel', e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
-              />
-              使用仓库自定义模型
-            </label>
+            <Checkbox label="使用仓库自定义模型" checked={form.useCustomModel} onChange={(v) => set('useCustomModel', v)} />
 
             {form.useCustomModel && (
               <>
@@ -300,22 +304,19 @@ export function Repositories() {
               />
             </Field>
 
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              {([
-                ['autoReview', '开启 Webhook 自动审查'],
-                ['enableMrComment', '回写平台评论'],
-                ['enableDingtalk', '推送钉钉'],
-              ] as const).map(([k, label]) => (
-                <label key={k} className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={form[k]}
-                    onChange={(e) => set(k, e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
-                  />
-                  {label}
-                </label>
-              ))}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap gap-x-6 gap-y-2">
+                {([
+                  ['autoReview', '开启 Webhook 自动审查'],
+                  ['enableMrComment', '回写平台评论'],
+                  ['enableDingtalk', '推送钉钉'],
+                ] as const).map(([k, label]) => (
+                  <Checkbox key={k} label={label} checked={form[k]} onChange={(v) => set(k, v)} />
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-[var(--muted)]">
+                审查结论始终保留在会话页面；「回写平台评论」控制是否发布到 GitLab（MR / Commit 评论），「推送钉钉」控制审查完成后是否推送群通知。
+              </p>
             </div>
 
             {form.enableDingtalk && (
@@ -338,8 +339,8 @@ export function Repositories() {
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-              <Button variant="ghost" onClick={closeModal} type="button" disabled={saving}>
+            <div className="flex items-center justify-end gap-2 border-t border-[var(--hairline)] pt-4">
+              <Button variant="secondary" onClick={closeModal} type="button" disabled={saving}>
                 取消
               </Button>
               <Button onClick={submit} disabled={saving}>
@@ -355,32 +356,33 @@ export function Repositories() {
           <Card key={r.id} className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-medium text-slate-900">{r.path}</p>
+                <p className="truncate text-sm font-semibold text-[var(--ink)]">{r.path}</p>
                 <span
                   className={cn(
                     'rounded-full px-2 py-0.5 text-[11px] font-medium',
-                    r.autoReview ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500',
+                    r.autoReview ? 'bg-[var(--success)]/12 text-[var(--success)]' : 'bg-[var(--surface-strong)] text-[var(--muted)]',
                   )}
                 >
                   {r.autoReview ? '自动审查' : '手动'}
                 </span>
-                {r.enableMrComment && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">平台评论</span>}
-                {r.enableDingtalk && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">钉钉</span>}
+                {r.enableMrComment && <span className="rounded-full bg-[var(--brand-lavender)]/25 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">平台评论</span>}
+                {r.enableDingtalk && <span className="rounded-full bg-[var(--brand-ochre)]/25 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">钉钉</span>}
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-[var(--muted)]">
                 模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : r.defaultAIModel ? `${r.defaultAIModel.provider}/${r.defaultAIModel.modelId}` : '全局默认'} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
               </p>
             </div>
-            <Button variant="ghost" onClick={() => edit(r)}>
+            <Button variant="secondary" onClick={() => edit(r)}>
               编辑
             </Button>
-            <Button variant="danger" onClick={() => remove(r.id)}>
+            <Button variant="danger" onClick={() => remove(r)}>
               删除
             </Button>
           </Card>
         ))}
-        {repos.length === 0 && <p className="text-center text-xs text-slate-400">还没有配置仓库</p>}
+        {repos.length === 0 && <p className="text-center text-xs text-[var(--muted)]">还没有配置仓库</p>}
       </div>
+      {confirmElement}
     </PageShell>
   );
 }

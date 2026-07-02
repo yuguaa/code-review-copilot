@@ -24,6 +24,18 @@ export function loadGlobalDefaultModel(): Promise<GlobalDefaultModel> {
   });
 }
 
+/** 仅用全局默认模型解析配置（未绑定仓库的会话用）。 */
+export function resolveGlobalModelConfig(globalDefaultModel: GlobalDefaultModel): ModelConfig {
+  if (!globalDefaultModel) throw new Error('未配置全局默认模型，无法解析模型');
+  return {
+    provider: globalDefaultModel.provider,
+    modelId: globalDefaultModel.modelId,
+    apiKey: globalDefaultModel.apiKey,
+    apiBaseUrl: globalDefaultModel.apiBaseUrl,
+    maxSteps: globalDefaultModel.maxSteps,
+  };
+}
+
 export function resolveRepositoryModelConfig(
   repo: SessionWithRepository['repository'],
   globalDefaultModel: GlobalDefaultModel,

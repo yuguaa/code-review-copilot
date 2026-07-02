@@ -11,16 +11,18 @@ import {
   ChevronRight,
   ScanSearch,
   GitBranch,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
+import { Button, Modal, useConfirm } from './ui';
 import type { SessionListItem, RepositoryItem } from '../lib/types';
 
 const statusColor: Record<string, string> = {
-  running: 'bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.12)]',
-  completed: 'bg-emerald-500',
-  failed: 'bg-rose-500',
+  running: 'bg-[var(--warning)]',
+  completed: 'bg-[var(--success)]',
+  failed: 'bg-[var(--brand-coral)]',
 };
 
 const statusLabel: Record<string, string> = {
@@ -79,15 +81,117 @@ function groupByRepo(sessions: SessionListItem[]): RepoGroup[] {
   return [...groups.values()];
 }
 
+/** 新建对话弹层：明确选择仓库，而不是默默用第一个。 */
+function NewChatModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [repos, setRepos] = useState<RepositoryItem[] | null>(null);
+  const [selected, setSelected] = useState<string>('');
+  const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!open) return;
+    setRepos(null);
+    api<{ repositories: RepositoryItem[] }>('/api/repositories')
+      .then((d) => {
+        setRepos(d.repositories);
+        setSelected(d.repositories[0]?.id ?? '');
+      })
+      .catch((e) => {
+        toast.error(e instanceof Error ? e.message : '仓库列表加载失败');
+        setRepos([]);
+      });
+  }, [open]);
+
+  const create = () => {
+    if (!selected) return;
+    setCreating(true);
+    api<{ session: { id: string } }>('/api/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ repositoryId: selected }),
+    })
+      .then(({ session }) => {
+        onClose();
+        navigate(`/c/${session.id}`);
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '创建失败'))
+      .finally(() => setCreating(false));
+  };
+
+  return (
+    <Modal open={open} title="新建对话" onClose={onClose} maxWidth="max-w-md">
+      {repos == null ? (
+        <p className="py-4 text-center text-sm text-[var(--muted)]">加载仓库中…</p>
+      ) : repos.length === 0 ? (
+        <div className="space-y-3 py-2 text-center">
+          <p className="text-sm text-[var(--body-strong)]">还没有可用仓库</p>
+          <p className="text-xs text-[var(--muted)]">对话需要挂在一个仓库下，Agent 才能读取它的代码与记忆。</p>
+          <Link to="/repositories" onClick={onClose} className="inline-block text-sm font-semibold text-[var(--brand-coral)] hover:underline">
+            去仓库配置 →
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs text-[var(--muted)]">选择对话关联的仓库，Agent 将在该仓库的工作区内回答问题。</p>
+          <div className="max-h-72 space-y-1.5 overflow-y-auto">
+            {repos.map((r) => (
+              <label
+                key={r.id}
+                className={cn(
+                  'flex cursor-pointer items-center gap-2.5 rounded-[var(--r-md)] border px-3 py-2.5 text-sm transition-colors',
+                  selected === r.id
+                    ? 'border-[var(--ink)] bg-[var(--accent-soft)] text-[var(--ink)]'
+                    : 'border-[var(--hairline)] text-[var(--body)] hover:bg-[var(--surface-card)]',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="new-chat-repo"
+                  checked={selected === r.id}
+                  onChange={() => setSelected(r.id)}
+                  className="accent-[var(--brand-pink)]"
+                />
+                <FolderGit2 size={14} className="shrink-0 text-[var(--muted)]" />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{r.name}</span>
+                  <span className="block truncate text-xs text-[var(--muted)]">{r.path}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose} type="button" disabled={creating}>
+              取消
+            </Button>
+            <Button onClick={create} disabled={creating || !selected}>
+              {creating ? '创建中…' : '开始对话'}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [newChatOpen, setNewChatOpen] = useState(false);
   const navigate = useNavigate();
   const { sessionId } = useParams();
+  const { confirm, element: confirmElement } = useConfirm();
 
-  const load = useCallback(async () => {
-    const data = await api<{ sessions: SessionListItem[] }>('/api/sessions').catch(() => ({ sessions: [] }));
-    setSessions(data.sessions);
+  const load = useCallback(() => {
+    return api<{ sessions: SessionListItem[] }>('/api/sessions')
+      .then((data) => {
+        setSessions(data.sessions);
+        setLoadError(null);
+      })
+      .catch((e) => {
+        setLoadError(e instanceof Error ? e.message : '加载失败');
+      })
+      .finally(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -111,62 +215,68 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
       return next;
     });
 
-  const newChat = async () => {
-    const repos = await api<{ repositories: RepositoryItem[] }>('/api/repositories').catch(() => ({ repositories: [] }));
-    if (repos.repositories.length === 0) {
-      toast.error('请先在「仓库配置」添加一个仓库（含模型配置）');
-      return;
-    }
-    const { session } = await api<{ session: { id: string } }>('/api/sessions', {
-      method: 'POST',
-      body: JSON.stringify({ repositoryId: repos.repositories[0].id }),
-    });
-    await load();
-    navigate(`/c/${session.id}`);
-  };
-
-  const logout = async () => {
-    await api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-    window.location.href = '/login';
-  };
-
-  const removeSession = (id: string) => {
-    if (!window.confirm('确认删除这个会话吗？删除后无法在侧栏恢复。')) return;
-    api(`/api/sessions/${id}`, { method: 'DELETE' })
-      .then(load)
+  const logout = () => {
+    api('/api/auth/logout', { method: 'POST' })
+      .catch(() => undefined)
       .then(() => {
-        if (id === sessionId) navigate('/');
-        toast.success('已删除会话');
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : '删除失败'));
+        window.location.href = '/login';
+      });
+  };
+
+  const removeSession = (s: SessionListItem) => {
+    void confirm({
+      title: '删除会话',
+      description: `「${sessionLabel(s)}」及其全部消息将被删除，无法恢复。`,
+    }).then((ok) => {
+      if (!ok) return;
+      api(`/api/sessions/${s.id}`, { method: 'DELETE' })
+        .then(load)
+        .then(() => {
+          if (s.id === sessionId) navigate('/');
+          toast.success('已删除会话');
+        })
+        .catch((e) => toast.error(e instanceof Error ? e.message : '删除失败'));
+    });
   };
 
   return (
-    <aside className="glass-panel relative z-20 flex h-full w-80 shrink-0 flex-col border-r border-white/70 max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
-      <div className="border-b border-white/70 px-4 py-4 max-md:py-3">
+    <aside className="z-20 flex h-full w-80 shrink-0 flex-col border-r border-[var(--hairline)] bg-[var(--surface-soft)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
+      <div className="px-4 py-4">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="scan-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-[0_12px_28px_rgba(37,99,235,0.24)]">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--brand-pink)] text-white">
               <ScanSearch size={16} />
             </span>
             <div className="min-w-0">
-              <span className="block truncate text-sm font-semibold tracking-[0.01em] text-slate-950">代码审查 Agent</span>
-              <span className="block truncate text-[11px] text-slate-500">Review command center</span>
+              <span className="font-display block truncate text-[15px] text-[var(--ink)]">代码审查 Agent</span>
+              <span className="block truncate text-[11px] text-[var(--muted)]">审查会话工作台</span>
             </div>
           </div>
           <button
-            onClick={newChat}
+            onClick={() => setNewChatOpen(true)}
             title="新对话"
-            className="interactive-lift flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/80 bg-white/78 text-slate-600 shadow-[var(--shadow-control)] hover:bg-[var(--cyan-soft)] hover:text-cyan-700 active:scale-95"
+            aria-label="新对话"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95"
           >
             <Plus size={17} />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 space-y-1 overflow-y-auto px-2.5 py-3 max-md:max-h-56">
-        {sessions.length === 0 && (
-          <p className="px-3 py-10 text-center text-xs leading-relaxed text-slate-400">
+      <div className="flex-1 space-y-1 overflow-y-auto px-2.5 py-2 max-md:max-h-56">
+        {loadError && (
+          <div className="mx-1 space-y-2 rounded-[var(--r-md)] border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/8 px-3 py-3 text-center">
+            <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-coral)]">
+              <AlertCircle size={13} /> 会话列表加载失败
+            </p>
+            <p className="break-words text-[11px] text-[var(--muted)]">{loadError}</p>
+            <Button variant="secondary" className="h-7 px-3 py-0 text-xs" onClick={() => void load()}>
+              重试
+            </Button>
+          </div>
+        )}
+        {!loadError && loaded && sessions.length === 0 && (
+          <p className="px-3 py-10 text-center text-xs leading-relaxed text-[var(--muted-soft)]">
             暂无会话。
             <br />
             点击右上角 + 新建对话，
@@ -179,67 +289,59 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
           const isCollapsed = collapsed.has(group.key);
           const hasActive = group.sessions.some((s) => s.id === sessionId);
           return (
-            <div key={group.key} className="surface-enter select-none rounded-xl">
+            <div key={group.key} className="select-none">
               <button
                 onClick={() => toggle(group.key)}
                 title={group.path ?? group.name}
-                className="interactive-lift group/header flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-white/74 hover:shadow-[var(--shadow-sm)]"
+                className="flex w-full items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-card)]"
               >
                 <ChevronRight
                   size={14}
-                  className={cn('shrink-0 text-slate-400 transition-transform duration-200', !isCollapsed && 'rotate-90')}
+                  className={cn('shrink-0 text-[var(--muted-soft)] transition-transform duration-200', !isCollapsed && 'rotate-90')}
                 />
-                <FolderGit2 size={14} className={cn('shrink-0', hasActive ? 'text-indigo-600' : 'text-slate-400')} />
-                <span className={cn('truncate text-xs font-semibold', hasActive ? 'text-indigo-700' : 'text-slate-800')}>
+                <FolderGit2 size={14} className={cn('shrink-0', hasActive ? 'text-[var(--brand-pink)]' : 'text-[var(--muted)]')} />
+                <span className={cn('truncate text-xs font-semibold', hasActive ? 'text-[var(--ink)]' : 'text-[var(--body-strong)]')}>
                   {group.name}
                 </span>
-                <span className="ml-auto shrink-0 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-500 ring-1 ring-white/80">
+                <span className="ml-auto shrink-0 rounded-full bg-[var(--surface-strong)] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-[var(--muted)]">
                   {group.sessions.length}
                 </span>
               </button>
 
               {!isCollapsed && (
-                <div className="mb-1 ml-[15px] space-y-1 border-l border-cyan-200/70 pl-1.5">
+                <div className="mb-1 ml-[19px] space-y-0.5 border-l border-[var(--hairline)] pl-2">
                   {group.sessions.map((s) => {
                     const active = s.id === sessionId;
                     return (
                       <div
                         key={s.id}
                         className={cn(
-                          'group relative rounded-lg transition-[background-color,box-shadow]',
-                          active
-                            ? 'bg-white/88 shadow-[var(--shadow-glow)] ring-1 ring-cyan-100'
-                            : 'hover:bg-white/76 hover:shadow-[var(--shadow-sm)]',
+                          'group relative rounded-[var(--r-md)] transition-colors',
+                          active ? 'bg-white shadow-[var(--shadow-sm)]' : 'hover:bg-[var(--surface-card)]',
                         )}
                       >
                         {active && (
-                          <span className="absolute -left-[7px] top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-full bg-[linear-gradient(180deg,var(--cyan),var(--accent))] shadow-[0_0_18px_rgba(14,165,233,0.46)]" />
+                          <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-[var(--brand-pink)]" />
                         )}
                         <button
                           onClick={() => navigate(`/c/${s.id}`)}
-                          className="interactive-lift grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2.5 py-2 pr-8 text-left"
+                          className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2 pr-8 text-left"
                         >
                           {s.kind === 'review' ? (
-                            <GitPullRequest
-                              size={13}
-                              className={cn('shrink-0', active ? 'text-cyan-600' : 'text-slate-400')}
-                            />
+                            <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--brand-pink)]' : 'text-[var(--muted)]')} />
                           ) : (
-                            <MessageSquare
-                              size={13}
-                              className={cn('shrink-0', active ? 'text-cyan-600' : 'text-slate-400')}
-                            />
+                            <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--brand-pink)]' : 'text-[var(--muted)]')} />
                           )}
                           <span className="min-w-0">
                             <span
                               className={cn(
                                 'block truncate text-xs',
-                                active ? 'font-semibold text-slate-950' : 'font-medium text-slate-800',
+                                active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]',
                               )}
                             >
                               {sessionLabel(s)}
                             </span>
-                            <span className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-[10px] text-slate-500">
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-[10px] text-[var(--muted)]">
                               {s.sourceBranch || s.targetBranch ? <GitBranch size={10} className="shrink-0" /> : null}
                               <span className="truncate">{sessionMeta(s)}</span>
                             </span>
@@ -248,8 +350,8 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                             title={statusLabel[s.status] ?? s.status}
                             className={cn(
                               'ml-auto h-1.5 w-1.5 shrink-0 rounded-full',
-                              statusColor[s.status] ?? 'bg-slate-300',
-                              s.status === 'running' && 'thinking-pulse',
+                              statusColor[s.status] ?? 'bg-[var(--muted-soft)]',
+                              s.status === 'running' && 'animate-pulse',
                             )}
                           />
                         </button>
@@ -259,9 +361,9 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                           title="删除会话"
                           onClick={(e) => {
                             e.stopPropagation();
-                            removeSession(s.id);
+                            removeSession(s);
                           }}
-                          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 opacity-0 transition-[opacity,background-color,color,transform] hover:bg-rose-50 hover:text-rose-600 active:scale-95 group-focus-within:opacity-100 group-hover:opacity-100"
+                          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[var(--r-sm)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] group-focus-within:opacity-100 group-hover:opacity-100"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -275,26 +377,29 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
         })}
       </div>
 
-      <div className="space-y-0.5 border-t border-white/70 px-2.5 py-3 text-sm max-md:grid max-md:grid-cols-3 max-md:gap-1 max-md:space-y-0">
+      <div className="space-y-0.5 border-t border-[var(--hairline)] px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-3 max-md:gap-1 max-md:space-y-0">
         <Link
           to="/repositories"
-          className="interactive-lift flex items-center gap-2.5 rounded-xl px-3 py-2 text-slate-700 hover:bg-[var(--cyan-soft)] hover:text-cyan-700 active:scale-[0.98]"
+          className="flex items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
         >
           <FolderGit2 size={15} /> 仓库配置
         </Link>
         <Link
           to="/settings"
-          className="interactive-lift flex items-center gap-2.5 rounded-xl px-3 py-2 text-slate-700 hover:bg-[var(--cyan-soft)] hover:text-cyan-700 active:scale-[0.98]"
+          className="flex items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
         >
           <SettingsIcon size={15} /> 设置
         </Link>
         <button
           onClick={logout}
-          className="interactive-lift flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-slate-700 hover:bg-rose-50 hover:text-rose-700 active:scale-[0.98]"
+          className="flex w-full items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-colors hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)]"
         >
           <LogOut size={15} /> 退出登录
         </button>
       </div>
+
+      <NewChatModal open={newChatOpen} onClose={() => setNewChatOpen(false)} />
+      {confirmElement}
     </aside>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import { Button, Card, Field, Input, PageShell, Select } from '../components/ui';
+import { Button, Card, Checkbox, Field, FeatureCard, Input, PageShell, Select, SectionLabel, useConfirm } from '../components/ui';
 
 type Account = {
   id: string;
@@ -65,24 +65,26 @@ export function Settings() {
   const [saving, setSaving] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [savingNotification, setSavingNotification] = useState(false);
+  const { confirm, element: confirmElement } = useConfirm();
 
-  const load = useCallback(async () => {
-    const [gitlab, ai, overview, notice] = await Promise.all([
-      api<{ accounts: Account[] }>('/api/settings/gitlab').catch(() => ({ accounts: [] })),
-      api<{ models: AIModel[] }>('/api/settings/models').catch(() => ({ models: [] })),
-      api<{ stats: Stats }>('/api/settings/stats').catch(() => ({ stats: null })),
-      api<{ notification: NotificationSetting }>('/api/settings/notification').catch(() => ({
-        notification: { dingtalkEnabled: false, dingtalkWebhookUrl: null, hasDingtalkSecret: false },
-      })),
-    ]);
-    setAccounts(gitlab.accounts);
-    setModels(ai.models);
-    setStats(overview.stats);
-    setNotification((current) => ({
-      dingtalkEnabled: notice.notification.dingtalkEnabled,
-      dingtalkWebhookUrl: notice.notification.dingtalkWebhookUrl ?? '',
-      dingtalkSecret: current.dingtalkSecret,
-    }));
+  const load = useCallback(() => {
+    return Promise.all([
+      api<{ accounts: Account[] }>('/api/settings/gitlab'),
+      api<{ models: AIModel[] }>('/api/settings/models'),
+      api<{ stats: Stats | null }>('/api/settings/stats'),
+      api<{ notification: NotificationSetting }>('/api/settings/notification'),
+    ])
+      .then(([gitlab, ai, overview, notice]) => {
+        setAccounts(gitlab.accounts);
+        setModels(ai.models);
+        setStats(overview.stats);
+        setNotification((current) => ({
+          dingtalkEnabled: notice.notification.dingtalkEnabled,
+          dingtalkWebhookUrl: notice.notification.dingtalkWebhookUrl ?? '',
+          dingtalkSecret: current.dingtalkSecret,
+        }));
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '设置加载失败'));
   }, []);
   useEffect(() => {
     void load();
@@ -116,9 +118,17 @@ export function Settings() {
     d.ok ? toast.success('连接正常') : toast.error('连接失败，请检查地址与令牌');
   };
 
-  const remove = async (id: string) => {
-    await api(`/api/settings/gitlab/${id}`, { method: 'DELETE' });
-    await load();
+  const remove = (account: Account) => {
+    void confirm({
+      title: '删除 GitLab 账号',
+      description: `「${account.url}」的凭证将被删除，关联仓库的 Webhook 验签与 API 调用会随之失效。`,
+    }).then((ok) => {
+      if (!ok) return;
+      api(`/api/settings/gitlab/${account.id}`, { method: 'DELETE' })
+        .then(load)
+        .then(() => toast.success('已删除账号'))
+        .catch((e) => toast.error(e instanceof Error ? e.message : '删除失败'));
+    });
   };
 
   const addModel = () => {
@@ -145,8 +155,17 @@ export function Settings() {
       .then(() => toast.success('已设为默认模型'));
   };
 
-  const removeModel = (id: string) => {
-    api(`/api/settings/models/${id}`, { method: 'DELETE' }).then(load);
+  const removeModel = (model: AIModel) => {
+    void confirm({
+      title: '删除全局模型',
+      description: `「${model.provider}/${model.modelId}」将被删除，使用它的仓库会回退到默认模型。`,
+    }).then((ok) => {
+      if (!ok) return;
+      api(`/api/settings/models/${model.id}`, { method: 'DELETE' })
+        .then(load)
+        .then(() => toast.success('已删除模型'))
+        .catch((e) => toast.error(e instanceof Error ? e.message : '删除失败'));
+    });
   };
 
   const saveNotification = () => {
@@ -168,32 +187,28 @@ export function Settings() {
     <PageShell title="设置">
       {stats && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ['仓库', `${stats.activeRepositoryCount}/${stats.repositoryCount}`, '启用 / 总数'],
-            ['模型', String(stats.modelCount), '可用全局模型'],
-            ['会话', String(stats.sessionCount), `审查 ${stats.reviewSessionCount} · 对话 ${stats.chatSessionCount}`],
-            ['消息', String(stats.messageCount), stats.latestSessionAt ? `最近 ${new Date(stats.latestSessionAt).toLocaleString()}` : '暂无会话'],
-          ].map(([label, value, hint]) => (
-            <Card key={label} className="space-y-1 p-4">
-              <p className="text-xs font-medium text-slate-500">{label}</p>
-              <p className="font-mono text-2xl font-semibold tabular-nums text-slate-950">{value}</p>
-              <p className="truncate text-[11px] text-slate-400">{hint}</p>
-            </Card>
+          {([
+            ['仓库', `${stats.activeRepositoryCount}/${stats.repositoryCount}`, '启用 / 总数', 'pink'],
+            ['模型', String(stats.modelCount), '可用全局模型', 'lavender'],
+            ['会话', String(stats.sessionCount), `审查 ${stats.reviewSessionCount} · 对话 ${stats.chatSessionCount}`, 'peach'],
+            ['消息', String(stats.messageCount), stats.latestSessionAt ? `最近 ${new Date(stats.latestSessionAt).toLocaleString()}` : '暂无会话', 'ochre'],
+          ] as const).map(([label, value, hint, tone]) => (
+            <FeatureCard key={label} tone={tone} className="space-y-1 p-5">
+              <p className="text-xs font-semibold opacity-70">{label}</p>
+              <p className="font-display text-3xl tabular-nums">{value}</p>
+              <p className="truncate text-[11px] opacity-70">{hint}</p>
+            </FeatureCard>
           ))}
         </div>
       )}
 
       <Card className="space-y-4">
-        <h2 className="text-sm font-semibold">全局钉钉配置</h2>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={notification.dingtalkEnabled}
-            onChange={(e) => setNotification((current) => ({ ...current, dingtalkEnabled: e.target.checked }))}
-            className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
-          />
-          开启全局钉钉推送
-        </label>
+        <h2 className="font-display text-lg text-[var(--ink)]">全局钉钉配置</h2>
+        <Checkbox
+          label="开启全局钉钉推送"
+          checked={notification.dingtalkEnabled}
+          onChange={(v) => setNotification((current) => ({ ...current, dingtalkEnabled: v }))}
+        />
         <Field label="钉钉机器人 Webhook">
           <Input
             value={notification.dingtalkWebhookUrl}
@@ -215,7 +230,7 @@ export function Settings() {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="text-sm font-semibold">全局模型配置</h2>
+        <h2 className="font-display text-lg text-[var(--ink)]">全局模型配置</h2>
         <div className="grid grid-cols-3 gap-3">
           <Field label="模型 Provider">
             <Select value={modelForm.provider} onChange={(e) => setModel('provider', e.target.value)}>
@@ -239,47 +254,54 @@ export function Settings() {
             <Input value={modelForm.apiBaseUrl} onChange={(e) => setModel('apiBaseUrl', e.target.value)} placeholder="https://.../v1" />
           </Field>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={modelForm.isDefault}
-            onChange={(e) => setModel('isDefault', e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 bg-white accent-indigo-600"
-          />
-          设为默认模型
-        </label>
+        <Checkbox label="设为默认模型" checked={modelForm.isDefault} onChange={(v) => setModel('isDefault', v)} />
         <Button onClick={addModel} disabled={savingModel}>
           {savingModel ? '保存中…' : '添加模型'}
         </Button>
       </Card>
 
       <div className="space-y-3">
-        {models.map((m) => (
-          <Card key={m.id} className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-slate-900">
-                {m.provider}/{m.modelId}
-                {m.isDefault && <span className="ml-2 text-[11px] text-emerald-600">默认</span>}
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Key {m.hasApiKey ? '已配置' : '缺失'} · 最大步数 {m.maxSteps} · {m.isActive ? '启用' : '停用'}
-              </p>
-            </div>
-            {!m.isDefault && (
-              <Button variant="ghost" onClick={() => setDefaultModel(m.id)}>
+        {models.map((m) =>
+          m.isDefault ? (
+            // 默认模型：teal pricing-tier 高亮，teal 底色即「默认」信号
+            <FeatureCard key={m.id} tone="teal" className="flex items-center gap-3 p-5">
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                  {m.provider}/{m.modelId}
+                  <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px]">默认</span>
+                </p>
+                <p className="text-[11px] opacity-70">
+                  Key {m.hasApiKey ? '已配置' : '缺失'} · 最大步数 {m.maxSteps} · {m.isActive ? '启用' : '停用'}
+                </p>
+              </div>
+              <Button variant="danger" onClick={() => removeModel(m)}>
+                删除
+              </Button>
+            </FeatureCard>
+          ) : (
+            <Card key={m.id} className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-[var(--ink)]">
+                  {m.provider}/{m.modelId}
+                </p>
+                <p className="text-[11px] text-[var(--muted)]">
+                  Key {m.hasApiKey ? '已配置' : '缺失'} · 最大步数 {m.maxSteps} · {m.isActive ? '启用' : '停用'}
+                </p>
+              </div>
+              <Button variant="secondary" onClick={() => setDefaultModel(m.id)}>
                 设默认
               </Button>
-            )}
-            <Button variant="danger" onClick={() => removeModel(m.id)}>
-              删除
-            </Button>
-          </Card>
-        ))}
-        {models.length === 0 && <p className="text-center text-xs text-slate-400">还没有全局模型配置</p>}
+              <Button variant="danger" onClick={() => removeModel(m)}>
+                删除
+              </Button>
+            </Card>
+          ),
+        )}
+        {models.length === 0 && <p className="text-center text-xs text-[var(--muted)]">还没有全局模型配置</p>}
       </div>
 
       <Card className="space-y-4">
-        <h2 className="text-sm font-semibold">添加 GitLab 账号</h2>
+        <h2 className="font-display text-lg text-[var(--ink)]">添加 GitLab 账号</h2>
         <Field label="实例地址">
           <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://gitlab.com" />
         </Field>
@@ -298,21 +320,22 @@ export function Settings() {
         {accounts.map((a) => (
           <Card key={a.id} className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-slate-900">{a.url}</p>
-              <p className="text-[11px] text-slate-500">
+              <p className="truncate text-sm text-[var(--ink)]">{a.url}</p>
+              <p className="text-[11px] text-[var(--muted)]">
                 令牌 {a.hasAccessToken ? '已配置' : '缺失'} · Webhook 密钥 {a.hasWebhookSecret ? '已配置' : '未配置'}
               </p>
             </div>
-            <Button variant="ghost" onClick={() => test(a.id)}>
+            <Button variant="secondary" onClick={() => test(a.id)}>
               测试连接
             </Button>
-            <Button variant="danger" onClick={() => remove(a.id)}>
+            <Button variant="danger" onClick={() => remove(a)}>
               删除
             </Button>
           </Card>
         ))}
-        {accounts.length === 0 && <p className="text-center text-xs text-slate-400">还没有 GitLab 账号</p>}
+        {accounts.length === 0 && <p className="text-center text-xs text-[var(--muted)]">还没有 GitLab 账号</p>}
       </div>
+      {confirmElement}
     </PageShell>
   );
 }

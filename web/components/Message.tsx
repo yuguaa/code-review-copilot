@@ -1,68 +1,136 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { UIMessage } from 'ai';
-import { ChevronRight, Wrench, User, Bot, Sparkles } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { ChevronRight, Loader2, Webhook, Brain, CircleCheck, CircleX, CircleDashed } from 'lucide-react';
 import { cn } from '../lib/cn';
 
 const TOOL_LABEL: Record<string, string> = {
-  list_changed_files: '列出变更文件',
-  fetch_diff: '获取 diff',
+  bash: '执行命令',
   read_file: '读取文件',
-  post_review_comment: '发布审查评论',
-  post_inline_comment: '发布行级评论',
-  notify_dingtalk: '推送钉钉通知',
+  git_diff: '查看变更 diff',
   read_memory: '读取项目记忆',
   write_memory: '更新项目记忆',
+  post_review_comment: '发布审查评论',
+  post_inline_comment: '发布行级评论',
   delegate_security: '委派安全审查',
   delegate_architecture: '委派架构审查',
   delegate_performance: '委派性能审查',
 };
 
-const EVENT_LABEL: Record<string, string> = {
-  'step-start': '模型开始生成',
-  'step-finish': '模型完成一步',
-  'source-url': '引用链接',
-  'source-document': '引用文档',
-  file: '生成文件',
-};
+type Part = UIMessage['parts'][number];
 
-function ToolPart({ part }: { part: Record<string, unknown> }) {
-  const [open, setOpen] = useState(false);
+/** 消息 parts 分段：文本独立成段，工具调用 / 推理等过程性 parts 聚合成一个折叠组。 */
+type Segment = { kind: 'text'; text: string } | { kind: 'process'; parts: Part[] };
+
+function segmentParts(parts: Part[]): Segment[] {
+  const segments: Segment[] = [];
+  for (const part of parts) {
+    if ((part.type as string) === 'step-start' || (part.type as string) === 'step-finish') continue;
+    if (part.type === 'text') {
+      if (part.text.trim()) segments.push({ kind: 'text', text: part.text });
+      continue;
+    }
+    const last = segments[segments.length - 1];
+    if (last?.kind === 'process') last.parts.push(part);
+    else segments.push({ kind: 'process', parts: [part] });
+  }
+  return segments;
+}
+
+function toolName(part: Record<string, unknown>): string {
   const type = String(part.type ?? '');
-  const name =
-    type === 'dynamic-tool' ? String(part.toolName ?? '') : type.replace(/^tool-/, '');
-  const state = String(part.state ?? '');
+  const raw = type === 'dynamic-tool' ? String(part.toolName ?? '') : type.replace(/^tool-/, '');
+  return TOOL_LABEL[raw] ?? raw;
+}
+
+function isTool(part: Part): boolean {
+  return part.type === 'dynamic-tool' || part.type.startsWith('tool-');
+}
+
+/** 单个过程步骤：一行状态 + 名称，点击展开入参出参。 */
+function ProcessStep({ part }: { part: Part }) {
+  const [open, setOpen] = useState(false);
+  const record = part as unknown as Record<string, unknown>;
+
+  if (part.type === 'reasoning') {
+    const text = String(record.text ?? '');
+    if (!text.trim()) return null;
+    return (
+      <div className="px-3 py-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-2 text-left text-[var(--muted)] transition-colors hover:text-[var(--body-strong)]"
+        >
+          <Brain size={13} className="shrink-0 text-[var(--brand-lavender)]" />
+          <span className="truncate">思考{open ? '' : `：${text.slice(0, 60)}`}</span>
+          <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
+        </button>
+        {open && <p className="mt-1.5 whitespace-pre-wrap pl-[21px] leading-relaxed text-[var(--muted)]">{text}</p>}
+      </div>
+    );
+  }
+
+  if (!isTool(part)) {
+    return (
+      <div className="px-3 py-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-2 text-left text-[var(--muted)] transition-colors hover:text-[var(--body-strong)]"
+        >
+          <CircleDashed size={13} className="shrink-0 text-[var(--muted-soft)]" />
+          <span className="truncate">{part.type}</span>
+          <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
+        </button>
+        {open && (
+          <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words pl-[21px] text-[11px] text-[var(--muted)]">
+            {JSON.stringify(part, null, 2)}
+          </pre>
+        )}
+      </div>
+    );
+  }
+
+  const state = String(record.state ?? '');
   const done = state === 'output-available';
   const errored = state === 'output-error';
+  const running = !done && !errored;
+  const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
 
   return (
-    <div className="my-2 overflow-hidden rounded-xl bg-white/86 text-xs shadow-[var(--shadow-sm)] ring-1 ring-slate-200/70 backdrop-blur">
-      <button onClick={() => setOpen((v) => !v)} className="interactive-lift flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-cyan-50/70">
-        <span
+    <div className="px-3 py-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 text-left transition-colors hover:text-[var(--ink)]"
+      >
+        <StatusIcon
+          size={13}
           className={cn(
-            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
-            errored ? 'bg-rose-50 text-rose-600' : done ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600 ring-1 ring-amber-100',
+            'shrink-0',
+            errored ? 'text-[var(--error)]' : done ? 'text-[var(--success)]' : 'animate-spin text-[var(--warning)]',
           )}
-        >
-          <Wrench size={13} />
-        </span>
-        <span className="font-semibold text-slate-800">{TOOL_LABEL[name] ?? name}</span>
-        <span className="text-slate-500">{errored ? '失败' : done ? '完成' : '执行中'}</span>
-        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform duration-200', open && 'rotate-90')} />
+        />
+        <span className={cn('truncate font-medium', errored ? 'text-[var(--error)]' : 'text-[var(--body-strong)]')}>{toolName(record)}</span>
+        {running && <span className="shrink-0 text-[var(--muted-soft)]">执行中</span>}
+        <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="animate-fade-in space-y-2 border-t border-slate-100 bg-slate-50/80 px-3 py-2">
-          {part.input != null && (
-            <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-600">
-              入参：{JSON.stringify(part.input, null, 2)}
+        <div className="mt-1.5 space-y-1.5 pl-[21px]">
+          {record.input != null && (
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-white px-2.5 py-2 text-[11px] leading-relaxed text-[var(--body)] ring-1 ring-[var(--hairline)]">
+              {JSON.stringify(record.input, null, 2)}
             </pre>
           )}
-          {part.output != null && (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-700">
-              {typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2)}
+          {record.output != null && (
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-white px-2.5 py-2 text-[11px] leading-relaxed text-[var(--body-strong)] ring-1 ring-[var(--hairline)]">
+              {typeof record.output === 'string' ? record.output : JSON.stringify(record.output, null, 2)}
             </pre>
           )}
-          {errored && part.errorText != null && (
-            <pre className="whitespace-pre-wrap text-[11px] text-rose-400">{String(part.errorText)}</pre>
+          {errored && record.errorText != null && (
+            <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>
           )}
         </div>
       )}
@@ -70,74 +138,108 @@ function ToolPart({ part }: { part: Record<string, unknown> }) {
   );
 }
 
-function EventPart({ part }: { part: Record<string, unknown> }) {
+/** 过程折叠组：默认收起，仅显示进度摘要；执行中时在头部实时显示当前步骤。 */
+function ProcessGroup({ parts }: { parts: Part[] }) {
   const [open, setOpen] = useState(false);
-  const type = String(part.type ?? 'unknown');
-  const label = EVENT_LABEL[type] ?? `模型事件：${type}`;
+  const tools = parts.filter(isTool) as unknown as Record<string, unknown>[];
+  const runningTool = tools.find((t) => {
+    const state = String(t.state ?? '');
+    return state !== 'output-available' && state !== 'output-error';
+  });
+  const erroredCount = tools.filter((t) => String(t.state ?? '') === 'output-error').length;
+
   return (
-    <div className="my-2 overflow-hidden rounded-xl bg-white/86 text-xs shadow-[var(--shadow-sm)] ring-1 ring-slate-200/70 backdrop-blur">
+    <div className="my-2 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-card)] text-xs">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="interactive-lift flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-cyan-50/70"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-strong)]"
       >
-        <span className="scan-accent flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--accent-soft)] text-[var(--accent)]">
-          <Sparkles size={13} />
-        </span>
-        <span className="font-semibold">{label}</span>
-        <ChevronRight size={13} className={cn('ml-auto text-slate-400 transition-transform duration-200', open && 'rotate-90')} />
+        <ChevronRight size={13} className={cn('shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
+        <span className="font-semibold text-[var(--body-strong)]">执行过程</span>
+        <span className="text-[var(--muted)]">{parts.length} 步</span>
+        {erroredCount > 0 && <span className="text-[var(--error)]">{erroredCount} 步失败</span>}
+        {runningTool && (
+          <span className="ml-auto inline-flex min-w-0 items-center gap-1.5 text-[var(--warning)]">
+            <Loader2 size={12} className="shrink-0 animate-spin" />
+            <span className="truncate">{toolName(runningTool)}</span>
+          </span>
+        )}
       </button>
       {open && (
-        <pre className="animate-fade-in max-h-64 overflow-auto border-t border-slate-100 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-          {JSON.stringify(part, null, 2)}
+        <div className="animate-fade-in divide-y divide-[var(--hairline)] border-t border-[var(--hairline)] bg-[var(--canvas)]">
+          {parts.map((part, i) => (
+            <ProcessStep key={i} part={part} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function messageText(message: UIMessage): string {
+  return message.parts
+    .map((p) => (p.type === 'text' ? p.text : ''))
+    .join('')
+    .trim();
+}
+
+/** Webhook 触发的首条指令：折叠为一张紧凑的任务卡。 */
+function TriggerCard({ message }: { message: UIMessage }) {
+  const [open, setOpen] = useState(false);
+  const text = messageText(message);
+  return (
+    <div className="my-2 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-card)] text-xs">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-strong)]"
+      >
+        <Webhook size={13} className="shrink-0 text-[var(--brand-pink)]" />
+        <span className="font-semibold text-[var(--body-strong)]">Webhook 触发审查</span>
+        <span className="truncate text-[var(--muted)]">{open ? '' : text.split('\n')[0]}</span>
+        <ChevronRight size={13} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <pre className="animate-fade-in whitespace-pre-wrap break-words border-t border-[var(--hairline)] bg-[var(--canvas)] px-3 py-2.5 leading-relaxed text-[var(--body)]">
+          {text}
         </pre>
       )}
     </div>
   );
 }
 
-export function Message({ message }: { message: UIMessage }) {
-  const isUser = message.role === 'user';
+function Markdown({ children }: { children: string }) {
   return (
-    <div className={cn('surface-enter flex gap-3 py-3.5', isUser ? 'justify-end pl-16' : 'justify-start pr-16')}>
-      <div
-        className={cn(
-          'mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-[var(--shadow-control)]',
-          isUser
-            ? 'order-2 bg-[var(--accent)] text-white shadow-[0_10px_22px_rgba(37,99,235,0.2)]'
-            : 'scan-accent bg-white/90 text-[var(--accent)] ring-1 ring-slate-200/70',
-        )}
-      >
-        {isUser ? <User size={15} /> : <Bot size={15} />}
+    <div className="markdown-body">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
+    </div>
+  );
+}
+
+export function Message({ message, isTrigger }: { message: UIMessage; isTrigger?: boolean }) {
+  if (isTrigger) return <TriggerCard message={message} />;
+
+  if (message.role === 'user') {
+    const text = messageText(message);
+    return (
+      <div className="flex justify-end py-2 pl-14">
+        <div className="max-w-full whitespace-pre-wrap break-words rounded-[var(--r-lg)] rounded-br-md bg-[var(--accent-soft)] px-4 py-2.5 text-sm leading-relaxed text-[var(--ink)]">
+          {text}
+        </div>
       </div>
-      <div className={cn('flex min-w-0 max-w-[76%] flex-col space-y-1', isUser ? 'items-end text-right' : 'items-start')}>
-        {message.parts.map((part, i) => {
-          if (part.type === 'text') {
-            return (
-              <div
-                key={i}
-                className={cn(
-                  'message-surface inline-block whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed backdrop-blur',
-                  isUser
-                    ? 'rounded-2xl rounded-tr-md bg-[var(--accent)] text-white shadow-[0_14px_28px_rgba(37,99,235,0.18)]'
-                    : 'rounded-2xl rounded-tl-md bg-white/88 text-slate-800 shadow-[var(--shadow-sm)] ring-1 ring-slate-200/70',
-                )}
-              >
-                {part.text}
-              </div>
-            );
-          }
-          if (part.type === 'reasoning') {
-            return (
-              <div key={i} className="rounded-xl bg-[var(--accent-soft)] px-3 py-2 text-xs leading-relaxed text-[var(--accent-strong)] ring-1 ring-white/80">
-                {part.text}
-              </div>
-            );
-          }
-          if (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) {
-            return <ToolPart key={i} part={part as unknown as Record<string, unknown>} />;
-          }
-          return <EventPart key={i} part={part as unknown as Record<string, unknown>} />;
+    );
+  }
+
+  // assistant：正文走 Markdown，过程性 parts 聚合折叠，整体奶白卡承载
+  const segments = segmentParts(message.parts);
+  if (segments.length === 0) return null;
+  return (
+    <div className="py-2">
+      <div className="rounded-[var(--r-lg)] border border-[var(--hairline)] bg-white px-5 py-4">
+        {segments.map((seg, i): ReactNode => {
+          if (seg.kind === 'text') return <Markdown key={i}>{seg.text}</Markdown>;
+          return <ProcessGroup key={i} parts={seg.parts} />;
         })}
       </div>
     </div>
