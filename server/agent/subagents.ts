@@ -1,6 +1,7 @@
 import { ToolLoopAgent, tool, stepCountIs, type LanguageModel } from 'ai';
 import { z } from 'zod';
 import { buildReadTools, type ReviewContext } from './tools';
+import type { ToolKey } from './capabilities';
 
 const RECON = '你工作在一个已 checkout 好的本地仓库（cwd 即仓库根），用 bash（grep/rg/find/cat/git log 等只读命令）、read_file、git_diff 在工作区自行取证。';
 
@@ -32,6 +33,7 @@ type ReadSubagent = ReturnType<typeof makeSubagent>;
  * 主 agent 自主决定是否委派（取代旧版硬编码触发）。
  */
 export function buildDelegateTools(ctx: ReviewContext, model: LanguageModel) {
+  const enabled = ctx.enabledTools;
   const security = makeSubagent(model, SECURITY_INSTRUCTIONS, ctx);
   const architecture = makeSubagent(model, ARCH_INSTRUCTIONS, ctx);
   const performance = makeSubagent(model, PERF_INSTRUCTIONS, ctx);
@@ -48,9 +50,14 @@ export function buildDelegateTools(ctx: ReviewContext, model: LanguageModel) {
       },
     });
 
-  return {
-    delegate_security: delegate(security, '安全'),
-    delegate_architecture: delegate(architecture, '架构'),
-    delegate_performance: delegate(performance, '性能'),
-  };
+  const items: Array<[ToolKey, string, ReadSubagent]> = [
+    ['delegate_security', '安全', security],
+    ['delegate_architecture', '架构', architecture],
+    ['delegate_performance', '性能', performance],
+  ];
+  return Object.fromEntries(
+    items
+      .filter(([key]) => enabled?.has(key) ?? true)
+      .map(([key, label, agent]) => [key, delegate(agent, label)]),
+  );
 }

@@ -262,6 +262,14 @@ describe('输出工具的开关控制', () => {
     expect('bash' in tools).toBe(true);
     expect('read_memory' in tools).toBe(true);
   });
+
+  it('仓库禁用工具时不暴露对应工具', () => {
+    const tools = buildTools(fakeContext({ enabledTools: new Set(['read_file', 'read_memory']) }));
+    expect('bash' in tools).toBe(false);
+    expect('git_diff' in tools).toBe(false);
+    expect('write_memory' in tools).toBe(false);
+    expect('read_file' in tools).toBe(true);
+  });
 });
 
 describe('buildInstructions（输出渠道按配置生成）', () => {
@@ -284,5 +292,23 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
     const text = buildInstructions(repo({ defaultReviewPrompt: '重点关注鉴权' }));
     expect(text).toContain('本仓库的额外审查要求');
     expect(text).toContain('重点关注鉴权');
+  });
+
+  it('启用 brooks-lint skill 时追加 Iron Law 指令', () => {
+    const text = buildInstructions(repo(), {
+      skills: [
+        {
+          key: 'brooks-review',
+          name: 'Brooks PR Review',
+          description: 'x',
+          mode: 'review',
+          defaultEnabled: true,
+          prompt: '必须按 brooks-lint 的 Iron Law 输出',
+        },
+      ],
+    });
+    expect(text).toContain('启用的仓库 Skills');
+    expect(text).toContain('Brooks PR Review');
+    expect(text).toContain('Iron Law');
   });
 });

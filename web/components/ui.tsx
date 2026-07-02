@@ -4,7 +4,7 @@ import { ArrowLeft, X, TriangleAlert } from 'lucide-react';
 import { cn } from '../lib/cn';
 
 const fieldBase =
-  'w-full rounded-[var(--r-md)] border border-[var(--hairline)] bg-white px-4 py-2.5 text-sm text-[var(--ink)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] focus:border-[var(--ink)] focus:ring-4 focus:ring-[var(--ring)] disabled:bg-[var(--surface-card)] disabled:opacity-60';
+  'w-full rounded-[var(--r-md)] border border-[var(--hairline)] bg-white px-4 py-2.5 text-sm text-[var(--ink)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] focus:border-[var(--surface-strong)] focus:shadow-[0_0_0_1px_rgba(10,10,10,0.06)] disabled:bg-[var(--surface-card)] disabled:opacity-60';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(fieldBase, props.className)} />;

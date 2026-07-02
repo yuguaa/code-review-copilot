@@ -4,6 +4,7 @@ import { buildReadTools } from './tools';
 import { prepareWorkspace } from '../lib/workspace';
 import type { SessionWithRepository } from '../lib/chat-store';
 import { createLogger } from '../lib/logger';
+import { resolveRepositoryCapabilities } from './capabilities';
 
 const log = createLogger('chat-agent');
 
@@ -58,7 +59,8 @@ export async function createChatStream(opts: { session: SessionWithRepository; m
   if (repo) {
     try {
       const workspace = await prepareWorkspace(opts.session);
-      tools = buildReadTools({ repoId: repo.id, workdir: workspace.dir, diffRef: workspace.diffRef });
+      const capabilities = await resolveRepositoryCapabilities(repo.id);
+      tools = buildReadTools({ repoId: repo.id, workdir: workspace.dir, diffRef: workspace.diffRef, enabledTools: capabilities.tools });
     } catch (err) {
       log.warn(`工作区准备失败，本轮对话不带工具 session=${opts.session.id}`, err);
     }

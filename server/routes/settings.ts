@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { prisma } from '../lib/prisma';
 import { createGitLabService } from '../lib/gitlab';
+import { getCapabilityCatalog, syncBuiltinCapabilities } from '../agent/capabilities';
 
 export const settingsRoutes = new Hono();
 
@@ -190,4 +191,59 @@ settingsRoutes.patch('/models/:id', async (c) => {
 settingsRoutes.delete('/models/:id', async (c) => {
   await prisma.aIModel.delete({ where: { id: c.req.param('id') } }).catch(() => undefined);
   return c.json({ success: true });
+});
+
+settingsRoutes.get('/capabilities', async (c) => {
+  const catalog = await getCapabilityCatalog();
+  return c.json({
+    tools: catalog.tools.map((item) => ({
+      id: item.id,
+      key: item.key,
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      defaultEnabled: item.defaultEnabled,
+      builtin: item.builtin,
+      isActive: item.isActive,
+    })),
+    skills: catalog.skills.map((item) => ({
+      id: item.id,
+      key: item.key,
+      name: item.name,
+      description: item.description,
+      mode: item.mode,
+      defaultEnabled: item.defaultEnabled,
+      builtin: item.builtin,
+      isActive: item.isActive,
+    })),
+  });
+});
+
+settingsRoutes.patch('/capabilities', async (c) => {
+  await syncBuiltinCapabilities();
+  const b = await c.req.json();
+  await prisma.$transaction(async (tx) => {
+    for (const item of (Array.isArray(b.tools) ? b.tools : []) as Array<{ key?: string; defaultEnabled?: boolean; isActive?: boolean }>) {
+      if (!item.key) continue;
+      await tx.agentTool.update({
+        where: { key: item.key },
+        data: {
+          ...(item.defaultEnabled !== undefined ? { defaultEnabled: item.defaultEnabled } : {}),
+          ...(item.isActive !== undefined ? { isActive: item.isActive } : {}),
+        },
+      });
+    }
+    for (const item of (Array.isArray(b.skills) ? b.skills : []) as Array<{ key?: string; defaultEnabled?: boolean; isActive?: boolean }>) {
+      if (!item.key) continue;
+      await tx.agentSkill.update({
+        where: { key: item.key },
+        data: {
+          ...(item.defaultEnabled !== undefined ? { defaultEnabled: item.defaultEnabled } : {}),
+          ...(item.isActive !== undefined ? { isActive: item.isActive } : {}),
+        },
+      });
+    }
+  });
+  const catalog = await getCapabilityCatalog();
+  return c.json({ tools: catalog.tools, skills: catalog.skills });
 });

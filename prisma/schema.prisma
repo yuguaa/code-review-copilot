@@ -73,10 +73,79 @@ model Repository {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   sessions        Session[]
+  toolSettings    RepositoryToolSetting[]
+  skillSettings   RepositorySkillSetting[]
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@index([defaultAIModelId])
   @@map("repositories")
+}
+
+/// Agent 可用工具注册表（平台级事实源）
+model AgentTool {
+  id             String                  @id @default(cuid())
+  key            String                  @unique
+  name           String
+  description    String
+  category       String                  @default("read")
+  defaultEnabled Boolean                 @default(true)
+  builtin        Boolean                 @default(true)
+  isActive       Boolean                 @default(true)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  repoSettings   RepositoryToolSetting[]
+
+  @@map("agent_tools")
+}
+
+/// Agent Skill 注册表（平台级事实源）
+model AgentSkill {
+  id             String                   @id @default(cuid())
+  key            String                   @unique
+  name           String
+  description    String
+  mode           String                   @default("review")
+  prompt         String
+  defaultEnabled Boolean                  @default(false)
+  builtin        Boolean                  @default(true)
+  isActive       Boolean                  @default(true)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  repoSettings   RepositorySkillSetting[]
+
+  @@map("agent_skills")
+}
+
+/// 仓库级工具启用覆盖；不存在记录时使用 AgentTool.defaultEnabled
+model RepositoryToolSetting {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  toolId       String
+  tool         AgentTool  @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  enabled      Boolean
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([repositoryId, toolId])
+  @@index([toolId])
+  @@map("repository_tool_settings")
+}
+
+/// 仓库级 Skill 启用覆盖；不存在记录时使用 AgentSkill.defaultEnabled
+model RepositorySkillSetting {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  skillId      String
+  skill        AgentSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  enabled      Boolean
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([repositoryId, skillId])
+  @@index([skillId])
+  @@map("repository_skill_settings")
 }
 
 /// 一次会话：审查会话（webhook 触发）或普通会话

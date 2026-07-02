@@ -316,7 +316,7 @@ function ChatThread({
 
       <div className="z-10 bg-[var(--canvas)] p-4 max-md:p-3">
         <div className="mx-auto max-w-4xl">
-          <div className="flex items-end gap-2 rounded-[var(--r-md)] border border-[var(--hairline)] bg-white p-1.5 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] focus-within:border-[var(--surface-strong)] focus-within:ring-2 focus-within:ring-[var(--ring)]">
+          <div className="flex items-end gap-2 rounded-[var(--r-md)] border border-[var(--hairline)] bg-white p-1.5 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] focus-within:border-[var(--surface-strong)] focus-within:shadow-[0_0_0_1px_rgba(10,10,10,0.06)]">
             <textarea
               ref={inputRef}
               value={input}

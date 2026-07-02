@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { Button, Card, Checkbox, ColorBlock, Field, Input, PageShell, Select, useConfirm } from '../components/ui';
+import { CapabilityList } from '../components/CapabilityList';
+import type { AgentSkillItem, AgentToolItem } from '../lib/types';
 
 type Account = {
   id: string;
@@ -53,6 +55,10 @@ export function Settings() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [models, setModels] = useState<AIModel[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [tools, setTools] = useState<AgentToolItem[]>([]);
+  const [skills, setSkills] = useState<AgentSkillItem[]>([]);
+  const [enabledTools, setEnabledTools] = useState<string[]>([]);
+  const [enabledSkills, setEnabledSkills] = useState<string[]>([]);
   const [notification, setNotification] = useState({
     dingtalkEnabled: true,
     dingtalkWebhookUrl: '',
@@ -65,6 +71,7 @@ export function Settings() {
   const [saving, setSaving] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [savingNotification, setSavingNotification] = useState(false);
+  const [savingCapabilities, setSavingCapabilities] = useState(false);
   const { confirm, element: confirmElement } = useConfirm();
 
   const load = useCallback(() => {
@@ -73,11 +80,16 @@ export function Settings() {
       api<{ models: AIModel[] }>('/api/settings/models'),
       api<{ stats: Stats | null }>('/api/settings/stats'),
       api<{ notification: NotificationSetting }>('/api/settings/notification'),
+      api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/capabilities'),
     ])
-      .then(([gitlab, ai, overview, notice]) => {
+      .then(([gitlab, ai, overview, notice, capabilityResult]) => {
         setAccounts(gitlab.accounts);
         setModels(ai.models);
         setStats(overview.stats);
+        setTools(capabilityResult.tools);
+        setSkills(capabilityResult.skills);
+        setEnabledTools(capabilityResult.tools.filter((item) => item.defaultEnabled).map((item) => item.key));
+        setEnabledSkills(capabilityResult.skills.filter((item) => item.defaultEnabled).map((item) => item.key));
         setNotification((current) => ({
           dingtalkEnabled: notice.notification.dingtalkEnabled,
           dingtalkWebhookUrl: notice.notification.dingtalkWebhookUrl ?? '',
@@ -183,6 +195,21 @@ export function Settings() {
       .finally(() => setSavingNotification(false));
   };
 
+  const saveCapabilities = () => {
+    setSavingCapabilities(true);
+    api('/api/settings/capabilities', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        tools: tools.map((item) => ({ key: item.key, defaultEnabled: enabledTools.includes(item.key), isActive: item.isActive ?? true })),
+        skills: skills.map((item) => ({ key: item.key, defaultEnabled: enabledSkills.includes(item.key), isActive: item.isActive ?? true })),
+      }),
+    })
+      .then(load)
+      .then(() => toast.success('已保存 Tools / Skills 默认配置'))
+      .catch((e) => toast.error(e instanceof Error ? e.message : '保存失败'))
+      .finally(() => setSavingCapabilities(false));
+  };
+
   return (
     <PageShell title="设置">
       {stats && (
@@ -201,6 +228,18 @@ export function Settings() {
           ))}
         </div>
       )}
+
+      <Card className="space-y-4">
+        <h2 className="font-display text-lg text-[var(--ink)]">Tools / Skills 管理</h2>
+        <p className="text-sm leading-relaxed text-[var(--muted)]">
+          这里控制平台默认启用能力；仓库配置里可以再覆盖。`brooks-sweep` 默认关闭，因为它是修复模式，本平台目前不授予写文件工具。
+        </p>
+        <CapabilityList title="Tools 默认启用" items={tools} selected={enabledTools} onChange={setEnabledTools} />
+        <CapabilityList title="Skills 默认启用" items={skills} selected={enabledSkills} onChange={setEnabledSkills} />
+        <Button onClick={saveCapabilities} disabled={savingCapabilities}>
+          {savingCapabilities ? '保存中…' : '保存 Tools / Skills'}
+        </Button>
+      </Card>
 
       <Card className="space-y-4">
         <h2 className="font-display text-lg text-[var(--ink)]">全局钉钉配置</h2>

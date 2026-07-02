@@ -9,7 +9,7 @@
 - **后端**：[Hono](https://hono.dev)（web 标准 Request/Response，AI SDK 的 `toUIMessageStreamResponse()` 直接 return）
 - **前端**：Vite + React + `@ai-sdk/react` 的 `useChat`
 - **Agent**：`ai` v7（`streamText` + `stopWhen` + `ToolLoopAgent` subagent 委派）
-- **数据**：Prisma + PostgreSQL（4 张表）
+- **数据**：Prisma + PostgreSQL
 - **鉴权**：HMAC 签名 Cookie + 可选 IP 白名单，全局守卫所有 `/api/*`
 
 ## 工程结构
@@ -42,8 +42,9 @@ npm run dev                 # 同时起 Hono(:8787) 与 Vite(:5173)
 ## 配置流程
 
 1. **设置 → 添加 GitLab 账号**：实例地址 + 访问令牌（api 权限）+ Webhook 密钥。
-2. **仓库配置 → 添加仓库**：选账号 → 拉取并选项目 → 配模型（provider/modelId/apiKey）→ 监听分支 / 默认审查提示词 / 自动审查。
-3. 在 GitLab 项目里加 Webhook（**Merge Request events**），URL 指向 `<部署地址>/api/webhook/gitlab`，Secret Token 与账号的 Webhook 密钥一致。
+2. **设置 → Tools / Skills 管理**：调整平台默认工具与审查方法；内置 `brooks-lint` 风格 skill 可直接启用。
+3. **仓库配置 → 添加仓库**：选账号 → 拉取并选项目 → 配模型（provider/modelId/apiKey）→ 监听分支 / 默认审查提示词 / 自动审查 / 仓库级 Tools 和 Skills 覆盖。
+4. 在 GitLab 项目里加 Webhook（**Merge Request events**），URL 指向 `<部署地址>/api/webhook/gitlab`，Secret Token 与账号的 Webhook 密钥一致。
 
 之后每次 MR 打开/更新都会自动生成一个审查会话，agent 审查并回写 MR，你可在左侧会话里继续追问。
 
@@ -51,6 +52,8 @@ npm run dev                 # 同时起 Hono(:8787) 与 Vite(:5173)
 
 - `GitLabAccount` —— 接入凭证
 - `Repository` —— 仓库 + 按仓库的模型/提示词配置
+- `AgentTool` / `AgentSkill` —— 平台级工具与 skill 注册表
+- `RepositoryToolSetting` / `RepositorySkillSetting` —— 仓库级能力覆盖
 - `Session` —— 一次会话（`kind=review|chat`，审查会话带 MR 元信息）
 - `Message` —— 线性 `UIMessage` 持久化
 

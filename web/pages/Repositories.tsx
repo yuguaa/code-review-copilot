@@ -3,6 +3,8 @@ import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Button, Card, Checkbox, ColorBlock, Field, Input, Select, Textarea, PageShell, Modal, useConfirm } from '../components/ui';
+import { CapabilityList } from '../components/CapabilityList';
+import type { AgentSkillItem, AgentToolItem } from '../lib/types';
 
 type Account = { id: string; url: string };
 type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean };
@@ -26,6 +28,8 @@ type Repo = {
   dingtalkWebhook: string | null;
   defaultAIModel: AIModel | null;
   hasCustomApiKey: boolean;
+  enabledTools: string[];
+  enabledSkills: string[];
 };
 
 const emptyForm = {
@@ -47,12 +51,16 @@ const emptyForm = {
   enableDingtalk: true,
   dingtalkWebhook: '',
   dingtalkSecret: '',
+  enabledTools: [] as string[],
+  enabledSkills: [] as string[],
 };
 
 export function Repositories() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [models, setModels] = useState<AIModel[]>([]);
+  const [tools, setTools] = useState<AgentToolItem[]>([]);
+  const [skills, setSkills] = useState<AgentSkillItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
@@ -69,11 +77,14 @@ export function Repositories() {
       api<{ repositories: Repo[] }>('/api/repositories'),
       api<{ accounts: Account[] }>('/api/settings/gitlab'),
       api<{ models: AIModel[] }>('/api/settings/models'),
+      api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/capabilities'),
     ])
-      .then(([repositoryResult, accountResult, modelResult]) => {
+      .then(([repositoryResult, accountResult, modelResult, capabilityResult]) => {
         setRepos(repositoryResult.repositories);
         setAccounts(accountResult.accounts);
         setModels(modelResult.models);
+        setTools(capabilityResult.tools);
+        setSkills(capabilityResult.skills);
         if (accountResult.accounts[0] && !form.gitLabAccountId) set('gitLabAccountId', accountResult.accounts[0].id);
       })
       .catch((e) => toast.error(e instanceof Error ? e.message : '配置加载失败'));
@@ -100,7 +111,12 @@ export function Repositories() {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId });
+    setForm({
+      ...emptyForm,
+      gitLabAccountId: form.gitLabAccountId,
+      enabledTools: tools.filter((item) => item.defaultEnabled).map((item) => item.key),
+      enabledSkills: skills.filter((item) => item.defaultEnabled).map((item) => item.key),
+    });
     setProjects([]);
     setSearch('');
     setModalOpen(true);
@@ -135,6 +151,8 @@ export function Repositories() {
       enableDingtalk: repo.enableDingtalk,
       dingtalkWebhook: repo.dingtalkWebhook ?? '',
       dingtalkSecret: '',
+      enabledTools: repo.enabledTools,
+      enabledSkills: repo.enabledSkills,
     });
     setProjects([]);
     setModalOpen(true);
@@ -229,7 +247,7 @@ export function Repositories() {
                   <button
                     key={p.id}
                     onClick={() => pickProject(p)}
-                  className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color] hover:bg-white hover:text-[var(--ink)]"
+                    className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color] hover:bg-white hover:text-[var(--ink)]"
                   >
                     {p.path} <span className="text-[var(--muted-soft)]">#{p.id}</span>
                   </button>
@@ -319,6 +337,29 @@ export function Repositories() {
               </p>
             </div>
 
+            <div className="space-y-4 rounded-[var(--r-md)] bg-[var(--surface-soft)] p-4">
+              <div>
+                <h3 className="font-display text-sm text-[var(--ink)]">仓库 Tools / Skills</h3>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                  这里覆盖平台默认能力。关闭工具后，审查与追问都不会再向模型暴露对应 tool。
+                </p>
+              </div>
+              <CapabilityList
+                title="Tools"
+                items={tools}
+                selected={form.enabledTools}
+                onChange={(next) => set('enabledTools', next)}
+                defaultLabel="平台默认"
+              />
+              <CapabilityList
+                title="Skills"
+                items={skills}
+                selected={form.enabledSkills}
+                onChange={(next) => set('enabledSkills', next)}
+                defaultLabel="平台默认"
+              />
+            </div>
+
             {form.enableDingtalk && (
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="钉钉机器人 Webhook">
@@ -369,7 +410,7 @@ export function Repositories() {
                 {r.enableDingtalk && <span className="rounded-full bg-[var(--brand-cream)] px-2 py-0.5 text-[11px] text-[var(--body-strong)]">钉钉</span>}
               </div>
               <p className="mt-1 text-[11px] text-[var(--muted)]">
-                模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : r.defaultAIModel ? `${r.defaultAIModel.provider}/${r.defaultAIModel.modelId}` : '全局默认'} · 监听 {r.watchBranches || '全部'} · 自动审查 {r.autoReview ? '开' : '关'}
+                模型 {r.customProvider && r.customModelId ? `${r.customProvider}/${r.customModelId}` : r.defaultAIModel ? `${r.defaultAIModel.provider}/${r.defaultAIModel.modelId}` : '全局默认'} · 监听 {r.watchBranches || '全部'} · Skills {r.enabledSkills.length} · Tools {r.enabledTools.length}
               </p>
             </div>
             <Button variant="secondary" onClick={() => edit(r)}>

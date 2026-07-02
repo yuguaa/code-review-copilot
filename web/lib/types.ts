@@ -38,3 +38,27 @@ export type RepositoryItem = {
   name: string;
   path: string;
 };
+
+export type AgentToolItem = {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  defaultEnabled: boolean;
+  builtin?: boolean;
+  isActive?: boolean;
+  enabled?: boolean;
+};
+
+export type AgentSkillItem = {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  mode: string;
+  defaultEnabled: boolean;
+  builtin?: boolean;
+  isActive?: boolean;
+  enabled?: boolean;
+};
