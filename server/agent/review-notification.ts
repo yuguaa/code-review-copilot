@@ -1,22 +1,8 @@
 import type { UIMessage } from 'ai';
-import { prisma } from '../lib/prisma';
-import { sendDingtalk } from '../lib/dingtalk';
 import type { SessionWithRepository } from '../lib/chat-store';
+import { sendReviewDingtalkNotification } from '../modules/notifications/notifications.service';
 
 type RepositoryForDingtalk = NonNullable<SessionWithRepository['repository']>;
-type NotificationForDingtalk = {
-  dingtalkEnabled: boolean;
-  dingtalkWebhookUrl: string | null;
-  dingtalkSecret: string | null;
-} | null;
-
-export function resolveDingtalkConfig(repo: RepositoryForDingtalk, notification: NotificationForDingtalk) {
-  return repo.dingtalkWebhook
-    ? { webhook: repo.dingtalkWebhook, secret: repo.dingtalkSecret }
-    : notification?.dingtalkEnabled && notification.dingtalkWebhookUrl
-      ? { webhook: notification.dingtalkWebhookUrl, secret: notification.dingtalkSecret }
-      : null;
-}
 
 function textOf(messages: UIMessage[]): string {
   const message = [...messages].reverse().find((m) => m.role === 'assistant');
@@ -59,12 +45,8 @@ export function notifyReviewCompleted(session: SessionWithRepository, messages: 
   const repo = session.repository;
   if (!repo?.enableDingtalk) return Promise.resolve('skipped');
 
-  return prisma.notificationSetting.findUnique({ where: { scope: 'global' } }).then((notification) => {
-    const dingtalk = resolveDingtalkConfig(repo, notification);
-    if (!dingtalk) return 'skipped';
-
-    const resultText = textOf(messages) || '审查已完成，但模型没有返回可展示的文本结果。请进入会话查看工具调用记录。';
-    const text = [`## ${titleOf(session)}`, '', contextOf(session), '', '---', '', resultText].join('\n');
-    return sendDingtalk(dingtalk, titleOf(session), text).then(() => 'sent' as const);
-  });
+  const resultText = textOf(messages) || '审查已完成，但模型没有返回可展示的文本结果。请进入会话查看工具调用记录。';
+  const title = titleOf(session);
+  const text = [`## ${title}`, '', contextOf(session), '', '---', '', resultText].join('\n');
+  return sendReviewDingtalkNotification(repo, title, text);
 }
