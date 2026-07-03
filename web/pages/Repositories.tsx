@@ -1,204 +1,41 @@
-import { useEffect, useState, useCallback } from 'react';
-import { toast } from 'sonner';
-import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Button, Card, Checkbox, ColorBlock, Field, Input, Select, Textarea, PageShell, Modal, useConfirm } from '../components/ui';
 import { CapabilityList } from '../components/CapabilityList';
-import type { AgentSkillItem, AgentToolItem } from '../lib/types';
-
-type Account = { id: string; url: string };
-type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean };
-type Project = { id: number; name: string; path: string; defaultBranch: string };
-type Repo = {
-  id: string;
-  gitLabAccountId: string;
-  name: string;
-  path: string;
-  gitLabProjectId: number;
-  watchBranches: string | null;
-  autoReview: boolean;
-  defaultAIModelId: string | null;
-  customProvider: string | null;
-  customModelId: string | null;
-  customApiBaseUrl: string | null;
-  customMaxSteps: number | null;
-  defaultReviewPrompt: string | null;
-  enableMrComment: boolean;
-  enableDingtalk: boolean;
-  dingtalkWebhook: string | null;
-  defaultAIModel: AIModel | null;
-  hasCustomApiKey: boolean;
-  enabledTools: string[];
-  enabledSkills: string[];
-};
-
-const emptyForm = {
-  gitLabAccountId: '',
-  gitLabProjectId: '',
-  name: '',
-  path: '',
-  watchBranches: 'main',
-  autoReview: true,
-  defaultAIModelId: '',
-  useCustomModel: false,
-  customProvider: 'openai',
-  customModelId: '',
-  customApiKey: '',
-  customApiBaseUrl: '',
-  customMaxSteps: 16,
-  defaultReviewPrompt: '',
-  enableMrComment: false,
-  enableDingtalk: true,
-  dingtalkWebhook: '',
-  dingtalkSecret: '',
-  enabledTools: [] as string[],
-  enabledSkills: [] as string[],
-};
+import { useRepositoriesPageData } from '../hooks/useRepositoriesPageData';
 
 export function Repositories() {
-  const [repos, setRepos] = useState<Repo[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [models, setModels] = useState<AIModel[]>([]);
-  const [tools, setTools] = useState<AgentToolItem[]>([]);
-  const [skills, setSkills] = useState<AgentSkillItem[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ ...emptyForm });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const {
+    repos,
+    accounts,
+    models,
+    tools,
+    skills,
+    projects,
+    search,
+    form,
+    editingId,
+    modalOpen,
+    saving,
+    setField,
+    setSearch,
+    fetchProjects,
+    pickProject,
+    openAdd,
+    closeModal,
+    edit,
+    submit,
+    remove,
+  } = useRepositoriesPageData();
   const { confirm, element: confirmElement } = useConfirm();
   const webhookUrl = `${location.origin}/api/webhook/gitlab`;
 
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
-
-  const load = useCallback(() => {
-    return Promise.all([
-      api<{ repositories: Repo[] }>('/api/repositories'),
-      api<{ accounts: Account[] }>('/api/settings/gitlab'),
-      api<{ models: AIModel[] }>('/api/settings/models'),
-      api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/capabilities'),
-    ])
-      .then(([repositoryResult, accountResult, modelResult, capabilityResult]) => {
-        setRepos(repositoryResult.repositories);
-        setAccounts(accountResult.accounts);
-        setModels(modelResult.models);
-        setTools(capabilityResult.tools);
-        setSkills(capabilityResult.skills);
-        if (accountResult.accounts[0] && !form.gitLabAccountId) set('gitLabAccountId', accountResult.accounts[0].id);
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : '配置加载失败'));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const fetchProjects = async () => {
-    if (!form.gitLabAccountId) return toast.error('请先选择 GitLab 账号');
-    const d = await api<{ projects: Project[] }>(
-      `/api/settings/gitlab/${form.gitLabAccountId}/projects?search=${encodeURIComponent(search)}`,
-    ).catch(() => ({ projects: [] }));
-    setProjects(d.projects);
-    if (d.projects.length === 0) toast.message('没有拉到项目');
-  };
-
-  const pickProject = (p: Project) => {
-    set('gitLabProjectId', String(p.id));
-    set('name', p.name);
-    set('path', p.path);
-    setProjects([]);
-  };
-
-  const openAdd = () => {
-    setEditingId(null);
-    setForm({
-      ...emptyForm,
-      gitLabAccountId: form.gitLabAccountId,
-      enabledTools: tools.filter((item) => item.defaultEnabled).map((item) => item.key),
-      enabledSkills: skills.filter((item) => item.defaultEnabled).map((item) => item.key),
-    });
-    setProjects([]);
-    setSearch('');
-    setModalOpen(true);
-  };
-
-  const closeModal = () => {
-    if (saving) return;
-    setModalOpen(false);
-    setEditingId(null);
-    setProjects([]);
-  };
-
-  const edit = (repo: Repo) => {
-    setEditingId(repo.id);
-    setForm({
-      ...emptyForm,
-      gitLabAccountId: repo.gitLabAccountId,
-      gitLabProjectId: String(repo.gitLabProjectId),
-      name: repo.name,
-      path: repo.path,
-      watchBranches: repo.watchBranches ?? '',
-      autoReview: repo.autoReview,
-      defaultAIModelId: repo.defaultAIModelId ?? '',
-      useCustomModel: Boolean(repo.customProvider || repo.customModelId || repo.hasCustomApiKey),
-      customProvider: repo.customProvider ?? 'openai',
-      customModelId: repo.customModelId ?? '',
-      customApiKey: '',
-      customApiBaseUrl: repo.customApiBaseUrl ?? '',
-      customMaxSteps: repo.customMaxSteps ?? 16,
-      defaultReviewPrompt: repo.defaultReviewPrompt ?? '',
-      enableMrComment: repo.enableMrComment,
-      enableDingtalk: repo.enableDingtalk,
-      dingtalkWebhook: repo.dingtalkWebhook ?? '',
-      dingtalkSecret: '',
-      enabledTools: repo.enabledTools,
-      enabledSkills: repo.enabledSkills,
-    });
-    setProjects([]);
-    setModalOpen(true);
-  };
-
-  const submit = () => {
-    if (!form.gitLabAccountId || !form.gitLabProjectId) {
-      return toast.error('请填写账号与项目');
-    }
-    if (form.useCustomModel && (!form.customProvider || !form.customModelId || (!editingId && !form.customApiKey))) {
-      return toast.error('请填写完整的仓库自定义模型配置');
-    }
-    setSaving(true);
-    const payload = {
-      ...form,
-      customProvider: form.useCustomModel ? form.customProvider : null,
-      customModelId: form.useCustomModel ? form.customModelId : null,
-      customApiKey: form.useCustomModel ? form.customApiKey : null,
-      customApiBaseUrl: form.useCustomModel ? form.customApiBaseUrl : null,
-      customMaxSteps: form.useCustomModel ? form.customMaxSteps : null,
-    };
-    const request = editingId
-      ? api(`/api/repositories/${editingId}`, { method: 'PATCH', body: JSON.stringify(payload) })
-      : api('/api/repositories', { method: 'POST', body: JSON.stringify(payload) });
-    request
-      .then(() => {
-        setForm({ ...emptyForm, gitLabAccountId: form.gitLabAccountId });
-        setEditingId(null);
-        setModalOpen(false);
-        return load();
-      })
-      .then(() => toast.success(editingId ? '已更新仓库' : '已添加仓库'))
-      .catch((e) => toast.error(e instanceof Error ? e.message : editingId ? '更新失败' : '添加失败'))
-      .finally(() => setSaving(false));
-  };
-
-  const remove = (repo: Repo) => {
+  const confirmRemove = (repo: (typeof repos)[number]) => {
     void confirm({
       title: '删除仓库',
       description: `「${repo.path}」的配置与关联会话记录将被删除，Webhook 触发也会失效。`,
     }).then((ok) => {
       if (!ok) return;
-      api(`/api/repositories/${repo.id}`, { method: 'DELETE' })
-        .then(load)
-        .then(() => toast.success('已删除仓库'))
-        .catch((e) => toast.error(e instanceof Error ? e.message : '删除失败'));
+      void remove(repo);
     });
   };
 
@@ -224,7 +61,7 @@ export function Repositories() {
         ) : (
           <div className="space-y-4">
             <Field label="GitLab 账号">
-              <Select value={form.gitLabAccountId} onChange={(e) => set('gitLabAccountId', e.target.value)}>
+              <Select value={form.gitLabAccountId} onChange={(e) => setField('gitLabAccountId', e.target.value)}>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.url}
@@ -257,18 +94,18 @@ export function Repositories() {
 
             <div className="grid gap-3 md:grid-cols-3">
               <Field label="项目 ID">
-                <Input value={form.gitLabProjectId} onChange={(e) => set('gitLabProjectId', e.target.value)} />
+                <Input value={form.gitLabProjectId} onChange={(e) => setField('gitLabProjectId', e.target.value)} />
               </Field>
               <Field label="名称">
-                <Input value={form.name} onChange={(e) => set('name', e.target.value)} />
+                <Input value={form.name} onChange={(e) => setField('name', e.target.value)} />
               </Field>
               <Field label="路径">
-                <Input value={form.path} onChange={(e) => set('path', e.target.value)} />
+                <Input value={form.path} onChange={(e) => setField('path', e.target.value)} />
               </Field>
             </div>
 
             <Field label="仓库默认模型" hint="不选择时自动使用「设置」里的全局默认模型；需要特殊模型时再开启仓库自定义模型">
-              <Select value={form.defaultAIModelId} onChange={(e) => set('defaultAIModelId', e.target.value)}>
+              <Select value={form.defaultAIModelId} onChange={(e) => setField('defaultAIModelId', e.target.value)}>
                 <option value="">使用全局默认模型</option>
                 {models.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -278,46 +115,46 @@ export function Repositories() {
               </Select>
             </Field>
 
-            <Checkbox label="使用仓库自定义模型" checked={form.useCustomModel} onChange={(v) => set('useCustomModel', v)} />
+            <Checkbox label="使用仓库自定义模型" checked={form.useCustomModel} onChange={(v) => setField('useCustomModel', v)} />
 
             {form.useCustomModel && (
               <>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Field label="模型 Provider">
-                    <Select value={form.customProvider} onChange={(e) => set('customProvider', e.target.value)}>
+                    <Select value={form.customProvider} onChange={(e) => setField('customProvider', e.target.value)}>
                       <option value="openai">openai</option>
                       <option value="anthropic">anthropic</option>
                       <option value="openai-compatible">openai-compatible</option>
                     </Select>
                   </Field>
                   <Field label="模型 ID">
-                    <Input value={form.customModelId} onChange={(e) => set('customModelId', e.target.value)} placeholder="gpt-4o" />
+                    <Input value={form.customModelId} onChange={(e) => setField('customModelId', e.target.value)} placeholder="gpt-4o" />
                   </Field>
                   <Field label="最大步数">
-                    <Input type="number" value={form.customMaxSteps} onChange={(e) => set('customMaxSteps', Number(e.target.value))} />
+                    <Input type="number" value={form.customMaxSteps} onChange={(e) => setField('customMaxSteps', Number(e.target.value))} />
                   </Field>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="模型 API Key">
-                    <Input type="password" value={form.customApiKey} onChange={(e) => set('customApiKey', e.target.value)} />
+                    <Input type="password" value={form.customApiKey} onChange={(e) => setField('customApiKey', e.target.value)} />
                   </Field>
                   <Field label="API Base URL（openai-compatible 必填）">
-                    <Input value={form.customApiBaseUrl} onChange={(e) => set('customApiBaseUrl', e.target.value)} placeholder="https://.../v1" />
+                    <Input value={form.customApiBaseUrl} onChange={(e) => setField('customApiBaseUrl', e.target.value)} placeholder="https://.../v1" />
                   </Field>
                 </div>
               </>
             )}
 
             <Field label="监听分支" hint="逗号分隔，支持通配符，如 main,release-*；留空=全部">
-              <Input value={form.watchBranches} onChange={(e) => set('watchBranches', e.target.value)} />
+              <Input value={form.watchBranches} onChange={(e) => setField('watchBranches', e.target.value)} />
             </Field>
 
             <Field label="默认审查提示词（可选）" hint="webhook 首轮审查的额外要求，会追加到内置审查指令之后">
               <Textarea
                 rows={3}
                 value={form.defaultReviewPrompt}
-                onChange={(e) => set('defaultReviewPrompt', e.target.value)}
+                onChange={(e) => setField('defaultReviewPrompt', e.target.value)}
                 placeholder="例如：重点关注鉴权与数据库事务一致性"
               />
             </Field>
@@ -329,7 +166,7 @@ export function Repositories() {
                   ['enableMrComment', '回写平台评论'],
                   ['enableDingtalk', '推送钉钉'],
                 ] as const).map(([k, label]) => (
-                  <Checkbox key={k} label={label} checked={form[k]} onChange={(v) => set(k, v)} />
+                  <Checkbox key={k} label={label} checked={form[k]} onChange={(v) => setField(k, v)} />
                 ))}
               </div>
               <p className="text-xs leading-relaxed text-[var(--muted)]">
@@ -348,14 +185,14 @@ export function Repositories() {
                 title="Tools"
                 items={tools}
                 selected={form.enabledTools}
-                onChange={(next) => set('enabledTools', next)}
+                onChange={(next) => setField('enabledTools', next)}
                 defaultLabel="平台默认"
               />
               <CapabilityList
                 title="Skills"
                 items={skills}
                 selected={form.enabledSkills}
-                onChange={(next) => set('enabledSkills', next)}
+                onChange={(next) => setField('enabledSkills', next)}
                 defaultLabel="平台默认"
               />
             </div>
@@ -365,7 +202,7 @@ export function Repositories() {
                 <Field label="钉钉机器人 Webhook">
                   <Input
                     value={form.dingtalkWebhook}
-                    onChange={(e) => set('dingtalkWebhook', e.target.value)}
+                    onChange={(e) => setField('dingtalkWebhook', e.target.value)}
                     placeholder="https://oapi.dingtalk.com/robot/send?access_token=…"
                   />
                 </Field>
@@ -373,7 +210,7 @@ export function Repositories() {
                   <Input
                     type="password"
                     value={form.dingtalkSecret}
-                    onChange={(e) => set('dingtalkSecret', e.target.value)}
+                    onChange={(e) => setField('dingtalkSecret', e.target.value)}
                     placeholder="SEC…"
                   />
                 </Field>
@@ -416,7 +253,7 @@ export function Repositories() {
             <Button variant="secondary" onClick={() => edit(r)}>
               编辑
             </Button>
-            <Button variant="danger" onClick={() => remove(r)}>
+            <Button variant="danger" onClick={() => confirmRemove(r)}>
               删除
             </Button>
           </Card>
