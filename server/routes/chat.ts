@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { parseJsonEventStream, readUIMessageStream, uiMessageChunkSchema, type UIMessage } from 'ai';
-import { ensureChatTitle, getSessionWithRepository, loadMessages, mergeIncomingUserMessage, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
+import type { UIMessage } from 'ai';
+import { ensureChatTitle, getSessionWithRepository, loadMessages, mergeIncomingUserMessage, saveMessages } from '../lib/chat-store';
 import { publishSessionListChanged } from '../lib/session-events';
 import { createChatStream } from '../agent/chat-agent';
 import { ensureVisibleAssistantReply } from '../agent/review-message';
@@ -49,40 +49,11 @@ chatRoutes.post('/', async (c) => {
     originalMessages: messages,
     // 把真实错误透传给前端 toast，而不是默认的 "An error occurred."
     onError: (error) => (error instanceof Error ? error.message : String(error)),
-    consumeSseStream: ({ stream }) => {
-      consumeChatStream(sessionId, messages, stream);
+    onEnd: async ({ messages: finalMessages }) => {
+      const visibleMessages = ensureVisibleAssistantReply(finalMessages);
+      await saveMessages(sessionId, visibleMessages);
+      await ensureChatTitle(sessionId, visibleMessages);
+      publishSessionListChanged();
     },
   });
 });
-
-function consumeChatStream(
-  sessionId: string,
-  initialMessages: UIMessage[],
-  stream: ReadableStream<string>,
-): void {
-  const parsedStream = parseJsonEventStream({
-    stream: stream.pipeThrough(new TextEncoderStream()),
-    schema: uiMessageChunkSchema,
-  });
-  const chunkStream = parsedStream.pipeThrough(
-    new TransformStream({
-      transform(chunk, controller) {
-        if (!chunk.success) throw chunk.error;
-        controller.enqueue(chunk.value);
-      },
-    }),
-  );
-
-  void (async () => {
-    // 交互追问由前端 useChat 独占流式渲染；服务端只负责把最终结果落库，
-    // 不再逐 chunk 回显，避免两个来源双写同一会话造成重复/闪跳。
-    let finalMessages = initialMessages;
-    for await (const message of readUIMessageStream<UIMessage>({ stream: chunkStream })) {
-      finalMessages = mergeStreamingMessage(initialMessages, message);
-    }
-    finalMessages = ensureVisibleAssistantReply(finalMessages);
-    await saveMessages(sessionId, finalMessages);
-    await ensureChatTitle(sessionId, finalMessages);
-    publishSessionListChanged();
-  })().catch((err) => log.error(`消费追问流失败 session=${sessionId}`, err));
-}
