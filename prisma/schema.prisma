@@ -1,5 +1,5 @@
 // 会话式代码审查 Agent
-// 设计原则：review = session，线性 UIMessage 持久化，全局模型配置 + 仓库级覆盖。
+// 设计原则：review = session，Message tree + UIMessage.parts block 持久化，全局模型配置 + 仓库级覆盖。
 
 generator client {
   provider = "prisma-client-js"
@@ -165,25 +165,32 @@ model Session {
   author       String?
   status       String      @default("running") // running | completed | failed
   error        String?
+  activeLeafMessageId String?
+  activeLeafMessage   Message?  @relation("SessionActiveLeaf", fields: [activeLeafMessageId], references: [id], onDelete: SetNull)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
-  messages     Message[]
+  messages     Message[]   @relation("SessionMessages")
 
   @@index([kind, updatedAt])
   @@index([repositoryId])
   @@map("sessions")
 }
 
-/// 线性 UIMessage 持久化
+/// Message tree 持久化：每个 message 是一个气泡，parts 是气泡内 block 列表。
 model Message {
   id        String   @id @default(cuid())
   sessionId String
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session   Session  @relation("SessionMessages", fields: [sessionId], references: [id], onDelete: Cascade)
+  activeForSessions Session[] @relation("SessionActiveLeaf")
+  parentId  String?
+  parent    Message? @relation("MessageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Message[] @relation("MessageTree")
   role      String // user | assistant | system
   parts     Json // UIMessage.parts（text / tool-call / tool-result / reasoning）
   createdAt DateTime @default(now())
 
   @@index([sessionId, createdAt])
+  @@index([parentId, createdAt])
   @@map("messages")
 }
 

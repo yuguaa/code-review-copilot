@@ -1,7 +1,13 @@
 import type { UIMessage } from 'ai';
+import type { SessionMessageTree } from './chat-store';
+
+type SessionMessagePayload = Pick<
+  SessionMessageTree,
+  'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'
+>;
 
 type SessionEvent =
-  | { type: 'messages'; messages: UIMessage[] }
+  | ({ type: 'messages'; messages: UIMessage[] } & Partial<Omit<SessionMessagePayload, 'messages'>>)
   | { type: 'status'; status: string }
   | { type: 'review-error'; error: string };
 
@@ -21,8 +27,12 @@ export function subscribeSessionEvents(sessionId: string, signal?: AbortSignal):
   });
 }
 
-export function publishSessionMessages(sessionId: string, messages: UIMessage[]): void {
-  publishSessionEvent(sessionId, { type: 'messages', messages });
+export function publishSessionMessages(
+  sessionId: string,
+  messagesOrPayload: UIMessage[] | SessionMessagePayload,
+): void {
+  const payload = Array.isArray(messagesOrPayload) ? { messages: messagesOrPayload } : messagesOrPayload;
+  publishSessionEvent(sessionId, { type: 'messages', ...payload });
 }
 
 export function publishSessionStatus(sessionId: string, status: string): void {

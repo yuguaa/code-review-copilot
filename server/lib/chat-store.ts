@@ -2,6 +2,32 @@ import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { prisma } from './prisma';
 
+export type MessageRow = {
+  id: string;
+  parentId: string | null;
+  role: string;
+  parts: unknown;
+  createdAt: Date;
+};
+
+export type MessageTreeNode = {
+  id: string;
+  parentId: string | null;
+  role: UIMessage['role'];
+  createdAt: Date;
+  siblingIds: string[];
+  siblingIndex: number;
+  siblingCount: number;
+  active: boolean;
+};
+
+export type SessionMessageTree = {
+  messages: UIMessage[];
+  messageTree: MessageTreeNode[];
+  activeLeafMessageId: string | null;
+  activePathIds: string[];
+};
+
 /** 会话 + 仓库（含模型配置），供 chat route / agent 使用。 */
 export function getSessionWithRepository(id: string) {
   return prisma.session.findUnique({
@@ -68,39 +94,93 @@ export async function ensureChatTitle(sessionId: string, messages: UIMessage[]):
   await prisma.session.update({ where: { id: sessionId }, data: { title } });
 }
 
-/** 读取会话的线性消息（映射为 AI SDK UIMessage）。 */
+/** 读取会话当前 active path（映射为 AI SDK UIMessage）。 */
 export async function loadMessages(sessionId: string): Promise<UIMessage[]> {
+  return (await loadSessionMessageTree(sessionId)).messages;
+}
+
+export async function loadSessionMessageTree(sessionId: string): Promise<SessionMessageTree> {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { activeLeafMessageId: true },
+  });
   const rows = await prisma.message.findMany({
     where: { sessionId },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
-  return rows.map((r) => ({
-    id: r.id,
-    role: r.role as UIMessage['role'],
-    parts: r.parts as UIMessage['parts'],
-  }));
+  const activeLeafMessageId = pickActiveLeafId(rows, session?.activeLeafMessageId ?? null);
+  const activePathIds = buildPathIds(rows, activeLeafMessageId);
+  const activePath = new Set(activePathIds);
+  const siblingIdsByParent = buildSiblingIdsByParent(rows);
+
+  return {
+    messages: rows
+      .filter((row) => activePath.has(row.id))
+      .sort((a, b) => activePathIds.indexOf(a.id) - activePathIds.indexOf(b.id))
+      .map(toUIMessage),
+    messageTree: rows.map((row) => {
+      const siblingIds = siblingIdsByParent.get(row.parentId ?? null) ?? [row.id];
+      return {
+        id: row.id,
+        parentId: row.parentId,
+        role: row.role as UIMessage['role'],
+        createdAt: row.createdAt,
+        siblingIds,
+        siblingIndex: Math.max(0, siblingIds.indexOf(row.id)),
+        siblingCount: siblingIds.length,
+        active: activePath.has(row.id),
+      };
+    }),
+    activeLeafMessageId,
+    activePathIds,
+  };
 }
 
 /**
- * 持久化会话消息：整组替换（onFinish 给的是完整 messages 数组）。
- * 用事务保证一致性，并刷新 session.updatedAt。
+ * 持久化当前 active path：按 message id upsert，并用相邻 message 表达父子链。
+ * 不删除其他分支，避免切换/分叉后丢失历史路径。
  */
 export async function saveMessages(sessionId: string, messages: UIMessage[]): Promise<void> {
   const uniqueMessages = dedupeMessages(messages);
+  const activeLeafMessageId = uniqueMessages.at(-1)?.id ?? null;
 
   await prisma.$transaction([
-    prisma.message.deleteMany({ where: { sessionId } }),
-    prisma.message.createMany({
-      data: uniqueMessages.map((m) => ({
-        id: m.id,
-        sessionId,
-        role: m.role,
-        parts: m.parts as object,
-      })),
-      skipDuplicates: true,
+    ...uniqueMessages.map((m, index) =>
+      prisma.message.upsert({
+        where: { id: m.id },
+        create: {
+          id: m.id,
+          sessionId,
+          parentId: uniqueMessages[index - 1]?.id ?? null,
+          role: m.role,
+          parts: m.parts as object,
+        },
+        update: {
+          parentId: uniqueMessages[index - 1]?.id ?? null,
+          role: m.role,
+          parts: m.parts as object,
+        },
+      }),
+    ),
+    prisma.session.update({
+      where: { id: sessionId },
+      data: { activeLeafMessageId, updatedAt: new Date() },
     }),
-    prisma.session.update({ where: { id: sessionId }, data: { updatedAt: new Date() } }),
   ]);
+}
+
+export async function setActiveMessage(sessionId: string, messageId: string): Promise<SessionMessageTree | null> {
+  const rows = await prisma.message.findMany({
+    where: { sessionId },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+  if (!rows.some((row) => row.id === messageId)) return null;
+  const leafId = pickLatestLeafId(rows, messageId);
+  await prisma.session.update({
+    where: { id: sessionId },
+    data: { activeLeafMessageId: leafId, updatedAt: new Date() },
+  });
+  return loadSessionMessageTree(sessionId);
 }
 
 export function dedupeMessages(messages: UIMessage[]): UIMessage[] {
@@ -149,6 +229,68 @@ export function mergeIncomingUserMessage(storedMessages: UIMessage[], incomingMe
   if (!latestUserMessage) return storedMessages;
   if (storedMessages.some((message) => message.id === latestUserMessage.id)) return storedMessages;
   return [...storedMessages, latestUserMessage];
+}
+
+export function mergeIncomingUserMessageAtParent(
+  storedMessages: UIMessage[],
+  incomingMessages: UIMessage[],
+  parentMessageId?: string | null,
+): UIMessage[] {
+  const baseMessages = parentMessageId
+    ? storedMessages.slice(0, storedMessages.findIndex((message) => message.id === parentMessageId) + 1)
+    : storedMessages;
+  if (parentMessageId && baseMessages.length === 0) return storedMessages;
+  return mergeIncomingUserMessage(baseMessages, incomingMessages);
+}
+
+function toUIMessage(row: MessageRow): UIMessage {
+  return {
+    id: row.id,
+    role: row.role as UIMessage['role'],
+    parts: row.parts as UIMessage['parts'],
+  };
+}
+
+export function pickActiveLeafId(rows: MessageRow[], activeLeafMessageId: string | null): string | null {
+  if (activeLeafMessageId && rows.some((row) => row.id === activeLeafMessageId)) return activeLeafMessageId;
+  return rows.at(-1)?.id ?? null;
+}
+
+export function buildPathIds(rows: MessageRow[], leafId: string | null): string[] {
+  if (!leafId) return [];
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const path: string[] = [];
+  const seen = new Set<string>();
+  let current = byId.get(leafId);
+  while (current && !seen.has(current.id)) {
+    path.push(current.id);
+    seen.add(current.id);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+  return path.reverse();
+}
+
+export function buildSiblingIdsByParent(rows: MessageRow[]): Map<string | null, string[]> {
+  const groups = new Map<string | null, string[]>();
+  for (const row of rows) {
+    const key = row.parentId ?? null;
+    groups.set(key, [...(groups.get(key) ?? []), row.id]);
+  }
+  return groups;
+}
+
+export function pickLatestLeafId(rows: MessageRow[], messageId: string): string {
+  const childrenByParent = new Map<string, MessageRow[]>();
+  for (const row of rows) {
+    if (!row.parentId) continue;
+    childrenByParent.set(row.parentId, [...(childrenByParent.get(row.parentId) ?? []), row]);
+  }
+  let currentId = messageId;
+  for (;;) {
+    const children = childrenByParent.get(currentId);
+    if (!children?.length) return currentId;
+    currentId = children[children.length - 1].id;
+  }
 }
 
 /** 从 UIMessage.parts 里抽一段纯文本预览。 */

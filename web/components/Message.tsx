@@ -1,9 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import type { UIMessage } from 'ai';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { ChevronRight, Loader2, Webhook, Brain, CircleCheck, CircleX, CircleDashed } from 'lucide-react';
+import { Streamdown } from 'streamdown';
+import { code } from '@streamdown/code';
+import { cjk } from '@streamdown/cjk';
+import { Brain, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, CircleX, GitBranchPlus, Loader2, RotateCcw, Webhook } from 'lucide-react';
 import { cn } from '../lib/cn';
+import type { MessageTreeNode } from '../lib/types';
 
 const TOOL_LABEL: Record<string, string> = {
   bash: '执行命令',
@@ -19,24 +21,13 @@ const TOOL_LABEL: Record<string, string> = {
 };
 
 type Part = UIMessage['parts'][number];
+type BranchInfo = Pick<MessageTreeNode, 'siblingIds' | 'siblingIndex' | 'siblingCount'>;
 
-/** 消息 parts 分段：文本独立成段，工具调用 / 推理等过程性 parts 聚合成一个折叠组。 */
-type Segment = { kind: 'text'; text: string; streaming: boolean } | { kind: 'process'; parts: Part[] };
-
-function segmentParts(parts: Part[]): Segment[] {
-  const segments: Segment[] = [];
-  for (const part of parts) {
-    if ((part.type as string) === 'step-start' || (part.type as string) === 'step-finish') continue;
-    if (part.type === 'text') {
-      const streaming = (part as { state?: string }).state === 'streaming';
-      if (part.text.trim() || streaming) segments.push({ kind: 'text', text: part.text, streaming });
-      continue;
-    }
-    const last = segments[segments.length - 1];
-    if (last?.kind === 'process') last.parts.push(part);
-    else segments.push({ kind: 'process', parts: [part] });
-  }
-  return segments;
+function textOf(message: UIMessage): string {
+  return message.parts
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('')
+    .trim();
 }
 
 function toolName(part: Record<string, unknown>): string {
@@ -49,216 +40,211 @@ function isTool(part: Part): boolean {
   return part.type === 'dynamic-tool' || part.type.startsWith('tool-');
 }
 
-/** 单个过程步骤：一行状态 + 名称，点击展开入参出参。 */
-function ProcessStep({ part }: { part: Part }) {
+function isBoundary(part: Part): boolean {
+  const type = String(part.type);
+  return type === 'step-start' || type === 'step-finish';
+}
+
+function StreamingCursor({ className }: { className?: string }) {
+  return <span className={cn('inline-block h-4 w-1.5 translate-y-0.5 animate-pulse rounded-full bg-[var(--ink)]', className)} />;
+}
+
+function MarkdownBlock({ text, streaming }: { text: string; streaming?: boolean }) {
+  if (!text.trim() && !streaming) return null;
+  return (
+    <div className="streamdown-body min-w-0">
+      {text.trim() ? (
+        <Streamdown animated plugins={{ code, cjk }} isAnimating={Boolean(streaming)}>
+          {text}
+        </Streamdown>
+      ) : null}
+      {streaming && <StreamingCursor />}
+    </div>
+  );
+}
+
+function PlainTextBlock({ text }: { text: string }) {
+  if (!text.trim()) return null;
+  return <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>;
+}
+
+function ReasoningBlock({ part }: { part: Part }) {
   const [open, setOpen] = useState(false);
   const record = part as unknown as Record<string, unknown>;
+  const text = String(record.text ?? '');
+  const streaming = record.state === 'streaming';
+  if (!text.trim() && !streaming) return null;
+  return (
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-soft)] text-xs">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--body-strong)] transition-colors hover:bg-white"
+      >
+        {streaming ? <Loader2 size={13} className="shrink-0 animate-spin text-[var(--warning)]" /> : <Brain size={13} className="shrink-0 text-[var(--brand-navy)]" />}
+        <span className="caption truncate">REASONING{text && !open ? ` · ${text.slice(0, 72)}` : ''}</span>
+        <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-[var(--hairline)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
+    </div>
+  );
+}
 
-  if (part.type === 'reasoning') {
-    const text = String(record.text ?? '');
-    if (!text.trim()) return null;
-    return (
-      <div className="px-3 py-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex w-full items-center gap-2 text-left text-[var(--muted)] transition-colors hover:text-[var(--body-strong)]"
-        >
-          <Brain size={13} className="shrink-0 text-[var(--brand-navy)]" />
-          <span className="caption truncate">思考{open ? '' : `：${text.slice(0, 60)}`}</span>
-          <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
-        </button>
-        {open && <p className="mt-1.5 whitespace-pre-wrap pl-[21px] leading-relaxed text-[var(--muted)]">{text}</p>}
-      </div>
-    );
-  }
-
-  if (!isTool(part)) {
-    return (
-      <div className="px-3 py-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex w-full items-center gap-2 text-left text-[var(--muted)] transition-colors hover:text-[var(--body-strong)]"
-        >
-          <CircleDashed size={13} className="shrink-0 text-[var(--muted-soft)]" />
-          <span className="truncate">{part.type}</span>
-          <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
-        </button>
-        {open && (
-            <pre className="caption mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words pl-[21px] text-[var(--muted)]">
-            {JSON.stringify(part, null, 2)}
-          </pre>
-        )}
-      </div>
-    );
-  }
-
+function ToolBlock({ part }: { part: Part }) {
+  const [open, setOpen] = useState(false);
+  const record = part as unknown as Record<string, unknown>;
   const state = String(record.state ?? '');
   const done = state === 'output-available';
   const errored = state === 'output-error';
   const running = !done && !errored;
   const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
-
   return (
-    <div className="px-3 py-1.5">
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-white text-xs">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-left transition-colors hover:text-[var(--ink)]"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-soft)]"
       >
         <StatusIcon
           size={13}
-          className={cn(
-            'shrink-0',
-            errored ? 'text-[var(--error)]' : done ? 'text-[var(--success)]' : 'animate-spin text-[var(--warning)]',
-          )}
+          className={cn('shrink-0', errored ? 'text-[var(--error)]' : done ? 'text-[var(--success)]' : 'animate-spin text-[var(--warning)]')}
         />
         <span className={cn('caption truncate', errored ? 'text-[var(--error)]' : 'text-[var(--body-strong)]')}>{toolName(record)}</span>
         {running && <span className="shrink-0 text-[var(--muted-soft)]">执行中</span>}
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="mt-1.5 space-y-1.5 pl-[21px]">
-          {record.input != null && (
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[var(--surface-soft)] px-2.5 py-2 font-mono text-[11px] leading-relaxed text-[var(--body)] ring-1 ring-[var(--hairline)]">
-              {JSON.stringify(record.input, null, 2)}
-            </pre>
-          )}
-          {record.output != null && (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[var(--surface-soft)] px-2.5 py-2 font-mono text-[11px] leading-relaxed text-[var(--body-strong)] ring-1 ring-[var(--hairline)]">
-              {typeof record.output === 'string' ? record.output : JSON.stringify(record.output, null, 2)}
-            </pre>
-          )}
-          {errored && record.errorText != null && (
-            <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>
-          )}
+        <div className="space-y-2 border-t border-[var(--hairline)] bg-[var(--canvas)] px-3 py-2.5">
+          {record.input != null && <JsonPanel label="INPUT" value={record.input} />}
+          {record.output != null && <JsonPanel label="OUTPUT" value={record.output} strong />}
+          {errored && record.errorText != null && <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>}
         </div>
       )}
     </div>
   );
 }
 
-/** 过程折叠组：默认收起，仅显示进度摘要；执行中时在头部实时显示当前步骤。 */
-function ProcessGroup({ parts }: { parts: Part[] }) {
-  const [open, setOpen] = useState(false);
-  const tools = parts.filter(isTool) as unknown as Record<string, unknown>[];
-  const runningTool = tools.find((t) => {
-    const state = String(t.state ?? '');
-    return state !== 'output-available' && state !== 'output-error';
-  });
-  const erroredCount = tools.filter((t) => String(t.state ?? '') === 'output-error').length;
-
+function JsonPanel({ label, value, strong }: { label: string; value: unknown; strong?: boolean }) {
   return (
-    <div className="my-3 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-white text-xs">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-soft)]"
-      >
-        <ChevronRight size={13} className={cn('shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
-        <span className="eyebrow text-[var(--body-strong)]">执行过程</span>
-        <span className="caption text-[var(--muted)]">{parts.length} 步</span>
-        {erroredCount > 0 && <span className="text-[var(--error)]">{erroredCount} 步失败</span>}
-        {runningTool && (
-          <span className="ml-auto inline-flex min-w-0 items-center gap-1.5 text-[var(--warning)]">
-            <Loader2 size={12} className="shrink-0 animate-spin" />
-            <span className="truncate">{toolName(runningTool)}</span>
-          </span>
+    <div className="space-y-1">
+      <span className="caption text-[var(--muted-soft)]">{label}</span>
+      <pre
+        className={cn(
+          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[var(--surface-soft)] px-2.5 py-2 font-mono text-[11px] leading-relaxed ring-1 ring-[var(--hairline)]',
+          strong ? 'text-[var(--body-strong)]' : 'text-[var(--body)]',
         )}
-      </button>
-      {open && (
-        <div className="animate-fade-in divide-y divide-[var(--hairline)] border-t border-[var(--hairline)] bg-[var(--canvas)]">
-          {parts.map((part, i) => (
-            <ProcessStep key={i} part={part} />
-          ))}
-        </div>
-      )}
+      >
+        {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+      </pre>
     </div>
   );
 }
 
-function messageText(message: UIMessage): string {
-  return message.parts
-    .map((p) => (p.type === 'text' ? p.text : ''))
-    .join('')
-    .trim();
+function UnknownBlock({ part }: { part: Part }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-soft)] text-xs">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--muted)] hover:bg-white">
+        <CircleDashed size={13} className="shrink-0" />
+        <span className="caption truncate">{String(part.type)}</span>
+        <ChevronRight size={12} className={cn('ml-auto shrink-0 transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && <JsonPanel label="PART" value={part} />}
+    </div>
+  );
 }
 
-/** Webhook 触发的首条指令：折叠为一张紧凑的任务卡。 */
+function MessageBlockRenderer({ part, role, streaming }: { part: Part; role: UIMessage['role']; streaming?: boolean }) {
+  if (isBoundary(part)) return null;
+  if (part.type === 'text') {
+    return role === 'assistant' ? <MarkdownBlock text={part.text} streaming={streaming || (part as { state?: string }).state === 'streaming'} /> : <PlainTextBlock text={part.text} />;
+  }
+  if (part.type === 'reasoning') return <ReasoningBlock part={part} />;
+  if (isTool(part)) return <ToolBlock part={part} />;
+  return <UnknownBlock part={part} />;
+}
+
 function TriggerCard({ message }: { message: UIMessage }) {
   const [open, setOpen] = useState(false);
-  const text = messageText(message);
+  const text = textOf(message);
   return (
     <div className="my-3 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--brand-lime)] text-xs text-[var(--ink)]">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-black/5"
-      >
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-black/5">
         <Webhook size={13} className="shrink-0 text-[var(--ink)]" />
         <span className="eyebrow text-[var(--ink)]">Webhook 触发审查</span>
         <span className="truncate text-[var(--body)]">{open ? '' : text.split('\n')[0]}</span>
         <ChevronRight size={13} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
-      {open && (
-        <pre className="animate-fade-in whitespace-pre-wrap break-words border-t border-black/15 bg-white/50 px-3 py-2.5 font-mono leading-relaxed text-[var(--body)]">
-          {text}
-        </pre>
-      )}
+      {open && <pre className="animate-fade-in whitespace-pre-wrap break-words border-t border-black/15 bg-white/50 px-3 py-2.5 font-mono leading-relaxed text-[var(--body)]">{text}</pre>}
     </div>
   );
 }
 
-function Markdown({ children }: { children: string }) {
+function BranchSwitcher({ branch, onSelectSibling }: { branch?: BranchInfo; onSelectSibling?: (messageId: string) => void }) {
+  if (!branch || branch.siblingCount <= 1 || !onSelectSibling) return null;
+  const previous = branch.siblingIds[branch.siblingIndex - 1];
+  const next = branch.siblingIds[branch.siblingIndex + 1];
   return (
-    <div className="markdown-body">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
+    <div className="caption flex shrink-0 items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-card)] px-1.5 py-1 text-[var(--body-strong)]">
+      <button type="button" disabled={!previous} onClick={() => previous && onSelectSibling(previous)} className="rounded-[var(--r-pill)] p-0.5 hover:bg-white disabled:opacity-30" aria-label="上一条分支">
+        <ChevronLeft size={12} />
+      </button>
+      <span className="min-w-8 text-center">{branch.siblingIndex + 1}/{branch.siblingCount}</span>
+      <button type="button" disabled={!next} onClick={() => next && onSelectSibling(next)} className="rounded-[var(--r-pill)] p-0.5 hover:bg-white disabled:opacity-30" aria-label="下一条分支">
+        <ChevronRight size={12} />
+      </button>
     </div>
   );
 }
 
-function StreamingCursor() {
-  return <span className="inline-block h-4 w-1.5 translate-y-0.5 animate-pulse rounded-full bg-[var(--ink)]" />;
-}
-
-export function Message({ message, isTrigger, isStreaming }: { message: UIMessage; isTrigger?: boolean; isStreaming?: boolean }) {
+export function Message({
+  message,
+  isTrigger,
+  isStreaming,
+  branch,
+  onSelectSibling,
+  onBranchFrom,
+}: {
+  message: UIMessage;
+  isTrigger?: boolean;
+  isStreaming?: boolean;
+  branch?: BranchInfo;
+  onSelectSibling?: (messageId: string) => void;
+  onBranchFrom?: (messageId: string) => void;
+}) {
   if (isTrigger) return <TriggerCard message={message} />;
 
-  if (message.role === 'user') {
-    const text = messageText(message);
-    return (
-      <div className="flex justify-end py-3 pl-14">
-        <div className="max-w-full whitespace-pre-wrap break-words rounded-[var(--r-md)] bg-[var(--ink)] px-4 py-2.5 text-sm leading-relaxed text-white">
-          {text}
+  const isUser = message.role === 'user';
+  const visibleParts = message.parts.filter((part) => !isBoundary(part));
+  const canBranch = !isStreaming && Boolean(onBranchFrom);
+  return (
+    <div className={cn('group flex py-3', isUser ? 'justify-end pl-12' : 'justify-start pr-8 max-md:pr-0')}>
+      <div className={cn('flex max-w-full items-start gap-2', isUser && 'flex-row-reverse')}>
+        <div
+          className={cn(
+            'min-w-0 space-y-3 rounded-[var(--r-md)]',
+            isUser ? 'bg-[var(--ink)] px-4 py-2.5 text-white' : 'bg-transparent text-[var(--body-strong)]',
+          )}
+        >
+          {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
+          {visibleParts.map((part, index) => (
+            <MessageBlockRenderer key={`${message.id}-${index}-${part.type}`} part={part} role={message.role} streaming={isStreaming && index === visibleParts.length - 1} />
+          ))}
+        </div>
+        <div className={cn('flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
+          <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
+          {canBranch && (
+            <button
+              type="button"
+              onClick={() => onBranchFrom?.(message.id)}
+              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] hover:bg-[var(--surface-strong)]"
+              title={isUser ? '重新回答' : '从这里继续'}
+            >
+              {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}
+            </button>
+          )}
         </div>
       </div>
-    );
-  }
-
-  // assistant：正文走文档流，过程性 parts 聚合折叠。
-  const segments = segmentParts(message.parts);
-  if (segments.length === 0) {
-    if (!isStreaming) return null;
-    return (
-      <div className="py-4 pr-8 max-md:pr-0">
-        <StreamingCursor />
-      </div>
-    );
-  }
-  return (
-    <div className="py-4 pr-8 max-md:pr-0">
-      {segments.map((seg, i): ReactNode => {
-        if (seg.kind === 'text') {
-          return (
-            <div key={i} className="space-y-1">
-              {seg.text.trim() && <Markdown>{seg.text}</Markdown>}
-              {(isStreaming || seg.streaming) && <StreamingCursor />}
-            </div>
-          );
-        }
-        return <ProcessGroup key={i} parts={seg.parts} />;
-      })}
     </div>
   );
 }

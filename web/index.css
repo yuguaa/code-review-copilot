@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
 
 /* 设计 token：Figma 语法的高密度审查工作台。 */
 :root {

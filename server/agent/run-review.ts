@@ -1,5 +1,11 @@
 import { prisma } from '../lib/prisma';
-import { getSessionWithRepository, loadMessages, mergeStreamingMessage, saveMessages } from '../lib/chat-store';
+import {
+  getSessionWithRepository,
+  loadMessages,
+  loadSessionMessageTree,
+  mergeStreamingMessage,
+  saveMessages,
+} from '../lib/chat-store';
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
 import { notifyReviewCompleted } from './review-notification';
@@ -46,7 +52,7 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     await saveMessages(sessionId, finalMessages);
     await notifyReviewCompleted(session, finalMessages);
     await prisma.session.update({ where: { id: sessionId }, data: { status: 'completed' } });
-    publishSessionMessages(sessionId, finalMessages);
+    publishSessionMessages(sessionId, await loadSessionMessageTree(sessionId));
     publishSessionStatus(sessionId, 'completed');
     publishSessionListChanged();
     log.info(`审查完成 session=${sessionId}`);

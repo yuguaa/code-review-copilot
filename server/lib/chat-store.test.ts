@@ -1,7 +1,18 @@
 import type { UIMessage } from 'ai';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { dedupeMessages, mergeIncomingUserMessage, mergePersistedMessages, mergeStreamingMessage } from './chat-store';
+import {
+  buildPathIds,
+  buildSiblingIdsByParent,
+  dedupeMessages,
+  mergeIncomingUserMessage,
+  mergeIncomingUserMessageAtParent,
+  mergePersistedMessages,
+  mergeStreamingMessage,
+  pickActiveLeafId,
+  pickLatestLeafId,
+  type MessageRow,
+} from './chat-store';
 
 describe('dedupeMessages', () => {
   it('keeps the last message when duplicate ids appear', () => {
@@ -108,6 +119,52 @@ describe('mergeIncomingUserMessage', () => {
     ];
 
     expect(mergeIncomingUserMessage(storedMessages, storedMessages)).toEqual(storedMessages);
+  });
+});
+
+describe('message tree helpers', () => {
+  const at = (n: number) => new Date(2026, 0, 1, 0, 0, n);
+  const rows: MessageRow[] = [
+    { id: 'u1', parentId: null, role: 'user', parts: [], createdAt: at(1) },
+    { id: 'a1', parentId: 'u1', role: 'assistant', parts: [], createdAt: at(2) },
+    { id: 'u2', parentId: 'a1', role: 'user', parts: [], createdAt: at(3) },
+    { id: 'a2', parentId: 'u2', role: 'assistant', parts: [], createdAt: at(4) },
+    { id: 'a3', parentId: 'u2', role: 'assistant', parts: [], createdAt: at(5) },
+  ];
+
+  it('active leaf 缺失时使用最近消息作为默认路径叶子', () => {
+    expect(pickActiveLeafId(rows, null)).toBe('a3');
+    expect(pickActiveLeafId(rows, 'missing')).toBe('a3');
+    expect(pickActiveLeafId(rows, 'a2')).toBe('a2');
+  });
+
+  it('从 leaf 还原 root 到 leaf 的 active path', () => {
+    expect(buildPathIds(rows, 'a2')).toEqual(['u1', 'a1', 'u2', 'a2']);
+  });
+
+  it('按 parent 收集 sibling，支持同一 user 下多次回答', () => {
+    expect(buildSiblingIdsByParent(rows).get('u2')).toEqual(['a2', 'a3']);
+  });
+
+  it('切换到中间节点时落到该子树最近叶子', () => {
+    expect(pickLatestLeafId(rows, 'u2')).toBe('a3');
+    expect(pickLatestLeafId(rows, 'a2')).toBe('a2');
+  });
+
+  it('从指定 message 分叉时截断 active path 再追加用户消息', () => {
+    const storedMessages: UIMessage[] = [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: '起点' }] },
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: '回答' }] },
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: '后续' }] },
+      { id: 'a2', role: 'assistant', parts: [{ type: 'text', text: '后续回答' }] },
+    ];
+    const incoming: UIMessage[] = [{ id: 'branch-user', role: 'user', parts: [{ type: 'text', text: '从回答分叉' }] }];
+
+    expect(mergeIncomingUserMessageAtParent(storedMessages, incoming, 'a1').map((message) => message.id)).toEqual([
+      'u1',
+      'a1',
+      'branch-user',
+    ]);
   });
 });
 

@@ -31,6 +31,20 @@ export type SessionDetail = {
     repository: { id: string; name: string; path: string } | null;
   };
   messages: UIMessage[];
+  messageTree: MessageTreeNode[];
+  activeLeafMessageId: string | null;
+  activePathIds: string[];
+};
+
+export type MessageTreeNode = {
+  id: string;
+  parentId: string | null;
+  role: UIMessage['role'];
+  createdAt: string;
+  siblingIds: string[];
+  siblingIndex: number;
+  siblingCount: number;
+  active: boolean;
 };
 
 export type RepositoryItem = {

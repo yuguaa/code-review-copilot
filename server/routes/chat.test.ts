@@ -10,6 +10,7 @@ describe('chat route streaming persistence', () => {
     expect(source).toContain('onEnd: async');
     expect(source).toContain('generateMessageId: randomUUID');
     expect(source).toContain('mergePersistedMessages(messages, finalMessages)');
+    expect(source).toContain('mergeIncomingUserMessageAtParent');
     expect(source).toContain('saveMessages(sessionId, visibleMessages)');
     expect(source).toContain('publishSessionListChanged');
   });

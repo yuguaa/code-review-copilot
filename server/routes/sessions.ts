@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { prisma } from '../lib/prisma';
-import { getSessionWithRepository, listSessions, loadMessages } from '../lib/chat-store';
+import { getSessionWithRepository, listSessions, loadSessionMessageTree, setActiveMessage } from '../lib/chat-store';
 import { publishSessionListChanged, subscribeSessionEvents, subscribeSessionListEvents } from '../lib/session-events';
 
 export const sessionRoutes = new Hono();
@@ -42,7 +42,7 @@ sessionRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
   const session = await getSessionWithRepository(id);
   if (!session) return c.json({ error: '会话不存在' }, 404);
-  const messages = await loadMessages(id);
+  const tree = await loadSessionMessageTree(id);
   return c.json({
     session: {
       id: session.id,
@@ -61,8 +61,24 @@ sessionRoutes.get('/:id', async (c) => {
         ? { id: session.repository.id, name: session.repository.name, path: session.repository.path }
         : null,
     },
-    messages,
+    messages: tree.messages,
+    messageTree: tree.messageTree,
+    activeLeafMessageId: tree.activeLeafMessageId,
+    activePathIds: tree.activePathIds,
   });
+});
+
+/** 切换当前会话 active message，并自动落到该节点子树下最近叶子。 */
+sessionRoutes.post('/:id/active-message', async (c) => {
+  const sessionId = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const messageId = typeof body.messageId === 'string' ? body.messageId : null;
+  if (!messageId) return c.json({ error: '缺少 messageId' }, 400);
+
+  const tree = await setActiveMessage(sessionId, messageId);
+  if (!tree) return c.json({ error: '消息不存在' }, 404);
+  publishSessionListChanged();
+  return c.json(tree);
 });
 
 /** 新建普通对话会话（可选绑定仓库以便用其模型配置）。 */

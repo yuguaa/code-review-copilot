@@ -5,7 +5,7 @@ import {
   ensureChatTitle,
   getSessionWithRepository,
   loadMessages,
-  mergeIncomingUserMessage,
+  mergeIncomingUserMessageAtParent,
   mergePersistedMessages,
   saveMessages,
 } from '../lib/chat-store';
@@ -24,7 +24,7 @@ export const chatRoutes = new Hono();
  * webhook 首轮审查不经过这里，见 run-review.ts。
  */
 chatRoutes.post('/', async (c) => {
-  let body: { sessionId?: string; messages?: UIMessage[] };
+  let body: { sessionId?: string; messages?: UIMessage[]; parentMessageId?: string | null };
   try {
     body = await c.req.json();
   } catch {
@@ -33,6 +33,7 @@ chatRoutes.post('/', async (c) => {
 
   const sessionId = body.sessionId;
   const incomingMessages = body.messages ?? [];
+  const parentMessageId = typeof body.parentMessageId === 'string' ? body.parentMessageId : null;
   if (!sessionId) return c.json({ error: '缺少 sessionId' }, 400);
 
   const session = await getSessionWithRepository(sessionId);
@@ -43,7 +44,7 @@ chatRoutes.post('/', async (c) => {
     return c.json({ error: '本次审查正在进行中，请等待审查完成后再追问。' }, 409);
   }
 
-  const messages = mergeIncomingUserMessage(await loadMessages(sessionId), incomingMessages);
+  const messages = mergeIncomingUserMessageAtParent(await loadMessages(sessionId), incomingMessages, parentMessageId);
 
   let result: Awaited<ReturnType<typeof createChatStream>>;
   try {

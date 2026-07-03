@@ -100,15 +100,25 @@ function ChatThread({
   updateDetail: React.Dispatch<React.SetStateAction<SessionDetail | null>>;
 }) {
   const sessionId = detail.session.id;
+  const [parentMessageId, setParentMessageId] = useState<string | null>(null);
   const transport = useMemo(
     () => new DefaultChatTransport({ api: '/api/chat', body: { sessionId } }),
     [sessionId],
   );
-  const { messages, setMessages, sendMessage, stop, status } = useChat({
+  const { messages, setMessages, sendMessage, regenerate, stop, status } = useChat({
     id: sessionId,
     messages: detail.messages,
     transport,
-    onFinish: onActivity,
+    onFinish: () => {
+      setParentMessageId(null);
+      onActivity();
+      api<SessionDetail>(`/api/sessions/${sessionId}`)
+        .then((next) => {
+          updateDetail(next);
+          setMessages(next.messages);
+        })
+        .catch(() => undefined);
+    },
     onError: (e) => {
       let message = e.message || '回复失败，请稍后重试';
       try {
@@ -182,7 +192,23 @@ function ChatThread({
       // 本地追问流式进行中时忽略服务端回显，避免两个来源双写造成重复/闪跳；
       // 该通道只服务后台 webhook 审查（页面被动旁观，此时非 busy）。
       if (busyRef.current) return;
-      const payload = JSON.parse((event as MessageEvent<string>).data) as Pick<SessionDetail, 'messages'>;
+      const payload = JSON.parse((event as MessageEvent<string>).data) as Partial<
+        Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>
+      >;
+      if (payload.messageTree) {
+        updateDetail((current) =>
+          current
+            ? {
+                ...current,
+                messages: payload.messages ?? current.messages,
+                messageTree: payload.messageTree ?? current.messageTree,
+                activeLeafMessageId: payload.activeLeafMessageId ?? current.activeLeafMessageId,
+                activePathIds: payload.activePathIds ?? current.activePathIds,
+              }
+            : current,
+        );
+      }
+      if (!payload.messages) return;
       setMessages(payload.messages);
     });
 
@@ -209,13 +235,52 @@ function ChatThread({
   // 审查进行中不允许追问：两条流程会并发整组覆盖落库导致消息丢失，服务端也会拒绝
   const reviewing = s.status === 'running';
   const composerDisabled = busy || reviewing;
+  const treeById = useMemo(() => new Map(detail.messageTree.map((node) => [node.id, node])), [detail.messageTree]);
 
   const submit = () => {
     const text = input.trim();
     if (!text || composerDisabled) return;
     nearBottomRef.current = true;
     setInput('');
-    void sendMessage({ text });
+    void sendMessage({ text }, { body: { parentMessageId } });
+  };
+
+  const switchToMessage = (messageId: string) => {
+    if (busy) return;
+    api<Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>>(`/api/sessions/${sessionId}/active-message`, {
+      method: 'POST',
+      body: JSON.stringify({ messageId }),
+    })
+      .then((next) => {
+        setMessages(next.messages);
+        updateDetail((current) =>
+          current
+            ? {
+                ...current,
+                messages: next.messages,
+                messageTree: next.messageTree,
+                activeLeafMessageId: next.activeLeafMessageId,
+                activePathIds: next.activePathIds,
+              }
+            : current,
+        );
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '切换分支失败'));
+  };
+
+  const branchFromMessage = (messageId: string) => {
+    if (busy) return;
+    const message = messages.find((item) => item.id === messageId);
+    if (message?.role === 'user') {
+      nearBottomRef.current = true;
+      setParentMessageId(null);
+      regenerate({ messageId, body: { parentMessageId: messageId } }).catch((e) =>
+        toast.error(e instanceof Error ? e.message : '重新回答失败'),
+      );
+      return;
+    }
+    setParentMessageId(messageId);
+    inputRef.current?.focus();
   };
 
   const shortHash = s.commitSha ? s.commitSha.slice(0, 8) : null;
@@ -302,6 +367,9 @@ function ChatThread({
                 message={m}
                 isTrigger={isTriggerFirst && i === 0}
                 isStreaming={status === 'streaming' && i === messages.length - 1 && m.role === 'assistant'}
+                branch={treeById.get(m.id)}
+                onSelectSibling={switchToMessage}
+                onBranchFrom={reviewing ? undefined : branchFromMessage}
               />
             ))}
             {/* 仅在还没有 assistant 消息时显示极简等待；流开始后由最后一条消息承载光标与正文。 */}
@@ -335,7 +403,11 @@ function ChatThread({
               rows={1}
               disabled={reviewing}
               placeholder={
-                reviewing ? '审查进行中，完成后即可追问…' : '继续追问，或要求重新审查…（Enter 发送，Shift+Enter 换行）'
+                reviewing
+                  ? '审查进行中，完成后即可追问…'
+                  : parentMessageId
+                    ? '从选中的消息分叉继续…（Enter 发送，Shift+Enter 换行）'
+                    : '继续追问，或要求重新审查…（Enter 发送，Shift+Enter 换行）'
               }
               className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--muted-soft)] disabled:cursor-not-allowed"
             />
