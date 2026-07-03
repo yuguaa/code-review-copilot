@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ComposerCommand } from '../components/composer/composer-types';
+import type { ComposerCommand } from './composer-types';
 
 export function useComposerCommands(commands: ComposerCommand[]) {
   const [open, setOpen] = useState(false);

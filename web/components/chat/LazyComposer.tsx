@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import type { ComponentProps } from 'react';
 
-const Composer = lazy(() => import('../Composer').then((module) => ({ default: module.Composer })));
+const Composer = lazy(() => import('../composer/Composer').then((module) => ({ default: module.Composer })));
 
 function ComposerFallback() {
   return (
