@@ -22,6 +22,7 @@ import {
   type GitLabWebhookResult,
   type MergeRequestPosition,
 } from './gitlab-comments';
+import { fetchGitLabPages } from './gitlab-pagination';
 
 const log = createLogger("GitLabService");
 
@@ -174,33 +175,23 @@ export class GitLabService {
   ): Promise<GitLabCommit[]> {
     const perPage = params?.per_page ?? 100
     const maxPages = params?.max_pages ?? 200
-    const commits: GitLabCommit[] = []
-
-    for (let page = 1; page <= maxPages; page += 1) {
-      try {
-        const response = await this.client.get(
-          `/projects/${projectId}/repository/commits`,
-          {
-            params: {
-              per_page: perPage,
-              page,
-              since: params?.since,
-              until: params?.until,
-              ref_name: params?.ref_name,
-              author: params?.author,
-            },
-          }
-        )
-        const batch = Array.isArray(response.data) ? response.data : []
-        commits.push(...batch)
-        if (batch.length < perPage) break
-      } catch (error) {
-        log.error('Failed to fetch project commits:', error)
-        throw new Error('Failed to fetch project commits from GitLab')
-      }
+    try {
+      return await fetchGitLabPages<GitLabCommit>({
+        client: this.client,
+        path: `/projects/${projectId}/repository/commits`,
+        params: {
+          since: params?.since,
+          until: params?.until,
+          ref_name: params?.ref_name,
+          author: params?.author,
+        },
+        perPage,
+        maxPages,
+      })
+    } catch (error) {
+      log.error('Failed to fetch project commits:', error)
+      throw new Error('Failed to fetch project commits from GitLab')
     }
-
-    return commits
   }
 
   /**
@@ -222,30 +213,18 @@ export class GitLabService {
   getBranches(projectId: number | string, params?: { search?: string; per_page?: number; max_pages?: number }): Promise<GitLabBranch[]> {
     const perPage = params?.per_page ?? 100
     const maxPages = params?.max_pages ?? 10
-    const branches: GitLabBranch[] = []
-    let page = 1
-
-    const loadPage = (): Promise<GitLabBranch[]> => {
-      if (page > maxPages) return Promise.resolve(branches)
-      return this.client.get(`/projects/${projectId}/repository/branches`, {
-        params: {
-          search: params?.search,
-          per_page: perPage,
-          page,
-        },
-      }).then((response) => {
-        const batch = Array.isArray(response.data) ? response.data as GitLabBranch[] : []
-        branches.push(...batch)
-        page += 1
-        if (batch.length < perPage) return branches
-        return loadPage()
-      }).catch((error) => {
-        log.error('Failed to fetch GitLab branches:', error)
-        throw new Error('Failed to fetch branches from GitLab')
-      })
-    }
-
-    return loadPage()
+    return fetchGitLabPages<GitLabBranch>({
+      client: this.client,
+      path: `/projects/${projectId}/repository/branches`,
+      params: {
+        search: params?.search,
+      },
+      perPage,
+      maxPages,
+    }).catch((error) => {
+      log.error('Failed to fetch GitLab branches:', error)
+      throw new Error('Failed to fetch branches from GitLab')
+    })
   }
 
   /**
@@ -294,32 +273,20 @@ export class GitLabService {
   ): Promise<GitLabRepositoryTreeItem[]> {
     const perPage = params.per_page ?? 100
     const maxPages = params.max_pages ?? 20
-    const treeItems: GitLabRepositoryTreeItem[] = []
-    let page = 1
-
-    const loadPage = (): Promise<GitLabRepositoryTreeItem[]> => {
-      if (page > maxPages) return Promise.resolve(treeItems)
-      return this.client.get(`/projects/${projectId}/repository/tree`, {
-        params: {
-          ref: params.ref,
-          path: params.path,
-          recursive: params.recursive ?? true,
-          per_page: perPage,
-          page,
-        },
-      }).then((response) => {
-        const batch = Array.isArray(response.data) ? response.data : []
-        treeItems.push(...batch)
-        page += 1
-        if (batch.length < perPage) return treeItems
-        return loadPage()
-      }).catch((error) => {
-        log.error('Failed to fetch repository tree:', error)
-        throw new Error('Failed to fetch repository tree from GitLab')
-      })
-    }
-
-    return loadPage()
+    return fetchGitLabPages<GitLabRepositoryTreeItem>({
+      client: this.client,
+      path: `/projects/${projectId}/repository/tree`,
+      params: {
+        ref: params.ref,
+        path: params.path,
+        recursive: params.recursive ?? true,
+      },
+      perPage,
+      maxPages,
+    }).catch((error) => {
+      log.error('Failed to fetch repository tree:', error)
+      throw new Error('Failed to fetch repository tree from GitLab')
+    })
   }
 
   /**
@@ -328,7 +295,9 @@ export class GitLabService {
   getRepositoryFileRaw(projectId: number | string, filePath: string, ref: string): Promise<string> {
     const encodedPath = encodeURIComponent(filePath)
     return this.client.get(`/projects/${projectId}/repository/files/${encodedPath}/raw`, {
-      params: { ref },
+      params: {
+        ref,
+      },
       responseType: 'text',
       transformResponse: [(data) => data],
     }).then((response) => String(response.data || '')).catch((error) => {
