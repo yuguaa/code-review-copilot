@@ -1,21 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
 import {
   Loader2,
   MessageSquare,
   AlertCircle,
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { api } from '../lib/api';
 import type { SessionDetail } from '../lib/types';
 import { Sidebar } from '../components/Sidebar';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { LazyComposer } from '../components/chat/LazyComposer';
 import { MessageList } from '../components/chat/MessageList';
-import { useChatAutoScroll } from '../hooks/useChatAutoScroll';
-import { useChatSessionEvents } from '../hooks/useChatSessionEvents';
+import { useSessionDetail } from '../hooks/useSessionDetail';
+import { useChatThreadController } from '../hooks/useChatThreadController';
 
 export function Chat() {
   const { sessionId } = useParams();
@@ -44,26 +40,7 @@ export function Chat() {
 }
 
 function ChatView({ sessionId, onActivity }: { sessionId: string; onActivity: () => void }) {
-  const [detail, setDetail] = useState<SessionDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadDetail = useCallback(() => {
-    return api<SessionDetail>(`/api/sessions/${sessionId}`)
-      .then((next) => {
-        setDetail(next);
-        return next;
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : '加载失败');
-        return null;
-      });
-  }, [sessionId]);
-
-  useEffect(() => {
-    setDetail(null);
-    setError(null);
-    void loadDetail();
-  }, [loadDetail]);
+  const { detail, error, setDetail } = useSessionDetail(sessionId);
 
   if (error) {
     return (
@@ -93,126 +70,36 @@ function ChatThread({
   onActivity: () => void;
   updateDetail: React.Dispatch<React.SetStateAction<SessionDetail | null>>;
 }) {
-  const sessionId = detail.session.id;
-  const [parentMessageId, setParentMessageId] = useState<string | null>(null);
-  const [commandRunning, setCommandRunning] = useState(false);
-  const transport = useMemo(
-    () => new DefaultChatTransport({ api: '/api/chat', body: { sessionId } }),
-    [sessionId],
-  );
-  const { messages, setMessages, sendMessage, regenerate, stop, status } = useChat({
-    id: sessionId,
-    messages: detail.messages,
-    transport,
-    onFinish: () => {
-      setParentMessageId(null);
-      onActivity();
-      api<SessionDetail>(`/api/sessions/${sessionId}`)
-        .then((next) => {
-          updateDetail(next);
-          setMessages(next.messages);
-        })
-        .catch(() => undefined);
-    },
-    onError: (e) => {
-      let message = e.message || '回复失败，请稍后重试';
-      try {
-        message = (JSON.parse(message) as { error?: string }).error ?? message;
-      } catch {
-        // 非 JSON 响应体，原样展示
-      }
-      toast.error(message);
-    },
-  });
-  const busy = status === 'submitted' || status === 'streaming';
-  const { scrollRef, scrollState, markNearBottom, syncScrollState } = useChatAutoScroll({
+  const {
+    branchFromMessage,
     busy,
+    canRunReviewCommand,
+    commandRunning,
     messages,
-    sessionId,
+    parentMessageId,
+    reviewing,
+    runReviewCommand,
+    scroll,
     status,
-  });
-
-  useChatSessionEvents({ busy, sessionId, setMessages, updateDetail, onActivity });
-
+    stop,
+    submit,
+    switchToMessage,
+    treeById,
+  } = useChatThreadController({ detail, onActivity, updateDetail });
   const s = detail.session;
-  // 审查进行中不允许追问：两条流程会并发整组覆盖落库导致消息丢失，服务端也会拒绝
-  const reviewing = s.status === 'running';
-  const composerDisabled = busy || reviewing;
-  const treeById = useMemo(() => new Map(detail.messageTree.map((node) => [node.id, node])), [detail.messageTree]);
-  const canRunReviewCommand = s.kind === 'review' && !busy && !reviewing;
-
-  const submit = (text: string) => {
-    if (!text || composerDisabled) return;
-    markNearBottom();
-    void sendMessage({ text }, { body: { parentMessageId } });
-  };
-
-  const runReviewCommand = () => {
-    if (!canRunReviewCommand || commandRunning) return;
-    setCommandRunning(true);
-    setParentMessageId(null);
-    markNearBottom();
-    api<Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>>(
-      `/api/sessions/${sessionId}/review-command`,
-      { method: 'POST' },
-    )
-      .then((next) => {
-        setMessages(next.messages);
-        updateDetail((current) =>
-          current
-            ? {
-                ...current,
-                session: { ...current.session, status: 'running', error: null },
-                messages: next.messages,
-                messageTree: next.messageTree,
-                activeLeafMessageId: next.activeLeafMessageId,
-                activePathIds: next.activePathIds,
-              }
-            : current,
-        );
-        onActivity();
-        toast.success('已重新执行代码审查');
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : '代码审查指令执行失败'))
-      .finally(() => setCommandRunning(false));
-  };
-
-  const switchToMessage = (messageId: string) => {
-    if (busy) return;
-    api<Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>>(`/api/sessions/${sessionId}/active-message`, {
-      method: 'POST',
-      body: JSON.stringify({ messageId }),
-    })
-      .then((next) => {
-        setMessages(next.messages);
-        updateDetail((current) =>
-          current
-            ? {
-                ...current,
-                messages: next.messages,
-                messageTree: next.messageTree,
-                activeLeafMessageId: next.activeLeafMessageId,
-                activePathIds: next.activePathIds,
-              }
-            : current,
-        );
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : '切换分支失败'));
-  };
-
-  const branchFromMessage = (messageId: string) => {
-    if (busy) return;
-    const message = messages.find((item) => item.id === messageId);
-    if (message?.role === 'user') {
-      markNearBottom();
-      setParentMessageId(null);
-      regenerate({ messageId, body: { parentMessageId: messageId } }).catch((e) =>
-        toast.error(e instanceof Error ? e.message : '重新回答失败'),
-      );
-      return;
-    }
-    setParentMessageId(messageId);
-  };
+  const composerCommands = useMemo(
+    () => [
+      {
+        id: 'review-command',
+        title: '代码审查指令',
+        description: '重新执行当前 review，完成后按仓库配置发送钉钉或 GitLab 评论。',
+        disabled: !canRunReviewCommand || commandRunning,
+        loading: commandRunning,
+        onSelect: runReviewCommand,
+      },
+    ],
+    [canRunReviewCommand, commandRunning, runReviewCommand],
+  );
 
   return (
     <>
@@ -221,11 +108,11 @@ function ChatThread({
       <div
         className={[
           'conversation-frame min-h-0 flex-1',
-          scrollState.scrollable && !scrollState.top ? 'is-scrolled' : '',
-          scrollState.scrollable && !scrollState.bottom ? 'can-scroll-more' : '',
+          scroll.scrollState.scrollable && !scroll.scrollState.top ? 'is-scrolled' : '',
+          scroll.scrollState.scrollable && !scroll.scrollState.bottom ? 'can-scroll-more' : '',
         ].join(' ')}
       >
-        <div ref={scrollRef} onScroll={syncScrollState} className="conversation-scroll h-full min-w-0 overflow-y-auto">
+        <div ref={scroll.scrollRef} onScroll={scroll.syncScrollState} className="conversation-scroll h-full min-w-0 overflow-y-auto">
           <MessageList
             session={s}
             messages={messages}
@@ -253,16 +140,7 @@ function ChatThread({
             busy={busy}
             onStop={stop}
             onSubmit={submit}
-            commands={[
-              {
-                id: 'review-command',
-                title: '代码审查指令',
-                description: '重新执行当前 review，完成后按仓库配置发送钉钉或 GitLab 评论。',
-                disabled: !canRunReviewCommand || commandRunning,
-                loading: commandRunning,
-                onSelect: runReviewCommand,
-              },
-            ]}
+            commands={composerCommands}
           />
         </div>
       </div>
