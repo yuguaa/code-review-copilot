@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
@@ -14,6 +14,8 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { LazyComposer } from '../components/chat/LazyComposer';
 import { MessageList } from '../components/chat/MessageList';
+import { useChatAutoScroll } from '../hooks/useChatAutoScroll';
+import { useChatSessionEvents } from '../hooks/useChatSessionEvents';
 
 export function Chat() {
   const { sessionId } = useParams();
@@ -122,95 +124,15 @@ function ChatThread({
       toast.error(message);
     },
   });
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const nearBottomRef = useRef(true);
-  const [scrollState, setScrollState] = useState({ top: true, bottom: true, scrollable: false });
   const busy = status === 'submitted' || status === 'streaming';
-  // 交互追问期间，useChat 独占 messages；用 ref 让 SSE 监听闭包读到实时 busy
-  const busyRef = useRef(false);
-  useEffect(() => {
-    busyRef.current = busy;
-  }, [busy]);
+  const { scrollRef, scrollState, markNearBottom, syncScrollState } = useChatAutoScroll({
+    busy,
+    messages,
+    sessionId,
+    status,
+  });
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-  }, []);
-
-  const syncScrollState = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const bottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 3;
-    nearBottomRef.current = bottom;
-    setScrollState({
-      top: el.scrollTop <= 2,
-      bottom,
-      scrollable: el.scrollHeight > el.clientHeight + 3,
-    });
-  }, []);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      if (nearBottomRef.current) scrollToBottom('smooth');
-      syncScrollState();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [busy, messages, scrollToBottom, status, syncScrollState]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      scrollToBottom('auto');
-      syncScrollState();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [scrollToBottom, sessionId, syncScrollState]);
-
-  useEffect(() => {
-    const events = new EventSource(`/api/sessions/${sessionId}/events`);
-
-    events.addEventListener('messages', (event) => {
-      // 本地追问流式进行中时忽略服务端回显，避免两个来源双写造成重复/闪跳；
-      // 该通道只服务后台 webhook 审查（页面被动旁观，此时非 busy）。
-      if (busyRef.current) return;
-      const payload = JSON.parse((event as MessageEvent<string>).data) as Partial<
-        Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>
-      >;
-      if (payload.messageTree) {
-        updateDetail((current) =>
-          current
-            ? {
-                ...current,
-                messages: payload.messages ?? current.messages,
-                messageTree: payload.messageTree ?? current.messageTree,
-                activeLeafMessageId: payload.activeLeafMessageId ?? current.activeLeafMessageId,
-                activePathIds: payload.activePathIds ?? current.activePathIds,
-              }
-            : current,
-        );
-      }
-      if (!payload.messages) return;
-      setMessages(payload.messages);
-    });
-
-    events.addEventListener('status', (event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as { status: string };
-      updateDetail((current) =>
-        current ? { ...current, session: { ...current.session, status: payload.status } } : current,
-      );
-      if (payload.status !== 'running') onActivity();
-    });
-
-    events.addEventListener('review-error', (event) => {
-      if (!(event instanceof MessageEvent)) return;
-      const payload = JSON.parse(event.data) as { error: string };
-      updateDetail((current) =>
-        current ? { ...current, session: { ...current.session, error: payload.error } } : current,
-      );
-    });
-
-    return () => events.close();
-  }, [onActivity, sessionId, setMessages, updateDetail]);
+  useChatSessionEvents({ busy, sessionId, setMessages, updateDetail, onActivity });
 
   const s = detail.session;
   // 审查进行中不允许追问：两条流程会并发整组覆盖落库导致消息丢失，服务端也会拒绝
@@ -221,7 +143,7 @@ function ChatThread({
 
   const submit = (text: string) => {
     if (!text || composerDisabled) return;
-    nearBottomRef.current = true;
+    markNearBottom();
     void sendMessage({ text }, { body: { parentMessageId } });
   };
 
@@ -229,7 +151,7 @@ function ChatThread({
     if (!canRunReviewCommand || commandRunning) return;
     setCommandRunning(true);
     setParentMessageId(null);
-    nearBottomRef.current = true;
+    markNearBottom();
     api<Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>>(
       `/api/sessions/${sessionId}/review-command`,
       { method: 'POST' },
@@ -282,7 +204,7 @@ function ChatThread({
     if (busy) return;
     const message = messages.find((item) => item.id === messageId);
     if (message?.role === 'user') {
-      nearBottomRef.current = true;
+      markNearBottom();
       setParentMessageId(null);
       regenerate({ messageId, body: { parentMessageId: messageId } }).catch((e) =>
         toast.error(e instanceof Error ? e.message : '重新回答失败'),
