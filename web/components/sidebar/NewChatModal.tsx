@@ -66,8 +66,8 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
                 className={cn(
                   'flex cursor-pointer items-center gap-2.5 rounded-[var(--r-md)] border px-3 py-2.5 text-sm transition-colors',
                   selected === r.id
-                    ? 'border-[var(--ink)] bg-[var(--surface-card)] text-[var(--ink)]'
-                    : 'border-[var(--hairline)] text-[var(--body)] hover:bg-[var(--surface-card)]',
+                    ? 'border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--ink)] shadow-[var(--shadow-sm)]'
+                    : 'border-white/70 bg-[var(--surface-card)] text-[var(--body)] ring-1 ring-[var(--hairline)] hover:bg-white',
                 )}
               >
                 <input
@@ -75,7 +75,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
                   name="new-chat-repo"
                   checked={selected === r.id}
                   onChange={() => setSelected(r.id)}
-                  className="accent-[var(--ink)]"
+                  className="accent-[var(--accent)]"
                 />
                 <FolderGit2 size={14} className="shrink-0 text-[var(--muted)]" />
                 <span className="min-w-0">

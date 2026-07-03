@@ -18,19 +18,19 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--surface-dark)]/40 px-4 py-10"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--surface-dark)]/48 px-4 py-10 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={cn('animate-fade-in w-full rounded-[var(--r-md)] bg-[var(--canvas)] shadow-[var(--shadow-lg)]', maxWidth)}>
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-md)] border-b border-[var(--hairline)] bg-[var(--canvas)] px-6 py-4">
+      <div className={cn('animate-fade-in w-full rounded-[var(--r-lg)] bg-[var(--surface-card)] shadow-[var(--shadow-lg)] ring-1 ring-white/70', maxWidth)}>
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-lg)] border-b border-white/70 bg-[rgba(251,252,248,0.92)] px-6 py-4 backdrop-blur">
           <h2 className="font-display text-lg text-[var(--ink)]">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="关闭弹窗"
-            className="flex h-8 w-8 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--r-md)] text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-soft)] hover:text-[var(--ink)] active:scale-95"
           >
             <X size={16} />
           </button>

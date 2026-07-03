@@ -44,9 +44,9 @@ export function MessageList({
         </div>
       )}
       {messages.length === 0 && (
-        <div className="mx-auto mt-16 max-w-md rounded-[var(--r-xl)] bg-[var(--brand-lilac)] px-7 py-9 text-center text-[var(--ink)]">
-          <p className="font-display text-xl">开始对话吧</p>
-          <p className="mt-2 text-sm leading-relaxed opacity-80">问一次审查结论、变更风险或某个文件的实现细节。</p>
+        <div className="mx-auto mt-16 max-w-md rounded-[var(--r-xl)] bg-[var(--surface-card)] px-7 py-9 text-center text-[var(--ink)] shadow-[var(--shadow-lg)] ring-1 ring-white/80">
+          <p className="font-display text-xl">从一个具体问题开始</p>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">可以询问审查结论、变更风险，或某个文件的实现细节。</p>
         </div>
       )}
       {messages.map((message, index) => (
@@ -63,11 +63,11 @@ export function MessageList({
       {/* 仅在还没有 assistant 消息时显示极简等待；流开始后由最后一条消息承载光标与正文。 */}
       {status === 'submitted' && messages.at(-1)?.role !== 'assistant' && (
         <div className="inline-flex items-center gap-2 px-1 py-1.5 text-xs text-[var(--muted)]">
-          <Loader2 size={13} className="animate-spin text-[var(--ink)]" />
+          <Loader2 size={13} className="animate-spin text-[var(--accent)]" />
         </div>
       )}
       {!busy && reviewing && (
-        <div className="caption inline-flex items-center gap-2 rounded-[var(--r-pill)] bg-[var(--brand-cream)] px-3 py-1.5 text-[var(--ink)]">
+        <div className="caption inline-flex items-center gap-2 rounded-[var(--r-pill)] bg-[var(--brand-cream)] px-3 py-1.5 text-[var(--ink)] shadow-[var(--shadow-sm)]">
           <Activity size={13} /> 后台审查进行中，回复会实时同步到这里
         </div>
       )}

@@ -57,17 +57,17 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
   const streaming = record.state === 'streaming';
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-white text-xs shadow-[var(--shadow-sm)]">
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--body-strong)] transition-colors hover:bg-[var(--surface-hover)]"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--body-strong)] transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]"
       >
         {streaming ? <Loader2 size={13} className="shrink-0 animate-spin text-[var(--warning)]" /> : <Brain size={13} className="shrink-0 text-[var(--muted)]" />}
         <span className="caption truncate">REASONING{text && !open ? ` · ${text.slice(0, 72)}` : ''}</span>
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
-      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-[var(--hairline)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
+      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-white/70 bg-[var(--surface-soft)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
     </div>
   );
 }
@@ -97,11 +97,11 @@ function ToolBlock({ part }: { part: MessagePart }) {
   const running = !done && !errored;
   const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
   return (
-    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-white text-xs shadow-[var(--shadow-sm)]">
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--surface-soft)]"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]"
       >
         <StatusIcon
           size={13}
@@ -112,7 +112,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="space-y-2 border-t border-[var(--hairline)] bg-[var(--canvas)] px-3 py-2.5">
+        <div className="space-y-2 border-t border-white/70 bg-[var(--surface-soft)] px-3 py-2.5">
           {record.input != null && <JsonPanel label="INPUT" value={record.input} />}
           {record.output != null && <JsonPanel label="OUTPUT" value={record.output} strong />}
           {errored && record.errorText != null && <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>}
@@ -125,8 +125,8 @@ function ToolBlock({ part }: { part: MessagePart }) {
 function UnknownBlock({ part }: { part: MessagePart }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface-soft)] text-xs">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--muted)] hover:bg-[var(--surface-hover)]">
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-soft)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--muted)] transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]">
         <CircleDashed size={13} className="shrink-0" />
         <span className="caption truncate">{String(part.type)}</span>
         <ChevronRight size={12} className={cn('ml-auto shrink-0 transition-transform', open && 'rotate-90')} />

@@ -3,7 +3,7 @@ import { cn } from '../../lib/cn';
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded-[var(--r-md)] border border-[var(--hairline)] bg-white p-6 shadow-[var(--shadow-sm)]', className)}>{children}</div>
+    <div className={cn('rounded-[var(--r-lg)] border border-white/70 bg-[var(--surface-card)] p-6 shadow-[var(--shadow-md)] ring-1 ring-[var(--hairline)]', className)}>{children}</div>
   );
 }
 
@@ -46,7 +46,7 @@ export function BadgePill({ children, className }: { children: ReactNode; classN
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-card)] px-2.5 py-1 text-[13px] font-medium text-[var(--body-strong)]',
+        'inline-flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-soft)] px-2.5 py-1 text-[13px] font-medium text-[var(--body-strong)] ring-1 ring-[var(--hairline)]',
         className,
       )}
     >

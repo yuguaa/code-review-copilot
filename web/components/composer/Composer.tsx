@@ -113,7 +113,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
   };
 
   return (
-    <div className="relative flex items-end gap-2 rounded-[var(--r-lg)] border border-[var(--hairline)] bg-white p-1.5 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] focus-within:border-[var(--ink)] focus-within:shadow-[0_0_0_1px_rgba(0,0,0,0.08)]">
+    <div className="relative flex items-end gap-2 rounded-[var(--r-lg)] border border-white/80 bg-[var(--surface-card)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[var(--hairline)] transition-[border-color,box-shadow,transform] focus-within:border-[var(--accent)] focus-within:shadow-[0_24px_60px_-42px_rgba(31,39,34,0.52)]">
       <div className="min-w-0 flex-1">
         <RichComposerEditor
           ref={editorRef}
@@ -133,7 +133,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
         disabled={!hasCommand || editorDisabled}
         aria-label="打开指令"
         title="打开指令"
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] disabled:opacity-35"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95 disabled:opacity-35"
       >
         <Command size={16} />
       </button>
@@ -142,7 +142,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
           onClick={onStop}
           aria-label="停止生成"
           title="停止生成"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
         >
           <Square size={14} className="fill-current" />
         </button>
@@ -151,7 +151,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
           onClick={submit}
           disabled={editorDisabled || empty}
           aria-label="发送"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-40"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95 disabled:opacity-40"
         >
           <SendHorizontal size={16} />
         </button>

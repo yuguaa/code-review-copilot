@@ -72,7 +72,7 @@ export function RepositoryModal({
                 <button
                   key={project.id}
                   onClick={() => pickProject(project)}
-                  className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color] hover:bg-white hover:text-[var(--ink)]"
+                  className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color,transform] hover:bg-white hover:text-[var(--ink)] active:scale-[0.99]"
                 >
                   {project.path} <span className="text-[var(--muted-soft)]">#{project.id}</span>
                 </button>
@@ -205,7 +205,7 @@ export function RepositoryModal({
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-[var(--hairline)] pt-4">
+          <div className="flex items-center justify-end gap-2 border-t border-white/70 pt-4">
             <Button variant="secondary" onClick={closeModal} type="button" disabled={saving}>
               取消
             </Button>

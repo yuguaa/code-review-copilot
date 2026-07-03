@@ -34,7 +34,9 @@ export function MessageBubble({
         <div
           className={cn(
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
-            isUser ? 'bg-[var(--ink)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]' : 'bg-transparent text-[var(--body-strong)]',
+            isUser
+              ? 'bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
+              : 'bg-[rgba(251,252,248,0.46)] px-4 py-3 text-[var(--body-strong)] shadow-[var(--shadow-sm)] ring-1 ring-white/70',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
@@ -48,7 +50,7 @@ export function MessageBubble({
             <button
               type="button"
               onClick={() => onBranchFrom?.(message.id)}
-              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--hairline)] bg-white px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] hover:bg-[var(--surface-hover)]"
+              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-white/70 bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,transform] hover:bg-white active:scale-95"
               title={isUser ? '重新回答' : '从这里继续'}
             >
               {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}

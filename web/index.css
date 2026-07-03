@@ -2,41 +2,41 @@
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
-/* 设计 token：Vercel 风格的高密度审查工作台。 */
+/* 设计 token：冷静、清晰、克制的代码审查工作台。 */
 :root {
   color-scheme: light;
 
-  --canvas: #ffffff;
-  --surface-soft: #fafafa;
-  --surface-card: #f5f5f5;
-  --surface-hover: #f2f2f2;
-  --surface-strong: #eaeaea;
-  --surface-dark: #111111;
-  --hairline: #e5e5e5;
+  --canvas: #f5f7f2;
+  --surface-soft: #eef2ec;
+  --surface-card: #fbfcf8;
+  --surface-hover: #e8ede5;
+  --surface-strong: #dce4da;
+  --surface-dark: #151a17;
+  --hairline: rgba(31, 39, 34, 0.12);
 
-  --brand-lime: #d7ff38;
-  --brand-lilac: #c7b8ff;
-  --brand-cream: #fff2b8;
-  --brand-mint: #b8f3d3;
-  --brand-pink: #ff7ab6;
-  --brand-coral: #ff5f57;
-  --brand-navy: #0d1b3d;
-  --brand-teal: #0f3b35;
+  --brand-lime: #9ec46a;
+  --brand-lilac: #d7dfd1;
+  --brand-cream: #f0e7cb;
+  --brand-mint: #b7d8bf;
+  --brand-pink: #c7808e;
+  --brand-coral: #c25f52;
+  --brand-navy: #1e2a25;
+  --brand-teal: #315f50;
 
-  --primary: #0a0a0a;
-  --ink: #0a0a0a;
-  --body-strong: #171717;
-  --body: #3f3f46;
-  --muted: #71717a;
-  --muted-soft: #a1a1aa;
+  --primary: #1e2a25;
+  --ink: #17201c;
+  --body-strong: #26332d;
+  --body: #4e5d55;
+  --muted: #758078;
+  --muted-soft: #9aa49c;
   --on-primary: #ffffff;
 
-  --success: #148f4f;
-  --warning: #b66d00;
-  --error: #d7352f;
+  --success: #3f7f5f;
+  --warning: #a1712d;
+  --error: #b84f45;
 
-  --accent: #0a0a0a;
-  --ring: rgba(0, 0, 0, 0.14);
+  --accent: #6e9b59;
+  --ring: rgba(49, 95, 80, 0.22);
 
   --r-xs: 4px;
   --r-sm: 8px;
@@ -45,13 +45,13 @@
   --r-xl: 16px;
   --r-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 8px 18px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.16);
-  --shadow-popover: 0 16px 40px rgba(0, 0, 0, 0.14);
+  --shadow-sm: 0 1px 2px rgba(31, 39, 34, 0.06), 0 1px 0 rgba(255, 255, 255, 0.68) inset;
+  --shadow-md: 0 16px 32px -24px rgba(31, 39, 34, 0.32);
+  --shadow-lg: 0 32px 70px -42px rgba(31, 39, 34, 0.45);
+  --shadow-popover: 0 24px 52px -28px rgba(31, 39, 34, 0.42);
 
-  --font-display: 'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
+  --font-display: 'Geist', 'Satoshi', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-body: 'Geist', 'Satoshi', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
     'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -74,11 +74,40 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+body::before {
+  pointer-events: none;
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(rgba(31, 39, 34, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 39, 34, 0.035) 1px, transparent 1px),
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 13px,
+      rgba(31, 39, 34, 0.025) 13px 14px
+    ),
+    radial-gradient(circle at 16% 12%, rgba(158, 196, 106, 0.13), transparent 28rem),
+    radial-gradient(circle at 92% 8%, rgba(49, 95, 80, 0.08), transparent 24rem);
+  background-size:
+    128px 128px,
+    128px 128px,
+    34px 34px,
+    auto,
+    auto;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 /* 产品 UI 标题：用字重与紧凑行高建层级，不靠营销式大标题。 */
 .font-display {
   font-family: var(--font-display);
-  font-weight: 560;
-  letter-spacing: -0.01em;
+  font-weight: 620;
+  letter-spacing: -0.018em;
 }
 
 .font-mono {
@@ -111,12 +140,12 @@ body {
 
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--ring);
+  outline: 2px solid rgba(49, 95, 80, 0.42);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--brand-lime);
+  background: rgba(158, 196, 106, 0.48);
   color: var(--ink);
 }
 
@@ -141,7 +170,7 @@ a:focus-visible {
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(3px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -149,7 +178,171 @@ a:focus-visible {
   }
 }
 .animate-fade-in {
-  animation: fade-in 0.18s var(--ease-out);
+  animation: fade-in 0.28s var(--ease-out);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.45);
+    opacity: 0.18;
+  }
+}
+
+.status-breathe {
+  position: relative;
+}
+.status-breathe::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  background: currentColor;
+  animation: breathe 1.8s var(--ease-out) infinite;
+  z-index: -1;
+}
+
+.line-canvas {
+  position: relative;
+  isolation: isolate;
+}
+.line-canvas::before {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(31, 39, 34, 0.09) calc(50% - 0.5px), rgba(31, 39, 34, 0.09) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+    linear-gradient(rgba(31, 39, 34, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(110, 155, 89, 0.16), transparent 34%, transparent 66%, rgba(110, 155, 89, 0.12));
+  background-size:
+    100% 100%,
+    100% 96px,
+    100% 1px;
+  background-position:
+    0 0,
+    0 0,
+    0 38%;
+}
+
+.line-canvas::after {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 28px;
+  z-index: -1;
+  opacity: 0.54;
+  background:
+    linear-gradient(90deg, rgba(31, 39, 34, 0.12) 10px, transparent 10px) left top / 86px 1px no-repeat,
+    linear-gradient(rgba(31, 39, 34, 0.12) 10px, transparent 10px) left top / 1px 86px no-repeat,
+    linear-gradient(270deg, rgba(31, 39, 34, 0.12) 10px, transparent 10px) right bottom / 86px 1px no-repeat,
+    linear-gradient(0deg, rgba(31, 39, 34, 0.12) 10px, transparent 10px) right bottom / 1px 86px no-repeat,
+    radial-gradient(circle at 50% 38%, rgba(31, 39, 34, 0.12) 0 1px, transparent 1.5px),
+    linear-gradient(90deg, transparent calc(50% - 34px), rgba(31, 39, 34, 0.06) calc(50% - 34px), rgba(31, 39, 34, 0.06) calc(50% + 34px), transparent calc(50% + 34px));
+}
+
+.measure-rails {
+  position: relative;
+}
+.measure-rails::before,
+.measure-rails::after {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  opacity: 0.48;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(31, 39, 34, 0.08) 0 1px,
+      transparent 1px 5px
+    );
+  border-inline: 1px solid rgba(31, 39, 34, 0.055);
+}
+.measure-rails::before {
+  left: max(0px, calc((100vw - 1080px) / 2 - 22px));
+}
+.measure-rails::after {
+  right: max(0px, calc((100vw - 1080px) / 2 - 22px));
+}
+
+.technical-panel {
+  position: relative;
+  overflow: hidden;
+}
+.technical-panel::before,
+.technical-panel::after {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.technical-panel::before {
+  background:
+    linear-gradient(rgba(31, 39, 34, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 39, 34, 0.045) 1px, transparent 1px);
+  background-size: 100% 58px, 58px 100%;
+  mask-image: linear-gradient(180deg, black, transparent 86%);
+}
+.technical-panel::after {
+  border-top: 1px solid rgba(110, 155, 89, 0.42);
+  transform: translateY(52px);
+}
+
+.blueprint-backdrop {
+  position: relative;
+}
+.blueprint-backdrop::before,
+.blueprint-backdrop::after {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  z-index: -1;
+  opacity: 0.68;
+}
+.blueprint-backdrop::before {
+  width: min(36vw, 460px);
+  height: min(36vw, 460px);
+  right: max(16px, calc((100vw - 1160px) / 2 - 120px));
+  top: 10%;
+  border: 1px solid rgba(31, 39, 34, 0.055);
+  background:
+    repeating-linear-gradient(0deg, rgba(31, 39, 34, 0.045) 0 1px, transparent 1px 18px),
+    repeating-linear-gradient(90deg, rgba(31, 39, 34, 0.045) 0 1px, transparent 1px 18px);
+  transform: rotate(3deg);
+}
+.blueprint-backdrop::after {
+  width: min(30vw, 360px);
+  height: min(22vw, 260px);
+  left: max(14px, calc((100vw - 1160px) / 2 - 80px));
+  bottom: 12%;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(31, 39, 34, 0.06) 0 1px,
+      transparent 1px 7px
+    );
+  mask-image: linear-gradient(135deg, transparent 8%, black 28%, black 72%, transparent 92%);
+}
+
+@media (max-width: 767px) {
+  .measure-rails::before,
+  .measure-rails::after {
+    display: none;
+  }
+
+  .line-canvas::after,
+  .blueprint-backdrop::before,
+  .blueprint-backdrop::after {
+    opacity: 0.28;
+  }
 }
 
 .conversation-frame {

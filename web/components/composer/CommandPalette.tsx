@@ -11,8 +11,8 @@ type CommandPaletteProps = {
 
 export function CommandPalette({ activeCommand, commands, onSelect }: CommandPaletteProps) {
   return (
-    <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--canvas)] shadow-[var(--shadow-popover)]">
-      <div className="border-b border-[var(--hairline)] px-3 py-2">
+    <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 overflow-hidden rounded-[var(--r-lg)] border border-white/70 bg-[var(--surface-card)] shadow-[var(--shadow-popover)] ring-1 ring-[var(--hairline)]">
+      <div className="border-b border-white/70 px-3 py-2">
         <span className="caption text-[var(--muted)]">输入 / 选择指令</span>
       </div>
       {commands.length === 0 && (
@@ -27,18 +27,18 @@ export function CommandPalette({ activeCommand, commands, onSelect }: CommandPal
             onClick={() => onSelect(command)}
             disabled={command.disabled}
             className={cn(
-              'flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50',
+              'flex w-full items-start gap-3 px-3 py-3 text-left transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50',
               selected && 'bg-[var(--surface-hover)]',
             )}
           >
-            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--ink)] text-white">
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
               {command.loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
             </span>
             <span className="min-w-0">
               <span className="block text-sm font-medium text-[var(--ink)]">{command.title}</span>
               <span className="mt-0.5 block text-xs leading-relaxed text-[var(--muted)]">{command.description}</span>
             </span>
-            <span className="ml-auto rounded-[var(--r-sm)] border border-[var(--hairline)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--muted)]">
+            <span className="ml-auto rounded-[var(--r-sm)] border border-white/70 bg-[var(--surface-soft)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--muted)]">
               Enter
             </span>
           </button>

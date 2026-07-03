@@ -14,11 +14,11 @@ export function PageShell({
 }) {
   return (
     <div className="h-full overflow-y-auto bg-[var(--canvas)]">
-      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--hairline)] bg-[var(--canvas)] px-6 py-4">
+      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-white/70 bg-[rgba(245,247,242,0.9)] px-6 py-4 shadow-[0_18px_42px_-38px_rgba(31,39,34,0.5)] backdrop-blur">
         <Link
           to="/"
           aria-label="返回"
-          className="flex h-9 w-9 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
+          className="flex h-10 w-10 items-center justify-center rounded-[var(--r-md)] text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-card)] hover:text-[var(--ink)] active:scale-95"
         >
           <ArrowLeft size={16} />
         </Link>

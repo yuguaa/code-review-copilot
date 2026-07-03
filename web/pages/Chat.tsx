@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
 import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
@@ -16,23 +18,102 @@ export function Chat() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="flex h-full min-h-0 bg-[var(--canvas)] max-md:flex-col">
+    <div className="line-canvas blueprint-backdrop flex h-full min-h-0 overflow-x-hidden bg-[var(--canvas)] max-md:flex-col">
       <Sidebar refreshKey={refreshKey} />
       <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {sessionId ? (
           <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-[var(--r-xl)] bg-[var(--brand-lime)] text-[var(--ink)]">
-              <MessageSquare size={26} />
-            </div>
-            <p className="font-display text-xl text-[var(--ink)]">选择左侧会话，或新建一个对话</p>
-            <p className="max-w-sm text-sm leading-relaxed text-[var(--muted)]">
-              每个 Webhook 触发的审查都会成为一个可追问的会话，按仓库归类在左侧。
-            </p>
-          </div>
+          <ChatEmptyState />
         )}
       </main>
+    </div>
+  );
+}
+
+function ChatEmptyState() {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(
+    () => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+      timeline
+        .fromTo(
+          '[data-empty-shell]',
+          { y: 18, scale: 0.985 },
+          {
+            y: 0,
+            scale: 1,
+            duration: 0.62,
+            clearProps: 'transform',
+          },
+        )
+        .fromTo(
+          '[data-empty-copy]',
+          { y: 16, filter: 'blur(4px)' },
+          {
+            y: 0,
+            filter: 'blur(0px)',
+            duration: 0.56,
+            stagger: 0.06,
+            clearProps: 'transform,filter',
+          },
+          '-=0.34',
+        )
+        .fromTo(
+          '[data-empty-step]',
+          { x: 18 },
+          {
+            x: 0,
+            duration: 0.46,
+            stagger: 0.08,
+            clearProps: 'transform',
+          },
+          '-=0.34',
+        );
+
+      gsap.to('[data-empty-dot]', {
+        scale: 1.65,
+        opacity: 0.36,
+        duration: 1.2,
+        repeat: -1,
+        yoyo: true,
+        stagger: 0.18,
+        ease: 'sine.inOut',
+      });
+    },
+    { scope: rootRef },
+  );
+
+  return (
+    <div ref={rootRef} className="measure-rails grid h-full place-items-center px-6 py-10">
+      <div data-empty-shell className="technical-panel grid w-full max-w-3xl gap-8 rounded-[var(--r-xl)] bg-[var(--surface-card)] p-8 shadow-[var(--shadow-lg)] ring-1 ring-white/80 max-md:p-6 md:grid-cols-[1fr_0.72fr]">
+        <div className="min-w-0">
+          <div data-empty-copy className="flex h-14 w-14 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
+            <MessageSquare size={23} />
+          </div>
+          <p data-empty-copy className="font-display mt-8 max-w-lg text-[34px] leading-[1.04] text-[var(--ink)] max-sm:text-[28px]">
+            选择一次审查，继续追问上下文
+          </p>
+          <p data-empty-copy className="mt-4 max-w-md text-sm leading-relaxed text-[var(--muted)]">
+            Webhook 触发的审查会沉淀成会话。你可以追问风险原因、改动范围、分支差异，也可以从任意消息分叉继续。
+          </p>
+        </div>
+        <div className="grid content-end gap-3">
+          {['MR 触发', 'Agent 审查', '结论沉淀'].map((item) => (
+            <div
+              key={item}
+              data-empty-step
+              className="flex items-center justify-between rounded-[var(--r-md)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)] ring-1 ring-[var(--hairline)]"
+            >
+              <span>{item}</span>
+              <span data-empty-dot className="h-2 w-2 rounded-full bg-[var(--accent)]" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -124,7 +205,7 @@ function ChatThread({
         </div>
       </div>
 
-      <div className="z-10 border-t border-[var(--hairline)] bg-[var(--canvas)] p-4 max-md:p-3">
+      <div className="z-10 border-t border-white/70 bg-[rgba(245,247,242,0.9)] p-4 shadow-[0_-18px_42px_-38px_rgba(31,39,34,0.5)] max-md:p-3">
         <div className="mx-auto max-w-4xl">
           <LazyComposer
             placeholder={

@@ -5,7 +5,7 @@ const Composer = lazy(() => import('../composer/Composer').then((module) => ({ d
 
 function ComposerFallback() {
   return (
-    <div className="flex min-h-[54px] items-center rounded-[var(--r-lg)] border border-[var(--hairline)] bg-white px-4 text-sm text-[var(--muted)] shadow-[var(--shadow-sm)]">
+    <div className="flex min-h-[54px] items-center rounded-[var(--r-lg)] border border-white/70 bg-[var(--surface-card)] px-4 text-sm text-[var(--muted)] shadow-[var(--shadow-lg)] ring-1 ring-[var(--hairline)]">
       加载输入器…
     </div>
   );

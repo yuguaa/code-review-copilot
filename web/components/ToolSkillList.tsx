@@ -42,13 +42,13 @@ export function ToolSkillList({
         {items.map((item) => (
           <label
             key={item.key}
-            className="flex cursor-pointer items-start gap-2 rounded-[var(--r-md)] border border-[var(--hairline)] bg-white px-3 py-2.5 transition-colors hover:bg-[var(--surface-soft)]"
+            className="flex cursor-pointer items-start gap-2 rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)] transition-[background-color,transform] hover:bg-white active:scale-[0.99]"
           >
             <input
               type="checkbox"
               checked={selectedSet.has(item.key)}
               onChange={(e) => toggle(item.key, e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded-[var(--r-xs)] accent-[var(--ink)]"
+              className="mt-0.5 h-4 w-4 rounded-[var(--r-xs)] accent-[var(--accent)]"
             />
             <span className="min-w-0">
               <span className="flex flex-wrap items-center gap-1.5">

@@ -2,7 +2,7 @@ import type { ReactNode, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTML
 import { cn } from '../../lib/cn';
 
 const fieldBase =
-  'w-full rounded-[var(--r-sm)] border border-[var(--hairline)] bg-white px-3 py-2.5 text-sm text-[var(--ink)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted)] focus:border-[var(--ink)] focus:shadow-[0_0_0_1px_rgba(0,0,0,0.08)] disabled:bg-[var(--surface-card)] disabled:opacity-60';
+  'w-full rounded-[var(--r-sm)] border border-white/70 bg-[var(--surface-card)] px-3 py-2.5 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none ring-1 ring-[var(--hairline)] transition-[border-color,box-shadow] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--ring)] disabled:bg-[var(--surface-soft)] disabled:opacity-60';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(fieldBase, props.className)} />;

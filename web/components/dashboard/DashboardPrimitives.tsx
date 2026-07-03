@@ -7,14 +7,14 @@ import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 export const chartColors = {
-  ink: '#0a0a0a',
-  muted: '#6f6f68',
-  hairline: '#deded8',
-  lime: '#d7ff38',
-  mint: '#b8f3d3',
-  coral: '#ff5f57',
-  teal: '#0f3b35',
-  lilac: '#c7b8ff',
+  ink: '#17201c',
+  muted: '#758078',
+  hairline: '#dce4da',
+  lime: '#9ec46a',
+  mint: '#b7d8bf',
+  coral: '#c25f52',
+  teal: '#315f50',
+  lilac: '#d7dfd1',
 };
 
 export const trendChartConfig = {

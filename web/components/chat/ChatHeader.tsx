@@ -12,17 +12,17 @@ const statusViewByStatus = {
   running: {
     label: '审查中',
     icon: CircleDashed,
-    className: 'border-[var(--warning)]/30 bg-[var(--brand-cream)]/45 text-[var(--ink)]',
+    className: 'border-[var(--warning)]/20 bg-[var(--brand-cream)]/70 text-[var(--ink)]',
   },
   completed: {
     label: '已完成',
     icon: CheckCircle2,
-    className: 'border-[var(--success)]/20 bg-white text-[var(--success)]',
+    className: 'border-[var(--success)]/20 bg-[var(--surface-card)] text-[var(--success)]',
   },
   failed: {
     label: '失败',
     icon: AlertCircle,
-    className: 'border-[var(--error)]/25 bg-white text-[var(--error)]',
+    className: 'border-[var(--error)]/25 bg-[var(--surface-card)] text-[var(--error)]',
   },
 };
 
@@ -42,14 +42,14 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
   const statusView = statusViewByStatus[session.status as keyof typeof statusViewByStatus] ?? {
     label: session.status,
     icon: CircleDashed,
-    className: 'border-[var(--hairline)] bg-white text-[var(--muted)]',
+    className: 'border-[var(--hairline)] bg-[var(--surface-card)] text-[var(--muted)]',
   };
   const StatusIcon = statusView.icon;
   const pill =
-    'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] border border-[var(--hairline)] bg-white px-2.5 py-1 text-[var(--body-strong)]';
+    'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] border border-white/70 bg-[var(--surface-card)] px-2.5 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
 
   return (
-    <header className="sticky top-0 z-10 border-b border-[var(--hairline)] bg-[var(--canvas)]/95 px-6 py-3.5 backdrop-blur max-md:px-4">
+    <header className="sticky top-0 z-10 border-b border-white/70 bg-[rgba(245,247,242,0.9)] px-6 py-3.5 shadow-[0_18px_42px_-38px_rgba(31,39,34,0.5)] backdrop-blur max-md:px-4">
       <div className="mx-auto flex max-w-4xl min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1 basis-64">
           <h1 className="font-display truncate text-lg text-[var(--ink)]">{sessionTitle(session)}</h1>
@@ -60,7 +60,7 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
           )}
         </div>
         <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5 text-[11px] font-medium">
-          <span className={cn('caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border px-2.5 py-1', statusView.className)}>
+          <span className={cn('caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border px-2.5 py-1 shadow-[var(--shadow-sm)]', statusView.className)}>
             <StatusIcon size={12} className={session.status === 'running' ? 'animate-spin' : undefined} /> {statusView.label}
           </span>
           {branchText && (

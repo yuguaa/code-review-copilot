@@ -53,7 +53,7 @@ export function SessionList({
 
       {!loadError && sessions.length > 0 && (
         <div className="px-2 pb-1 pt-1">
-          <span className="eyebrow text-[var(--muted)]">最近活动</span>
+          <span className="eyebrow text-[var(--muted)]">最近审查</span>
         </div>
       )}
 
@@ -63,14 +63,14 @@ export function SessionList({
           <div
             key={s.id}
             className={cn(
-              'group relative rounded-[var(--r-md)] transition-colors',
-              active ? 'bg-white shadow-[inset_0_0_0_1px_var(--hairline)]' : 'hover:bg-white',
+              'group relative rounded-[var(--r-md)] transition-[background-color,box-shadow,transform]',
+              active ? 'bg-[var(--surface-card)] shadow-[var(--shadow-sm)] ring-1 ring-white/70' : 'hover:bg-[var(--surface-card)] hover:shadow-[var(--shadow-sm)]',
             )}
           >
-            {active && <span className="absolute left-0 top-1/2 h-7 w-[2px] -translate-y-1/2 rounded-full bg-[var(--ink)]" />}
+            {active && <span className="absolute left-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[var(--accent)] shadow-[0_0_0_4px_rgba(158,196,106,0.18)]" />}
             <button
               onClick={() => onSelect(s.id)}
-              className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2.5 pr-8 text-left"
+              className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-3 py-2.5 pr-8 text-left active:scale-[0.99]"
             >
               {s.kind === 'review' ? (
                 <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
@@ -97,7 +97,7 @@ export function SessionList({
                 className={cn(
                   'ml-auto h-1.5 w-1.5 shrink-0 rounded-full',
                   statusColor[s.status] ?? 'bg-[var(--muted-soft)]',
-                  s.status === 'running' && 'animate-pulse',
+                  s.status === 'running' && 'status-breathe',
                 )}
               />
             </button>
@@ -109,7 +109,7 @@ export function SessionList({
                 e.stopPropagation();
                 onDelete(s);
               }}
-              className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] group-focus-within:opacity-100 group-hover:opacity-100"
+              className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[var(--r-sm)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color,transform] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] active:scale-95 group-focus-within:opacity-100 group-hover:opacity-100"
             >
               <Trash2 size={13} />
             </button>

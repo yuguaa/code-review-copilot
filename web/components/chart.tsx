@@ -134,7 +134,7 @@ export function ChartTooltipContent({
   return (
     <div
       className={cn(
-        'grid min-w-32 items-start gap-1.5 rounded-[var(--r-md)] border border-[var(--hairline)] bg-white px-2.5 py-1.5 text-xs text-[var(--ink)] shadow-[var(--shadow-md)]',
+        'grid min-w-32 items-start gap-1.5 rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] px-2.5 py-1.5 text-xs text-[var(--ink)] shadow-[var(--shadow-md)] ring-1 ring-[var(--hairline)]',
         className,
       )}
     >
