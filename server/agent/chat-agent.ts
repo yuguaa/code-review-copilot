@@ -1,5 +1,5 @@
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
-import { loadGlobalDefaultModel, resolveGlobalModelConfig, resolveModel, resolveRepositoryModelConfig } from './model';
+import { loadGlobalDefaultModel, resolveGlobalModelConfig, resolveModel, resolveRepositoryModelConfig } from '../modules/ai-models/ai-models.service';
 import { buildReadTools } from './tools';
 import { prepareWorkspace } from '../lib/workspace';
 import type { SessionWithRepository } from '../lib/chat-store';

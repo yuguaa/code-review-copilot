@@ -1,5 +1,5 @@
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
-import { loadGlobalDefaultModel, resolveModel, resolveRepositoryModelConfig } from './model';
+import { loadGlobalDefaultModel, resolveModel, resolveRepositoryModelConfig } from '../modules/ai-models/ai-models.service';
 import { buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
 import { prepareWorkspace } from '../lib/workspace';

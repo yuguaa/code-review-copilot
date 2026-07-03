@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveModel, resolveRepositoryModelConfig } from './model';
+import { resolveModel, resolveRepositoryModelConfig } from '../modules/ai-models/ai-models.service';
 import { buildTools, isReadOnlyCommand, type ReviewContext } from './tools';
 import { buildInstructions } from './review-agent';
 import { signedUrl } from '../lib/dingtalk';

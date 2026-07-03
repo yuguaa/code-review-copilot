@@ -1,13 +1,13 @@
-import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
-import type { SessionWithRepository } from '../lib/chat-store';
-import { prisma } from '../lib/prisma';
+import type { SessionWithRepository } from '../../lib/chat-store';
+import { prisma } from '../../lib/prisma';
 
 /** 解析模型所需的最小配置。 */
 export type ModelConfig = {
-  provider: string; // openai | anthropic | openai-compatible
+  provider: string;
   modelId: string;
   apiKey: string;
   apiBaseUrl?: string | null;
