@@ -61,6 +61,10 @@ const messages: UIMessage[] = [
   { id: 'm1', role: 'assistant', parts: [{ type: 'text', text: '审查通过。' }] },
 ];
 
+function messagePart(value: unknown): UIMessage['parts'][number] {
+  return value as UIMessage['parts'][number];
+}
+
 describe('notifyReviewCompleted', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -110,13 +114,13 @@ describe('notifyReviewCompleted', () => {
         role: 'assistant',
         parts: [
           { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
-          {
+          messagePart({
             type: 'tool-post_review_comment',
             state: 'output-available',
             toolCallId: 'tool-1',
             input: { markdown: '## 严重\n- Dockerfile:12 构建产物路径错误，会导致镜像构建失败。' },
             output: { posted: true },
-          } as UIMessage['parts'][number],
+          }),
           { type: 'text', text: '总评已发布。我会把这次得到的部署审查要点沉淀到项目记忆。' },
         ],
       },
@@ -141,7 +145,7 @@ describe('notifyReviewCompleted', () => {
         role: 'assistant',
         parts: [
           { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
-          {
+          messagePart({
             type: 'tool-post_inline_comment',
             state: 'output-available',
             toolCallId: 'tool-1',
@@ -151,8 +155,8 @@ describe('notifyReviewCompleted', () => {
               body: '构建产物路径与根 build:all 契约不一致，会导致镜像构建失败。',
             },
             output: { posted: true },
-          } as UIMessage['parts'][number],
-          {
+          }),
+          messagePart({
             type: 'tool-post_inline_comment',
             state: 'output-available',
             toolCallId: 'tool-2',
@@ -162,7 +166,7 @@ describe('notifyReviewCompleted', () => {
               body: '基础镜像使用 latest，发布不可复现且难以审计。',
             },
             output: { posted: true },
-          } as UIMessage['parts'][number],
+          }),
           { type: 'text', text: '行级评论已发布。现在整理总评。' },
         ],
       },
@@ -187,6 +191,85 @@ describe('notifyReviewCompleted', () => {
       expect.anything(),
       expect.any(String),
       expect.not.stringContaining('我会先读取项目记忆'),
+    );
+  });
+
+  it('有总评评论时仍把行级问题附加到钉钉正文', async () => {
+    await notifyReviewCompleted(session(), [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          messagePart({
+            type: 'tool-post_inline_comment',
+            state: 'output-available',
+            toolCallId: 'tool-1',
+            input: {
+              path: 'Dockerfile',
+              line: 12,
+              body: '构建产物路径与根 build:all 契约不一致，会导致镜像构建失败。',
+            },
+            output: { posted: true },
+          }),
+          messagePart({
+            type: 'tool-post_review_comment',
+            state: 'output-available',
+            toolCallId: 'tool-2',
+            input: { markdown: '## 总评\n本次变更存在部署风险。' },
+            output: { posted: true },
+          }),
+        ],
+      },
+    ]);
+
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('## 总评'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('## 行级问题'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('Dockerfile:12'),
+    );
+  });
+
+  it('兼容 args 形态的行级工具调用参数', async () => {
+    await notifyReviewCompleted(session(), [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          messagePart({
+            type: 'tool-post_inline_comment',
+            state: 'output-available',
+            toolCallId: 'tool-1',
+            args: {
+              path: 'nginx.conf',
+              line: 8,
+              body: '子路径部署缺少静态资源路径校验，可能导致白屏。',
+            },
+            output: { posted: true },
+          }),
+          { type: 'text', text: '行级评论已发布。现在整理总评。' },
+        ],
+      },
+    ]);
+
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('nginx.conf:8'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.not.stringContaining('行级评论已发布'),
     );
   });
 

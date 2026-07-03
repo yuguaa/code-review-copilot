@@ -19,7 +19,7 @@ function reviewCommentMarkdown(part: unknown): string {
   const type = typeof part.type === 'string' ? part.type : '';
   const toolName = typeof part.toolName === 'string' ? part.toolName : '';
   if (type !== 'tool-post_review_comment' && toolName !== 'post_review_comment') return '';
-  const input = isRecord(part.input) ? part.input : null;
+  const input = toolInputOf(part);
   return typeof input?.markdown === 'string' ? input.markdown.trim() : '';
 }
 
@@ -28,12 +28,20 @@ function inlineReviewComment(part: unknown): string {
   const type = typeof part.type === 'string' ? part.type : '';
   const toolName = typeof part.toolName === 'string' ? part.toolName : '';
   if (type !== 'tool-post_inline_comment' && toolName !== 'post_inline_comment') return '';
-  const input = isRecord(part.input) ? part.input : null;
+  const input = toolInputOf(part);
   const path = typeof input?.path === 'string' ? input.path.trim() : '';
   const line = typeof input?.line === 'number' ? input.line : null;
   const body = typeof input?.body === 'string' ? input.body.trim() : '';
   if (!body) return '';
   return path && line ? `- ${path}:${line}\n  ${body}` : `- ${body}`;
+}
+
+function toolInputOf(part: MessagePartRecord): MessagePartRecord | null {
+  if (isRecord(part.input)) return part.input;
+  if (isRecord(part.rawInput)) return part.rawInput;
+  if (isRecord(part.args)) return part.args;
+  if (isRecord(part.toolCall) && isRecord(part.toolCall.args)) return part.toolCall.args;
+  return null;
 }
 
 function toolReviewTextOf(messages: UIMessage[]): string {
@@ -42,10 +50,10 @@ function toolReviewTextOf(messages: UIMessage[]): string {
     .reverse()
     .flatMap((message) => message.parts.map((part) => reviewCommentMarkdown(part)))
     .find(Boolean);
-  if (reviewComment) return reviewComment;
-
   const inlineComments = assistantMessages.flatMap((message) => message.parts.map((part) => inlineReviewComment(part))).filter(Boolean);
-  return inlineComments.length ? ['## 发现的问题', ...inlineComments].join('\n') : '';
+  if (reviewComment && inlineComments.length) return [reviewComment, '', '## 行级问题', ...inlineComments].join('\n');
+  if (reviewComment) return reviewComment;
+  return inlineComments.length ? ['## 行级问题', ...inlineComments].join('\n') : '';
 }
 
 function finalAssistantTextOf(messages: UIMessage[]): string {
