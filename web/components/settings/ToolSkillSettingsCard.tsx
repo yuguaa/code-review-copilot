@@ -1,5 +1,6 @@
 import { ToolSkillList } from '../ToolSkillList';
-import { Button, Card } from '../ui';
+import { Button } from '../ui/button';
+import { Card } from '../ui/surface';
 import type { AgentSkillItem, AgentToolItem } from '../../lib/types';
 
 export function ToolSkillSettingsCard({

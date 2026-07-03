@@ -3,7 +3,8 @@ import { GitLabAccountForm, GitLabAccountList } from '../components/settings/Git
 import { ModelList, ModelSettingsForm } from '../components/settings/ModelSettings';
 import { NotificationSettingsCard } from '../components/settings/NotificationSettingsCard';
 import { SettingsStatsGrid } from '../components/settings/SettingsStatsGrid';
-import { PageShell, useConfirm } from '../components/ui';
+import { PageShell } from '../components/ui/page-shell';
+import { useConfirm } from '../components/ui/confirm-dialog';
 import { useSettingsPageData, type Account, type AIModel } from '../hooks/useSettingsPageData';
 
 export function Settings() {

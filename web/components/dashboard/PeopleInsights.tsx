@@ -1,7 +1,7 @@
 import { AlertCircle, FolderGit2, MessageSquare, UserRound } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import type { DashboardBucket, PeopleSignals } from '../../hooks/useDashboardData';
-import { Card } from '../ui';
+import { Card } from '../ui/surface';
 import { fmtTime, SectionTitle, SignalCard } from './DashboardPrimitives';
 
 export function PeopleSignalGrid({ peopleSignals }: { peopleSignals: PeopleSignals }) {

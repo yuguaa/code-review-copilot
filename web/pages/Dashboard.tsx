@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { SummaryMetrics } from '../components/dashboard/SummaryMetrics';
-import { Card, PageShell } from '../components/ui';
+import { PageShell } from '../components/ui/page-shell';
+import { Card } from '../components/ui/surface';
 import { useDashboardData } from '../hooks/useDashboardData';
 
 const DashboardVisualSections = lazy(() =>

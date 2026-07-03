@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '../lib/api';
 import type { SessionListItem } from '../lib/types';
 import { useSidebarSessions } from '../hooks/useSidebarSessions';
-import { useConfirm } from './ui';
+import { useConfirm } from './ui/confirm-dialog';
 import { NewChatModal } from './sidebar/NewChatModal';
 import { SessionList } from './sidebar/SessionList';
 import { SidebarNav } from './sidebar/SidebarNav';

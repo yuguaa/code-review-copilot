@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Clock3, GitBranch } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { dashboardStatusText, type FailureItem, type RecentItem } from '../../hooks/useDashboardData';
-import { Card } from '../ui';
+import { Card } from '../ui/surface';
 import { branchText, fmtTime, SectionTitle, statusColor } from './DashboardPrimitives';
 
 export function FailureSamples({ failures }: { failures: FailureItem[] }) {

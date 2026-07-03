@@ -1,4 +1,5 @@
-import { Button, ColorBlock } from '../ui';
+import { Button } from '../ui/button';
+import { ColorBlock } from '../ui/surface';
 
 export function WebhookIntro({ webhookUrl, onAdd }: { webhookUrl: string; onAdd: () => void }) {
   return (

@@ -1,4 +1,4 @@
-import { Checkbox } from './ui';
+import { Checkbox } from './ui/forms';
 
 export type ToolSkillItem = {
   key: string;

@@ -1,5 +1,7 @@
 import { ToolSkillList } from '../ToolSkillList';
-import { Button, Checkbox, Field, Input, Modal, Select, Textarea } from '../ui';
+import { Button } from '../ui/button';
+import { Checkbox, Field, Input, Select, Textarea } from '../ui/forms';
+import { Modal } from '../ui/modal';
 import type { Account, AIModel, Project, RepositoryForm } from '../../hooks/useRepositoriesPageData';
 import type { AgentSkillItem, AgentToolItem } from '../../lib/types';
 

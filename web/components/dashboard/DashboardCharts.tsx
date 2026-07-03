@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import type { DashboardBucket, DashboardChartBucket, DashboardStatusChartItem } from '../../hooks/useDashboardData';
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '../chart';
-import { Card } from '../ui';
+import { Card } from '../ui/surface';
 import {
   authorChartConfig,
   chartColors,

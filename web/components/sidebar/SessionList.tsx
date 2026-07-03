@@ -1,7 +1,7 @@
 import { AlertCircle, FolderGit2, GitBranch, GitPullRequest, MessageSquare, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import type { SessionListItem } from '../../lib/types';
-import { Button } from '../ui';
+import { Button } from '../ui/button';
 import { repositoryLabel, sessionLabel, sessionMeta, statusColor, statusLabel } from './session-format';
 
 type SessionListProps = {

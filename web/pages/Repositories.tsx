@@ -1,4 +1,5 @@
-import { PageShell, useConfirm } from '../components/ui';
+import { PageShell } from '../components/ui/page-shell';
+import { useConfirm } from '../components/ui/confirm-dialog';
 import { RepositoryList } from '../components/repositories/RepositoryList';
 import { RepositoryModal } from '../components/repositories/RepositoryModal';
 import { WebhookIntro } from '../components/repositories/WebhookIntro';

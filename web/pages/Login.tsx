@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuth } from '../App';
-import { Button, SectionLabel } from '../components/ui';
+import { Button } from '../components/ui/button';
+import { SectionLabel } from '../components/ui/surface';
 
 export function Login() {
   const [username, setUsername] = useState('');

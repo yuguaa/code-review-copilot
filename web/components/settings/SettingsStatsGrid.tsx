@@ -1,4 +1,4 @@
-import { ColorBlock } from '../ui';
+import { ColorBlock } from '../ui/surface';
 import type { Stats } from '../../hooks/useSettingsPageData';
 
 export function SettingsStatsGrid({ stats }: { stats: Stats | null }) {

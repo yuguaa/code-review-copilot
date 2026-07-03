@@ -1,4 +1,6 @@
-import { Button, Card, Checkbox, ColorBlock, Field, Input, Select } from '../ui';
+import { Button } from '../ui/button';
+import { Checkbox, Field, Input, Select } from '../ui/forms';
+import { Card, ColorBlock } from '../ui/surface';
 import type { AIModel, ModelForm } from '../../hooks/useSettingsPageData';
 
 export function ModelSettingsForm({

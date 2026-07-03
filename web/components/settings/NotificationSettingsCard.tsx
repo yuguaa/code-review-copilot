@@ -1,4 +1,6 @@
-import { Button, Card, Checkbox, Field, Input } from '../ui';
+import { Button } from '../ui/button';
+import { Checkbox, Field, Input } from '../ui/forms';
+import { Card } from '../ui/surface';
 
 type NotificationForm = {
   dingtalkEnabled: boolean;

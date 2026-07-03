@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { ChartConfig } from '../chart';
-import { Card, ColorBlock } from '../ui';
+import { Card, ColorBlock } from '../ui/surface';
 import { cn } from '../../lib/cn';
 import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 

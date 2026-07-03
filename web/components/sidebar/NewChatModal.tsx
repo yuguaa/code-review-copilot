@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import type { RepositoryItem } from '../../lib/types';
-import { Button, Modal } from '../ui';
+import { Button } from '../ui/button';
+import { Modal } from '../ui/modal';
 
 /** 新建对话弹层：明确选择仓库，而不是默默用第一个。 */
 export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => void }) {

@@ -1,4 +1,6 @@
-import { Button, Card, Field, Input } from '../ui';
+import { Button } from '../ui/button';
+import { Field, Input } from '../ui/forms';
+import { Card } from '../ui/surface';
 import type { Account } from '../../hooks/useSettingsPageData';
 
 export function GitLabAccountForm({

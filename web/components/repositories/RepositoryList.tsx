@@ -1,6 +1,7 @@
 import { cn } from '../../lib/cn';
 import type { Repo } from '../../hooks/useRepositoriesPageData';
-import { Button, Card } from '../ui';
+import { Button } from '../ui/button';
+import { Card } from '../ui/surface';
 
 function modelLabel(repo: Repo): string {
   if (repo.customProvider && repo.customModelId) return `${repo.customProvider}/${repo.customModelId}`;
