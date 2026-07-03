@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 describe('chat route streaming persistence', () => {
   it('uses the UI message stream end callback to persist interactive follow-ups', () => {
-    const routeSource = readFileSync(new URL('./chat.ts', import.meta.url), 'utf8');
-    const serviceSource = readFileSync(new URL('../modules/chat/chat.service.ts', import.meta.url), 'utf8');
+    const routeSource = readFileSync(new URL('./chat.routes.ts', import.meta.url), 'utf8');
+    const serviceSource = readFileSync(new URL('./chat.service.ts', import.meta.url), 'utf8');
 
     expect(routeSource).not.toContain('publishSessionMessages');
     expect(routeSource).not.toContain('consumeSseStream');

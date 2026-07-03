@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import {
   subscribeSessionEvents,
   subscribeSessionListEvents,
-} from '../lib/session-events';
+} from '../../lib/session-events';
 import {
   createChatSession,
   deleteSession,
@@ -11,7 +11,7 @@ import {
   runReviewCommand,
   sessionExists,
   switchActiveMessage,
-} from '../modules/sessions/sessions.service';
+} from './sessions.service';
 
 export const sessionRoutes = new Hono();
 

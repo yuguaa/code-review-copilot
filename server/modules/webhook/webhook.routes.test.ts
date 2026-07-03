@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPushSessionTitle } from '../modules/webhook/webhook.service';
+import { buildPushSessionTitle } from './webhook.service';
 
 describe('buildPushSessionTitle', () => {
   it('uses the latest commit message as the push session title', () => {

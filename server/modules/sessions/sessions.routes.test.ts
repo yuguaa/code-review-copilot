@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 describe('session review command route', () => {
   it('delegates slash review commands to the session service', () => {
-    const routeSource = readFileSync(new URL('./sessions.ts', import.meta.url), 'utf8');
-    const serviceSource = readFileSync(new URL('../modules/sessions/sessions.service.ts', import.meta.url), 'utf8');
-    const lifecycleSource = readFileSync(new URL('../modules/sessions/session-lifecycle.service.ts', import.meta.url), 'utf8');
+    const routeSource = readFileSync(new URL('./sessions.routes.ts', import.meta.url), 'utf8');
+    const serviceSource = readFileSync(new URL('./sessions.service.ts', import.meta.url), 'utf8');
+    const lifecycleSource = readFileSync(new URL('./session-lifecycle.service.ts', import.meta.url), 'utf8');
 
     expect(routeSource).toContain("sessionRoutes.post('/:id/review-command'");
     expect(routeSource).toContain('runReviewCommand(sessionId)');

@@ -6,7 +6,7 @@ import {
   listRepositoryBranches,
   listRepositoryCapabilities,
   updateRepository,
-} from '../modules/repositories/repositories.service';
+} from './repositories.service';
 
 export const repositoryRoutes = new Hono();
 

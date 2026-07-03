@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { prepareChatStream } from '../modules/chat/chat.service';
+import { prepareChatStream } from './chat.service';
 
 export const chatRoutes = new Hono();
 

@@ -7,7 +7,7 @@ import {
   getMissingAuthEnv,
   shouldUseSecureAuthCookie,
   verifyLoginCredential,
-} from '../lib/auth';
+} from '../../lib/auth';
 
 export const authRoutes = new Hono();
 

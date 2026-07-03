@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { loadDashboardPayload } from '../modules/dashboard/dashboard.service';
+import { loadDashboardPayload } from './dashboard.service';
 
 export const dashboardRoutes = new Hono();
 

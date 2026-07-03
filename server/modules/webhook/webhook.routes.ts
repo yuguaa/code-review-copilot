@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { handleGitLabWebhook, type MergeRequestHook, type PushHook } from '../modules/webhook/webhook.service';
+import { handleGitLabWebhook, type MergeRequestHook, type PushHook } from './webhook.service';
 
 export const webhookRoutes = new Hono();
 
