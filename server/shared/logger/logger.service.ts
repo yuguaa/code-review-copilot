@@ -1,6 +1,7 @@
 import pino from "pino";
+import { appConfig } from "../../config/app.config";
 
-const level = process.env.LOG_LEVEL || (process.env.NODE_ENV === "development" ? "debug" : "info");
+const level = appConfig.logLevel;
 
 export const logger = pino({
   level,

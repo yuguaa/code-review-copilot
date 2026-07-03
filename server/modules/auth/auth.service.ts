@@ -1,19 +1,7 @@
+import { getAllowedClientIps, getAuthConfig, getMissingAuthEnv, normalizeIp } from '../../config/auth.config';
+
 export const AUTH_COOKIE_NAME = "code_review_copilot_session";
 export const AUTH_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
-
-const AUTH_ENV_KEYS = [
-  "APP_AUTH_USERNAME",
-  "APP_AUTH_SECRET",
-  "APP_AUTH_SESSION_SECRET",
-] as const;
-
-type AuthEnvKey = (typeof AUTH_ENV_KEYS)[number];
-
-type AuthConfig = {
-  username: string;
-  secret: string;
-  sessionSecret: string;
-};
 
 type SessionPayload = {
   username: string;
@@ -23,28 +11,8 @@ type SessionPayload = {
 
 const encoder = new TextEncoder();
 
-export function getMissingAuthEnv(): AuthEnvKey[] {
-  return AUTH_ENV_KEYS.filter((key) => !process.env[key]?.trim());
-}
-
-export function getAuthConfig(): AuthConfig | null {
-  const username = process.env.APP_AUTH_USERNAME?.trim();
-  const secret = process.env.APP_AUTH_SECRET?.trim();
-  const sessionSecret = process.env.APP_AUTH_SESSION_SECRET?.trim();
-
-  if (!username || !secret || !sessionSecret) {
-    return null;
-  }
-
-  return { username, secret, sessionSecret };
-}
-
 export function isAuthConfigured(): boolean {
   return getMissingAuthEnv().length === 0;
-}
-
-export function getAllowedClientIps(): string[] {
-  return normalizeIpList(process.env.APP_AUTH_IP_WHITELIST);
 }
 
 export function isIpWhitelistEnabled(): boolean {
@@ -165,43 +133,6 @@ function constantTimeEqual(left: string, right: string): boolean {
   }
 
   return diff === 0;
-}
-
-function normalizeIpList(value: string | undefined): string[] {
-  if (!value?.trim()) return [];
-
-  const ips = value
-    .split(",")
-    .map((item) => normalizeIp(item))
-    .filter(Boolean);
-
-  return Array.from(new Set(ips));
-}
-
-function normalizeIp(value: string): string {
-  const trimmedValue = value.trim();
-  if (!trimmedValue) return "";
-
-  const withoutPort = stripPort(trimmedValue);
-  if (withoutPort.startsWith("::ffff:")) {
-    return withoutPort.slice("::ffff:".length);
-  }
-
-  return withoutPort;
-}
-
-function stripPort(value: string): string {
-  if (value.startsWith("[")) {
-    const endIndex = value.indexOf("]");
-    return endIndex >= 0 ? value.slice(1, endIndex) : value;
-  }
-
-  const colonCount = value.split(":").length - 1;
-  if (colonCount === 1) {
-    return value.split(":")[0];
-  }
-
-  return value;
 }
 
 function base64UrlEncode(value: string): string {

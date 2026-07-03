@@ -2,14 +2,12 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
 import path from 'node:path';
+import { workspaceConfig } from '../../config/workspace.config';
 import type { SessionWithRepository } from '../../modules/sessions/session-message-store.service';
 import { createLogger } from '../../shared/logger/logger.service';
 
 const log = createLogger('workspace');
 const exec = promisify(execFile);
-
-const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT ?? './.workspaces');
-const TTL_MS = Number(process.env.WORKSPACE_TTL_HOURS ?? 72) * 3600_000;
 
 /**
  * 同仓库的主仓操作（clone/fetch/worktree add）必须串行：它们都写 repo/.git 元数据，
@@ -63,7 +61,7 @@ export function prepareWorkspace(session: SessionWithRepository): Promise<Worksp
   if (!repo) throw new Error('会话未绑定仓库，无法准备工作区');
 
   const repoId = repo.id;
-  const baseDir = path.join(WORKSPACE_ROOT, repoId);
+  const baseDir = path.join(workspaceConfig.root, repoId);
   const gitDir = path.join(baseDir, 'repo');
   const wtDir = path.join(baseDir, 'wt', worktreeKey(session));
   const auth = authArgs(repo.gitLabAccount.accessToken);
@@ -134,7 +132,7 @@ async function cleanupExpired(baseDir: string): Promise<void> {
     if (!e.isDirectory()) continue;
     const wt = path.join(wtRoot, e.name);
     const info = await stat(wt).catch(() => null);
-    if (!info || now - info.mtimeMs < TTL_MS) continue;
+    if (!info || now - info.mtimeMs < workspaceConfig.ttlMs) continue;
     log.info(`清理过期 worktree ${wt}`);
     await git(['-C', gitDir, 'worktree', 'remove', '--force', wt]).catch(() => undefined);
     await rm(wt, { recursive: true, force: true }).catch(() => undefined);

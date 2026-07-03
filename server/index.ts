@@ -12,6 +12,7 @@ import { repositoryRoutes } from './modules/repositories/repositories.routes';
 import { sessionRoutes } from './modules/sessions/sessions.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { webhookRoutes } from './modules/webhook/webhook.routes';
+import { appConfig } from './config/app.config';
 import { createLogger } from './shared/logger/logger.service';
 
 const log = createLogger('server');
@@ -36,12 +37,11 @@ app.route('/api/webhook', webhookRoutes);
 app.route('/api/dashboard', dashboardRoutes);
 
 // 生产环境托管 Vite 静态产物（SPA 回退到 index.html）
-if (process.env.NODE_ENV === 'production') {
+if (appConfig.isProduction) {
   app.use('/*', serveStatic({ root: './dist/web' }));
   app.get('/*', serveStatic({ path: './dist/web/index.html' }));
 }
 
-const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: app.fetch, port }, (info) => {
+serve({ fetch: app.fetch, port: appConfig.port }, (info) => {
   log.info(`server listening on http://localhost:${info.port}`);
 });

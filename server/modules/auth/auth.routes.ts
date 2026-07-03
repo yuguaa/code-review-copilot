@@ -4,10 +4,10 @@ import {
   AUTH_COOKIE_NAME,
   AUTH_SESSION_MAX_AGE_SECONDS,
   createAuthSession,
-  getMissingAuthEnv,
   shouldUseSecureAuthCookie,
   verifyLoginCredential,
 } from './auth.service';
+import { getMissingAuthEnv } from '../../config/auth.config';
 
 export const authRoutes = new Hono();
 
