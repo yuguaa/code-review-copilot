@@ -64,14 +64,14 @@ export type RecentItem = {
   updatedAt: string;
 };
 
-type PeopleSignals = {
+export type PeopleSignals = {
   mostActive: DashboardBucket | null;
   mostFailures: DashboardBucket | null;
   widestCoverage: DashboardBucket | null;
   highestMessageDensity: DashboardBucket | null;
 };
 
-type DashboardData = {
+export type DashboardData = {
   generatedAt: string;
   window: { days: number; since: string };
   summary: DashboardSummary;
@@ -82,6 +82,15 @@ type DashboardData = {
   peopleSignals: PeopleSignals;
   failures: FailureItem[];
   recent: RecentItem[];
+};
+
+export type DashboardStatusChartItem = DashboardData['statusDistribution'][number] & {
+  name: string;
+  label: string;
+};
+
+export type DashboardChartBucket = DashboardBucket & {
+  name: string;
 };
 
 export const dashboardStatusText: Record<string, string> = {
