@@ -4,7 +4,7 @@ import {
   deleteRepository,
   listRepositories,
   listRepositoryBranches,
-  listRepositoryCapabilities,
+  listRepositoryToolSkills,
   updateRepository,
 } from './repositories.service';
 
@@ -35,8 +35,8 @@ repositoryRoutes.get('/:id/branches', async (c) => {
   return c.json({ branches });
 });
 
-repositoryRoutes.get('/:id/capabilities', async (c) => {
-  const capabilities = await listRepositoryCapabilities(c.req.param('id'));
-  if (!capabilities) return c.json({ error: '仓库不存在' }, 404);
-  return c.json(capabilities);
+repositoryRoutes.get('/:id/tool-skills', async (c) => {
+  const toolSkills = await listRepositoryToolSkills(c.req.param('id'));
+  if (!toolSkills) return c.json({ error: '仓库不存在' }, 404);
+  return c.json(toolSkills);
 });

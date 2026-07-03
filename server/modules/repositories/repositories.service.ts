@@ -1,4 +1,13 @@
-import { getCapabilityCatalog } from '../capabilities/capabilities.service';
+import {
+  assertKnownSkillKeys,
+  filterSkillKeys,
+  listActiveSkills,
+} from '../skills/skills.service';
+import {
+  assertKnownToolKeys,
+  filterToolKeys,
+  listActiveTools,
+} from '../tools/tools.service';
 import { createGitLabService } from '../../shared/gitlab/gitlab.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
 
@@ -102,36 +111,30 @@ function updateRepositoryData(body: RepositoryPayload) {
   return data;
 }
 
-async function saveCapabilityOverrides(repositoryId: string, enabledTools: unknown, enabledSkills: unknown) {
+async function saveToolSkillOverrides(repositoryId: string, enabledTools: unknown, enabledSkills: unknown) {
   if (!Array.isArray(enabledTools) && !Array.isArray(enabledSkills)) return;
-  const catalog = await getCapabilityCatalog();
+  const [tools, skills] = await Promise.all([listActiveTools(), listActiveSkills()]);
   if (Array.isArray(enabledTools)) {
-    const allowedKeys = new Set(catalog.tools.map((tool) => tool.key));
-    for (const key of enabledTools) {
-      if (typeof key === 'string' && !allowedKeys.has(key)) throw new Error(`未知 Tool：${key}`);
-    }
+    assertKnownToolKeys(enabledTools, new Set(tools.map((tool) => tool.key)));
   }
   if (Array.isArray(enabledSkills)) {
-    const allowedKeys = new Set(catalog.skills.map((skill) => skill.key));
-    for (const key of enabledSkills) {
-      if (typeof key === 'string' && !allowedKeys.has(key)) throw new Error(`未知 Skill：${key}`);
-    }
+    assertKnownSkillKeys(enabledSkills, new Set(skills.map((skill) => skill.key)));
   }
   await prisma.$transaction(async (tx) => {
     if (Array.isArray(enabledTools)) {
       await tx.repositoryToolSetting.deleteMany({ where: { repositoryId } });
-      const enabled = new Set(enabledTools.filter((key): key is string => typeof key === 'string'));
+      const enabled = filterToolKeys(enabledTools);
       await tx.repositoryToolSetting.createMany({
-        data: catalog.tools
+        data: tools
           .filter((tool) => enabled.has(tool.key) !== tool.defaultEnabled)
           .map((tool) => ({ repositoryId, toolId: tool.id, enabled: enabled.has(tool.key) })),
       });
     }
     if (Array.isArray(enabledSkills)) {
       await tx.repositorySkillSetting.deleteMany({ where: { repositoryId } });
-      const enabled = new Set(enabledSkills.filter((key): key is string => typeof key === 'string'));
+      const enabled = filterSkillKeys(enabledSkills);
       await tx.repositorySkillSetting.createMany({
-        data: catalog.skills
+        data: skills
           .filter((skill) => enabled.has(skill.key) !== skill.defaultEnabled)
           .map((skill) => ({ repositoryId, skillId: skill.id, enabled: enabled.has(skill.key) })),
       });
@@ -149,28 +152,28 @@ export async function listRepositories() {
       skillSettings: { include: { skill: { select: { key: true, defaultEnabled: true } } } },
     },
   });
-  const catalog = await getCapabilityCatalog();
+  const [tools, skills] = await Promise.all([listActiveTools(), listActiveSkills()]);
   return repos.map((repo) => {
     const masked = maskRepo(repo);
     const toolOverrides = new Map(repo.toolSettings.map((item) => [item.tool.key, item.enabled]));
     const skillOverrides = new Map(repo.skillSettings.map((item) => [item.skill.key, item.enabled]));
     return {
       ...masked,
-      enabledTools: catalog.tools.filter((tool) => toolOverrides.get(tool.key) ?? tool.defaultEnabled).map((tool) => tool.key),
-      enabledSkills: catalog.skills.filter((skill) => skillOverrides.get(skill.key) ?? skill.defaultEnabled).map((skill) => skill.key),
+      enabledTools: tools.filter((tool) => toolOverrides.get(tool.key) ?? tool.defaultEnabled).map((tool) => tool.key),
+      enabledSkills: skills.filter((skill) => skillOverrides.get(skill.key) ?? skill.defaultEnabled).map((skill) => skill.key),
     };
   });
 }
 
 export async function createRepository(body: RepositoryPayload) {
   const repo = await prisma.repository.create({ data: createRepositoryData(body) });
-  await saveCapabilityOverrides(repo.id, body.enabledTools, body.enabledSkills);
+  await saveToolSkillOverrides(repo.id, body.enabledTools, body.enabledSkills);
   return maskRepo(repo);
 }
 
 export async function updateRepository(id: string, body: RepositoryPayload) {
   const repo = await prisma.repository.update({ where: { id }, data: updateRepositoryData(body) });
-  await saveCapabilityOverrides(id, body.enabledTools, body.enabledSkills);
+  await saveToolSkillOverrides(id, body.enabledTools, body.enabledSkills);
   return maskRepo(repo);
 }
 
@@ -190,7 +193,7 @@ export async function listRepositoryBranches(id: string) {
   return branches.map((branch) => branch.name);
 }
 
-export async function listRepositoryCapabilities(repositoryId: string) {
+export async function listRepositoryToolSkills(repositoryId: string) {
   const repo = await prisma.repository.findUnique({
     where: { id: repositoryId },
     include: {
@@ -199,11 +202,11 @@ export async function listRepositoryCapabilities(repositoryId: string) {
     },
   });
   if (!repo) return null;
-  const catalog = await getCapabilityCatalog();
+  const [tools, skills] = await Promise.all([listActiveTools(), listActiveSkills()]);
   const toolOverrides = new Map(repo.toolSettings.map((item) => [item.tool.key, item.enabled]));
   const skillOverrides = new Map(repo.skillSettings.map((item) => [item.skill.key, item.enabled]));
   return {
-    tools: catalog.tools.map((tool) => ({
+    tools: tools.map((tool) => ({
       id: tool.id,
       key: tool.key,
       name: tool.name,
@@ -212,7 +215,7 @@ export async function listRepositoryCapabilities(repositoryId: string) {
       defaultEnabled: tool.defaultEnabled,
       enabled: toolOverrides.get(tool.key) ?? tool.defaultEnabled,
     })),
-    skills: catalog.skills.map((skill) => ({
+    skills: skills.map((skill) => ({
       id: skill.id,
       key: skill.key,
       name: skill.name,

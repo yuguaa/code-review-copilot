@@ -76,14 +76,14 @@ export function useRepositoriesPageData() {
       api<{ repositories: Repo[] }>('/api/repositories'),
       api<{ accounts: Account[] }>('/api/settings/gitlab'),
       api<{ models: AIModel[] }>('/api/settings/models'),
-      api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/capabilities'),
+      api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/tool-skills'),
     ])
-      .then(([repositoryResult, accountResult, modelResult, capabilityResult]) => {
+      .then(([repositoryResult, accountResult, modelResult, toolSkillResult]) => {
         setRepos(repositoryResult.repositories);
         setAccounts(accountResult.accounts);
         setModels(modelResult.models);
-        setTools(capabilityResult.tools);
-        setSkills(capabilityResult.skills);
+        setTools(toolSkillResult.tools);
+        setSkills(toolSkillResult.skills);
         setForm((current) =>
           current.gitLabAccountId || !accountResult.accounts[0]
             ? current

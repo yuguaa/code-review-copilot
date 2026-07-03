@@ -236,18 +236,16 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
   });
 
   it('启用 brooks-lint skill 时追加 Iron Law 指令', () => {
-    const text = buildInstructions(repo(), {
-      skills: [
-        {
-          key: 'brooks-review',
-          name: 'Brooks PR Review',
-          description: 'x',
-          mode: 'review',
-          defaultEnabled: true,
-          prompt: '必须按 brooks-lint 的 Iron Law 输出',
-        },
-      ],
-    });
+    const text = buildInstructions(repo(), [
+      {
+        key: 'brooks-review',
+        name: 'Brooks PR Review',
+        description: 'x',
+        mode: 'review',
+        defaultEnabled: true,
+        prompt: '必须按 brooks-lint 的 Iron Law 输出',
+      },
+    ]);
     expect(text).toContain('启用的仓库 Skills');
     expect(text).toContain('Brooks PR Review');
     expect(text).toContain('Iron Law');

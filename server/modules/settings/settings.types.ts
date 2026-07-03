@@ -21,7 +21,7 @@ export type NotificationPayload = {
   dingtalkSecret?: string;
 };
 
-export type CapabilityPayload = {
+export type ToolSkillSettingsPayload = {
   tools?: Array<{ key?: string; defaultEnabled?: boolean; isActive?: boolean }>;
   skills?: Array<{ key?: string; defaultEnabled?: boolean; isActive?: boolean }>;
 };

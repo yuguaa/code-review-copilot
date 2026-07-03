@@ -11,8 +11,12 @@ vi.mock('../../infrastructure/prisma/prisma.service', () => ({
   },
 }));
 
-vi.mock('../capabilities/capabilities.service', () => ({
-  getCapabilityCatalog: vi.fn(),
+vi.mock('../tools/tools.service', () => ({
+  listActiveTools: vi.fn(),
+}));
+
+vi.mock('../skills/skills.service', () => ({
+  listActiveSkills: vi.fn(),
 }));
 
 describe('repositories.service memory', () => {

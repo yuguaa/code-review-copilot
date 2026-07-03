@@ -71,7 +71,7 @@ export function useSettingsPageData() {
   const [saving, setSaving] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [savingNotification, setSavingNotification] = useState(false);
-  const [savingCapabilities, setSavingCapabilities] = useState(false);
+  const [savingToolSkills, setSavingToolSkills] = useState(false);
 
   const load = useCallback(() => {
     return Promise.all([
@@ -79,16 +79,16 @@ export function useSettingsPageData() {
       api<{ models: AIModel[] }>('/api/settings/models'),
       api<{ stats: Stats | null }>('/api/settings/stats'),
       api<{ notification: NotificationSetting }>('/api/settings/notification'),
-      api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/capabilities'),
+      api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/tool-skills'),
     ])
-      .then(([gitlab, ai, overview, notice, capabilityResult]) => {
+      .then(([gitlab, ai, overview, notice, toolSkillResult]) => {
         setAccounts(gitlab.accounts);
         setModels(ai.models);
         setStats(overview.stats);
-        setTools(capabilityResult.tools);
-        setSkills(capabilityResult.skills);
-        setEnabledTools(capabilityResult.tools.filter((item) => item.defaultEnabled).map((item) => item.key));
-        setEnabledSkills(capabilityResult.skills.filter((item) => item.defaultEnabled).map((item) => item.key));
+        setTools(toolSkillResult.tools);
+        setSkills(toolSkillResult.skills);
+        setEnabledTools(toolSkillResult.tools.filter((item) => item.defaultEnabled).map((item) => item.key));
+        setEnabledSkills(toolSkillResult.skills.filter((item) => item.defaultEnabled).map((item) => item.key));
         setNotification((current) => ({
           dingtalkEnabled: notice.notification.dingtalkEnabled,
           dingtalkWebhookUrl: notice.notification.dingtalkWebhookUrl ?? '',
@@ -188,9 +188,9 @@ export function useSettingsPageData() {
       .finally(() => setSavingNotification(false));
   };
 
-  const saveCapabilities = () => {
-    setSavingCapabilities(true);
-    api('/api/settings/capabilities', {
+  const saveToolSkills = () => {
+    setSavingToolSkills(true);
+    api('/api/settings/tool-skills', {
       method: 'PATCH',
       body: JSON.stringify({
         tools: tools.map((item) => ({ key: item.key, defaultEnabled: enabledTools.includes(item.key), isActive: item.isActive ?? true })),
@@ -200,7 +200,7 @@ export function useSettingsPageData() {
       .then(load)
       .then(() => toast.success('已保存 Tools / Skills 默认配置'))
       .catch((e) => toast.error(e instanceof Error ? e.message : '保存失败'))
-      .finally(() => setSavingCapabilities(false));
+      .finally(() => setSavingToolSkills(false));
   };
 
   return {
@@ -219,7 +219,7 @@ export function useSettingsPageData() {
     saving,
     savingModel,
     savingNotification,
-    savingCapabilities,
+    savingToolSkills,
     setEnabledTools,
     setEnabledSkills,
     setNotification,
@@ -234,6 +234,6 @@ export function useSettingsPageData() {
     setDefaultModel,
     removeModel,
     saveNotification,
-    saveCapabilities,
+    saveToolSkills,
   };
 }

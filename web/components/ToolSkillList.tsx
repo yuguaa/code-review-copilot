@@ -1,6 +1,6 @@
 import { Checkbox } from './ui';
 
-export type CapabilityItem = {
+export type ToolSkillItem = {
   key: string;
   name: string;
   description: string;
@@ -10,7 +10,7 @@ export type CapabilityItem = {
   enabled?: boolean;
 };
 
-export function CapabilityList({
+export function ToolSkillList({
   title,
   items,
   selected,
@@ -18,7 +18,7 @@ export function CapabilityList({
   defaultLabel = '默认启用',
 }: {
   title: string;
-  items: CapabilityItem[];
+  items: ToolSkillItem[];
   selected: string[];
   onChange: (next: string[]) => void;
   defaultLabel?: string;

@@ -1,4 +1,4 @@
-import { CapabilityList } from '../CapabilityList';
+import { ToolSkillList } from '../ToolSkillList';
 import { Button, Checkbox, Field, Input, Modal, Select, Textarea } from '../ui';
 import type { Account, AIModel, Project, RepositoryForm } from '../../hooks/useRepositoriesPageData';
 import type { AgentSkillItem, AgentToolItem } from '../../lib/types';
@@ -167,14 +167,14 @@ export function RepositoryModal({
                 这里覆盖平台默认能力。关闭工具后，审查与追问都不会再向模型暴露对应 tool。
               </p>
             </div>
-            <CapabilityList
+            <ToolSkillList
               title="Tools"
               items={tools}
               selected={form.enabledTools}
               onChange={(next) => setField('enabledTools', next)}
               defaultLabel="平台默认"
             />
-            <CapabilityList
+            <ToolSkillList
               title="Skills"
               items={skills}
               selected={form.enabledSkills}

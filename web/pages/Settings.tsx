@@ -1,4 +1,4 @@
-import { CapabilitySettingsCard } from '../components/settings/CapabilitySettingsCard';
+import { ToolSkillSettingsCard } from '../components/settings/ToolSkillSettingsCard';
 import { GitLabAccountForm, GitLabAccountList } from '../components/settings/GitLabAccountSettings';
 import { ModelList, ModelSettingsForm } from '../components/settings/ModelSettings';
 import { NotificationSettingsCard } from '../components/settings/NotificationSettingsCard';
@@ -23,7 +23,7 @@ export function Settings() {
     saving,
     savingModel,
     savingNotification,
-    savingCapabilities,
+    savingToolSkills,
     setEnabledTools,
     setEnabledSkills,
     setNotification,
@@ -38,7 +38,7 @@ export function Settings() {
     setDefaultModel,
     removeModel,
     saveNotification,
-    saveCapabilities,
+    saveToolSkills,
   } = useSettingsPageData();
   const { confirm, element: confirmElement } = useConfirm();
 
@@ -65,15 +65,15 @@ export function Settings() {
   return (
     <PageShell title="设置">
       <SettingsStatsGrid stats={stats} />
-      <CapabilitySettingsCard
+      <ToolSkillSettingsCard
         tools={tools}
         skills={skills}
         enabledTools={enabledTools}
         enabledSkills={enabledSkills}
-        saving={savingCapabilities}
+        saving={savingToolSkills}
         onToolsChange={setEnabledTools}
         onSkillsChange={setEnabledSkills}
-        onSave={saveCapabilities}
+        onSave={saveToolSkills}
       />
       <NotificationSettingsCard
         notification={notification}

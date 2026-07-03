@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createAIModel, deleteAIModel, listAIModels, updateAIModel } from './ai-model-settings.service';
-import { listCapabilities, updateCapabilities } from './capabilities-settings.service';
+import { listToolSkillSettings, updateToolSkillSettings } from './tool-skill-settings.service';
 import {
   createGitLabAccount,
   deleteGitLabAccount,
@@ -83,12 +83,11 @@ settingsRoutes.get('/stats', async (c) => {
   return c.json({ stats: await loadSettingsStats() });
 });
 
-settingsRoutes.get('/capabilities', async (c) => {
-  return c.json(await listCapabilities());
+settingsRoutes.get('/tool-skills', async (c) => {
+  return c.json(await listToolSkillSettings());
 });
 
-settingsRoutes.patch('/capabilities', async (c) => {
+settingsRoutes.patch('/tool-skills', async (c) => {
   const body = await c.req.json();
-  const catalog = await updateCapabilities(body);
-  return c.json({ tools: catalog.tools, skills: catalog.skills });
+  return c.json(await updateToolSkillSettings(body));
 });

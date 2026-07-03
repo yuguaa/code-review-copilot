@@ -7,7 +7,7 @@ import path from 'node:path';
 import { createGitLabService, type GitLabService } from '../shared/gitlab/gitlab.service';
 import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
 import type { Workspace } from '../infrastructure/workspace/workspace.service';
-import type { ToolKey } from '../modules/capabilities/capabilities.service';
+import type { ToolKey } from '../modules/tools/tools.service';
 import {
   readRepositoryMemory,
   writeRepositoryMemory,
