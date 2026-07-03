@@ -10,8 +10,8 @@ import { prisma } from '../../lib/prisma';
 import {
   publishSessionListChanged,
   publishSessionMessages,
-  publishSessionStatus,
 } from '../../lib/session-events';
+import { markReviewSessionRunning } from './session-lifecycle.service';
 
 export function listSessionSummaries(kind?: string) {
   return listSessions(kind);
@@ -113,17 +113,10 @@ export function runReviewCommand(sessionId: string): Promise<ReviewCommandResult
             ],
           },
         })
-        .then((command) =>
-          prisma.session.update({
-            where: { id: sessionId },
-            data: { status: 'running', error: null, activeLeafMessageId: command.id, updatedAt: new Date() },
-          }),
-        )
+        .then((command) => markReviewSessionRunning(sessionId, command.id))
         .then(() => loadSessionMessageTree(sessionId))
         .then((next) => {
           publishSessionMessages(sessionId, next);
-          publishSessionStatus(sessionId, 'running');
-          publishSessionListChanged();
           void runReviewSession(sessionId);
           return { kind: 'started' as const, tree: next };
         });

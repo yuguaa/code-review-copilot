@@ -5,6 +5,7 @@ describe('session review command route', () => {
   it('delegates slash review commands to the session service', () => {
     const routeSource = readFileSync(new URL('./sessions.ts', import.meta.url), 'utf8');
     const serviceSource = readFileSync(new URL('../modules/sessions/sessions.service.ts', import.meta.url), 'utf8');
+    const lifecycleSource = readFileSync(new URL('../modules/sessions/session-lifecycle.service.ts', import.meta.url), 'utf8');
 
     expect(routeSource).toContain("sessionRoutes.post('/:id/review-command'");
     expect(routeSource).toContain('runReviewCommand(sessionId)');
@@ -17,8 +18,12 @@ describe('session review command route', () => {
     expect(serviceSource).toContain("session.status === 'running'");
     expect(serviceSource).toContain('parentId: seed.id');
     expect(serviceSource).toContain('代码审查指令');
-    expect(serviceSource).toContain("status: 'running'");
-    expect(serviceSource).toContain("publishSessionStatus(sessionId, 'running')");
+    expect(serviceSource).toContain('markReviewSessionRunning(sessionId, command.id)');
     expect(serviceSource).toContain('void runReviewSession(sessionId)');
+
+    expect(lifecycleSource).toContain("status: 'running'");
+    expect(lifecycleSource).toContain("publishSessionStatus(sessionId, 'running')");
+    expect(lifecycleSource).toContain('markReviewSessionCompleted');
+    expect(lifecycleSource).toContain('markReviewSessionFailed');
   });
 });

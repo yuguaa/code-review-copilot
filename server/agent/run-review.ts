@@ -1,8 +1,6 @@
-import { prisma } from '../lib/prisma';
 import {
   getSessionWithRepository,
   loadMessages,
-  loadSessionMessageTree,
   mergeStreamingMessage,
   saveMessages,
 } from '../lib/chat-store';
@@ -10,13 +8,12 @@ import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
 import { notifyReviewCompleted } from './review-notification';
 import { createLogger } from '../lib/logger';
-import {
-  publishSessionError,
-  publishSessionListChanged,
-  publishSessionMessages,
-  publishSessionStatus,
-} from '../lib/session-events';
+import { publishSessionMessages } from '../lib/session-events';
 import { readUIMessageStream, type UIMessage } from 'ai';
+import {
+  markReviewSessionCompleted,
+  markReviewSessionFailed,
+} from '../modules/sessions/session-lifecycle.service';
 
 const log = createLogger('run-review');
 
@@ -51,22 +48,11 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     finalMessages = ensureVisibleAssistantReply(finalMessages);
     await saveMessages(sessionId, finalMessages);
     await notifyReviewCompleted(session, finalMessages);
-    await prisma.session.update({ where: { id: sessionId }, data: { status: 'completed' } });
-    publishSessionMessages(sessionId, await loadSessionMessageTree(sessionId));
-    publishSessionStatus(sessionId, 'completed');
-    publishSessionListChanged();
+    await markReviewSessionCompleted(sessionId);
     log.info(`审查完成 session=${sessionId}`);
   } catch (err) {
     log.error(`审查失败 session=${sessionId}`, err);
     const message = err instanceof Error ? err.message : String(err);
-    await prisma.session
-      .update({
-        where: { id: sessionId },
-        data: { status: 'failed', error: message },
-      })
-      .catch(() => undefined);
-    publishSessionError(sessionId, message);
-    publishSessionStatus(sessionId, 'failed');
-    publishSessionListChanged();
+    await markReviewSessionFailed(sessionId, message);
   }
 }
