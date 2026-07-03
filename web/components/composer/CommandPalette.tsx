@@ -1,4 +1,5 @@
-import { Loader2, RefreshCcw } from 'lucide-react';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
+import RefreshCcw from 'lucide-react/dist/esm/icons/refresh-ccw';
 import { cn } from '../../lib/cn';
 import type { ComposerCommand } from './composer-types';
 

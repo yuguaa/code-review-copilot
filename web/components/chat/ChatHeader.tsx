@@ -1,4 +1,10 @@
-import { AlertCircle, CheckCircle2, CircleDashed, FolderGit2, GitBranch, Hash, UserRound } from 'lucide-react';
+import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/circle-check';
+import CircleDashed from 'lucide-react/dist/esm/icons/circle-dashed';
+import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
+import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
+import Hash from 'lucide-react/dist/esm/icons/hash';
+import UserRound from 'lucide-react/dist/esm/icons/user-round';
 import { cn } from '../../lib/cn';
 import type { SessionDetail } from '../../lib/types';
 

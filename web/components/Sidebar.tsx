@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, ScanSearch } from 'lucide-react';
+import Plus from 'lucide-react/dist/esm/icons/plus';
+import ScanSearch from 'lucide-react/dist/esm/icons/scan-search';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import type { SessionListItem } from '../lib/types';

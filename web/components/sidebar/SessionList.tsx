@@ -1,4 +1,9 @@
-import { AlertCircle, FolderGit2, GitBranch, GitPullRequest, MessageSquare, Trash2 } from 'lucide-react';
+import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
+import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
+import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
+import GitPullRequest from 'lucide-react/dist/esm/icons/git-pull-request';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
+import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
 import { cn } from '../../lib/cn';
 import type { SessionListItem } from '../../lib/types';
 import { Button } from '../ui/button';

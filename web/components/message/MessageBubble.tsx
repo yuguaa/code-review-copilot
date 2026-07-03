@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
-import { GitBranchPlus, RotateCcw } from 'lucide-react';
+import GitBranchPlus from 'lucide-react/dist/esm/icons/git-branch-plus';
+import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw';
 import { cn } from '../../lib/cn';
 import { BranchSwitcher } from './BranchSwitcher';
 import { MessageBlockRenderer } from './MessageBlockRenderer';

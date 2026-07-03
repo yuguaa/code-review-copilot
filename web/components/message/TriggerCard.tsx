@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { UIMessage } from 'ai';
-import { ChevronRight, Webhook } from 'lucide-react';
+import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right';
+import Webhook from 'lucide-react/dist/esm/icons/webhook';
 import { cn } from '../../lib/cn';
 
 function textOf(message: UIMessage): string {

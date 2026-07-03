@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TriangleAlert } from 'lucide-react';
+import TriangleAlert from 'lucide-react/dist/esm/icons/triangle-alert';
 import { Button } from './button';
 
 export function ConfirmDialog({

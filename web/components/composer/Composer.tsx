@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Command, SendHorizontal, Square } from 'lucide-react';
+import Command from 'lucide-react/dist/esm/icons/command';
+import SendHorizontal from 'lucide-react/dist/esm/icons/send-horizontal';
+import Square from 'lucide-react/dist/esm/icons/square';
 import { CommandPalette } from './CommandPalette';
 import type { ComposerCommand } from './composer-types';
 import { RichComposerEditor, type RichComposerEditorHandle } from './RichComposerEditor';

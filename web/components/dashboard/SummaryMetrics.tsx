@@ -1,4 +1,7 @@
-import { BarChart3, CheckCircle2, UsersRound, Wrench } from 'lucide-react';
+import BarChart3 from 'lucide-react/dist/esm/icons/chart-column';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/circle-check';
+import UsersRound from 'lucide-react/dist/esm/icons/users-round';
+import Wrench from 'lucide-react/dist/esm/icons/wrench';
 import type { DashboardSummary } from '../../hooks/useDashboardData';
 import { MetricCard } from './DashboardPrimitives';
 

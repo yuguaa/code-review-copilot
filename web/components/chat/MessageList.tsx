@@ -1,5 +1,7 @@
 import type { UIMessage } from 'ai';
-import { Activity, AlertCircle, Loader2 } from 'lucide-react';
+import Activity from 'lucide-react/dist/esm/icons/activity';
+import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { Message } from '../Message';
 import type { MessageTreeNode, SessionDetail } from '../../lib/types';
 

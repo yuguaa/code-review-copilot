@@ -1,6 +1,11 @@
 import { lazy, Suspense, useState } from 'react';
 import type { UIMessage } from 'ai';
-import { Brain, ChevronRight, CircleCheck, CircleDashed, CircleX, Loader2 } from 'lucide-react';
+import Brain from 'lucide-react/dist/esm/icons/brain';
+import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right';
+import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
+import CircleDashed from 'lucide-react/dist/esm/icons/circle-dashed';
+import CircleX from 'lucide-react/dist/esm/icons/circle-x';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { cn } from '../../lib/cn';
 import { StreamingCursor } from './StreamingCursor';
 import { isBoundaryPart, type MessagePart } from './message-types';

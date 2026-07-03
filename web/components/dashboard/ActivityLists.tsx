@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, Clock3, GitBranch } from 'lucide-react';
+import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
+import CheckCircle2 from 'lucide-react/dist/esm/icons/circle-check';
+import Clock3 from 'lucide-react/dist/esm/icons/clock-3';
+import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
 import { cn } from '../../lib/cn';
 import { dashboardStatusText, type FailureItem, type RecentItem } from '../../hooks/useDashboardData';
 import { Card } from '../ui/surface';

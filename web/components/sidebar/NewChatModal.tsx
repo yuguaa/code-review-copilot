@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FolderGit2 } from 'lucide-react';
+import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
 import { toast } from 'sonner';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';

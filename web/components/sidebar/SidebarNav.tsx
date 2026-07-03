@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
-import { BarChart3, FolderGit2, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import BarChart3 from 'lucide-react/dist/esm/icons/chart-column';
+import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
+import LogOut from 'lucide-react/dist/esm/icons/log-out';
+import SettingsIcon from 'lucide-react/dist/esm/icons/settings';
 
 export function SidebarNav({ onLogout }: { onLogout: () => void }) {
   return (

@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  Loader2,
-  MessageSquare,
-  AlertCircle,
-} from 'lucide-react';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
+import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
 import type { SessionDetail } from '../lib/types';
 import { Sidebar } from '../components/Sidebar';
 import { ChatHeader } from '../components/chat/ChatHeader';

@@ -1,4 +1,7 @@
-import { AlertCircle, FolderGit2, MessageSquare, UserRound } from 'lucide-react';
+import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
+import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
+import UserRound from 'lucide-react/dist/esm/icons/user-round';
 import { cn } from '../../lib/cn';
 import type { DashboardBucket, PeopleSignals } from '../../hooks/useDashboardData';
 import { Card } from '../ui/surface';
