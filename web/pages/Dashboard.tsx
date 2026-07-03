@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { toast } from 'sonner';
 import {
   Activity,
   AlertCircle,
@@ -27,92 +25,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Card, ColorBlock, PageShell } from '../components/ui';
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from '../components/chart';
-
-type Summary = {
-  total: number;
-  reviewTotal: number;
-  chatTotal: number;
-  completed: number;
-  failed: number;
-  running: number;
-  messageTotal: number;
-  authorCount: number;
-  repositoryCount: number;
-  activeRepositoryCount: number;
-  modelCount: number;
-  accountCount: number;
-  toolCount: number;
-  skillCount: number;
-  successRate: number;
-  failureRate: number;
-  avgMessagesPerSession: number;
-};
-
-type Bucket = {
-  key: string;
-  label: string;
-  total: number;
-  reviews: number;
-  chats: number;
-  completed: number;
-  failed: number;
-  running: number;
-  messages: number;
-  repositoryCount: number;
-  topRepository: { label: string; count: number } | null;
-  latestAt: string | null;
-  successRate: number;
-  failureRate: number;
-  activityShare: number;
-  failureShare: number;
-  avgMessagesPerSession: number;
-};
-
-type FailureItem = {
-  id: string;
-  title: string;
-  author: string;
-  repository: string;
-  error: string;
-  updatedAt: string;
-};
-
-type RecentItem = {
-  id: string;
-  kind: string;
-  status: string;
-  title: string;
-  author: string;
-  repository: string;
-  sourceBranch: string | null;
-  targetBranch: string | null;
-  messages: number;
-  updatedAt: string;
-};
-
-type PeopleSignals = {
-  mostActive: Bucket | null;
-  mostFailures: Bucket | null;
-  widestCoverage: Bucket | null;
-  highestMessageDensity: Bucket | null;
-};
-
-type DashboardData = {
-  generatedAt: string;
-  window: { days: number; since: string };
-  summary: Summary;
-  timeline: Bucket[];
-  statusDistribution: { status: string; count: number; percent: number }[];
-  repositories: Bucket[];
-  authors: Bucket[];
-  peopleSignals: PeopleSignals;
-  failures: FailureItem[];
-  recent: RecentItem[];
-};
+import { dashboardStatusText, type DashboardBucket, type RecentItem, useDashboardData } from '../hooks/useDashboardData';
 
 const chartColors = {
   ink: '#0a0a0a',
@@ -147,12 +63,6 @@ const repositoryChartConfig = {
   total: { label: '会话', color: chartColors.teal },
 } satisfies ChartConfig;
 
-const statusText: Record<string, string> = {
-  completed: '完成',
-  failed: '失败',
-  running: '运行中',
-};
-
 const statusColor: Record<string, string> = {
   completed: 'bg-[var(--brand-mint)] text-[var(--ink)]',
   failed: 'bg-[var(--brand-coral)] text-white',
@@ -172,10 +82,6 @@ function fmtTime(value: string | null): string {
 function branchText(item: RecentItem): string {
   if (item.sourceBranch && item.targetBranch) return `${item.sourceBranch} -> ${item.targetBranch}`;
   return item.sourceBranch ?? item.targetBranch ?? '未记录分支';
-}
-
-function shortLabel(value: string, max = 18): string {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
 function chartHeight(items: unknown[], min = 280, row = 36): number {
@@ -232,8 +138,8 @@ function SignalCard({
   icon: Icon,
 }: {
   label: string;
-  bucket: Bucket | null;
-  value: (bucket: Bucket) => string;
+  bucket: DashboardBucket | null;
+  value: (bucket: DashboardBucket) => string;
   icon: typeof Activity;
 }) {
   return (
@@ -253,45 +159,7 @@ function EmptyState({ label }: { label: string }) {
 }
 
 export function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
-
-  const load = useCallback(() => {
-    return api<DashboardData>('/api/dashboard')
-      .then(setData)
-      .catch((e) => toast.error(e instanceof Error ? e.message : '看板加载失败'));
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const statusChart = useMemo(
-    () =>
-      (data?.statusDistribution ?? []).map((item) => ({
-        ...item,
-        name: item.status,
-        label: statusText[item.status] ?? item.status,
-      })),
-    [data],
-  );
-
-  const authorChart = useMemo(
-    () =>
-      (data?.authors ?? []).map((item) => ({
-        ...item,
-        name: shortLabel(item.label, 12),
-      })),
-    [data],
-  );
-
-  const repositoryChart = useMemo(
-    () =>
-      (data?.repositories ?? []).map((item) => ({
-        ...item,
-        name: shortLabel(item.label, 20),
-      })),
-    [data],
-  );
+  const { data, statusChart, authorChart, repositoryChart } = useDashboardData();
 
   if (!data) {
     return (
@@ -492,7 +360,7 @@ export function Dashboard() {
                     <span className="caption mt-1 block truncate text-[var(--muted)]">{item.author} · {item.repository}</span>
                   </span>
                   <span className="text-right max-md:col-start-2 max-md:flex max-md:items-center max-md:gap-3 max-md:text-left">
-                    <span className="caption block text-[var(--muted)]">{statusText[item.status] ?? item.status}</span>
+                    <span className="caption block text-[var(--muted)]">{dashboardStatusText[item.status] ?? item.status}</span>
                     <span className="caption block text-[var(--muted-soft)]">{item.messages} MSG</span>
                     <span className="caption block text-[var(--muted-soft)]">{fmtTime(item.updatedAt)}</span>
                   </span>
