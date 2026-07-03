@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDashboardPayload } from './dashboard';
+import { buildDashboardPayload } from '../modules/dashboard/dashboard.service';
 
 function session(overrides: Record<string, unknown>) {
   const now = new Date('2026-07-03T08:00:00.000Z');
