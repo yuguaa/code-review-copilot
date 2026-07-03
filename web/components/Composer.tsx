@@ -1,18 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Command, Loader2, RefreshCcw, SendHorizontal, Square } from 'lucide-react';
+import { Command, SendHorizontal, Square } from 'lucide-react';
 import { cn } from '../lib/cn';
+import { CommandPalette } from './composer/CommandPalette';
+import type { ComposerCommand } from './composer/composer-types';
+import { useComposerCommands } from '../hooks/useComposerCommands';
 
-export type ComposerCommand = {
-  id: string;
-  title: string;
-  description: string;
-  disabled?: boolean;
-  loading?: boolean;
-  onSelect: () => void;
-};
+export type { ComposerCommand } from './composer/composer-types';
 
 type ComposerProps = {
   placeholder: string;
@@ -27,44 +23,25 @@ const editorClass =
   'composer-editor min-h-10 max-h-40 overflow-y-auto px-3 py-2 text-sm leading-6 text-[var(--ink)] outline-none';
 
 export function Composer({ placeholder, disabled, busy, commands, onSubmit, onStop }: ComposerProps) {
-  const [commandOpen, setCommandOpen] = useState(false);
   const [empty, setEmpty] = useState(true);
-  const [query, setQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const {
+    activeCommand,
+    availableCommands,
+    hasCommand,
+    moveSelection,
+    open,
+    openRef,
+    reset: resetCommands,
+    setOpen: setCommandOpen,
+    setQuery,
+  } = useComposerCommands(commands);
   const editorDisabled = Boolean(disabled || busy);
-  const availableCommands = useMemo(
-    () =>
-      commands.filter((command) => {
-        const normalized = query.trim().toLowerCase();
-        if (!normalized) return true;
-        return `${command.title} ${command.description}`.toLowerCase().includes(normalized);
-      }),
-    [commands, query],
-  );
-  const selectableCommands = availableCommands.filter((command) => !command.disabled);
-  const activeCommand = selectableCommands[selectedIndex] ?? selectableCommands[0];
-  const hasCommand = commands.some((command) => !command.disabled);
   const activeCommandRef = useRef<ComposerCommand | undefined>(activeCommand);
   const submitRef = useRef<() => void>(() => undefined);
-  const commandOpenRef = useRef(false);
 
   useEffect(() => {
     activeCommandRef.current = activeCommand;
   }, [activeCommand]);
-
-  useEffect(() => {
-    commandOpenRef.current = commandOpen;
-  }, [commandOpen]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  useEffect(() => {
-    if (selectedIndex > selectableCommands.length - 1) {
-      setSelectedIndex(Math.max(0, selectableCommands.length - 1));
-    }
-  }, [selectableCommands.length, selectedIndex]);
 
   const editor = useEditor({
     extensions: [
@@ -85,30 +62,27 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
         class: editorClass,
       },
       handleKeyDown: (_view, event) => {
-        if (event.key === 'Escape' && commandOpenRef.current) {
+        if (event.key === 'Escape' && openRef.current) {
           event.preventDefault();
           setCommandOpen(false);
           return true;
         }
-        if (commandOpenRef.current && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+        if (openRef.current && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
           event.preventDefault();
           const direction = event.key === 'ArrowDown' ? 1 : -1;
-          setSelectedIndex((current) => {
-            if (selectableCommands.length <= 1) return 0;
-            return (current + direction + selectableCommands.length) % selectableCommands.length;
-          });
+          moveSelection(direction);
           return true;
         }
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
           const command = activeCommandRef.current;
-          if (commandOpenRef.current && command) {
+          if (openRef.current && command) {
             command.onSelect();
             editor?.commands.clearContent();
-            setCommandOpen(false);
+            resetCommands();
             return true;
           }
-          if (commandOpenRef.current) return true;
+          if (openRef.current) return true;
           submitRef.current();
           return true;
         }
@@ -126,7 +100,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
       setQuery('');
       setCommandOpen(false);
     },
-  }, [placeholder, hasCommand, selectableCommands.length]);
+  }, [placeholder, hasCommand, moveSelection, resetCommands]);
 
   useEffect(() => {
     if (!editor) return;
@@ -167,52 +141,25 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
     setQuery('');
   };
 
+  const selectCommand = (command: ComposerCommand) => {
+    if (command.disabled) return;
+    command.onSelect();
+    editor?.commands.clearContent();
+    setEmpty(true);
+    resetCommands();
+  };
+
   return (
     <div className="relative flex items-end gap-2 rounded-[var(--r-lg)] border border-[var(--hairline)] bg-white p-1.5 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] focus-within:border-[var(--ink)] focus-within:shadow-[0_0_0_1px_rgba(0,0,0,0.08)]">
       <div className="min-w-0 flex-1">
         <EditorContent editor={editor} />
       </div>
-      {commandOpen && (
-        <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--canvas)] shadow-[var(--shadow-popover)]">
-          <div className="border-b border-[var(--hairline)] px-3 py-2">
-            <span className="caption text-[var(--muted)]">输入 / 选择指令</span>
-          </div>
-          {availableCommands.length === 0 && (
-            <div className="px-3 py-5 text-center text-xs text-[var(--muted)]">没有匹配的指令</div>
-          )}
-          {availableCommands.map((command) => {
-            const selected = activeCommand?.id === command.id;
-            return (
-              <button
-                key={command.id}
-                type="button"
-                onClick={() => {
-                  if (command.disabled) return;
-                  command.onSelect();
-                  editor?.commands.clearContent();
-                  setEmpty(true);
-                  setCommandOpen(false);
-                }}
-                disabled={command.disabled}
-                className={cn(
-                  'flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50',
-                  selected && 'bg-[var(--surface-hover)]',
-                )}
-              >
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--ink)] text-white">
-                  {command.loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-[var(--ink)]">{command.title}</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-[var(--muted)]">{command.description}</span>
-                </span>
-                <span className="ml-auto rounded-[var(--r-sm)] border border-[var(--hairline)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--muted)]">
-                  Enter
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      {open && (
+        <CommandPalette
+          activeCommand={activeCommand}
+          commands={availableCommands}
+          onSelect={selectCommand}
+        />
       )}
       <button
         type="button"

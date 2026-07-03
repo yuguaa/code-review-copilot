@@ -1,0 +1,48 @@
+import { Loader2, RefreshCcw } from 'lucide-react';
+import { cn } from '../../lib/cn';
+import type { ComposerCommand } from './composer-types';
+
+type CommandPaletteProps = {
+  activeCommand?: ComposerCommand;
+  commands: ComposerCommand[];
+  onSelect: (command: ComposerCommand) => void;
+};
+
+export function CommandPalette({ activeCommand, commands, onSelect }: CommandPaletteProps) {
+  return (
+    <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 overflow-hidden rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--canvas)] shadow-[var(--shadow-popover)]">
+      <div className="border-b border-[var(--hairline)] px-3 py-2">
+        <span className="caption text-[var(--muted)]">输入 / 选择指令</span>
+      </div>
+      {commands.length === 0 && (
+        <div className="px-3 py-5 text-center text-xs text-[var(--muted)]">没有匹配的指令</div>
+      )}
+      {commands.map((command) => {
+        const selected = activeCommand?.id === command.id;
+        return (
+          <button
+            key={command.id}
+            type="button"
+            onClick={() => onSelect(command)}
+            disabled={command.disabled}
+            className={cn(
+              'flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50',
+              selected && 'bg-[var(--surface-hover)]',
+            )}
+          >
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--ink)] text-white">
+              {command.loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-[var(--ink)]">{command.title}</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-[var(--muted)]">{command.description}</span>
+            </span>
+            <span className="ml-auto rounded-[var(--r-sm)] border border-[var(--hairline)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--muted)]">
+              Enter
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
