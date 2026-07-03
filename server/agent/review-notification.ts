@@ -3,13 +3,48 @@ import type { SessionWithRepository } from '../modules/sessions/session-message-
 import { sendReviewDingtalkNotification } from '../modules/notifications/notifications.service';
 
 type RepositoryForDingtalk = NonNullable<SessionWithRepository['repository']>;
+type MessagePartRecord = Record<string, unknown>;
 
-function textOf(messages: UIMessage[]): string {
-  const message = [...messages].reverse().find((m) => m.role === 'assistant');
+function isRecord(value: unknown): value is MessagePartRecord {
+  return value !== null && typeof value === 'object';
+}
+
+function textPartValue(part: unknown): string {
+  if (!isRecord(part)) return '';
+  return part.type === 'text' && typeof part.text === 'string' ? part.text.trim() : '';
+}
+
+function reviewCommentMarkdown(part: unknown): string {
+  if (!isRecord(part)) return '';
+  const type = typeof part.type === 'string' ? part.type : '';
+  const toolName = typeof part.toolName === 'string' ? part.toolName : '';
+  if (type !== 'tool-post_review_comment' && toolName !== 'post_review_comment') return '';
+  const input = isRecord(part.input) ? part.input : null;
+  return typeof input?.markdown === 'string' ? input.markdown.trim() : '';
+}
+
+function hasReviewFindings(text: string): boolean {
+  return /严重|一般|建议|问题|风险|影响|修复|文件|行|健康分|Dockerfile|\.tsx?:\d+|\.vue:\d+|\.java:\d+|\.py:\d+/.test(text);
+}
+
+function finalReviewTextOf(messages: UIMessage[]): string {
+  const assistantMessages = messages.filter((m) => m.role === 'assistant');
+  const publishedReview = [...assistantMessages]
+    .reverse()
+    .flatMap((message) => message.parts.map((part) => reviewCommentMarkdown(part)))
+    .find(Boolean);
+  if (publishedReview) return publishedReview;
+
+  const textBlocks = assistantMessages
+    .map((message) => message.parts.map((part) => textPartValue(part)).filter(Boolean).join('\n\n').trim())
+    .filter(Boolean);
+  const reviewText = [...textBlocks].reverse().find(hasReviewFindings);
+  if (reviewText) return reviewText;
+
+  const message = [...assistantMessages].reverse().find((m) => m.parts.some((part) => textPartValue(part)));
   if (!message) return '';
   return message.parts
-    .filter((p): p is { type: 'text'; text: string } => p.type === 'text' && typeof p.text === 'string')
-    .map((p) => p.text.trim())
+    .map((part) => textPartValue(part))
     .filter(Boolean)
     .join('\n\n')
     .trim();
@@ -45,7 +80,7 @@ export function notifyReviewCompleted(session: SessionWithRepository, messages: 
   const repo = session.repository;
   if (!repo?.enableDingtalk) return Promise.resolve('skipped');
 
-  const resultText = textOf(messages) || '审查已完成，但模型没有返回可展示的文本结果。请进入会话查看工具调用记录。';
+  const resultText = finalReviewTextOf(messages) || '审查已完成，但模型没有返回可展示的文本结果。请进入会话查看工具调用记录。';
   const title = titleOf(session);
   const text = [`## ${title}`, '', contextOf(session), '', '---', '', resultText].join('\n');
   return sendReviewDingtalkNotification(repo, title, text);

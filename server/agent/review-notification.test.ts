@@ -103,6 +103,37 @@ describe('notifyReviewCompleted', () => {
     );
   });
 
+  it('优先把 post_review_comment 的 markdown 作为钉钉正文', async () => {
+    await notifyReviewCompleted(session(), [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
+          {
+            type: 'tool-post_review_comment',
+            state: 'output-available',
+            toolCallId: 'tool-1',
+            input: { markdown: '## 严重\n- Dockerfile:12 构建产物路径错误，会导致镜像构建失败。' },
+            output: { posted: true },
+          } as UIMessage['parts'][number],
+          { type: 'text', text: '总评已发布。我会把这次得到的部署审查要点沉淀到项目记忆。' },
+        ],
+      },
+    ]);
+
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('Dockerfile:12 构建产物路径错误'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.not.stringContaining('我会先读取项目记忆'),
+    );
+  });
+
   it('仓库关闭钉钉时跳过', async () => {
     const s = session({
       repository: { ...session().repository!, enableDingtalk: false },
