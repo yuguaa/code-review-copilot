@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { UIMessage } from 'ai';
-import { Streamdown } from 'streamdown';
-import { code } from '@streamdown/code';
-import { cjk } from '@streamdown/cjk';
 import { Brain, ChevronRight, CircleCheck, CircleDashed, CircleX, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { StreamingCursor } from './StreamingCursor';
 import { isBoundaryPart, type MessagePart } from './message-types';
+
+const MarkdownBlock = lazy(() => import('./MarkdownBlock').then((module) => ({ default: module.MarkdownBlock })));
 
 const TOOL_LABEL: Record<string, string> = {
   bash: '执行命令',
@@ -31,15 +30,11 @@ function isTool(part: MessagePart): boolean {
   return part.type === 'dynamic-tool' || part.type.startsWith('tool-');
 }
 
-function MarkdownBlock({ text, streaming }: { text: string; streaming?: boolean }) {
+function MarkdownFallback({ text, streaming }: { text: string; streaming?: boolean }) {
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="streamdown-body min-w-0">
-      {text.trim() ? (
-        <Streamdown animated plugins={{ code, cjk }} isAnimating={Boolean(streaming)}>
-          {text}
-        </Streamdown>
-      ) : null}
+    <div className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
+      {text}
       {streaming && <StreamingCursor />}
     </div>
   );
@@ -139,7 +134,13 @@ function UnknownBlock({ part }: { part: MessagePart }) {
 export function MessageBlockRenderer({ part, role, streaming }: { part: MessagePart; role: UIMessage['role']; streaming?: boolean }) {
   if (isBoundaryPart(part)) return null;
   if (part.type === 'text') {
-    return role === 'assistant' ? <MarkdownBlock text={part.text} streaming={streaming || (part as { state?: string }).state === 'streaming'} /> : <PlainTextBlock text={part.text} />;
+    if (role !== 'assistant') return <PlainTextBlock text={part.text} />;
+    const isStreaming = streaming || (part as { state?: string }).state === 'streaming';
+    return (
+      <Suspense fallback={<MarkdownFallback text={part.text} streaming={isStreaming} />}>
+        <MarkdownBlock text={part.text} streaming={isStreaming} />
+      </Suspense>
+    );
   }
   if (part.type === 'reasoning') return <ReasoningBlock part={part} />;
   if (isTool(part)) return <ToolBlock part={part} />;
