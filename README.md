@@ -17,7 +17,7 @@
 ```
 server/            # Hono 后端
   index.ts         # app 装配 + 全局鉴权 + 生产托管前端
-  routes/          # auth / sessions / repositories / settings / chat / webhook
+  routes/          # auth / sessions / repositories / settings / chat / webhook / dashboard
   agent/           # model · tools · subagents · review-agent · run-review
   lib/             # gitlab · auth · prompts · prisma · chat-store · branch-match
 web/               # Vite + React SPA（Chat / Settings / Repositories / Login）
@@ -45,6 +45,7 @@ npm run dev                 # 同时起 Hono(:8787) 与 Vite(:5173)
 2. **设置 → Tools / Skills 管理**：调整平台默认工具与审查方法；内置 `brooks-lint` 风格 skill 可直接启用。
 3. **仓库配置 → 添加仓库**：选账号 → 拉取并选项目 → 配模型（provider/modelId/apiKey）→ 监听分支 / 默认审查提示词 / 自动审查 / 仓库级 Tools 和 Skills 覆盖。
 4. 在 GitLab 项目里加 Webhook（**Merge Request events**），URL 指向 `<部署地址>/api/webhook/gitlab`，Secret Token 与账号的 Webhook 密钥一致。
+5. **数据看板**：查看 14 天趋势、状态分布、仓库热度、人员维度、失败样本和最近活动；人员分析覆盖活跃占比、失败贡献、仓库覆盖和消息密度。
 
 之后每次 MR 打开/更新都会自动生成一个审查会话，agent 审查并回写 MR，你可在左侧会话里继续追问。
 

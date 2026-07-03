@@ -254,7 +254,15 @@ export function useConfirm() {
   return { confirm, element };
 }
 
-export function PageShell({ title, children }: { title: string; children: ReactNode }) {
+export function PageShell({
+  title,
+  children,
+  maxWidth = 'max-w-5xl',
+}: {
+  title: string;
+  children: ReactNode;
+  maxWidth?: string;
+}) {
   return (
     <div className="h-full overflow-y-auto bg-[var(--canvas)]">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--hairline)] bg-[var(--canvas)] px-6 py-4">
@@ -267,7 +275,7 @@ export function PageShell({ title, children }: { title: string; children: ReactN
         </Link>
         <h1 className="font-display text-lg text-[var(--ink)]">{title}</h1>
       </header>
-      <main className="mx-auto max-w-5xl space-y-8 px-6 py-10">{children}</main>
+      <main className={cn('mx-auto space-y-8 px-6 py-10', maxWidth)}>{children}</main>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { checkAuth } from './lib/api';
 import { Login } from './pages/Login';
 import { Chat } from './pages/Chat';
+import { Dashboard } from './pages/Dashboard';
 import { Settings } from './pages/Settings';
 import { Repositories } from './pages/Repositories';
 
@@ -36,6 +37,7 @@ export function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<RequireAuth><Chat /></RequireAuth>} />
         <Route path="/c/:sessionId" element={<RequireAuth><Chat /></RequireAuth>} />
+        <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
         <Route path="/repositories" element={<RequireAuth><Repositories /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />

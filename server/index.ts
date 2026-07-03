@@ -11,6 +11,7 @@ import { repositoryRoutes } from './routes/repositories';
 import { settingsRoutes } from './routes/settings';
 import { chatRoutes } from './routes/chat';
 import { webhookRoutes } from './routes/webhook';
+import { dashboardRoutes } from './routes/dashboard';
 import { createLogger } from './lib/logger';
 
 const log = createLogger('server');
@@ -32,6 +33,7 @@ app.route('/api/repositories', repositoryRoutes);
 app.route('/api/settings', settingsRoutes);
 app.route('/api/chat', chatRoutes);
 app.route('/api/webhook', webhookRoutes);
+app.route('/api/dashboard', dashboardRoutes);
 
 // 生产环境托管 Vite 静态产物（SPA 回退到 index.html）
 if (process.env.NODE_ENV === 'production') {

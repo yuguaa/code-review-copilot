@@ -12,6 +12,7 @@ import {
   ScanSearch,
   GitBranch,
   AlertCircle,
+  BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
@@ -377,7 +378,13 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
         })}
       </div>
 
-      <div className="space-y-0.5 border-t border-[var(--hairline)] px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-3 max-md:gap-1 max-md:space-y-0">
+      <div className="space-y-0.5 border-t border-[var(--hairline)] px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-2 max-md:gap-1 max-md:space-y-0">
+        <Link
+          to="/dashboard"
+          className="flex items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
+        >
+          <BarChart3 size={15} /> 数据看板
+        </Link>
         <Link
           to="/repositories"
           className="flex items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
