@@ -13,11 +13,11 @@ export type SessionWithRepository = NonNullable<
   Awaited<ReturnType<typeof getSessionWithRepository>>
 >;
 
-/** 会话列表（侧栏用），按触发/创建时间倒序，带最后一条消息预览。 */
+/** 会话列表（侧栏用），按最近活动时间倒序，带最后一条消息预览。 */
 export async function listSessions(kind?: string) {
   const sessions = await prisma.session.findMany({
     where: kind ? { kind } : undefined,
-    orderBy: { createdAt: 'desc' },
+    orderBy: { updatedAt: 'desc' },
     include: {
       repository: { select: { name: true, path: true } },
       messages: { orderBy: { createdAt: 'desc' }, take: 1 },

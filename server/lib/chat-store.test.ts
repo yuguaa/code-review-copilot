@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { dedupeMessages, mergeIncomingUserMessage, mergeStreamingMessage } from './chat-store';
 
@@ -74,5 +75,15 @@ describe('mergeIncomingUserMessage', () => {
     ];
 
     expect(mergeIncomingUserMessage(storedMessages, storedMessages)).toEqual(storedMessages);
+  });
+});
+
+describe('listSessions', () => {
+  it('侧栏会话列表按最近活动时间排序', () => {
+    const source = readFileSync(new URL('./chat-store.ts', import.meta.url), 'utf8');
+    const listSessionsBlock = source.slice(source.indexOf('export async function listSessions'), source.indexOf('/** 从首条用户消息抽取'));
+
+    expect(listSessionsBlock).toContain("orderBy: { updatedAt: 'desc' }");
+    expect(listSessionsBlock).toContain("messages: { orderBy: { createdAt: 'desc' }, take: 1 }");
   });
 });

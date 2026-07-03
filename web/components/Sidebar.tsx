@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   GitPullRequest,
@@ -8,7 +8,6 @@ import {
   FolderGit2,
   LogOut,
   Trash2,
-  ChevronRight,
   ScanSearch,
   GitBranch,
   AlertCircle,
@@ -32,15 +31,6 @@ const statusLabel: Record<string, string> = {
   failed: '失败',
 };
 
-const NONE_KEY = '__none__';
-
-type RepoGroup = {
-  key: string;
-  name: string;
-  path: string | null;
-  sessions: SessionListItem[];
-};
-
 /** 会话标题展示：审查会话带 MR 编号，普通对话空标题回退「新对话」。 */
 function sessionLabel(s: SessionListItem): string {
   if (s.kind === 'review') {
@@ -53,7 +43,7 @@ function sessionLabel(s: SessionListItem): string {
 function sessionMeta(s: SessionListItem): string {
   const branch =
     s.sourceBranch && s.targetBranch ? `${s.sourceBranch} → ${s.targetBranch}` : s.sourceBranch ?? s.targetBranch;
-  const time = new Date(s.createdAt).toLocaleString(undefined, {
+  const time = new Date(s.updatedAt).toLocaleString(undefined, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -62,24 +52,8 @@ function sessionMeta(s: SessionListItem): string {
   return [branch, time].filter(Boolean).join(' · ');
 }
 
-/** 按仓库把会话聚成有序分组（沿用 createdAt 倒序，最新触发的仓库在前）。 */
-function groupByRepo(sessions: SessionListItem[]): RepoGroup[] {
-  const groups = new Map<string, RepoGroup>();
-  for (const s of sessions) {
-    const key = s.repository?.path ?? NONE_KEY;
-    let group = groups.get(key);
-    if (!group) {
-      group = {
-        key,
-        name: s.repository?.name || s.repository?.path?.split('/').pop() || '未关联仓库',
-        path: s.repository?.path ?? null,
-        sessions: [],
-      };
-      groups.set(key, group);
-    }
-    group.sessions.push(s);
-  }
-  return [...groups.values()];
+function repositoryLabel(s: SessionListItem): string {
+  return s.repository?.name || s.repository?.path?.split('/').pop() || '未关联仓库';
 }
 
 /** 新建对话弹层：明确选择仓库，而不是默默用第一个。 */
@@ -177,7 +151,6 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [newChatOpen, setNewChatOpen] = useState(false);
   const navigate = useNavigate();
   const { sessionId } = useParams();
@@ -206,15 +179,6 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
     });
     return () => events.close();
   }, [load]);
-
-  const groups = useMemo(() => groupByRepo(sessions), [sessions]);
-
-  const toggle = (key: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
 
   const logout = () => {
     api('/api/auth/logout', { method: 'POST' })
@@ -286,93 +250,71 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
           </p>
         )}
 
-        {groups.map((group) => {
-          const isCollapsed = collapsed.has(group.key);
-          const hasActive = group.sessions.some((s) => s.id === sessionId);
-          return (
-            <div key={group.key} className="select-none">
-              <button
-                onClick={() => toggle(group.key)}
-                title={group.path ?? group.name}
-              className="flex w-full items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-card)]"
-              >
-                <ChevronRight
-                  size={14}
-                  className={cn('shrink-0 text-[var(--muted-soft)] transition-transform duration-200', !isCollapsed && 'rotate-90')}
-                />
-                <FolderGit2 size={14} className={cn('shrink-0', hasActive ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
-                <span className={cn('eyebrow truncate', hasActive ? 'text-[var(--ink)]' : 'text-[var(--body-strong)]')}>
-                  {group.name}
-                </span>
-                <span className="caption ml-auto shrink-0 rounded-[var(--r-pill)] bg-[var(--surface-strong)] px-1.5 py-0.5 tabular-nums text-[var(--muted)]">
-                  {group.sessions.length}
-                </span>
-              </button>
+        {!loadError && sessions.length > 0 && (
+          <div className="px-2 pb-1 pt-1">
+            <span className="eyebrow text-[var(--muted)]">最近活动</span>
+          </div>
+        )}
 
-              {!isCollapsed && (
-                <div className="mb-1 ml-[19px] space-y-0.5 pl-2">
-                  {group.sessions.map((s) => {
-                    const active = s.id === sessionId;
-                    return (
-                      <div
-                        key={s.id}
-                        className={cn(
-                          'group relative rounded-[var(--r-md)] transition-colors',
-                          active ? 'bg-[var(--surface-card)]' : 'hover:bg-[var(--surface-card)]',
-                        )}
-                      >
-                        {active && (
-                          <span className="absolute left-0 top-1/2 h-6 w-[2px] -translate-y-1/2 rounded-full bg-[var(--ink)]" />
-                        )}
-                        <button
-                          onClick={() => navigate(`/c/${s.id}`)}
-                          className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2 pr-8 text-left"
-                        >
-                          {s.kind === 'review' ? (
-                            <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
-                          ) : (
-                            <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
-                          )}
-                          <span className="min-w-0">
-                            <span
-                              className={cn(
-                                'block truncate text-xs',
-                                active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]',
-                              )}
-                            >
-                              {sessionLabel(s)}
-                            </span>
-                            <span className="caption mt-0.5 flex min-w-0 items-center gap-1 truncate text-[var(--muted)]">
-                              {s.sourceBranch || s.targetBranch ? <GitBranch size={10} className="shrink-0" /> : null}
-                              <span className="truncate">{sessionMeta(s)}</span>
-                            </span>
-                          </span>
-                          <span
-                            title={statusLabel[s.status] ?? s.status}
-                            className={cn(
-                              'ml-auto h-1.5 w-1.5 shrink-0 rounded-full',
-                              statusColor[s.status] ?? 'bg-[var(--muted-soft)]',
-                              s.status === 'running' && 'animate-pulse',
-                            )}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="删除会话"
-                          title="删除会话"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeSession(s);
-                          }}
-                          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] group-focus-within:opacity-100 group-hover:opacity-100"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+        {sessions.map((s) => {
+          const active = s.id === sessionId;
+          return (
+            <div
+              key={s.id}
+              className={cn(
+                'group relative rounded-[var(--r-md)] transition-colors',
+                active ? 'bg-[var(--surface-card)]' : 'hover:bg-[var(--surface-card)]',
               )}
+            >
+              {active && <span className="absolute left-0 top-1/2 h-8 w-[2px] -translate-y-1/2 rounded-full bg-[var(--ink)]" />}
+              <button
+                onClick={() => navigate(`/c/${s.id}`)}
+                className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2.5 pr-8 text-left"
+              >
+                {s.kind === 'review' ? (
+                  <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
+                ) : (
+                  <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
+                )}
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      'block truncate text-xs',
+                      active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]',
+                    )}
+                  >
+                    {sessionLabel(s)}
+                  </span>
+                  <span className="caption mt-1 flex min-w-0 items-center gap-1 truncate text-[var(--muted)]">
+                    <FolderGit2 size={10} className="shrink-0" />
+                    <span className="truncate">{repositoryLabel(s)}</span>
+                  </span>
+                  <span className="caption mt-0.5 flex min-w-0 items-center gap-1 truncate text-[var(--muted-soft)]">
+                    {s.sourceBranch || s.targetBranch ? <GitBranch size={10} className="shrink-0" /> : null}
+                    <span className="truncate">{sessionMeta(s)}</span>
+                  </span>
+                </span>
+                <span
+                  title={statusLabel[s.status] ?? s.status}
+                  className={cn(
+                    'ml-auto h-1.5 w-1.5 shrink-0 rounded-full',
+                    statusColor[s.status] ?? 'bg-[var(--muted-soft)]',
+                    s.status === 'running' && 'animate-pulse',
+                  )}
+                />
+              </button>
+              <button
+                type="button"
+                aria-label="删除会话"
+                title="删除会话"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeSession(s);
+                }}
+                className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[var(--r-pill)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] group-focus-within:opacity-100 group-hover:opacity-100"
+              >
+                <Trash2 size={13} />
+              </button>
             </div>
           );
         })}
