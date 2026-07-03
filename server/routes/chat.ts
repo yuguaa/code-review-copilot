@@ -1,6 +1,14 @@
 import { Hono } from 'hono';
 import type { UIMessage } from 'ai';
-import { ensureChatTitle, getSessionWithRepository, loadMessages, mergeIncomingUserMessage, saveMessages } from '../lib/chat-store';
+import { randomUUID } from 'node:crypto';
+import {
+  ensureChatTitle,
+  getSessionWithRepository,
+  loadMessages,
+  mergeIncomingUserMessage,
+  mergePersistedMessages,
+  saveMessages,
+} from '../lib/chat-store';
 import { publishSessionListChanged } from '../lib/session-events';
 import { createChatStream } from '../agent/chat-agent';
 import { ensureVisibleAssistantReply } from '../agent/review-message';
@@ -47,10 +55,11 @@ chatRoutes.post('/', async (c) => {
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
+    generateMessageId: randomUUID,
     // 把真实错误透传给前端 toast，而不是默认的 "An error occurred."
     onError: (error) => (error instanceof Error ? error.message : String(error)),
     onEnd: async ({ messages: finalMessages }) => {
-      const visibleMessages = ensureVisibleAssistantReply(finalMessages);
+      const visibleMessages = ensureVisibleAssistantReply(mergePersistedMessages(messages, finalMessages));
       await saveMessages(sessionId, visibleMessages);
       await ensureChatTitle(sessionId, visibleMessages);
       publishSessionListChanged();

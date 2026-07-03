@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import { randomUUID } from 'node:crypto';
 import { prisma } from './prisma';
 
 /** 会话 + 仓库（含模型配置），供 chat route / agent 使用。 */
@@ -106,11 +107,29 @@ export function dedupeMessages(messages: UIMessage[]): UIMessage[] {
   const byId = new Map<string, UIMessage>();
 
   for (const message of messages) {
-    if (!message.id) continue;
-    byId.set(message.id, message);
+    const id = message.id || randomUUID();
+    byId.set(id, { ...message, id });
   }
 
   return Array.from(byId.values());
+}
+
+/**
+ * 保存流式结果前做一次历史保护：
+ * AI SDK 回调理论上返回完整 messages，但任何短列表都不能覆盖掉已持久化历史。
+ */
+export function mergePersistedMessages(storedMessages: UIMessage[], finalMessages: UIMessage[]): UIMessage[] {
+  const merged = new Map<string, UIMessage>();
+
+  for (const message of dedupeMessages(storedMessages)) {
+    merged.set(message.id, message);
+  }
+
+  for (const message of dedupeMessages(finalMessages)) {
+    merged.set(message.id, message);
+  }
+
+  return Array.from(merged.values());
 }
 
 export function mergeStreamingMessage(baseMessages: UIMessage[], message: UIMessage): UIMessage[] {
