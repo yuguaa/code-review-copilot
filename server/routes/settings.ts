@@ -1,21 +1,16 @@
 import { Hono } from 'hono';
+import { createAIModel, deleteAIModel, listAIModels, updateAIModel } from '../modules/settings/ai-model-settings.service';
+import { listCapabilities, updateCapabilities } from '../modules/settings/capabilities-settings.service';
 import {
-  createAIModel,
   createGitLabAccount,
-  deleteAIModel,
   deleteGitLabAccount,
-  listAIModels,
-  listCapabilities,
   listGitLabAccounts,
   listGitLabProjects,
-  loadNotificationSetting,
-  loadSettingsStats,
   testGitLabAccount,
-  updateAIModel,
-  updateCapabilities,
   updateGitLabAccount,
-  updateNotificationSetting,
-} from '../modules/settings/settings.service';
+} from '../modules/settings/gitlab-account-settings.service';
+import { loadNotificationSetting, updateNotificationSetting } from '../modules/settings/notification-settings.service';
+import { loadSettingsStats } from '../modules/settings/settings-overview.service';
 
 export const settingsRoutes = new Hono();
 
