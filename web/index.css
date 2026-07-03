@@ -336,6 +336,11 @@ a:focus-visible {
   border-top: 1px solid var(--hairline);
 }
 
+.dashboard-list-item {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 64px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

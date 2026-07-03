@@ -36,7 +36,7 @@ export function AuthorDetailsTable({ authors }: { authors: DashboardBucket[] }) 
             <span>主要仓库 / 最近</span>
           </div>
           {authors.map((author, index) => (
-            <div key={author.key} className="grid grid-cols-[2.1fr_0.7fr_0.7fr_0.8fr_0.8fr_1.4fr] items-center gap-3 py-3 text-sm">
+            <div key={author.key} className="dashboard-list-item grid grid-cols-[2.1fr_0.7fr_0.7fr_0.8fr_0.8fr_1.4fr] items-center gap-3 py-3 text-sm">
               <span className="flex min-w-0 items-center gap-3">
                 <span className="caption w-6 shrink-0 text-[var(--muted)]">{String(index + 1).padStart(2, '0')}</span>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--surface-card)] text-[var(--ink)]">

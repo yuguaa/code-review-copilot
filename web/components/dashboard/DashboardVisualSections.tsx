@@ -1,7 +1,12 @@
+import { lazy, Suspense } from 'react';
 import type { DashboardChartBucket, DashboardData, DashboardStatusChartItem } from '../../hooks/useDashboardData';
 import { FailureSamples, RecentActivity } from './ActivityLists';
-import { AuthorRiskChartCard, RepositoryHeatChartCard, StatusChartCard, TrendChartCard } from './DashboardCharts';
 import { AuthorDetailsTable, PeopleSignalGrid } from './PeopleInsights';
+import { Card } from '../ui/surface';
+
+const DashboardChartSections = lazy(() =>
+  import('./DashboardChartSections').then((module) => ({ default: module.DashboardChartSections })),
+);
 
 type DashboardVisualSectionsProps = {
   data: DashboardData;
@@ -10,22 +15,46 @@ type DashboardVisualSectionsProps = {
   repositoryChart: DashboardChartBucket[];
 };
 
-export function DashboardVisualSections({ data, statusChart, authorChart, repositoryChart }: DashboardVisualSectionsProps) {
+function ChartSectionsFallback() {
   return (
     <>
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-        <TrendChartCard timeline={data.timeline} generatedAt={data.generatedAt} />
-        <StatusChartCard statusChart={statusChart} failureRate={data.summary.failureRate} />
+        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+          <div className="h-full" />
+        </Card>
+        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+          <div className="h-full" />
+        </Card>
       </div>
+      <div className="grid gap-6 xl:grid-cols-[1.28fr_0.72fr]">
+        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+          <div className="h-full" />
+        </Card>
+        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+          <div className="h-full" />
+        </Card>
+      </div>
+    </>
+  );
+}
+
+export function DashboardVisualSections({ data, statusChart, authorChart, repositoryChart }: DashboardVisualSectionsProps) {
+  return (
+    <>
+      <Suspense fallback={<ChartSectionsFallback />}>
+        <DashboardChartSections
+          authorChart={authorChart}
+          failureRate={data.summary.failureRate}
+          generatedAt={data.generatedAt}
+          repositoryChart={repositoryChart}
+          statusChart={statusChart}
+          timeline={data.timeline}
+        />
+      </Suspense>
 
       <div className="grid gap-6 xl:grid-cols-[0.72fr_1.28fr]">
         <PeopleSignalGrid peopleSignals={data.peopleSignals} />
-        <AuthorRiskChartCard authorChart={authorChart} />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <AuthorDetailsTable authors={data.authors} />
-        <RepositoryHeatChartCard repositoryChart={repositoryChart} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
