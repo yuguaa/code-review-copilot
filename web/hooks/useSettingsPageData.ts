@@ -49,6 +49,8 @@ const emptyModelForm = {
   isDefault: true,
 };
 
+export type ModelForm = typeof emptyModelForm;
+
 export function useSettingsPageData() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [models, setModels] = useState<AIModel[]>([]);
