@@ -1,7 +1,7 @@
 import { ToolLoopAgent, tool, stepCountIs, type LanguageModel } from 'ai';
 import { z } from 'zod';
 import { buildReadTools, type ReviewContext } from './tools';
-import type { ToolKey } from './capabilities';
+import type { ToolKey } from '../modules/capabilities/capabilities.service';
 
 const RECON = '你工作在一个已 checkout 好的本地仓库（cwd 即仓库根），用 bash（grep/rg/find/cat/git log 等只读命令）、read_file、git_diff 在工作区自行取证。';
 

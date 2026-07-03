@@ -4,7 +4,7 @@ import { buildReadTools } from './tools';
 import { prepareWorkspace } from '../lib/workspace';
 import type { SessionWithRepository } from '../lib/chat-store';
 import { createLogger } from '../lib/logger';
-import { resolveRepositoryCapabilities } from './capabilities';
+import { resolveRepositoryCapabilities } from '../modules/capabilities/capabilities.service';
 
 const log = createLogger('chat-agent');
 

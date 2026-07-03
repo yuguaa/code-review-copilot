@@ -8,7 +8,7 @@ import { createGitLabService, type GitLabService } from '../lib/gitlab';
 import { prisma } from '../lib/prisma';
 import type { SessionWithRepository } from '../lib/chat-store';
 import type { Workspace } from '../lib/workspace';
-import type { ToolKey } from './capabilities';
+import type { ToolKey } from '../modules/capabilities/capabilities.service';
 
 const exec = promisify(execFile);
 const MAX_CHARS = 30_000; // 单次工具返回上限，避免撑爆上下文

@@ -1,4 +1,4 @@
-import { getCapabilityCatalog } from '../../agent/capabilities';
+import { getCapabilityCatalog } from '../capabilities/capabilities.service';
 import { createGitLabService } from '../../lib/gitlab';
 import { prisma } from '../../lib/prisma';
 
