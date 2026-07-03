@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai';
-import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
-import { sendReviewDingtalkNotification } from '../modules/notifications/notifications.service';
+import type { SessionWithRepository } from '../sessions/session-message-store.service';
+import { sendReviewDingtalkNotification } from '../notifications/notifications.service';
 
 type RepositoryForDingtalk = NonNullable<SessionWithRepository['repository']>;
 type MessagePartRecord = Record<string, unknown>;

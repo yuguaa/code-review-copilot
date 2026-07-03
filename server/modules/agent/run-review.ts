@@ -3,17 +3,17 @@ import {
   loadMessages,
   mergeStreamingMessage,
   saveMessages,
-} from '../modules/sessions/session-message-store.service';
+} from '../sessions/session-message-store.service';
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
 import { notifyReviewCompleted } from './review-notification';
-import { createLogger } from '../shared/logger/logger.service';
-import { publishSessionMessages } from '../modules/sessions/session-events.service';
+import { createLogger } from '../../shared/logger/logger.service';
+import { publishSessionMessages } from '../sessions/session-events.service';
 import { readUIMessageStream, type UIMessage } from 'ai';
 import {
   markReviewSessionCompleted,
   markReviewSessionFailed,
-} from '../modules/sessions/session-lifecycle.service';
+} from '../sessions/session-lifecycle.service';
 
 const log = createLogger('run-review');
 

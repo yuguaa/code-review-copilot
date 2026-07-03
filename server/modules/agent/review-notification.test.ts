@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UIMessage } from 'ai';
 import { notifyReviewCompleted } from './review-notification';
-import { sendReviewDingtalkNotification } from '../modules/notifications/notifications.service';
-import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
+import { sendReviewDingtalkNotification } from '../notifications/notifications.service';
+import type { SessionWithRepository } from '../sessions/session-message-store.service';
 
-vi.mock('../modules/notifications/notifications.service', () => ({
+vi.mock('../notifications/notifications.service', () => ({
   sendReviewDingtalkNotification: vi.fn().mockResolvedValue('sent'),
 }));
 

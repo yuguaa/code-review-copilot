@@ -1,12 +1,12 @@
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
-import { loadGlobalDefaultModel, resolveModel, resolveRepositoryModelConfig } from '../modules/ai-models/ai-models.service';
+import { loadGlobalDefaultModel, resolveModel, resolveRepositoryModelConfig } from '../ai-models/ai-models.service';
 import { buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
-import { prepareWorkspace } from '../infrastructure/workspace/workspace.service';
-import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
-import { renderSkillInstructions, resolveRepositorySkills, type SkillState } from '../modules/skills/skills.service';
-import { resolveRepositoryTools } from '../modules/tools/tools.service';
-import { createLogger } from '../shared/logger/logger.service';
+import { prepareWorkspace } from '../../infrastructure/workspace/workspace.service';
+import type { SessionWithRepository } from '../sessions/session-message-store.service';
+import { renderSkillInstructions, resolveRepositorySkills, type SkillState } from '../skills/skills.service';
+import { resolveRepositoryTools } from '../tools/tools.service';
+import { createLogger } from '../../shared/logger/logger.service';
 
 const log = createLogger('review-agent');
 

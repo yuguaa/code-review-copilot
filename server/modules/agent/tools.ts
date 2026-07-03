@@ -4,14 +4,14 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { createGitLabService, type GitLabService } from '../shared/gitlab/gitlab.service';
-import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
-import type { Workspace } from '../infrastructure/workspace/workspace.service';
-import type { ToolKey } from '../modules/tools/tools.service';
+import { createGitLabService, type GitLabService } from '../../shared/gitlab/gitlab.service';
+import type { SessionWithRepository } from '../sessions/session-message-store.service';
+import type { Workspace } from '../../infrastructure/workspace/workspace.service';
+import type { ToolKey } from '../tools/tools.service';
 import {
   readRepositoryMemory,
   writeRepositoryMemory,
-} from '../modules/repositories/repositories.service';
+} from '../repositories/repositories.service';
 import { isReadOnlyCommand } from './read-only-command';
 
 const exec = promisify(execFile);

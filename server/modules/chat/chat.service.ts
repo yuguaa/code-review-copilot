@@ -8,8 +8,8 @@ import {
   saveMessages,
 } from '../sessions/session-message-store.service';
 import { publishSessionListChanged } from '../sessions/session-events.service';
-import { createChatStream } from '../../agent/chat-agent';
-import { ensureVisibleAssistantReply } from '../../agent/review-message';
+import { createChatStream } from '../agent/chat-agent';
+import { ensureVisibleAssistantReply } from '../agent/review-message';
 import { createLogger } from '../../shared/logger/logger.service';
 
 const log = createLogger('chat');

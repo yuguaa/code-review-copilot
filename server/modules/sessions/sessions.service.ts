@@ -1,4 +1,4 @@
-import { runReviewSession } from '../../agent/run-review';
+import { runReviewSession } from '../agent/run-review';
 import {
   getSessionWithRepository,
   listSessions,

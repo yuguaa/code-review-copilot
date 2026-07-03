@@ -1,10 +1,10 @@
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
-import { loadGlobalDefaultModel, resolveGlobalModelConfig, resolveModel, resolveRepositoryModelConfig } from '../modules/ai-models/ai-models.service';
+import { loadGlobalDefaultModel, resolveGlobalModelConfig, resolveModel, resolveRepositoryModelConfig } from '../ai-models/ai-models.service';
 import { buildReadTools } from './tools';
-import { prepareWorkspace } from '../infrastructure/workspace/workspace.service';
-import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
-import { createLogger } from '../shared/logger/logger.service';
-import { resolveRepositoryTools } from '../modules/tools/tools.service';
+import { prepareWorkspace } from '../../infrastructure/workspace/workspace.service';
+import type { SessionWithRepository } from '../sessions/session-message-store.service';
+import { createLogger } from '../../shared/logger/logger.service';
+import { resolveRepositoryTools } from '../tools/tools.service';
 
 const log = createLogger('chat-agent');
 

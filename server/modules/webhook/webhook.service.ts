@@ -1,4 +1,4 @@
-import { runReviewSession } from '../../agent/run-review';
+import { runReviewSession } from '../agent/run-review';
 import { matchesWatchBranches } from '../../common/utils/branch-match';
 import { createLogger } from '../../shared/logger/logger.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
