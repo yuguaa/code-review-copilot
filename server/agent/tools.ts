@@ -5,10 +5,13 @@ import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createGitLabService, type GitLabService } from '../lib/gitlab';
-import { prisma } from '../lib/prisma';
 import type { SessionWithRepository } from '../lib/chat-store';
 import type { Workspace } from '../lib/workspace';
 import type { ToolKey } from '../modules/capabilities/capabilities.service';
+import {
+  readRepositoryMemory,
+  writeRepositoryMemory,
+} from '../modules/repositories/repositories.service';
 
 const exec = promisify(execFile);
 const MAX_CHARS = 30_000; // 单次工具返回上限，避免撑爆上下文
@@ -176,10 +179,7 @@ export function buildReadTools(ctx: WorkspaceContext) {
           read_memory: tool({
             description: '读取本仓库的项目记忆（跨次审查沉淀的约定/架构/历史问题）。',
             inputSchema: z.object({}),
-            execute: async () => {
-              const repo = await prisma.repository.findUnique({ where: { id: ctx.repoId }, select: { memory: true } });
-              return repo?.memory?.trim() || '（暂无项目记忆）';
-            },
+            execute: () => readRepositoryMemory(ctx.repoId),
           }),
         }
       : {}),
@@ -218,10 +218,7 @@ export function buildTools(ctx: ReviewContext) {
           write_memory: tool({
             description: '更新本仓库的项目记忆（整体覆盖）。把本次审查得到的、对后续有用的项目认知沉淀进去。',
             inputSchema: z.object({ content: z.string().describe('完整的 Markdown 记忆内容') }),
-            execute: async ({ content }) => {
-              await prisma.repository.update({ where: { id: ctx.repoId }, data: { memory: content } });
-              return { saved: true };
-            },
+            execute: ({ content }) => writeRepositoryMemory(ctx.repoId, content),
           }),
         }
       : {}),

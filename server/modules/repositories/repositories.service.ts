@@ -223,3 +223,13 @@ export async function listRepositoryCapabilities(repositoryId: string) {
     })),
   };
 }
+
+export async function readRepositoryMemory(repositoryId: string): Promise<string> {
+  const repo = await prisma.repository.findUnique({ where: { id: repositoryId }, select: { memory: true } });
+  return repo?.memory?.trim() || '（暂无项目记忆）';
+}
+
+export async function writeRepositoryMemory(repositoryId: string, content: string): Promise<{ saved: true }> {
+  await prisma.repository.update({ where: { id: repositoryId }, data: { memory: content } });
+  return { saved: true };
+}
