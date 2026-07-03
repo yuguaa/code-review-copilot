@@ -21,14 +21,15 @@ const TOOL_LABEL: Record<string, string> = {
 type Part = UIMessage['parts'][number];
 
 /** 消息 parts 分段：文本独立成段，工具调用 / 推理等过程性 parts 聚合成一个折叠组。 */
-type Segment = { kind: 'text'; text: string } | { kind: 'process'; parts: Part[] };
+type Segment = { kind: 'text'; text: string; streaming: boolean } | { kind: 'process'; parts: Part[] };
 
 function segmentParts(parts: Part[]): Segment[] {
   const segments: Segment[] = [];
   for (const part of parts) {
     if ((part.type as string) === 'step-start' || (part.type as string) === 'step-finish') continue;
     if (part.type === 'text') {
-      if (part.text.trim()) segments.push({ kind: 'text', text: part.text });
+      const streaming = (part as { state?: string }).state === 'streaming';
+      if (part.text.trim() || streaming) segments.push({ kind: 'text', text: part.text, streaming });
       continue;
     }
     const last = segments[segments.length - 1];
@@ -217,7 +218,11 @@ function Markdown({ children }: { children: string }) {
   );
 }
 
-export function Message({ message, isTrigger }: { message: UIMessage; isTrigger?: boolean }) {
+function StreamingCursor() {
+  return <span className="inline-block h-4 w-1.5 translate-y-0.5 animate-pulse rounded-full bg-[var(--ink)]" />;
+}
+
+export function Message({ message, isTrigger, isStreaming }: { message: UIMessage; isTrigger?: boolean; isStreaming?: boolean }) {
   if (isTrigger) return <TriggerCard message={message} />;
 
   if (message.role === 'user') {
@@ -233,11 +238,25 @@ export function Message({ message, isTrigger }: { message: UIMessage; isTrigger?
 
   // assistant：正文走文档流，过程性 parts 聚合折叠。
   const segments = segmentParts(message.parts);
-  if (segments.length === 0) return null;
+  if (segments.length === 0) {
+    if (!isStreaming) return null;
+    return (
+      <div className="py-4 pr-8 max-md:pr-0">
+        <StreamingCursor />
+      </div>
+    );
+  }
   return (
     <div className="py-4 pr-8 max-md:pr-0">
       {segments.map((seg, i): ReactNode => {
-        if (seg.kind === 'text') return <Markdown key={i}>{seg.text}</Markdown>;
+        if (seg.kind === 'text') {
+          return (
+            <div key={i} className="space-y-1">
+              {seg.text.trim() && <Markdown>{seg.text}</Markdown>}
+              {(isStreaming || seg.streaming) && <StreamingCursor />}
+            </div>
+          );
+        }
         return <ProcessGroup key={i} parts={seg.parts} />;
       })}
     </div>

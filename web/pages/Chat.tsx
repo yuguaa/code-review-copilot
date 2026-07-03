@@ -297,10 +297,15 @@ function ChatThread({
               </div>
             )}
             {messages.map((m, i) => (
-              <Message key={m.id} message={m} isTrigger={isTriggerFirst && i === 0} />
+              <Message
+                key={m.id}
+                message={m}
+                isTrigger={isTriggerFirst && i === 0}
+                isStreaming={status === 'streaming' && i === messages.length - 1 && m.role === 'assistant'}
+              />
             ))}
-            {/* 仅在等待首个 token 时显示极简指示；token 一到就流入正文气泡，不再常驻 pill */}
-            {status === 'submitted' && (
+            {/* 仅在还没有 assistant 消息时显示极简等待；流开始后由最后一条消息承载光标与正文。 */}
+            {status === 'submitted' && messages.at(-1)?.role !== 'assistant' && (
               <div className="inline-flex items-center gap-2 px-1 py-1.5 text-xs text-[var(--muted)]">
                 <Loader2 size={13} className="animate-spin text-[var(--ink)]" />
               </div>
