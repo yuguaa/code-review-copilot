@@ -1,7 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle } from 'react';
-import { EditorContent, useEditor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { cn } from '../../lib/cn';
 
 export type RichComposerEditorHandle = {
@@ -21,7 +18,12 @@ type RichComposerEditorProps = {
 };
 
 const editorClass =
-  'composer-editor min-h-10 max-h-40 overflow-y-auto px-3 py-2 text-sm leading-6 text-[var(--ink)] outline-none';
+  'composer-editor min-h-10 max-h-40 w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-sm leading-6 text-[var(--ink)] outline-none placeholder:text-[var(--muted-soft)]';
+
+function syncHeight(element: HTMLTextAreaElement) {
+  element.style.height = 'auto';
+  element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
+}
 
 export const RichComposerEditor = forwardRef<RichComposerEditorHandle, RichComposerEditorProps>(
   function RichComposerEditor(
@@ -36,73 +38,59 @@ export const RichComposerEditor = forwardRef<RichComposerEditorHandle, RichCompo
     },
     ref,
   ) {
-    const editor = useEditor({
-      content: '',
-      editable: !disabled,
-      editorProps: {
-        attributes: {
-          class: editorClass,
-        },
-        handleKeyDown: (_view, event) => {
-          if (event.key === 'Escape') {
-            return onEscape();
-          }
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            const handled = onMoveSelection(event.key === 'ArrowDown' ? 1 : -1);
-            if (handled) event.preventDefault();
-            return handled;
-          }
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            return onEnter();
-          }
-          return false;
-        },
-      },
-      extensions: [
-        StarterKit.configure({
-          blockquote: false,
-          bulletList: false,
-          codeBlock: false,
-          hardBreak: false,
-          heading: false,
-          horizontalRule: false,
-          orderedList: false,
-        }),
-        Placeholder.configure({ placeholder }),
-      ],
-      onUpdate: ({ editor }) => {
-        const text = editor.getText();
-        onTextChange(text);
-        onEmptyChange(!text.trimStart());
-      },
-    }, [placeholder, onEnter, onEscape, onMoveSelection, onTextChange, onEmptyChange]);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const setValue = (value: string) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.value = value;
+      syncHeight(textarea);
+      onTextChange(value);
+      onEmptyChange(!value.trimStart());
+    };
 
     useImperativeHandle(
       ref,
       () => ({
-        clear: () => editor?.commands.clearContent(),
-        getText: () => editor?.getText() ?? '',
+        clear: () => setValue(''),
+        getText: () => textareaRef.current?.value ?? '',
         insertSlashAndFocus: () => {
-          editor?.chain().focus().setContent('/').run();
+          setValue('/');
+          textareaRef.current?.focus();
         },
       }),
-      [editor],
+      [onEmptyChange, onTextChange],
     );
 
-    useEffect(() => {
-      if (!editor) return;
-      editor.setOptions({
-        editable: !disabled,
-        editorProps: {
-          ...editor.options.editorProps,
-          attributes: {
-            class: cn(editorClass, disabled && 'cursor-not-allowed opacity-60'),
-          },
-        },
-      });
-    }, [editor, disabled]);
-
-    return <EditorContent editor={editor} />;
+    return (
+      <textarea
+        ref={textareaRef}
+        rows={1}
+        disabled={disabled}
+        placeholder={placeholder}
+        className={cn(editorClass, disabled && 'cursor-not-allowed opacity-60')}
+        onChange={(event) => {
+          const text = event.currentTarget.value;
+          syncHeight(event.currentTarget);
+          onTextChange(text);
+          onEmptyChange(!text.trimStart());
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && onEscape()) {
+            event.preventDefault();
+            return;
+          }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            const handled = onMoveSelection(event.key === 'ArrowDown' ? 1 : -1);
+            if (handled) event.preventDefault();
+            return;
+          }
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            onEnter();
+          }
+        }}
+      />
+    );
   },
 );
