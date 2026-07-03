@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 import type { NotificationPayload } from './settings.types';
 
 function maskNotification(setting: { dingtalkSecret?: string | null; dingtalkEnabled?: boolean; dingtalkWebhookUrl?: string | null } | null) {

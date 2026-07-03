@@ -1,6 +1,6 @@
 import { getCapabilityCatalog } from '../capabilities/capabilities.service';
-import { createGitLabService } from '../../lib/gitlab';
-import { prisma } from '../../lib/prisma';
+import { createGitLabService } from '../../shared/gitlab/gitlab.service';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 
 type RepositoryPayload = {
   gitLabAccountId?: string;

@@ -7,7 +7,7 @@ import {
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
 import { notifyReviewCompleted } from './review-notification';
-import { createLogger } from '../lib/logger';
+import { createLogger } from '../shared/logger/logger.service';
 import { publishSessionMessages } from '../lib/session-events';
 import { readUIMessageStream, type UIMessage } from 'ai';
 import {

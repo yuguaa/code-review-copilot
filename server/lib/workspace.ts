@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
 import path from 'node:path';
 import type { SessionWithRepository } from './chat-store';
-import { createLogger } from './logger';
+import { createLogger } from '../shared/logger/logger.service';
 
 const log = createLogger('workspace');
 const exec = promisify(execFile);

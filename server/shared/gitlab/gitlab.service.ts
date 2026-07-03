@@ -10,7 +10,7 @@
 
 import axios, { AxiosInstance } from 'axios'
 import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabRepositoryTreeItem, GitLabBranch } from './gitlab-types'
-import { createLogger } from "./logger";
+import { createLogger } from '../logger/logger.service';
 import {
   buildCommitCommentPayload,
   buildMergeRequestCommentPayload,

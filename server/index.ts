@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
-import { requireAuth } from './middleware/auth';
+import { requireAuth } from './common/guards/auth.guard';
 import { authRoutes } from './modules/auth/auth.routes';
 import { chatRoutes } from './modules/chat/chat.routes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
@@ -12,7 +12,7 @@ import { repositoryRoutes } from './modules/repositories/repositories.routes';
 import { sessionRoutes } from './modules/sessions/sessions.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { webhookRoutes } from './modules/webhook/webhook.routes';
-import { createLogger } from './lib/logger';
+import { createLogger } from './shared/logger/logger.service';
 
 const log = createLogger('server');
 const app = new Hono();

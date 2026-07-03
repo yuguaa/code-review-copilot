@@ -1,5 +1,5 @@
 import { loadSessionMessageTree } from '../../lib/chat-store';
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 import {
   publishSessionError,
   publishSessionListChanged,

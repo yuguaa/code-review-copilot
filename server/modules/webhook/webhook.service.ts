@@ -1,7 +1,7 @@
 import { runReviewSession } from '../../agent/run-review';
-import { matchesWatchBranches } from '../../lib/branch-match';
-import { createLogger } from '../../lib/logger';
-import { prisma } from '../../lib/prisma';
+import { matchesWatchBranches } from '../../common/utils/branch-match';
+import { createLogger } from '../../shared/logger/logger.service';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 import { publishSessionListChanged } from '../../lib/session-events';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 

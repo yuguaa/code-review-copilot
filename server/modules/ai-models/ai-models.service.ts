@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
 import type { SessionWithRepository } from '../../lib/chat-store';
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 
 /** 解析模型所需的最小配置。 */
 export type ModelConfig = {

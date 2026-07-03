@@ -10,7 +10,7 @@ import {
 import { publishSessionListChanged } from '../../lib/session-events';
 import { createChatStream } from '../../agent/chat-agent';
 import { ensureVisibleAssistantReply } from '../../agent/review-message';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '../../shared/logger/logger.service';
 
 const log = createLogger('chat');
 

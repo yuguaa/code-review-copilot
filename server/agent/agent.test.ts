@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { resolveModel, resolveRepositoryModelConfig } from '../modules/ai-models/ai-models.service';
 import { buildTools, type ReviewContext } from './tools';
 import { buildInstructions } from './review-agent';
-import { signedUrl } from '../lib/dingtalk';
-import type { GitLabService } from '../lib/gitlab';
+import { signedUrl } from '../shared/dingtalk/dingtalk.service';
+import type { GitLabService } from '../shared/gitlab/gitlab.service';
 import type { SessionWithRepository } from '../lib/chat-store';
 
 // 工具执行时 AI SDK 传入的 options（这里只需占位）。

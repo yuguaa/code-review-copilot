@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 
 export const BUILTIN_TOOL_KEYS = [
   'bash',

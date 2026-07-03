@@ -4,7 +4,7 @@ import { buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
 import { prepareWorkspace } from '../lib/workspace';
 import type { SessionWithRepository } from '../lib/chat-store';
-import { createLogger } from '../lib/logger';
+import { createLogger } from '../shared/logger/logger.service';
 import { renderSkillInstructions, resolveRepositoryCapabilities, type CapabilityState } from '../modules/capabilities/capabilities.service';
 
 const log = createLogger('review-agent');

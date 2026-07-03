@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { prisma } from './prisma';
+import { prisma } from '../infrastructure/prisma/prisma.service';
 
 export type MessageRow = {
   id: string;

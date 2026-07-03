@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { createGitLabService, type GitLabService } from '../lib/gitlab';
+import { createGitLabService, type GitLabService } from '../shared/gitlab/gitlab.service';
 import type { SessionWithRepository } from '../lib/chat-store';
 import type { Workspace } from '../lib/workspace';
 import type { ToolKey } from '../modules/capabilities/capabilities.service';

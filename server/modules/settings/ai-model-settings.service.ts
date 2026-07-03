@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 import type { AIModelPayload } from './settings.types';
 
 function maskModel(model: { apiKey?: string; [key: string]: unknown }) {

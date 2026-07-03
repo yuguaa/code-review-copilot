@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { sendDingtalk } from '../../lib/dingtalk';
-import { prisma } from '../../lib/prisma';
+import { sendDingtalk } from '../../shared/dingtalk/dingtalk.service';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 import {
   resolveDingtalkConfig,
   sendReviewDingtalkNotification,
   type DingtalkRepositoryConfig,
 } from './notifications.service';
 
-vi.mock('../../lib/prisma', () => ({
+vi.mock('../../infrastructure/prisma/prisma.service', () => ({
   prisma: {
     notificationSetting: {
       findUnique: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('../../lib/prisma', () => ({
   },
 }));
 
-vi.mock('../../lib/dingtalk', () => ({
+vi.mock('../../shared/dingtalk/dingtalk.service', () => ({
   sendDingtalk: vi.fn().mockResolvedValue(undefined),
 }));
 

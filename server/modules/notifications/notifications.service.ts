@@ -1,5 +1,5 @@
-import { sendDingtalk, type DingtalkConfig } from '../../lib/dingtalk';
-import { prisma } from '../../lib/prisma';
+import { sendDingtalk, type DingtalkConfig } from '../../shared/dingtalk/dingtalk.service';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 
 export type DingtalkRepositoryConfig = {
   enableDingtalk: boolean;

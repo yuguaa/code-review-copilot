@@ -1,5 +1,5 @@
 import { getCapabilityCatalog, syncBuiltinCapabilities } from '../capabilities/capabilities.service';
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 import type { CapabilityPayload } from './settings.types';
 
 export async function listCapabilities() {

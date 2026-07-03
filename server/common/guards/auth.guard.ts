@@ -5,7 +5,7 @@ import {
   isClientIpAllowed,
   isAuthConfigured,
   verifyAuthSession,
-} from '../lib/auth';
+} from '../../modules/auth/auth.service';
 
 /** 放行的公开路径前缀：登录接口 + webhook（webhook 用 GitLab 签名自校验，不走 Cookie）。 */
 const PUBLIC_PREFIXES = ['/api/auth/login', '/api/webhook'];

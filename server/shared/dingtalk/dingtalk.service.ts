@@ -1,6 +1,6 @@
 import axios from 'axios';
 import crypto from 'node:crypto';
-import { createLogger } from './logger';
+import { createLogger } from '../logger/logger.service';
 
 const log = createLogger('dingtalk');
 

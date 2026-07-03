@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { prisma } from '../../lib/prisma';
+import { prisma } from '../../infrastructure/prisma/prisma.service';
 import { readRepositoryMemory, writeRepositoryMemory } from './repositories.service';
 
-vi.mock('../../lib/prisma', () => ({
+vi.mock('../../infrastructure/prisma/prisma.service', () => ({
   prisma: {
     repository: {
       findUnique: vi.fn(),
