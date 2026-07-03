@@ -2,7 +2,7 @@ import { runReviewSession } from '../../agent/run-review';
 import { matchesWatchBranches } from '../../common/utils/branch-match';
 import { createLogger } from '../../shared/logger/logger.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
-import { publishSessionListChanged } from '../../lib/session-events';
+import { publishSessionListChanged } from '../sessions/session-events.service';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 const log = createLogger('webhook');

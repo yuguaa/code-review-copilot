@@ -4,7 +4,7 @@ import { buildTools, type ReviewContext } from './tools';
 import { buildInstructions } from './review-agent';
 import { signedUrl } from '../shared/dingtalk/dingtalk.service';
 import type { GitLabService } from '../shared/gitlab/gitlab.service';
-import type { SessionWithRepository } from '../lib/chat-store';
+import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
 
 // 工具执行时 AI SDK 传入的 options（这里只需占位）。
 const toolOpts = { toolCallId: 't1', messages: [] } as never;

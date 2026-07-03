@@ -2,8 +2,8 @@ import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 
 import { loadGlobalDefaultModel, resolveModel, resolveRepositoryModelConfig } from '../modules/ai-models/ai-models.service';
 import { buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
-import { prepareWorkspace } from '../lib/workspace';
-import type { SessionWithRepository } from '../lib/chat-store';
+import { prepareWorkspace } from '../infrastructure/workspace/workspace.service';
+import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
 import { createLogger } from '../shared/logger/logger.service';
 import { renderSkillInstructions, resolveRepositoryCapabilities, type CapabilityState } from '../modules/capabilities/capabilities.service';
 

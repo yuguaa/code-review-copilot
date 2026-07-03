@@ -2,8 +2,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
 import path from 'node:path';
-import type { SessionWithRepository } from './chat-store';
-import { createLogger } from '../shared/logger/logger.service';
+import type { SessionWithRepository } from '../../modules/sessions/session-message-store.service';
+import { createLogger } from '../../shared/logger/logger.service';
 
 const log = createLogger('workspace');
 const exec = promisify(execFile);

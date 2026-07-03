@@ -12,7 +12,7 @@ import {
   pickActiveLeafId,
   pickLatestLeafId,
   type MessageRow,
-} from './chat-store';
+} from './session-message-store.service';
 
 describe('dedupeMessages', () => {
   it('keeps the last message when duplicate ids appear', () => {
@@ -170,7 +170,7 @@ describe('message tree helpers', () => {
 
 describe('listSessions', () => {
   it('侧栏会话列表按最近活动时间排序', () => {
-    const source = readFileSync(new URL('./chat-store.ts', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./session-message-store.service.ts', import.meta.url), 'utf8');
     const listSessionsBlock = source.slice(source.indexOf('export async function listSessions'), source.indexOf('/** 从首条用户消息抽取'));
 
     expect(listSessionsBlock).toContain("orderBy: { updatedAt: 'desc' }");

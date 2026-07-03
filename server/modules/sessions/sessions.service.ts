@@ -5,12 +5,12 @@ import {
   loadSessionMessageTree,
   setActiveMessage,
   type SessionMessageTree,
-} from '../../lib/chat-store';
+} from './session-message-store.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
 import {
   publishSessionListChanged,
   publishSessionMessages,
-} from '../../lib/session-events';
+} from './session-events.service';
 import { markReviewSessionRunning } from './session-lifecycle.service';
 
 export function listSessionSummaries(kind?: string) {

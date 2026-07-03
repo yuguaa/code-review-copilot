@@ -1,11 +1,11 @@
-import { loadSessionMessageTree } from '../../lib/chat-store';
+import { loadSessionMessageTree } from './session-message-store.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
 import {
   publishSessionError,
   publishSessionListChanged,
   publishSessionMessages,
   publishSessionStatus,
-} from '../../lib/session-events';
+} from './session-events.service';
 
 export async function markReviewSessionRunning(sessionId: string, activeLeafMessageId: string): Promise<void> {
   await prisma.session.update({

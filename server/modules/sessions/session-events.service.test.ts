@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { publishSessionListChanged, publishSessionMessages, subscribeSessionEvents, subscribeSessionListEvents } from './session-events';
+import { publishSessionListChanged, publishSessionMessages, subscribeSessionEvents, subscribeSessionListEvents } from './session-events.service';
 import type { UIMessage } from 'ai';
 
 describe('session events', () => {

@@ -1,5 +1,5 @@
 import type { UIMessage } from 'ai';
-import type { SessionWithRepository } from '../lib/chat-store';
+import type { SessionWithRepository } from '../modules/sessions/session-message-store.service';
 import { sendReviewDingtalkNotification } from '../modules/notifications/notifications.service';
 
 type RepositoryForDingtalk = NonNullable<SessionWithRepository['repository']>;

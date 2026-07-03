@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import {
   subscribeSessionEvents,
   subscribeSessionListEvents,
-} from '../../lib/session-events';
+} from './session-events.service';
 import {
   createChatSession,
   deleteSession,

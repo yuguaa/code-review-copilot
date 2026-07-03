@@ -1,5 +1,5 @@
 import type { UIMessage } from 'ai';
-import type { SessionMessageTree } from './chat-store';
+import type { SessionMessageTree } from './session-message-store.service';
 
 type SessionMessagePayload = Pick<
   SessionMessageTree,

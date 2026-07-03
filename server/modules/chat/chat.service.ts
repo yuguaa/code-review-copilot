@@ -6,8 +6,8 @@ import {
   mergeIncomingUserMessageAtParent,
   mergePersistedMessages,
   saveMessages,
-} from '../../lib/chat-store';
-import { publishSessionListChanged } from '../../lib/session-events';
+} from '../sessions/session-message-store.service';
+import { publishSessionListChanged } from '../sessions/session-events.service';
 import { createChatStream } from '../../agent/chat-agent';
 import { ensureVisibleAssistantReply } from '../../agent/review-message';
 import { createLogger } from '../../shared/logger/logger.service';
