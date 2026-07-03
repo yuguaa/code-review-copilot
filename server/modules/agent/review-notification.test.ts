@@ -134,6 +134,62 @@ describe('notifyReviewCompleted', () => {
     );
   });
 
+  it('没有总评评论时把行级问题汇总到钉钉正文', async () => {
+    await notifyReviewCompleted(session(), [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
+          {
+            type: 'tool-post_inline_comment',
+            state: 'output-available',
+            toolCallId: 'tool-1',
+            input: {
+              path: 'Dockerfile',
+              line: 12,
+              body: '构建产物路径与根 build:all 契约不一致，会导致镜像构建失败。',
+            },
+            output: { posted: true },
+          } as UIMessage['parts'][number],
+          {
+            type: 'tool-post_inline_comment',
+            state: 'output-available',
+            toolCallId: 'tool-2',
+            input: {
+              path: 'Dockerfile',
+              line: 1,
+              body: '基础镜像使用 latest，发布不可复现且难以审计。',
+            },
+            output: { posted: true },
+          } as UIMessage['parts'][number],
+          { type: 'text', text: '行级评论已发布。现在整理总评。' },
+        ],
+      },
+    ]);
+
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('Dockerfile:12'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('构建产物路径与根 build:all 契约不一致'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('Dockerfile:1'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.not.stringContaining('我会先读取项目记忆'),
+    );
+  });
+
   it('仓库关闭钉钉时跳过', async () => {
     const s = session({
       repository: { ...session().repository!, enableDingtalk: false },

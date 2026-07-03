@@ -23,31 +23,41 @@ function reviewCommentMarkdown(part: unknown): string {
   return typeof input?.markdown === 'string' ? input.markdown.trim() : '';
 }
 
-function hasReviewFindings(text: string): boolean {
-  return /严重|一般|建议|问题|风险|影响|修复|文件|行|健康分|Dockerfile|\.tsx?:\d+|\.vue:\d+|\.java:\d+|\.py:\d+/.test(text);
+function inlineReviewComment(part: unknown): string {
+  if (!isRecord(part)) return '';
+  const type = typeof part.type === 'string' ? part.type : '';
+  const toolName = typeof part.toolName === 'string' ? part.toolName : '';
+  if (type !== 'tool-post_inline_comment' && toolName !== 'post_inline_comment') return '';
+  const input = isRecord(part.input) ? part.input : null;
+  const path = typeof input?.path === 'string' ? input.path.trim() : '';
+  const line = typeof input?.line === 'number' ? input.line : null;
+  const body = typeof input?.body === 'string' ? input.body.trim() : '';
+  if (!body) return '';
+  return path && line ? `- ${path}:${line}\n  ${body}` : `- ${body}`;
 }
 
-function finalReviewTextOf(messages: UIMessage[]): string {
-  const assistantMessages = messages.filter((m) => m.role === 'assistant');
-  const publishedReview = [...assistantMessages]
+function toolReviewTextOf(messages: UIMessage[]): string {
+  const assistantMessages = messages.filter((message) => message.role === 'assistant');
+  const reviewComment = [...assistantMessages]
     .reverse()
     .flatMap((message) => message.parts.map((part) => reviewCommentMarkdown(part)))
     .find(Boolean);
-  if (publishedReview) return publishedReview;
+  if (reviewComment) return reviewComment;
 
+  const inlineComments = assistantMessages.flatMap((message) => message.parts.map((part) => inlineReviewComment(part))).filter(Boolean);
+  return inlineComments.length ? ['## 发现的问题', ...inlineComments].join('\n') : '';
+}
+
+function finalAssistantTextOf(messages: UIMessage[]): string {
+  const assistantMessages = messages.filter((message) => message.role === 'assistant');
   const textBlocks = assistantMessages
     .map((message) => message.parts.map((part) => textPartValue(part)).filter(Boolean).join('\n\n').trim())
     .filter(Boolean);
-  const reviewText = [...textBlocks].reverse().find(hasReviewFindings);
-  if (reviewText) return reviewText;
+  return textBlocks.at(-1) ?? '';
+}
 
-  const message = [...assistantMessages].reverse().find((m) => m.parts.some((part) => textPartValue(part)));
-  if (!message) return '';
-  return message.parts
-    .map((part) => textPartValue(part))
-    .filter(Boolean)
-    .join('\n\n')
-    .trim();
+function finalReviewTextOf(messages: UIMessage[]): string {
+  return toolReviewTextOf(messages) || finalAssistantTextOf(messages);
 }
 
 function titleOf(session: SessionWithRepository): string {
