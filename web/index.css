@@ -3,16 +3,17 @@
 @source "../node_modules/@streamdown/code/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
-/* 设计 token：Figma 语法的高密度审查工作台。 */
+/* 设计 token：Vercel 风格的高密度审查工作台。 */
 :root {
   color-scheme: light;
 
   --canvas: #ffffff;
-  --surface-soft: #f7f7f5;
-  --surface-card: #f1f1ee;
-  --surface-strong: #e7e7e3;
-  --surface-dark: #0a0a0a;
-  --hairline: #deded8;
+  --surface-soft: #fafafa;
+  --surface-card: #f5f5f5;
+  --surface-hover: #f2f2f2;
+  --surface-strong: #eaeaea;
+  --surface-dark: #111111;
+  --hairline: #e5e5e5;
 
   --brand-lime: #d7ff38;
   --brand-lilac: #c7b8ff;
@@ -25,10 +26,10 @@
 
   --primary: #0a0a0a;
   --ink: #0a0a0a;
-  --body-strong: #1a1a1a;
-  --body: #3c3c37;
-  --muted: #6f6f68;
-  --muted-soft: #a5a59c;
+  --body-strong: #171717;
+  --body: #3f3f46;
+  --muted: #71717a;
+  --muted-soft: #a1a1aa;
   --on-primary: #ffffff;
 
   --success: #148f4f;
@@ -36,21 +37,22 @@
   --error: #d7352f;
 
   --accent: #0a0a0a;
-  --ring: rgba(10, 10, 10, 0.12);
+  --ring: rgba(0, 0, 0, 0.14);
 
   --r-xs: 4px;
   --r-sm: 8px;
   --r-md: 8px;
   --r-lg: 12px;
-  --r-xl: 24px;
+  --r-xl: 16px;
   --r-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.06);
-  --shadow-md: 0 8px 24px rgba(10, 10, 10, 0.08);
-  --shadow-lg: 0 24px 64px rgba(10, 10, 10, 0.18);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 8px 18px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.16);
+  --shadow-popover: 0 16px 40px rgba(0, 0, 0, 0.14);
 
   --font-display: 'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
     'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -76,8 +78,8 @@ body {
 /* 产品 UI 标题：用字重与紧凑行高建层级，不靠营销式大标题。 */
 .font-display {
   font-family: var(--font-display);
-  font-weight: 540;
-  letter-spacing: 0;
+  font-weight: 560;
+  letter-spacing: -0.01em;
 }
 
 .font-mono {
@@ -88,7 +90,7 @@ body {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -96,7 +98,7 @@ body {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 @layer base {
@@ -110,7 +112,7 @@ body {
 
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -184,68 +186,100 @@ a:focus-visible {
   scrollbar-gutter: stable;
 }
 
+.composer-editor p {
+  margin: 0;
+}
+.composer-editor .is-editor-empty:first-child::before {
+  pointer-events: none;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted);
+}
+
 /* Markdown 正文排版：assistant 像文档流，不像卡片墙。 */
+.streamdown-body,
 .markdown-body {
   font-size: 0.9375rem;
   line-height: 1.72;
   overflow-wrap: break-word;
   color: var(--body-strong);
 }
+.streamdown-body > :first-child,
 .markdown-body > :first-child {
   margin-top: 0;
 }
+.streamdown-body > :last-child,
 .markdown-body > :last-child {
   margin-bottom: 0;
 }
+.streamdown-body p,
 .markdown-body p {
   margin: 0.5em 0;
 }
+.streamdown-body h1,
+.streamdown-body h2,
+.streamdown-body h3,
+.streamdown-body h4,
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
 .markdown-body h4 {
   margin: 1.1em 0 0.45em;
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: 0;
+  font-weight: 650;
+  letter-spacing: -0.015em;
   line-height: 1.25;
   color: var(--ink);
+  text-wrap: balance;
 }
+.streamdown-body h1,
 .markdown-body h1 {
-  font-size: 1.4em;
+  font-size: 1.35em;
 }
+.streamdown-body h2,
 .markdown-body h2 {
-  font-size: 1.2em;
+  font-size: 1.18em;
 }
+.streamdown-body h3,
+.streamdown-body h4,
 .markdown-body h3,
 .markdown-body h4 {
   font-size: 1.05em;
 }
+.streamdown-body ul,
+.streamdown-body ol,
 .markdown-body ul,
 .markdown-body ol {
   margin: 0.5em 0;
   padding-left: 1.4em;
 }
+.streamdown-body ul,
 .markdown-body ul {
   list-style: disc;
 }
+.streamdown-body ol,
 .markdown-body ol {
   list-style: decimal;
 }
+.streamdown-body li,
 .markdown-body li {
   margin: 0.22em 0;
 }
+.streamdown-body li::marker,
 .markdown-body li::marker {
   color: var(--muted);
 }
+.streamdown-body code,
 .markdown-body code {
   padding: 0.1em 0.35em;
   border-radius: var(--r-xs);
   background: var(--surface-strong);
   font-family: var(--font-mono);
   font-size: 0.86em;
-  color: var(--brand-navy);
+  color: var(--ink);
 }
+.streamdown-body pre,
 .markdown-body pre {
   margin: 0.7em 0;
   padding: 0.85rem 1rem;
@@ -253,19 +287,22 @@ a:focus-visible {
   background: var(--surface-dark);
   overflow-x: auto;
 }
+.streamdown-body pre code,
 .markdown-body pre code {
   padding: 0;
   background: transparent;
-  color: #f2f2ef;
+  color: #f5f5f5;
   font-size: 0.8125rem;
   line-height: 1.6;
 }
+.streamdown-body blockquote,
 .markdown-body blockquote {
   margin: 0.7em 0;
   padding: 0.1em 0.9em;
   border-left: 1px solid var(--ink);
   color: var(--muted);
 }
+.streamdown-body table,
 .markdown-body table {
   margin: 0.7em 0;
   border-collapse: collapse;
@@ -274,21 +311,26 @@ a:focus-visible {
   max-width: 100%;
   overflow-x: auto;
 }
+.streamdown-body th,
+.streamdown-body td,
 .markdown-body th,
 .markdown-body td {
   padding: 0.4em 0.75em;
   border: 1px solid var(--hairline);
   text-align: left;
 }
+.streamdown-body th,
 .markdown-body th {
   background: var(--surface-card);
   font-weight: 600;
 }
+.streamdown-body a,
 .markdown-body a {
-  color: var(--brand-navy);
+  color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.streamdown-body hr,
 .markdown-body hr {
   margin: 1em 0;
   border: none;

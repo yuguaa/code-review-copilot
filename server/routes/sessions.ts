@@ -1,14 +1,24 @@
 import { Hono } from 'hono';
-import { prisma } from '../lib/prisma';
-import { getSessionWithRepository, listSessions, loadSessionMessageTree, setActiveMessage } from '../lib/chat-store';
-import { publishSessionListChanged, subscribeSessionEvents, subscribeSessionListEvents } from '../lib/session-events';
+import {
+  subscribeSessionEvents,
+  subscribeSessionListEvents,
+} from '../lib/session-events';
+import {
+  createChatSession,
+  deleteSession,
+  listSessionSummaries,
+  loadSessionDetail,
+  runReviewCommand,
+  sessionExists,
+  switchActiveMessage,
+} from '../modules/sessions/sessions.service';
 
 export const sessionRoutes = new Hono();
 
 /** 会话列表（侧栏）。?kind=review|chat 过滤。 */
 sessionRoutes.get('/', async (c) => {
   const kind = c.req.query('kind');
-  return c.json({ sessions: await listSessions(kind) });
+  return c.json({ sessions: await listSessionSummaries(kind) });
 });
 
 /** 会话列表事件：新会话、删除、审查状态变化后通知侧栏刷新。 */
@@ -25,8 +35,7 @@ sessionRoutes.get('/events', (c) => {
 /** 会话实时事件：后台审查流式消息会通过这里推给已打开页面。 */
 sessionRoutes.get('/:id/events', async (c) => {
   const id = c.req.param('id');
-  const session = await getSessionWithRepository(id);
-  if (!session) return c.json({ error: '会话不存在' }, 404);
+  if (!(await sessionExists(id))) return c.json({ error: '会话不存在' }, 404);
 
   return new Response(subscribeSessionEvents(id, c.req.raw.signal), {
     headers: {
@@ -40,32 +49,9 @@ sessionRoutes.get('/:id/events', async (c) => {
 /** 会话详情 + 消息。 */
 sessionRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
-  const session = await getSessionWithRepository(id);
-  if (!session) return c.json({ error: '会话不存在' }, 404);
-  const tree = await loadSessionMessageTree(id);
-  return c.json({
-    session: {
-      id: session.id,
-      kind: session.kind,
-      title: session.title,
-      status: session.status,
-      mrIid: session.mrIid,
-      mrTitle: session.mrTitle,
-      sourceBranch: session.sourceBranch,
-      targetBranch: session.targetBranch,
-      commitSha: session.commitSha,
-      author: session.author,
-      error: session.error,
-      updatedAt: session.updatedAt,
-      repository: session.repository
-        ? { id: session.repository.id, name: session.repository.name, path: session.repository.path }
-        : null,
-    },
-    messages: tree.messages,
-    messageTree: tree.messageTree,
-    activeLeafMessageId: tree.activeLeafMessageId,
-    activePathIds: tree.activePathIds,
-  });
+  const detail = await loadSessionDetail(id);
+  if (!detail) return c.json({ error: '会话不存在' }, 404);
+  return c.json(detail);
 });
 
 /** 切换当前会话 active message，并自动落到该节点子树下最近叶子。 */
@@ -75,31 +61,31 @@ sessionRoutes.post('/:id/active-message', async (c) => {
   const messageId = typeof body.messageId === 'string' ? body.messageId : null;
   if (!messageId) return c.json({ error: '缺少 messageId' }, 400);
 
-  const tree = await setActiveMessage(sessionId, messageId);
+  const tree = await switchActiveMessage(sessionId, messageId);
   if (!tree) return c.json({ error: '消息不存在' }, 404);
-  publishSessionListChanged();
   return c.json(tree);
+});
+
+/** 输入框 Slash Command：重新执行当前审查，并按仓库配置发布评论/钉钉。 */
+sessionRoutes.post('/:id/review-command', async (c) => {
+  const sessionId = c.req.param('id');
+  const result = await runReviewCommand(sessionId);
+  if (result.kind === 'missing') return c.json({ error: '会话不存在' }, 404);
+  if (result.kind === 'invalid-kind') return c.json({ error: '代码审查指令只能在审查会话中执行' }, 400);
+  if (result.kind === 'running') return c.json({ error: '本次审查正在运行中' }, 409);
+  if (result.kind === 'missing-seed') {
+    return c.json({ error: '会话缺少审查种子消息，无法重新执行 review' }, 400);
+  }
+  return c.json(result.tree);
 });
 
 /** 新建普通对话会话（可选绑定仓库以便用其模型配置）。 */
 sessionRoutes.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const repositoryId = typeof body.repositoryId === 'string' ? body.repositoryId : null;
-  const session = await prisma.session.create({
-    data: {
-      kind: 'chat',
-      title: typeof body.title === 'string' ? body.title : null,
-      repositoryId,
-      status: 'completed',
-    },
-  });
-  publishSessionListChanged();
-  return c.json({ session });
+  return c.json({ session: await createChatSession(body) });
 });
 
 /** 删除会话。 */
 sessionRoutes.delete('/:id', async (c) => {
-  await prisma.session.delete({ where: { id: c.req.param('id') } }).catch(() => undefined);
-  publishSessionListChanged();
-  return c.json({ success: true });
+  return c.json(await deleteSession(c.req.param('id')));
 });

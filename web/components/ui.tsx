@@ -4,7 +4,7 @@ import { ArrowLeft, X, TriangleAlert } from 'lucide-react';
 import { cn } from '../lib/cn';
 
 const fieldBase =
-  'w-full rounded-[var(--r-md)] border border-[var(--hairline)] bg-white px-4 py-2.5 text-sm text-[var(--ink)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] focus:border-[var(--surface-strong)] focus:shadow-[0_0_0_1px_rgba(10,10,10,0.06)] disabled:bg-[var(--surface-card)] disabled:opacity-60';
+  'w-full rounded-[var(--r-sm)] border border-[var(--hairline)] bg-white px-3 py-2.5 text-sm text-[var(--ink)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted)] focus:border-[var(--ink)] focus:shadow-[0_0_0_1px_rgba(0,0,0,0.08)] disabled:bg-[var(--surface-card)] disabled:opacity-60';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(fieldBase, props.className)} />;
@@ -76,17 +76,17 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'onColor' | 'danger' | 'magenta' | 'icon' }) {
   const styles = {
     primary: 'bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--body-strong)]',
-    secondary: 'border border-[var(--hairline)] bg-white text-[var(--ink)] hover:bg-[var(--surface-card)]',
+    secondary: 'border border-[var(--hairline)] bg-white text-[var(--ink)] hover:bg-[var(--surface-hover)]',
     onColor: 'bg-white text-[var(--ink)] hover:bg-white/90',
     danger: 'border border-[var(--error)]/25 bg-white text-[var(--error)] hover:bg-[var(--error)]/8',
     magenta: 'bg-[var(--brand-pink)] text-[var(--ink)] hover:brightness-95',
-    icon: 'h-10 w-10 rounded-[var(--r-pill)] bg-[var(--primary)] p-0 text-[var(--on-primary)] hover:bg-[var(--body-strong)]',
+    icon: 'h-10 w-10 rounded-[var(--r-sm)] bg-[var(--primary)] p-0 text-[var(--on-primary)] hover:bg-[var(--body-strong)]',
   }[variant];
   return (
     <button
       {...props}
       className={cn(
-        'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[var(--r-pill)] px-5 py-2.5 text-sm font-semibold transition-[background-color,filter,opacity,transform] active:scale-[0.96] disabled:pointer-events-none disabled:opacity-45',
+        'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[var(--r-sm)] px-4 py-2.5 text-sm font-medium transition-[background-color,filter,opacity,transform] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45',
         styles,
         className,
       )}
@@ -97,7 +97,7 @@ export function Button({
 /** 内容卡：只用于真正需要框定的内容块。 */
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded-[var(--r-md)] border border-[var(--hairline)] bg-white p-6', className)}>{children}</div>
+    <div className={cn('rounded-[var(--r-md)] border border-[var(--hairline)] bg-white p-6 shadow-[var(--shadow-sm)]', className)}>{children}</div>
   );
 }
 

@@ -3,25 +3,17 @@ import { useParams } from 'react-router-dom';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import {
-  SendHorizontal,
-  Square,
   Loader2,
-  FolderGit2,
-  GitBranch,
-  Hash,
-  UserRound,
   MessageSquare,
-  CircleDashed,
-  CheckCircle2,
   AlertCircle,
-  Activity,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import { cn } from '../lib/cn';
 import type { SessionDetail } from '../lib/types';
 import { Sidebar } from '../components/Sidebar';
-import { Message } from '../components/Message';
+import { ChatHeader } from '../components/chat/ChatHeader';
+import { LazyComposer } from '../components/chat/LazyComposer';
+import { MessageList } from '../components/chat/MessageList';
 
 export function Chat() {
   const { sessionId } = useParams();
@@ -101,6 +93,7 @@ function ChatThread({
 }) {
   const sessionId = detail.session.id;
   const [parentMessageId, setParentMessageId] = useState<string | null>(null);
+  const [commandRunning, setCommandRunning] = useState(false);
   const transport = useMemo(
     () => new DefaultChatTransport({ api: '/api/chat', body: { sessionId } }),
     [sessionId],
@@ -129,9 +122,7 @@ function ChatThread({
       toast.error(message);
     },
   });
-  const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
   const [scrollState, setScrollState] = useState({ top: true, bottom: true, scrollable: false });
   const busy = status === 'submitted' || status === 'streaming';
@@ -174,16 +165,6 @@ function ChatThread({
     });
     return () => cancelAnimationFrame(frame);
   }, [scrollToBottom, sessionId, syncScrollState]);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (!el) return;
-      el.style.height = 'auto';
-      el.style.height = `${Math.min(Math.max(el.scrollHeight, 40), 160)}px`;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [input]);
 
   useEffect(() => {
     const events = new EventSource(`/api/sessions/${sessionId}/events`);
@@ -236,13 +217,42 @@ function ChatThread({
   const reviewing = s.status === 'running';
   const composerDisabled = busy || reviewing;
   const treeById = useMemo(() => new Map(detail.messageTree.map((node) => [node.id, node])), [detail.messageTree]);
+  const canRunReviewCommand = s.kind === 'review' && !busy && !reviewing;
 
-  const submit = () => {
-    const text = input.trim();
+  const submit = (text: string) => {
     if (!text || composerDisabled) return;
     nearBottomRef.current = true;
-    setInput('');
     void sendMessage({ text }, { body: { parentMessageId } });
+  };
+
+  const runReviewCommand = () => {
+    if (!canRunReviewCommand || commandRunning) return;
+    setCommandRunning(true);
+    setParentMessageId(null);
+    nearBottomRef.current = true;
+    api<Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>>(
+      `/api/sessions/${sessionId}/review-command`,
+      { method: 'POST' },
+    )
+      .then((next) => {
+        setMessages(next.messages);
+        updateDetail((current) =>
+          current
+            ? {
+                ...current,
+                session: { ...current.session, status: 'running', error: null },
+                messages: next.messages,
+                messageTree: next.messageTree,
+                activeLeafMessageId: next.activeLeafMessageId,
+                activePathIds: next.activePathIds,
+              }
+            : current,
+        );
+        onActivity();
+        toast.success('已重新执行代码审查');
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '代码审查指令执行失败'))
+      .finally(() => setCommandRunning(false));
   };
 
   const switchToMessage = (messageId: string) => {
@@ -280,58 +290,11 @@ function ChatThread({
       return;
     }
     setParentMessageId(messageId);
-    inputRef.current?.focus();
   };
-
-  const shortHash = s.commitSha ? s.commitSha.slice(0, 8) : null;
-  const branchText =
-    s.sourceBranch && s.targetBranch ? `${s.sourceBranch} → ${s.targetBranch}` : s.sourceBranch ?? s.targetBranch ?? null;
-  const statusView = {
-    running: { label: '审查中', icon: CircleDashed, className: 'bg-[var(--brand-cream)] text-[var(--ink)]' },
-    completed: { label: '已完成', icon: CheckCircle2, className: 'bg-[var(--brand-mint)] text-[var(--ink)]' },
-    failed: { label: '失败', icon: AlertCircle, className: 'bg-[var(--brand-coral)] text-white' },
-  }[s.status] ?? { label: s.status, icon: CircleDashed, className: 'bg-[var(--surface-strong)] text-[var(--muted)]' };
-  const StatusIcon = statusView.icon;
-  const isTriggerFirst = s.kind === 'review' && messages[0]?.role === 'user';
-
-  const pill = 'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-card)] px-2.5 py-1 text-[var(--body-strong)]';
 
   return (
     <>
-      <header className="z-10 bg-[var(--canvas)] px-6 py-4 max-md:px-4">
-        <div className="mx-auto flex max-w-4xl min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1 basis-64">
-            <h1 className="font-display truncate text-lg text-[var(--ink)]">
-              {s.kind === 'review' && s.mrIid ? `!${s.mrIid} ${s.mrTitle ?? ''}` : s.title ?? '新对话'}
-            </h1>
-            {s.repository && (
-              <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[var(--muted)]">
-                <FolderGit2 size={12} className="shrink-0 text-[var(--muted-soft)]" /> {s.repository.path}
-              </p>
-            )}
-          </div>
-          <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5 text-[11px] font-medium">
-            <span className={cn('caption inline-flex items-center gap-1 rounded-[var(--r-pill)] px-2.5 py-1', statusView.className)}>
-              <StatusIcon size={12} className={s.status === 'running' ? 'animate-spin' : undefined} /> {statusView.label}
-            </span>
-            {branchText && (
-              <span className={pill}>
-                <GitBranch size={12} className="shrink-0 text-[var(--muted-soft)]" /> <span className="truncate">{branchText}</span>
-              </span>
-            )}
-            {shortHash && (
-              <span className={cn(pill, 'font-mono')}>
-                <Hash size={12} className="shrink-0 text-[var(--muted-soft)]" /> {shortHash}
-              </span>
-            )}
-            {s.author && (
-              <span className={pill}>
-                <UserRound size={12} className="shrink-0 text-[var(--muted-soft)]" /> <span className="truncate">{s.author}</span>
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
+      <ChatHeader session={s} />
 
       <div
         className={[
@@ -341,96 +304,44 @@ function ChatThread({
         ].join(' ')}
       >
         <div ref={scrollRef} onScroll={syncScrollState} className="conversation-scroll h-full min-w-0 overflow-y-auto">
-          <div className="mx-auto max-w-4xl px-6 py-5 max-md:px-4">
-            {/* 审查失败原因必须直接可见，让用户能自助修复配置 */}
-            {s.status === 'failed' && s.error && (
-              <div className="mb-4 flex items-start gap-2.5 rounded-[var(--r-md)] bg-[var(--brand-coral)] px-4 py-3 text-sm text-white">
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                <div className="min-w-0 space-y-0.5">
-                  <p className="font-semibold">本次审查失败</p>
-                  <p className="break-words text-xs leading-relaxed">{s.error}</p>
-                  {/模型|apiKey|api key/i.test(s.error) && (
-                    <p className="text-xs text-white/85">请到「设置 → 全局模型配置」或仓库的模型配置中补全后重试。</p>
-                  )}
-                </div>
-              </div>
-            )}
-            {messages.length === 0 && (
-              <div className="mx-auto mt-16 max-w-md rounded-[var(--r-xl)] bg-[var(--brand-lilac)] px-7 py-9 text-center text-[var(--ink)]">
-                <p className="font-display text-xl">开始对话吧</p>
-                <p className="mt-2 text-sm leading-relaxed opacity-80">问一次审查结论、变更风险或某个文件的实现细节。</p>
-              </div>
-            )}
-            {messages.map((m, i) => (
-              <Message
-                key={m.id}
-                message={m}
-                isTrigger={isTriggerFirst && i === 0}
-                isStreaming={status === 'streaming' && i === messages.length - 1 && m.role === 'assistant'}
-                branch={treeById.get(m.id)}
-                onSelectSibling={switchToMessage}
-                onBranchFrom={reviewing ? undefined : branchFromMessage}
-              />
-            ))}
-            {/* 仅在还没有 assistant 消息时显示极简等待；流开始后由最后一条消息承载光标与正文。 */}
-            {status === 'submitted' && messages.at(-1)?.role !== 'assistant' && (
-              <div className="inline-flex items-center gap-2 px-1 py-1.5 text-xs text-[var(--muted)]">
-                <Loader2 size={13} className="animate-spin text-[var(--ink)]" />
-              </div>
-            )}
-            {!busy && reviewing && (
-              <div className="caption inline-flex items-center gap-2 rounded-[var(--r-pill)] bg-[var(--brand-cream)] px-3 py-1.5 text-[var(--ink)]">
-                <Activity size={13} /> 后台审查进行中，回复会实时同步到这里
-              </div>
-            )}
-          </div>
+          <MessageList
+            session={s}
+            messages={messages}
+            status={status}
+            busy={busy}
+            reviewing={reviewing}
+            treeById={treeById}
+            onSelectSibling={switchToMessage}
+            onBranchFrom={branchFromMessage}
+          />
         </div>
       </div>
 
-      <div className="z-10 bg-[var(--canvas)] p-4 max-md:p-3">
+      <div className="z-10 border-t border-[var(--hairline)] bg-[var(--canvas)] p-4 max-md:p-3">
         <div className="mx-auto max-w-4xl">
-          <div className="flex items-end gap-2 rounded-[var(--r-md)] border border-[var(--hairline)] bg-white p-1.5 shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] focus-within:border-[var(--surface-strong)] focus-within:shadow-[0_0_0_1px_rgba(10,10,10,0.06)]">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-              rows={1}
-              disabled={reviewing}
-              placeholder={
-                reviewing
-                  ? '审查进行中，完成后即可追问…'
-                  : parentMessageId
-                    ? '从选中的消息分叉继续…（Enter 发送，Shift+Enter 换行）'
-                    : '继续追问，或要求重新审查…（Enter 发送，Shift+Enter 换行）'
-              }
-              className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--muted-soft)] disabled:cursor-not-allowed"
-            />
-            {busy ? (
-              <button
-                onClick={() => stop()}
-                aria-label="停止生成"
-                title="停止生成"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95"
-              >
-                <Square size={14} className="fill-current" />
-              </button>
-            ) : (
-              <button
-                onClick={submit}
-                disabled={reviewing || !input.trim()}
-                aria-label="发送"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-40"
-              >
-                <SendHorizontal size={16} />
-              </button>
-            )}
-          </div>
+          <LazyComposer
+            placeholder={
+              reviewing
+                ? '审查进行中，完成后即可追问…'
+                : parentMessageId
+                  ? '从选中的消息分叉继续…（Enter 发送，Shift+Enter 换行）'
+                  : '输入 / 选择指令，或继续追问…'
+            }
+            disabled={reviewing}
+            busy={busy}
+            onStop={stop}
+            onSubmit={submit}
+            commands={[
+              {
+                id: 'review-command',
+                title: '代码审查指令',
+                description: '重新执行当前 review，完成后按仓库配置发送钉钉或 GitLab 评论。',
+                disabled: !canRunReviewCommand || commandRunning,
+                loading: commandRunning,
+                onSelect: runReviewCommand,
+              },
+            ]}
+          />
         </div>
       </div>
     </>

@@ -22,7 +22,7 @@ import type { SessionListItem, RepositoryItem } from '../lib/types';
 const statusColor: Record<string, string> = {
   running: 'bg-[var(--brand-cream)]',
   completed: 'bg-[var(--success)]',
-  failed: 'bg-[var(--brand-coral)]',
+  failed: 'bg-[var(--error)]',
 };
 
 const statusLabel: Record<string, string> = {
@@ -205,11 +205,11 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   return (
-    <aside className="z-20 flex h-full w-80 shrink-0 flex-col border-r border-[var(--hairline)] bg-[var(--canvas)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
-      <div className="px-4 py-4">
+    <aside className="z-20 flex h-full w-80 shrink-0 flex-col border-r border-[var(--hairline)] bg-[var(--surface-soft)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
+      <div className="border-b border-[var(--hairline)] px-4 py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--ink)] text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--ink)] text-white shadow-[var(--shadow-sm)]">
               <ScanSearch size={16} />
             </span>
             <div className="min-w-0">
@@ -221,7 +221,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
             onClick={() => setNewChatOpen(true)}
             title="新对话"
             aria-label="新对话"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white transition-opacity hover:opacity-90 active:scale-95"
           >
             <Plus size={17} />
           </button>
@@ -263,10 +263,10 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
               key={s.id}
               className={cn(
                 'group relative rounded-[var(--r-md)] transition-colors',
-                active ? 'bg-[var(--surface-card)]' : 'hover:bg-[var(--surface-card)]',
+                active ? 'bg-white shadow-[inset_0_0_0_1px_var(--hairline)]' : 'hover:bg-white',
               )}
             >
-              {active && <span className="absolute left-0 top-1/2 h-8 w-[2px] -translate-y-1/2 rounded-full bg-[var(--ink)]" />}
+              {active && <span className="absolute left-0 top-1/2 h-7 w-[2px] -translate-y-1/2 rounded-full bg-[var(--ink)]" />}
               <button
                 onClick={() => navigate(`/c/${s.id}`)}
                 className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-2.5 py-2.5 pr-8 text-left"
@@ -278,10 +278,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                 )}
                 <span className="min-w-0">
                   <span
-                    className={cn(
-                      'block truncate text-xs',
-                      active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]',
-                    )}
+                    className={cn('block truncate text-[13px]', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}
                   >
                     {sessionLabel(s)}
                   </span>
@@ -320,7 +317,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
         })}
       </div>
 
-      <div className="space-y-0.5 border-t border-[var(--hairline)] px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-2 max-md:gap-1 max-md:space-y-0">
+      <div className="space-y-0.5 border-t border-[var(--hairline)] bg-white px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-2 max-md:gap-1 max-md:space-y-0">
         <Link
           to="/dashboard"
           className="flex items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-colors hover:bg-[var(--surface-card)] hover:text-[var(--ink)]"
