@@ -263,11 +263,12 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
     expect(text).toContain('审查结论会展示在会话页面');
   });
 
-  it('明确使用用户反馈沉淀指导后续审查', () => {
+  it('只把达到阈值的用户反馈沉淀作为后续审查依据', () => {
     const text = buildInstructions(repo());
-    expect(text).toContain('用户反馈沉淀');
-    expect(text).toContain('用户认可的审查发现');
-    expect(text).toContain('用户否定的审查发现');
+    expect(text).toContain('用户反馈阈值沉淀');
+    expect(text).toContain('单次 findingFeedbacks 不是证据');
+    expect(text).toContain('用户认可的问题模式');
+    expect(text).toContain('用户否定的问题模式');
     expect(text).toContain('不要机械复读');
     expect(text).toContain('不要写项目记忆');
   });

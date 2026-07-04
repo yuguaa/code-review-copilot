@@ -36,6 +36,10 @@ export type MessageFeedbackResult =
   | { kind: 'missing-repository' }
   | { kind: 'updated'; tree: SessionMessageTree };
 
+const feedbackMemoryHeader = '## 用户反馈阈值沉淀';
+const legacyFeedbackMemoryHeader = '## 用户反馈沉淀';
+const feedbackThreshold = { minTotal: 3, minNet: 2 } as const;
+
 /** 会话 + 仓库（含模型配置），供 chat route / agent 使用。 */
 export function getSessionWithRepository(id: string) {
   return prisma.session.findUnique({
@@ -212,22 +216,23 @@ export async function setMessageFeedback(
   if (!message.session.repositoryId) return { kind: 'missing-repository' };
 
   const nextParts = applyMessageFeedback(message.parts, feedback, findingText);
-  const memoryEntry = buildFeedbackMemoryEntry({
-    feedback,
-    messageText: normalizeFeedbackText(findingText) || extractPartsText(nextParts),
-  });
-  const nextMemory = mergeFeedbackMemory(message.session.repository?.memory, memoryEntry);
+  const repositoryId = message.session.repositoryId;
 
-  await prisma.$transaction([
-    prisma.message.update({
-      where: { id: message.id },
-      data: { parts: nextParts as object },
-    }),
-    prisma.repository.update({
-      where: { id: message.session.repositoryId },
-      data: { memory: nextMemory },
-    }),
-  ]);
+  await prisma.message.update({
+    where: { id: message.id },
+    data: { parts: nextParts as object },
+  });
+
+  const rows = await prisma.message.findMany({
+    where: { role: 'assistant', session: { repositoryId } },
+    select: { parts: true },
+  });
+  const memorySection = buildThresholdFeedbackMemorySection(collectFeedbackStats(rows.map((row) => row.parts)));
+  const nextMemory = mergeThresholdFeedbackMemory(message.session.repository?.memory, memorySection);
+  await prisma.repository.update({
+    where: { id: repositoryId },
+    data: { memory: nextMemory },
+  });
 
   return { kind: 'updated', tree: await loadSessionMessageTree(sessionId) };
 }
@@ -361,24 +366,82 @@ export function extractPartsText(parts: unknown): string {
     .trim();
 }
 
-export function buildFeedbackMemoryEntry({
-  feedback,
-  messageText,
-}: {
-  feedback: MessageFeedbackValue;
-  messageText: string;
-}): string {
-  const label = feedback === 'up' ? '用户认可的审查发现' : '用户否定的审查发现';
-  const text = messageText.length > 360 ? `${messageText.slice(0, 360)}…` : messageText;
-  return `- ${label}：${text || '空文本消息'}`;
+export type FeedbackPatternStat = {
+  pattern: string;
+  up: number;
+  down: number;
+};
+
+export function feedbackPatternOf(text: string): string {
+  const normalized = normalizeFeedbackText(text);
+  const issue = normalized.match(/问题[:：]\s*(.*?)(?:\s+(?:影响|修复建议)[:：]|$)/)?.[1]?.trim();
+  const source = issue || normalized;
+  return source
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '')
+    .replace(/\b[\w./-]+\.(?:ts|tsx|js|jsx|vue|css|scss|less|json|md|yml|yaml|prisma|sql|go|py|java|kt|rs|php|rb|sh|Dockerfile)(?::\d+)?\b/g, '')
+    .replace(/\b[\w./-]+:\d+\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-export function mergeFeedbackMemory(current: string | null | undefined, entry: string): string {
-  const header = '## 用户反馈沉淀';
+export function collectFeedbackStats(partsList: unknown[]): FeedbackPatternStat[] {
+  const stats = new Map<string, FeedbackPatternStat>();
+  for (const parts of partsList) {
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts) {
+      if (!part || typeof part !== 'object') continue;
+      const feedbacks = (part as { findingFeedbacks?: unknown }).findingFeedbacks;
+      if (!Array.isArray(feedbacks)) continue;
+      for (const item of feedbacks) {
+        const entry = item as { text?: unknown; feedback?: unknown };
+        if (entry.feedback !== 'up' && entry.feedback !== 'down') continue;
+        const pattern = feedbackPatternOf(typeof entry.text === 'string' ? entry.text : '');
+        if (!pattern) continue;
+        const stat = stats.get(pattern) ?? { pattern, up: 0, down: 0 };
+        if (entry.feedback === 'up') stat.up += 1;
+        if (entry.feedback === 'down') stat.down += 1;
+        stats.set(pattern, stat);
+      }
+    }
+  }
+  return Array.from(stats.values()).sort((a, b) => b.up + b.down - (a.up + a.down) || a.pattern.localeCompare(b.pattern));
+}
+
+export function buildThresholdFeedbackMemorySection(stats: FeedbackPatternStat[]): string {
+  const accepted = stats.filter((stat) => stat.up + stat.down >= feedbackThreshold.minTotal && stat.up - stat.down >= feedbackThreshold.minNet);
+  const rejected = stats.filter((stat) => stat.up + stat.down >= feedbackThreshold.minTotal && stat.down - stat.up >= feedbackThreshold.minNet);
+  const lines = [feedbackMemoryHeader];
+  for (const stat of accepted) {
+    lines.push(`- 用户认可的问题模式：${stat.pattern}（赞 ${stat.up} / 踩 ${stat.down} / 净 ${stat.up - stat.down}）`);
+  }
+  for (const stat of rejected) {
+    lines.push(`- 用户否定的问题模式：${stat.pattern}（赞 ${stat.up} / 踩 ${stat.down} / 净 ${stat.up - stat.down}）`);
+  }
+  return lines.join('\n');
+}
+
+export function mergeThresholdFeedbackMemory(current: string | null | undefined, section: string): string {
   const body = (current ?? '').trim();
-  if (!body) return `${header}\n${entry}`;
-  if (!body.includes(header)) return `${body}\n\n${header}\n${entry}`;
-  return `${body}\n${entry}`;
+  const sectionHasEntries = section.split('\n').slice(1).some((line) => line.trim());
+  const withoutOldSection = removeMemorySection(removeMemorySection(body, feedbackMemoryHeader), legacyFeedbackMemoryHeader).trim();
+  if (!sectionHasEntries) return withoutOldSection;
+  return withoutOldSection ? `${withoutOldSection}\n\n${section}` : section;
+}
+
+function removeMemorySection(memory: string, header: string): string {
+  if (!memory) return '';
+  const lines = memory.split('\n');
+  const result: string[] = [];
+  for (let index = 0; index < lines.length;) {
+    if (lines[index].trim() !== header) {
+      result.push(lines[index]);
+      index += 1;
+      continue;
+    }
+    index += 1;
+    while (index < lines.length && !/^##\s+/.test(lines[index])) index += 1;
+  }
+  return result.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
 function toUIMessage(row: MessageRow): UIMessage {

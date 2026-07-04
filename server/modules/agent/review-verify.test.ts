@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UIMessage } from 'ai';
-import { withVerifiedReviewText } from './review-verify';
+import { VERIFY_INSTRUCTIONS, withVerifiedReviewText } from './review-verify';
 
 describe('withVerifiedReviewText', () => {
   it('用 verified 文本替换最后一条 assistant 结论', () => {
@@ -28,5 +28,12 @@ describe('withVerifiedReviewText', () => {
     expect(result).toHaveLength(2);
     expect(result[1].role).toBe('assistant');
     expect(result[1].parts).toEqual([{ type: 'text', text: 'verified 总评' }]);
+  });
+});
+
+describe('VERIFY_INSTRUCTIONS', () => {
+  it('只把阈值反馈沉淀作为复核依据', () => {
+    expect(VERIFY_INSTRUCTIONS).toContain('用户反馈阈值沉淀');
+    expect(VERIFY_INSTRUCTIONS).toContain('单次 findingFeedbacks 不是可采信证据');
   });
 });

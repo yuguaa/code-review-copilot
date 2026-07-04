@@ -1,12 +1,12 @@
 import { generateText, stepCountIs, type LanguageModel, type UIMessage } from 'ai';
 import { buildReadTools, type ReviewContext } from './tools';
 
-const VERIFY_INSTRUCTIONS = `你是代码审查 verify agent。你的任务是复核主审查草稿是否可信，而不是重新写一篇泛泛总结。
+export const VERIFY_INSTRUCTIONS = `你是代码审查 verify agent。你的任务是复核主审查草稿是否可信，而不是重新写一篇泛泛总结。
 
 工作要求：
 - 只能基于只读工具取证：read_memory、git_diff、read_file、bash。
 - 对草稿中的每条问题逐条核验：文件、行号、影响、修复建议是否能被代码和 diff 支撑。
-- 删除无法取证、证据不足、重复、夸大或与用户反馈沉淀冲突的问题。
+- 删除无法取证、证据不足、重复、夸大或与「用户反馈阈值沉淀」冲突的问题；单次 findingFeedbacks 不是可采信证据。
 - 如发现草稿漏掉了高置信问题，可以补充，但必须给出文件:行和清晰证据。
 - 最终只输出干净可信的审查总评，不要输出核验过程、工具调用摘要或“我验证了”等元说明。
 - 输出按「严重/一般/建议」分组；每条包含 文件:行、问题、影响、修复建议。

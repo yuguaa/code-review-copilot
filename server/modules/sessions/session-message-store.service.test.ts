@@ -3,11 +3,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   applyMessageFeedback,
+  buildThresholdFeedbackMemorySection,
   buildPathIds,
   buildSiblingIdsByParent,
-  buildFeedbackMemoryEntry,
+  collectFeedbackStats,
   dedupeMessages,
-  mergeFeedbackMemory,
+  feedbackPatternOf,
+  mergeThresholdFeedbackMemory,
   mergeIncomingUserMessage,
   mergeIncomingUserMessageAtParent,
   mergePersistedMessages,
@@ -108,18 +110,61 @@ describe('message feedback helpers', () => {
     });
   });
 
-  it('把用户反馈追加到仓库记忆的固定分组', () => {
-    const entry = buildFeedbackMemoryEntry({
-      feedback: 'down',
-      messageText: '这个发现不是问题',
-    });
+  it('按问题模式归一化反馈文本', () => {
+    expect(feedbackPatternOf('server/a.ts:10 问题：空指针 影响：运行崩溃 修复建议：增加判空')).toBe('空指针');
+    expect(feedbackPatternOf('- web/b.tsx:2 重复请求会浪费资源')).toBe('重复请求会浪费资源');
+  });
 
-    expect(entry).toContain('用户否定的审查发现');
-    expect(mergeFeedbackMemory('## 架构约定\n- 使用 Hono', entry)).toBe(
-      '## 架构约定\n- 使用 Hono\n\n## 用户反馈沉淀\n- 用户否定的审查发现：这个发现不是问题',
+  it('未达到阈值时不写入长期记忆', () => {
+    const stats = collectFeedbackStats([
+      [{ type: 'text', findingFeedbacks: [{ text: 'a.ts:1 问题：空指针', feedback: 'up' }] }],
+      [{ type: 'text', findingFeedbacks: [{ text: 'b.ts:2 问题：空指针', feedback: 'up' }] }],
+    ]);
+    const section = buildThresholdFeedbackMemorySection(stats);
+
+    expect(section).toBe('## 用户反馈阈值沉淀');
+    expect(mergeThresholdFeedbackMemory('## 架构约定\n- 使用 Hono', section)).toBe('## 架构约定\n- 使用 Hono');
+  });
+
+  it('3 次反馈且净赞成达到 2 时写入认可模式', () => {
+    const stats = collectFeedbackStats([
+      [{ type: 'text', findingFeedbacks: [{ text: 'a.ts:1 问题：空指针', feedback: 'up' }] }],
+      [{ type: 'text', findingFeedbacks: [{ text: 'b.ts:2 问题：空指针', feedback: 'up' }] }],
+      [{ type: 'text', findingFeedbacks: [{ text: 'c.ts:3 问题：空指针', feedback: 'down' }] }],
+      [{ type: 'text', findingFeedbacks: [{ text: 'd.ts:4 问题：空指针', feedback: 'up' }] }],
+    ]);
+
+    expect(buildThresholdFeedbackMemorySection(stats)).toContain('用户认可的问题模式：空指针（赞 3 / 踩 1 / 净 2）');
+  });
+
+  it('3 次反馈且净反对达到 2 时写入否定模式', () => {
+    const stats = collectFeedbackStats([
+      [{ type: 'text', findingFeedbacks: [{ text: 'a.ts:1 问题：误报鉴权', feedback: 'down' }] }],
+      [{ type: 'text', findingFeedbacks: [{ text: 'b.ts:2 问题：误报鉴权', feedback: 'down' }] }],
+      [{ type: 'text', findingFeedbacks: [{ text: 'c.ts:3 问题：误报鉴权', feedback: 'up' }] }],
+      [{ type: 'text', findingFeedbacks: [{ text: 'd.ts:4 问题：误报鉴权', feedback: 'down' }] }],
+    ]);
+
+    expect(buildThresholdFeedbackMemorySection(stats)).toContain('用户否定的问题模式：误报鉴权（赞 1 / 踩 3 / 净 -2）');
+  });
+
+  it('同一发现切换反馈时只保留当前反馈', () => {
+    const first = applyMessageFeedback(
+      [{ type: 'text', text: '## 严重\n- a.ts:1 问题：空指针' }],
+      'up',
+      'a.ts:1 问题：空指针',
     );
-    expect(mergeFeedbackMemory('## 用户反馈沉淀\n- 用户认可的审查发现：旧问题', entry)).toBe(
-      '## 用户反馈沉淀\n- 用户认可的审查发现：旧问题\n- 用户否定的审查发现：这个发现不是问题',
+    const switched = applyMessageFeedback(first, 'down', 'a.ts:1 问题：空指针');
+    const stats = collectFeedbackStats([switched]);
+
+    expect(stats).toEqual([{ pattern: '空指针', up: 0, down: 1 }]);
+  });
+
+  it('更新阈值沉淀分组时保留其它记忆分组', () => {
+    const section = '## 用户反馈阈值沉淀\n- 用户认可的问题模式：空指针（赞 3 / 踩 1 / 净 2）';
+
+    expect(mergeThresholdFeedbackMemory('## 架构约定\n- 使用 Hono\n\n## 用户反馈沉淀\n- 单次旧反馈\n\n## 用户反馈阈值沉淀\n- 旧内容', section)).toBe(
+      '## 架构约定\n- 使用 Hono\n\n## 用户反馈阈值沉淀\n- 用户认可的问题模式：空指针（赞 3 / 踩 1 / 净 2）',
     );
   });
 });
