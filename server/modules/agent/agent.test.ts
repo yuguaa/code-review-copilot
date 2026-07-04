@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveModel, resolveRepositoryModelConfig } from '../ai-models/ai-models.service';
+import { resolveModel, resolveRepositoryModelConfig, resolveReviewModelConfigs } from '../ai-models/ai-models.service';
 import { buildTools, type ReviewContext } from './tools';
 import { buildInstructions } from './review-agent';
 import { signedUrl } from '../../shared/dingtalk/dingtalk.service';
@@ -118,6 +118,31 @@ describe('resolveRepositoryModelConfig', () => {
   });
 });
 
+describe('resolveReviewModelConfigs', () => {
+  it('主审查使用仓库模型，专项与验证模型使用激活模型池', () => {
+    const repoModel = model({ id: 'repo-model', provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' });
+    const configs = resolveReviewModelConfigs(
+      repo({ defaultAIModelId: 'repo-model', defaultAIModel: repoModel }),
+      model({ id: 'global-model', modelId: 'global-model' }),
+      [
+        { provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key', apiBaseUrl: 'https://example.com/v1', maxSteps: 16 },
+        { provider: 'anthropic', modelId: 'claude-sonnet-4', apiKey: 'verify-key', maxSteps: 12 },
+      ],
+    );
+
+    expect(configs.primary).toMatchObject({ provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' });
+    expect(configs.delegates).toHaveLength(2);
+    expect(configs.verifier).toMatchObject({ provider: 'anthropic', modelId: 'claude-sonnet-4' });
+  });
+
+  it('只有一个可用模型时验证模型复用主模型', () => {
+    const configs = resolveReviewModelConfigs(repo(), model(), []);
+
+    expect(configs.verifier).toEqual(configs.primary);
+    expect(configs.delegates).toEqual([configs.primary]);
+  });
+});
+
 describe('signedUrl（钉钉加签）', () => {
   it('无 secret 时返回原始 webhook', () => {
     expect(signedUrl('https://oapi.dingtalk.com/robot/send?access_token=abc')).toBe(
@@ -211,14 +236,23 @@ describe('输出工具的开关控制', () => {
     expect('write_memory' in tools).toBe(false);
     expect('read_file' in tools).toBe(true);
   });
+
+  it('草稿审查 loop 可关闭写记忆工具，避免 verify 前副作用', () => {
+    const tools = buildTools(fakeContext(), { publish: false, memoryWrite: false });
+    expect('post_review_comment' in tools).toBe(false);
+    expect('post_inline_comment' in tools).toBe(false);
+    expect('write_memory' in tools).toBe(false);
+    expect('read_memory' in tools).toBe(true);
+  });
 });
 
 describe('buildInstructions（输出渠道按配置生成）', () => {
-  it('开启平台评论与钉钉时，指令包含发布工具与钉钉说明', () => {
+  it('开启平台评论与钉钉时，指令说明验证后由系统发布', () => {
     const text = buildInstructions(repo({ enableMrComment: true, enableDingtalk: true }));
-    expect(text).toContain('post_review_comment');
-    expect(text).toContain('post_inline_comment');
+    expect(text).toContain('不要自行发布评论');
+    expect(text).toContain('系统会在 verify loop 通过后');
     expect(text).toContain('自动推送钉钉');
+    expect(text).toContain('verify loop');
   });
 
   it('关闭平台评论与钉钉时，指令不出现任何发布渠道', () => {
@@ -235,6 +269,7 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
     expect(text).toContain('用户认可的审查发现');
     expect(text).toContain('用户否定的审查发现');
     expect(text).toContain('不要机械复读');
+    expect(text).toContain('不要写项目记忆');
   });
 
   it('仓库自定义审查要求追加在指令末尾', () => {

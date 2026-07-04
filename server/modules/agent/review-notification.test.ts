@@ -1,11 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UIMessage } from 'ai';
-import { notifyReviewCompleted } from './review-notification';
+import {
+  buildVerifiedMemoryEntry,
+  mergeVerifiedReviewMemory,
+  notifyReviewCompleted,
+  publishVerifiedReview,
+  rememberVerifiedReview,
+} from './review-notification';
 import { sendReviewDingtalkNotification } from '../notifications/notifications.service';
+import { readRepositoryMemory, writeRepositoryMemory } from '../repositories/repositories.service';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
 
 vi.mock('../notifications/notifications.service', () => ({
   sendReviewDingtalkNotification: vi.fn().mockResolvedValue('sent'),
+}));
+
+vi.mock('../repositories/repositories.service', () => ({
+  readRepositoryMemory: vi.fn().mockResolvedValue('## 既有记忆\n- 保留'),
+  writeRepositoryMemory: vi.fn().mockResolvedValue(undefined),
 }));
 
 function session(overrides: Partial<SessionWithRepository> = {}): SessionWithRepository {
@@ -280,5 +292,90 @@ describe('notifyReviewCompleted', () => {
 
     await expect(notifyReviewCompleted(s, messages)).resolves.toBe('skipped');
     expect(sendReviewDingtalkNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('publishVerifiedReview', () => {
+  it('MR 会话发布 verified 总评', async () => {
+    const gitlab = {
+      createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'discussion-1' }),
+    };
+
+    await expect(
+      publishVerifiedReview(
+        {
+          gitlab: gitlab as never,
+          projectId: 1,
+          mrIid: 2,
+          repoId: 'r1',
+          workdir: '/tmp/repo',
+          diffRef: 'origin/main',
+          commitSha: 'head',
+          diffRefs: null,
+          enableMrComment: true,
+        },
+        'verified 总评',
+      ),
+    ).resolves.toBe('posted');
+
+    expect(gitlab.createMergeRequestComment).toHaveBeenCalledWith(1, 2, 'verified 总评');
+  });
+
+  it('关闭平台评论时跳过发布', async () => {
+    const gitlab = {
+      createMergeRequestComment: vi.fn(),
+    };
+
+    await expect(
+      publishVerifiedReview(
+        {
+          gitlab: gitlab as never,
+          projectId: 1,
+          mrIid: 2,
+          repoId: 'r1',
+          workdir: '/tmp/repo',
+          diffRef: 'origin/main',
+          commitSha: 'head',
+          diffRefs: null,
+          enableMrComment: false,
+        },
+        'verified 总评',
+      ),
+    ).resolves.toBe('skipped');
+
+    expect(gitlab.createMergeRequestComment).not.toHaveBeenCalled();
+  });
+});
+
+describe('verified review memory', () => {
+  it('把 verified 审查结论合并到固定记忆分组', () => {
+    const entry = buildVerifiedMemoryEntry('## 严重\n- a.ts:1 问题：x');
+
+    expect(entry).toContain('verified 审查结论');
+    expect(mergeVerifiedReviewMemory('## 既有记忆\n- 保留', entry)).toContain('## Verified 审查沉淀');
+    expect(mergeVerifiedReviewMemory('（暂无项目记忆）', entry)).toBe(`## Verified 审查沉淀\n${entry}`);
+  });
+
+  it('verify 后由系统写入仓库记忆', async () => {
+    await rememberVerifiedReview(
+      {
+        gitlab: {} as never,
+        projectId: 1,
+        mrIid: null,
+        repoId: 'r1',
+        workdir: '/tmp/repo',
+        diffRef: 'origin/main',
+        commitSha: 'head',
+        diffRefs: null,
+        enableMrComment: false,
+      },
+      'verified 总评',
+    );
+
+    expect(readRepositoryMemory).toHaveBeenCalledWith('r1');
+    expect(writeRepositoryMemory).toHaveBeenCalledWith(
+      'r1',
+      expect.stringContaining('verified 总评'),
+    );
   });
 });

@@ -2,6 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
+import type { AIModel } from '@prisma/client';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
 
@@ -16,12 +17,38 @@ export type ModelConfig = {
 
 type RepositoryForModel = NonNullable<SessionWithRepository['repository']>;
 type GlobalDefaultModel = RepositoryForModel['defaultAIModel'];
+type StoredAIModel = Pick<AIModel, 'provider' | 'modelId' | 'apiKey' | 'apiBaseUrl' | 'maxSteps'>;
+
+export type ReviewModelConfigs = {
+  primary: ModelConfig;
+  delegates: ModelConfig[];
+  verifier: ModelConfig;
+};
 
 export function loadGlobalDefaultModel(): Promise<GlobalDefaultModel> {
   return prisma.aIModel.findFirst({
     where: { isDefault: true, isActive: true },
     orderBy: { updatedAt: 'desc' },
   });
+}
+
+export function loadActiveModelConfigs(): Promise<ModelConfig[]> {
+  return prisma.aIModel
+    .findMany({
+      where: { isActive: true },
+      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+    })
+    .then((models) => models.map(modelConfigOf));
+}
+
+function modelConfigOf(model: StoredAIModel): ModelConfig {
+  return {
+    provider: model.provider,
+    modelId: model.modelId,
+    apiKey: model.apiKey,
+    apiBaseUrl: model.apiBaseUrl,
+    maxSteps: model.maxSteps,
+  };
 }
 
 /** 仅用全局默认模型解析配置（未绑定仓库的会话用）。 */
@@ -67,6 +94,24 @@ export function resolveRepositoryModelConfig(
     apiBaseUrl: model.apiBaseUrl,
     maxSteps: model.maxSteps,
   };
+}
+
+export function resolveReviewModelConfigs(
+  repo: SessionWithRepository['repository'],
+  globalDefaultModel: GlobalDefaultModel,
+  activeModelConfigs: ModelConfig[],
+): ReviewModelConfigs {
+  const primary = resolveRepositoryModelConfig(repo, globalDefaultModel);
+  const pool = activeModelConfigs.length ? activeModelConfigs : [primary];
+  return {
+    primary,
+    delegates: pool,
+    verifier: pool.find((config) => !sameModelEndpoint(config, primary)) ?? primary,
+  };
+}
+
+function sameModelEndpoint(a: ModelConfig, b: ModelConfig): boolean {
+  return a.provider === b.provider && a.modelId === b.modelId && (a.apiBaseUrl ?? null) === (b.apiBaseUrl ?? null);
 }
 
 /**

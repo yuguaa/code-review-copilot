@@ -148,12 +148,14 @@ export function buildReadTools(ctx: WorkspaceContext) {
  * 审查主 agent 工具集 = 只读探索 + 记忆沉淀 + 平台评论（enableMrComment 关闭时干脆不提供发布工具）。
  * 钉钉推送不是工具：审查完成后由系统按 enableDingtalk 确定性发送。
  */
-export function buildTools(ctx: ReviewContext) {
+export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memoryWrite?: boolean } = {}) {
+  const publish = opts.publish ?? true;
+  const memoryWrite = opts.memoryWrite ?? true;
   return {
     ...buildReadTools(ctx),
-    ...(ctx.enableMrComment ? buildPublishTools(ctx) : {}),
+    ...(publish && ctx.enableMrComment ? buildPublishTools(ctx) : {}),
 
-    ...(toolEnabled(ctx, 'write_memory')
+    ...(memoryWrite && toolEnabled(ctx, 'write_memory')
       ? {
           write_memory: tool({
             description: '更新本仓库的项目记忆（整体覆盖）。把本次审查得到的、对后续有用的项目认知沉淀进去。',

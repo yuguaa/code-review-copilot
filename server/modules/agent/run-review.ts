@@ -6,7 +6,8 @@ import {
 } from '../sessions/session-message-store.service';
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
-import { notifyReviewCompleted } from './review-notification';
+import { notifyReviewCompleted, publishVerifiedReview, rememberVerifiedReview } from './review-notification';
+import { verifyReviewResult, withVerifiedReviewText } from './review-verify';
 import { createLogger } from '../../shared/logger/logger.service';
 import { publishSessionMessages } from '../sessions/session-events.service';
 import { readUIMessageStream, type UIMessage } from 'ai';
@@ -30,10 +31,10 @@ export async function runReviewSession(sessionId: string): Promise<void> {
 
   try {
     const initial = await loadMessages(sessionId);
-    const result = await createReviewStream({ session, messages: initial });
+    const reviewRun = await createReviewStream({ session, messages: initial });
     let finalMessages = initial;
 
-    const uiStream = result.toUIMessageStream({
+    const uiStream = reviewRun.stream.toUIMessageStream({
       originalMessages: initial,
       onEnd: ({ messages }) => {
         finalMessages = messages;
@@ -46,7 +47,16 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     }
 
     finalMessages = ensureVisibleAssistantReply(finalMessages);
+    const verifiedText = await verifyReviewResult({
+      ctx: reviewRun.ctx,
+      messages: finalMessages,
+      model: reviewRun.verifierModel,
+      maxSteps: reviewRun.verifierConfig.maxSteps,
+    });
+    finalMessages = withVerifiedReviewText(finalMessages, verifiedText);
     await saveMessages(sessionId, finalMessages);
+    await rememberVerifiedReview(reviewRun.ctx, verifiedText);
+    await publishVerifiedReview(reviewRun.ctx, verifiedText);
     await notifyReviewCompleted(session, finalMessages);
     await markReviewSessionCompleted(sessionId);
     log.info(`审查完成 session=${sessionId}`);
