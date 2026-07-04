@@ -9,6 +9,8 @@ import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { cn } from '../../lib/cn';
 import { StreamingCursor } from './StreamingCursor';
 import { isBoundaryPart, type MessagePart } from './message-types';
+import { extractReviewFindings } from './review-findings';
+import type { MessageFeedbackValue, MessageFindingFeedback } from '../../lib/types';
 
 const MarkdownBlock = lazy(() => import('./MarkdownBlock').then((module) => ({ default: module.MarkdownBlock })));
 
@@ -136,18 +138,96 @@ function UnknownBlock({ part }: { part: MessagePart }) {
   );
 }
 
-export function MessageBlockRenderer({ part, role, streaming }: { part: MessagePart; role: UIMessage['role']; streaming?: boolean }) {
+export function MessageBlockRenderer({
+  part,
+  role,
+  streaming,
+  messageId,
+  onFindingFeedback,
+}: {
+  part: MessagePart;
+  role: UIMessage['role'];
+  streaming?: boolean;
+  messageId?: string;
+  onFindingFeedback?: (messageId: string, feedback: MessageFeedbackValue, findingText: string) => void;
+}) {
   if (isBoundaryPart(part)) return null;
   if (part.type === 'text') {
     if (role !== 'assistant') return <PlainTextBlock text={part.text} />;
     const isStreaming = streaming || (part as { state?: string }).state === 'streaming';
+    const findings = !isStreaming ? extractReviewFindings(part.text, findingFeedbacksOf(part)) : [];
     return (
-      <Suspense fallback={<MarkdownFallback text={part.text} streaming={isStreaming} />}>
-        <MarkdownBlock text={part.text} streaming={isStreaming} />
-      </Suspense>
+      <>
+        <Suspense fallback={<MarkdownFallback text={part.text} streaming={isStreaming} />}>
+          <MarkdownBlock text={part.text} streaming={isStreaming} />
+        </Suspense>
+        {messageId && onFindingFeedback && findings.length > 0 && (
+          <div className="mt-3 space-y-1.5 border-t border-white/70 pt-3">
+            {findings.map((finding) => (
+              <div
+                key={finding.id}
+                className="flex items-start gap-2 rounded-[var(--r-sm)] bg-white/45 px-2.5 py-2 ring-1 ring-[var(--hairline)]"
+              >
+                <span className="caption mt-0.5 shrink-0 text-[var(--muted-soft)]">{finding.severity}</span>
+                <p className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--body)]">{finding.text}</p>
+                <FindingFeedbackButtons
+                  value={finding.feedback}
+                  onFeedback={(feedback) => onFindingFeedback(messageId, feedback, finding.text)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </>
     );
   }
   if (part.type === 'reasoning') return <ReasoningBlock part={part} />;
   if (isTool(part)) return <ToolBlock part={part} />;
   return <UnknownBlock part={part} />;
+}
+
+function findingFeedbacksOf(part: MessagePart): MessageFindingFeedback[] {
+  const value = (part as { findingFeedbacks?: unknown }).findingFeedbacks;
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is MessageFindingFeedback => {
+    const entry = item as { text?: unknown; feedback?: unknown };
+    return typeof entry.text === 'string' && (entry.feedback === 'up' || entry.feedback === 'down');
+  });
+}
+
+function FindingFeedbackButtons({
+  value,
+  onFeedback,
+}: {
+  value: MessageFeedbackValue | null;
+  onFeedback: (feedback: MessageFeedbackValue) => void;
+}) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onFeedback('up')}
+        aria-label="认可这条发现"
+        title="认可这条发现"
+        className={cn(
+          'rounded-[var(--r-pill)] p-1 transition-[background-color,color,transform] hover:bg-white active:scale-95',
+          value === 'up' ? 'bg-[var(--brand-mint)] text-[var(--ink)]' : 'text-[var(--muted)]',
+        )}
+      >
+        <CircleCheck size={12} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onFeedback('down')}
+        aria-label="否定这条发现"
+        title="否定这条发现"
+        className={cn(
+          'rounded-[var(--r-pill)] p-1 transition-[background-color,color,transform] hover:bg-white active:scale-95',
+          value === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',
+        )}
+      >
+        <CircleX size={12} />
+      </button>
+    </span>
+  );
 }

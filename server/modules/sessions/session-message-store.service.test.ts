@@ -2,9 +2,12 @@ import type { UIMessage } from 'ai';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  applyMessageFeedback,
   buildPathIds,
   buildSiblingIdsByParent,
+  buildFeedbackMemoryEntry,
   dedupeMessages,
+  mergeFeedbackMemory,
   mergeIncomingUserMessage,
   mergeIncomingUserMessageAtParent,
   mergePersistedMessages,
@@ -70,6 +73,54 @@ describe('mergePersistedMessages', () => {
     ];
 
     expect(mergePersistedMessages(storedMessages, finalMessages)).toEqual(finalMessages);
+  });
+});
+
+describe('message feedback helpers', () => {
+  it('把反馈写到 assistant 文本 part 上', () => {
+    const parts = [
+      { type: 'text', text: '发现一个问题' },
+      { type: 'tool-bash', state: 'output-available' },
+    ];
+
+    const result = applyMessageFeedback(parts, 'up');
+
+    expect(result[0]).toMatchObject({ type: 'text', text: '发现一个问题', feedback: 'up' });
+    expect((result[0] as { feedbackAt?: string }).feedbackAt).toBeTruthy();
+    expect(result[1]).toEqual(parts[1]);
+  });
+
+  it('把单条发现反馈写到文本 part 的 findingFeedbacks 上', () => {
+    const parts = [
+      { type: 'text', text: '## 严重\n- 文件:a.ts:1 问题：空指针 影响：崩溃 修复建议：判空' },
+    ];
+
+    const result = applyMessageFeedback(parts, 'down', '文件:a.ts:1 问题：空指针 影响：崩溃 修复建议：判空');
+
+    expect(result[0]).toMatchObject({
+      type: 'text',
+      findingFeedbacks: [
+        {
+          text: '文件:a.ts:1 问题：空指针 影响：崩溃 修复建议：判空',
+          feedback: 'down',
+        },
+      ],
+    });
+  });
+
+  it('把用户反馈追加到仓库记忆的固定分组', () => {
+    const entry = buildFeedbackMemoryEntry({
+      feedback: 'down',
+      messageText: '这个发现不是问题',
+    });
+
+    expect(entry).toContain('用户否定的审查发现');
+    expect(mergeFeedbackMemory('## 架构约定\n- 使用 Hono', entry)).toBe(
+      '## 架构约定\n- 使用 Hono\n\n## 用户反馈沉淀\n- 用户否定的审查发现：这个发现不是问题',
+    );
+    expect(mergeFeedbackMemory('## 用户反馈沉淀\n- 用户认可的审查发现：旧问题', entry)).toBe(
+      '## 用户反馈沉淀\n- 用户认可的审查发现：旧问题\n- 用户否定的审查发现：这个发现不是问题',
+    );
   });
 });
 

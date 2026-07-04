@@ -3,8 +3,11 @@ import {
   getSessionWithRepository,
   listSessions,
   loadSessionMessageTree,
+  messageFeedbackValues,
+  setMessageFeedback,
   setActiveMessage,
   type SessionMessageTree,
+  type MessageFeedbackValue,
 } from './session-message-store.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
 import {
@@ -55,6 +58,25 @@ export function switchActiveMessage(sessionId: string, messageId: string) {
     if (!tree) return null;
     publishSessionListChanged();
     return tree;
+  });
+}
+
+export function submitMessageFeedback(sessionId: string, messageId: unknown, feedback: unknown, findingText?: unknown) {
+  if (typeof messageId !== 'string') return Promise.resolve({ kind: 'missing-message-id' as const });
+  if (!messageFeedbackValues.includes(feedback as MessageFeedbackValue)) {
+    return Promise.resolve({ kind: 'invalid-feedback' as const });
+  }
+  return setMessageFeedback(
+    sessionId,
+    messageId,
+    feedback as MessageFeedbackValue,
+    typeof findingText === 'string' ? findingText : undefined,
+  ).then((result) => {
+    if (result.kind === 'updated') {
+      publishSessionMessages(sessionId, result.tree);
+      publishSessionListChanged();
+    }
+    return result;
   });
 }
 

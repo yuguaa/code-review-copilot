@@ -3,7 +3,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import type { SessionDetail } from '../lib/types';
+import type { MessageFeedbackValue, SessionDetail } from '../lib/types';
 import { useChatAutoScroll } from './useChatAutoScroll';
 import { useChatSessionEvents } from './useChatSessionEvents';
 
@@ -130,6 +130,20 @@ export function useChatThreadController({
     setParentMessageId(messageId);
   }, [busy, markNearBottom, messages, regenerate]);
 
+  const submitFeedback = useCallback((messageId: string, feedback: MessageFeedbackValue, findingText?: string) => {
+    if (busy) return;
+    api<MessageTreePayload>(`/api/sessions/${sessionId}/message-feedback`, {
+      method: 'POST',
+      body: JSON.stringify({ messageId, feedback, findingText }),
+    })
+      .then((next) => {
+        setMessages(next.messages);
+        updateDetail((current) => mergeMessageTree(current, next));
+        toast.success(feedback === 'up' ? '已记录认可，后续审查会参考' : '已记录否定，后续审查会避开');
+      })
+      .catch((e) => toast.error(errorMessage(e, '反馈提交失败')));
+  }, [busy, sessionId, setMessages, updateDetail]);
+
   return {
     branchFromMessage,
     busy,
@@ -143,6 +157,7 @@ export function useChatThreadController({
     status,
     stop,
     submit,
+    submitFeedback,
     switchToMessage,
     treeById,
   };

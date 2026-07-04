@@ -18,7 +18,7 @@ export function Chat() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="line-canvas blueprint-backdrop flex h-full min-h-0 overflow-x-hidden bg-[var(--canvas)] max-md:flex-col">
+    <div className="line-canvas blueprint-backdrop flex h-full min-h-0 overflow-x-hidden max-md:flex-col">
       <Sidebar refreshKey={refreshKey} />
       <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {sessionId ? (
@@ -162,6 +162,7 @@ function ChatThread({
     status,
     stop,
     submit,
+    submitFeedback,
     switchToMessage,
     treeById,
   } = useChatThreadController({ detail, onActivity, updateDetail });
@@ -201,6 +202,7 @@ function ChatThread({
             treeById={treeById}
             onSelectSibling={switchToMessage}
             onBranchFrom={branchFromMessage}
+            onFeedback={submitFeedback}
           />
         </div>
       </div>

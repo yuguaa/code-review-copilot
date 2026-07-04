@@ -10,6 +10,7 @@ import {
   loadSessionDetail,
   runReviewCommand,
   sessionExists,
+  submitMessageFeedback,
   switchActiveMessage,
 } from './sessions.service';
 
@@ -64,6 +65,18 @@ sessionRoutes.post('/:id/active-message', async (c) => {
   const tree = await switchActiveMessage(sessionId, messageId);
   if (!tree) return c.json({ error: '消息不存在' }, 404);
   return c.json(tree);
+});
+
+/** 用户反馈某条审查发现：写入消息元数据，并沉淀到仓库级长期记忆。 */
+sessionRoutes.post('/:id/message-feedback', async (c) => {
+  const sessionId = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const result = await submitMessageFeedback(sessionId, body.messageId, body.feedback, body.findingText);
+  if (result.kind === 'missing-message-id') return c.json({ error: '缺少 messageId' }, 400);
+  if (result.kind === 'invalid-feedback') return c.json({ error: '反馈类型无效' }, 400);
+  if (result.kind === 'missing-message') return c.json({ error: '消息不存在' }, 404);
+  if (result.kind === 'missing-repository') return c.json({ error: '当前会话未绑定仓库，无法沉淀长期记忆' }, 400);
+  return c.json(result.tree);
 });
 
 /** 输入框 Slash Command：重新执行当前审查，并按仓库配置发布评论/钉钉。 */

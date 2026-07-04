@@ -8,6 +8,8 @@ describe('session review command route', () => {
     const lifecycleSource = readFileSync(new URL('./session-lifecycle.service.ts', import.meta.url), 'utf8');
 
     expect(routeSource).toContain("sessionRoutes.post('/:id/review-command'");
+    expect(routeSource).toContain("sessionRoutes.post('/:id/message-feedback'");
+    expect(routeSource).toContain('submitMessageFeedback(sessionId, body.messageId, body.feedback, body.findingText)');
     expect(routeSource).toContain('runReviewCommand(sessionId)');
     expect(routeSource).toContain("result.kind === 'invalid-kind'");
     expect(routeSource).toContain("result.kind === 'running'");

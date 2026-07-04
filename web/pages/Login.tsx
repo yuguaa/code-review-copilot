@@ -104,7 +104,7 @@ export function Login() {
     'w-full rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none ring-1 ring-[var(--hairline)] transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
 
   return (
-    <div ref={rootRef} className="line-canvas measure-rails blueprint-backdrop min-h-full bg-[var(--canvas)]">
+    <div ref={rootRef} className="line-canvas measure-rails blueprint-backdrop min-h-full">
       <div className="mx-auto grid min-h-full max-w-6xl items-center gap-12 px-6 py-16 lg:grid-cols-[0.92fr_1.08fr]">
         <div className="mx-auto w-full max-w-md">
           <span data-login-copy className="flex h-12 w-12 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">

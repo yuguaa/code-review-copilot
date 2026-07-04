@@ -13,7 +13,7 @@ export function PageShell({
   maxWidth?: string;
 }) {
   return (
-    <div className="h-full overflow-y-auto bg-[var(--canvas)]">
+    <div className="h-full overflow-y-auto">
       <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-white/70 bg-[rgba(245,247,242,0.9)] px-6 py-4 shadow-[0_18px_42px_-38px_rgba(31,39,34,0.5)] backdrop-blur">
         <Link
           to="/"

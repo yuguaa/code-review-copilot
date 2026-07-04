@@ -47,6 +47,14 @@ export type MessageTreeNode = {
   active: boolean;
 };
 
+export type MessageFeedbackValue = 'up' | 'down';
+
+export type MessageFindingFeedback = {
+  text: string;
+  feedback: MessageFeedbackValue;
+  feedbackAt?: string;
+};
+
 export type RepositoryItem = {
   id: string;
   name: string;

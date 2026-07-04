@@ -28,6 +28,14 @@ export type SessionMessageTree = {
   activePathIds: string[];
 };
 
+export const messageFeedbackValues = ['up', 'down'] as const;
+export type MessageFeedbackValue = (typeof messageFeedbackValues)[number];
+
+export type MessageFeedbackResult =
+  | { kind: 'missing-message' }
+  | { kind: 'missing-repository' }
+  | { kind: 'updated'; tree: SessionMessageTree };
+
 /** 会话 + 仓库（含模型配置），供 chat route / agent 使用。 */
 export function getSessionWithRepository(id: string) {
   return prisma.session.findUnique({
@@ -183,6 +191,47 @@ export async function setActiveMessage(sessionId: string, messageId: string): Pr
   return loadSessionMessageTree(sessionId);
 }
 
+export async function setMessageFeedback(
+  sessionId: string,
+  messageId: string,
+  feedback: MessageFeedbackValue,
+  findingText?: string,
+): Promise<MessageFeedbackResult> {
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, sessionId, role: 'assistant' },
+    include: {
+      session: {
+        select: {
+          repositoryId: true,
+          repository: { select: { memory: true } },
+        },
+      },
+    },
+  });
+  if (!message) return { kind: 'missing-message' };
+  if (!message.session.repositoryId) return { kind: 'missing-repository' };
+
+  const nextParts = applyMessageFeedback(message.parts, feedback, findingText);
+  const memoryEntry = buildFeedbackMemoryEntry({
+    feedback,
+    messageText: normalizeFeedbackText(findingText) || extractPartsText(nextParts),
+  });
+  const nextMemory = mergeFeedbackMemory(message.session.repository?.memory, memoryEntry);
+
+  await prisma.$transaction([
+    prisma.message.update({
+      where: { id: message.id },
+      data: { parts: nextParts as object },
+    }),
+    prisma.repository.update({
+      where: { id: message.session.repositoryId },
+      data: { memory: nextMemory },
+    }),
+  ]);
+
+  return { kind: 'updated', tree: await loadSessionMessageTree(sessionId) };
+}
+
 export function dedupeMessages(messages: UIMessage[]): UIMessage[] {
   const byId = new Map<string, UIMessage>();
 
@@ -241,6 +290,95 @@ export function mergeIncomingUserMessageAtParent(
     : storedMessages;
   if (parentMessageId && baseMessages.length === 0) return storedMessages;
   return mergeIncomingUserMessage(baseMessages, incomingMessages);
+}
+
+export function applyMessageFeedback(parts: unknown, feedback: MessageFeedbackValue, findingText?: string): UIMessage['parts'] {
+  const list = Array.isArray(parts) ? parts : [];
+  const targetText = normalizeFeedbackText(findingText);
+  if (!targetText) {
+    return list.map((part) => {
+      if (!part || typeof part !== 'object') return part;
+      const record = part as Record<string, unknown>;
+      if (record.type !== 'text') return part;
+      return {
+        ...record,
+        feedback,
+        feedbackAt: new Date().toISOString(),
+      };
+    }) as UIMessage['parts'];
+  }
+
+  const textPartIndex = findFeedbackTextPartIndex(list, targetText);
+  const feedbackAt = new Date().toISOString();
+  return list.map((part, index) => {
+    if (!part || typeof part !== 'object') return part;
+    const record = part as Record<string, unknown>;
+    if (record.type !== 'text') return part;
+    if (index !== textPartIndex) return part;
+    const existing = Array.isArray(record.findingFeedbacks) ? record.findingFeedbacks : [];
+    const findingFeedbacks = [
+      ...existing.filter((item) => {
+        const entry = item as { text?: unknown };
+        return entry.text !== targetText;
+      }),
+      { text: targetText, feedback, feedbackAt },
+    ];
+    return {
+      ...record,
+      findingFeedbacks,
+    };
+  }) as UIMessage['parts'];
+}
+
+function findFeedbackTextPartIndex(parts: unknown[], targetText: string): number {
+  const firstTextIndex = parts.findIndex(isTextPart);
+  const matchedIndex = parts.findIndex((part) => {
+    if (!isTextPart(part)) return false;
+    return normalizeFeedbackText(part.text).includes(targetText);
+  });
+  return matchedIndex >= 0 ? matchedIndex : firstTextIndex;
+}
+
+function isTextPart(part: unknown): part is { type: 'text'; text: string } {
+  if (!part || typeof part !== 'object') return false;
+  const record = part as { type?: unknown; text?: unknown };
+  return record.type === 'text' && typeof record.text === 'string';
+}
+
+export function normalizeFeedbackText(text: unknown): string {
+  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+}
+
+export function extractPartsText(parts: unknown): string {
+  if (!Array.isArray(parts)) return '';
+  return parts
+    .map((part) => {
+      const p = part as { type?: unknown; text?: unknown };
+      return p.type === 'text' && typeof p.text === 'string' ? p.text : '';
+    })
+    .join('\n')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function buildFeedbackMemoryEntry({
+  feedback,
+  messageText,
+}: {
+  feedback: MessageFeedbackValue;
+  messageText: string;
+}): string {
+  const label = feedback === 'up' ? '用户认可的审查发现' : '用户否定的审查发现';
+  const text = messageText.length > 360 ? `${messageText.slice(0, 360)}…` : messageText;
+  return `- ${label}：${text || '空文本消息'}`;
+}
+
+export function mergeFeedbackMemory(current: string | null | undefined, entry: string): string {
+  const header = '## 用户反馈沉淀';
+  const body = (current ?? '').trim();
+  if (!body) return `${header}\n${entry}`;
+  if (!body.includes(header)) return `${body}\n\n${header}\n${entry}`;
+  return `${body}\n${entry}`;
 }
 
 function toUIMessage(row: MessageRow): UIMessage {

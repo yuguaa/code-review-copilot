@@ -13,7 +13,7 @@ const AuthContext = createContext<AuthState>({ authed: false, ready: false, refr
 export const useAuth = () => useContext(AuthContext);
 
 function PageFallback() {
-  return <div className="flex h-full items-center justify-center bg-[var(--canvas)] text-sm text-[var(--muted)]">加载中…</div>;
+  return <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">加载中…</div>;
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {

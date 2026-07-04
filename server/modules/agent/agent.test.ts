@@ -229,6 +229,14 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
     expect(text).toContain('审查结论会展示在会话页面');
   });
 
+  it('明确使用用户反馈沉淀指导后续审查', () => {
+    const text = buildInstructions(repo());
+    expect(text).toContain('用户反馈沉淀');
+    expect(text).toContain('用户认可的审查发现');
+    expect(text).toContain('用户否定的审查发现');
+    expect(text).toContain('不要机械复读');
+  });
+
   it('仓库自定义审查要求追加在指令末尾', () => {
     const text = buildInstructions(repo({ defaultReviewPrompt: '重点关注鉴权' }));
     expect(text).toContain('本仓库的额外审查要求');

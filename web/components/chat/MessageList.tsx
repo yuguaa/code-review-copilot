@@ -3,7 +3,7 @@ import Activity from 'lucide-react/dist/esm/icons/activity';
 import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { Message } from '../Message';
-import type { MessageTreeNode, SessionDetail } from '../../lib/types';
+import type { MessageFeedbackValue, MessageTreeNode, SessionDetail } from '../../lib/types';
 
 type MessageListProps = {
   session: SessionDetail['session'];
@@ -14,6 +14,7 @@ type MessageListProps = {
   treeById: Map<string, MessageTreeNode>;
   onSelectSibling: (messageId: string) => void;
   onBranchFrom: (messageId: string) => void;
+  onFeedback: (messageId: string, feedback: MessageFeedbackValue, findingText?: string) => void;
 };
 
 export function MessageList({
@@ -25,6 +26,7 @@ export function MessageList({
   treeById,
   onSelectSibling,
   onBranchFrom,
+  onFeedback,
 }: MessageListProps) {
   const isTriggerFirst = session.kind === 'review' && messages[0]?.role === 'user';
 
@@ -58,6 +60,7 @@ export function MessageList({
           branch={treeById.get(message.id)}
           onSelectSibling={onSelectSibling}
           onBranchFrom={reviewing ? undefined : onBranchFrom}
+          onFeedback={reviewing ? undefined : onFeedback}
         />
       ))}
       {/* 仅在还没有 assistant 消息时显示极简等待；流开始后由最后一条消息承载光标与正文。 */}
