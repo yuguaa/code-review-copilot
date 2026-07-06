@@ -78,13 +78,13 @@ export function MetricCard({
   tone?: 'white' | 'lime' | 'coral' | 'navy';
 }) {
   const content = (
-    <div className="flex min-h-28 items-start justify-between gap-3">
+    <div className="flex min-h-24 items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="eyebrow opacity-70">{label}</p>
-        <p className="mt-3 font-display text-3xl tabular-nums">{value}</p>
+        <p className="mt-2 font-display text-3xl tabular-nums">{value}</p>
         <p className="mt-1 truncate text-xs opacity-70">{hint}</p>
       </div>
-      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-pill)]', tone === 'white' ? 'bg-[var(--surface-card)] text-[var(--ink)]' : 'bg-white/20')}>
+      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-pill)] border', tone === 'white' ? 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--ink)]' : 'border-white/20 bg-white/20')}>
         <Icon size={18} />
       </span>
     </div>
@@ -92,7 +92,7 @@ export function MetricCard({
 
   if (tone === 'white') return <Card className="p-5">{content}</Card>;
   return (
-    <ColorBlock tone={tone} className="p-5">
+    <ColorBlock tone={tone} className="p-5 shadow-[0_18px_42px_-36px_rgba(7,26,18,0.52)]">
       {content}
     </ColorBlock>
   );
@@ -119,7 +119,7 @@ export function SignalCard({
   icon: IconComponent;
 }) {
   return (
-    <div className="rounded-[var(--r-md)] bg-[var(--surface-soft)] p-4">
+    <div className="rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="eyebrow text-[var(--muted)]">{label}</span>
         <Icon size={16} className="text-[var(--muted)]" />

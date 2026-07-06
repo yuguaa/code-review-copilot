@@ -26,7 +26,7 @@ export function GlassSurface({
   return (
     <LiquidGlass
       className={cn(
-        'glass-surface relative overflow-hidden border border-white/70 shadow-[var(--shadow-md)] ring-1 ring-[var(--hairline)]',
+        'glass-surface relative overflow-hidden border border-[var(--line-default)] shadow-[var(--shadow-md)]',
         interactive && 'transition-transform active:translate-y-px active:scale-[0.99]',
         className,
       )}

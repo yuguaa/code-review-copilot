@@ -7,11 +7,11 @@ import SettingsIcon from 'lucide-react/dist/esm/icons/settings';
 export function SidebarNav({ collapsed, onLogout }: { collapsed?: boolean; onLogout: () => void }) {
   const itemClass =
     collapsed
-      ? 'flex min-h-10 items-center justify-center rounded-[var(--r-md)] text-[var(--body)] transition-[background-color,color,transform] hover:bg-[var(--surface-card)] hover:text-[var(--ink)] active:translate-y-px active:scale-[0.99]'
-      : 'flex min-h-10 items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-[background-color,color,transform] hover:bg-[var(--surface-card)] hover:text-[var(--ink)] active:translate-y-px active:scale-[0.99]';
+      ? 'flex min-h-10 items-center justify-center rounded-[var(--r-md)] border border-transparent text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-card)] hover:text-[var(--ink)] active:translate-y-px active:scale-[0.99]'
+      : 'flex min-h-10 items-center gap-2.5 rounded-[var(--r-md)] border border-transparent px-3 py-2 text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-card)] hover:text-[var(--ink)] active:translate-y-px active:scale-[0.99]';
 
   return (
-    <div className="space-y-0.5 border-t border-white/70 bg-[rgba(251,252,248,0.58)] px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-2 max-md:gap-1 max-md:space-y-0">
+    <div className="space-y-0.5 border-t border-[var(--line-default)] bg-[rgba(251,252,248,0.58)] px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-2 max-md:gap-1 max-md:space-y-0">
       <Link
         to="/dashboard"
         title="数据看板"
@@ -36,7 +36,7 @@ export function SidebarNav({ collapsed, onLogout }: { collapsed?: boolean; onLog
       <button
         onClick={onLogout}
         title="退出登录"
-        className={collapsed ? 'flex min-h-10 w-full items-center justify-center rounded-[var(--r-md)] text-[var(--body)] transition-[background-color,color,transform] hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:translate-y-px active:scale-[0.99]' : 'flex min-h-10 w-full items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[var(--body)] transition-[background-color,color,transform] hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:translate-y-px active:scale-[0.99]'}
+        className={collapsed ? 'flex min-h-10 w-full cursor-pointer items-center justify-center rounded-[var(--r-md)] border border-transparent text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--brand-coral)]/25 hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:translate-y-px active:scale-[0.99]' : 'flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-[var(--r-md)] border border-transparent px-3 py-2 text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--brand-coral)]/25 hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:translate-y-px active:scale-[0.99]'}
       >
         <LogOut size={15} /> {!collapsed && '退出登录'}
       </button>

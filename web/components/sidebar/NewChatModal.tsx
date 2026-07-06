@@ -67,7 +67,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
                   'flex cursor-pointer items-center gap-2.5 rounded-[var(--r-md)] border px-3 py-2.5 text-sm transition-colors',
                   selected === r.id
                     ? 'border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--ink)] shadow-[var(--shadow-sm)]'
-                    : 'border-white/70 bg-[var(--surface-card)] text-[var(--body)] ring-1 ring-[var(--hairline)] hover:bg-white',
+                    : 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--body)] hover:border-[var(--line-accent)] hover:bg-white',
                 )}
               >
                 <input

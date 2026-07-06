@@ -17,7 +17,7 @@ export function ModelSettingsForm({
   return (
     <Card className="space-y-4">
       <h2 className="font-display text-lg text-[var(--ink)]">全局模型配置</h2>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid gap-3 md:grid-cols-3">
         <Field label="模型 Provider">
           <Select value={modelForm.provider} onChange={(event) => onModelChange('provider', event.target.value)}>
             <option value="openai">openai</option>
@@ -32,7 +32,7 @@ export function ModelSettingsForm({
           <Input type="number" value={modelForm.maxSteps} onChange={(event) => onModelChange('maxSteps', Number(event.target.value))} />
         </Field>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
         <Field label="API Key">
           <Input type="password" value={modelForm.apiKey} onChange={(event) => onModelChange('apiKey', event.target.value)} />
         </Field>
@@ -58,25 +58,25 @@ export function ModelList({
   onRemove: (model: AIModel) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="line-list">
       {models.map((model) =>
         model.isDefault ? (
-          <ColorBlock key={model.id} tone="navy" className="flex items-center gap-3 p-5">
+          <ColorBlock key={model.id} tone="navy" className="flex items-center gap-3 rounded-none border-0 p-5 shadow-none max-md:flex-col max-md:items-stretch">
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-2 truncate text-sm font-semibold">
                 {model.provider}/{model.modelId}
-                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px]">默认</span>
+                <span className="rounded-full border border-white/25 bg-white/20 px-2 py-0.5 text-[11px]">默认</span>
               </p>
               <p className="text-[11px] opacity-70">
                 Key {model.hasApiKey ? '已配置' : '缺失'} · 最大步数 {model.maxSteps} · {model.isActive ? '启用' : '停用'}
               </p>
             </div>
-            <Button variant="danger" onClick={() => onRemove(model)}>
+            <Button variant="danger" className="max-md:w-full" onClick={() => onRemove(model)}>
               删除
             </Button>
           </ColorBlock>
         ) : (
-          <Card key={model.id} className="flex items-center gap-3">
+          <Card key={model.id} className="flex items-center gap-3 rounded-none border-0 p-5 shadow-none max-md:flex-col max-md:items-stretch">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-[var(--ink)]">
                 {model.provider}/{model.modelId}
@@ -85,12 +85,14 @@ export function ModelList({
                 Key {model.hasApiKey ? '已配置' : '缺失'} · 最大步数 {model.maxSteps} · {model.isActive ? '启用' : '停用'}
               </p>
             </div>
-            <Button variant="secondary" onClick={() => onSetDefault(model.id)}>
-              设默认
-            </Button>
-            <Button variant="danger" onClick={() => onRemove(model)}>
-              删除
-            </Button>
+            <div className="flex shrink-0 gap-2 border-l border-[var(--line-subtle)] pl-4 max-md:border-l-0 max-md:border-t max-md:pt-3 max-md:pl-0">
+              <Button variant="secondary" onClick={() => onSetDefault(model.id)}>
+                设默认
+              </Button>
+              <Button variant="danger" onClick={() => onRemove(model)}>
+                删除
+              </Button>
+            </div>
           </Card>
         ),
       )}

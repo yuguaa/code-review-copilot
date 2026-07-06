@@ -51,21 +51,23 @@ export function GitLabAccountList({
   onRemove: (account: Account) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="line-list">
       {accounts.map((account) => (
-        <Card key={account.id} className="flex items-center gap-3">
+        <Card key={account.id} className="flex items-center gap-3 rounded-none border-0 p-5 shadow-none max-md:flex-col max-md:items-stretch">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm text-[var(--ink)]">{account.url}</p>
             <p className="text-[11px] text-[var(--muted)]">
               令牌 {account.hasAccessToken ? '已配置' : '缺失'} · Webhook 密钥 {account.hasWebhookSecret ? '已配置' : '未配置'}
             </p>
           </div>
-          <Button variant="secondary" onClick={() => onTest(account.id)}>
-            测试连接
-          </Button>
-          <Button variant="danger" onClick={() => onRemove(account)}>
-            删除
-          </Button>
+          <div className="flex shrink-0 gap-2 border-l border-[var(--line-subtle)] pl-4 max-md:border-l-0 max-md:border-t max-md:pt-3 max-md:pl-0">
+            <Button variant="secondary" onClick={() => onTest(account.id)}>
+              测试连接
+            </Button>
+            <Button variant="danger" onClick={() => onRemove(account)}>
+              删除
+            </Button>
+          </div>
         </Card>
       ))}
       {accounts.length === 0 && <p className="text-center text-xs text-[var(--muted)]">还没有 GitLab 账号</p>}

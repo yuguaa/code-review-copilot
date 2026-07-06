@@ -64,7 +64,7 @@ export function SessionList({
           <div
             key={s.id}
             className={cn(
-              'sidebar-session-row group relative overflow-hidden transition-[background-color,box-shadow,transform]',
+              'sidebar-session-row group relative overflow-hidden transition-[background-color,border-color,box-shadow,transform]',
               active ? 'is-active' : 'hover:bg-white/48',
             )}
           >
@@ -73,7 +73,7 @@ export function SessionList({
               onClick={() => onSelect(s.id)}
               title={sessionLabel(s)}
               className={cn(
-                'grid w-full items-center rounded-[var(--r-md)] text-left transition-transform active:scale-[0.99]',
+                'grid w-full cursor-pointer items-center rounded-[var(--r-md)] text-left transition-transform active:scale-[0.99]',
                 collapsed ? 'h-10 grid-cols-1 place-items-center px-0 py-0' : 'grid-cols-[auto_minmax(0,1fr)_auto] gap-2.5 px-3 py-2.5 pr-8',
               )}
             >

@@ -52,12 +52,12 @@ export function DashboardVisualSections({ data, statusChart, authorChart, reposi
         />
       </Suspense>
 
-      <div className="grid gap-6 xl:grid-cols-[0.72fr_1.28fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.72fr_1.28fr]">
         <PeopleSignalGrid peopleSignals={data.peopleSignals} />
         <AuthorDetailsTable authors={data.authors} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <FailureSamples failures={data.failures} />
         <RecentActivity recent={data.recent} />
       </div>

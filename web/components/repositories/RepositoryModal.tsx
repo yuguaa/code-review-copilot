@@ -67,12 +67,12 @@ export function RepositoryModal({
             </div>
           </Field>
           {projects.length > 0 && (
-            <div className="max-h-48 space-y-1 overflow-y-auto rounded-[var(--r-md)] bg-[var(--surface-card)] p-1 ring-1 ring-[var(--hairline)]">
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] p-1">
               {projects.map((project) => (
                 <button
                   key={project.id}
                   onClick={() => pickProject(project)}
-                  className="block w-full rounded-[var(--r-sm)] px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color,transform] hover:bg-white hover:text-[var(--ink)] active:scale-[0.99]"
+                  className="block w-full cursor-pointer rounded-[var(--r-sm)] border border-transparent px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color,border-color,transform] hover:border-[var(--line-subtle)] hover:bg-white hover:text-[var(--ink)] active:scale-[0.99]"
                 >
                   {project.path} <span className="text-[var(--muted-soft)]">#{project.id}</span>
                 </button>
@@ -162,7 +162,7 @@ export function RepositoryModal({
             </p>
           </div>
 
-          <div className="space-y-4 rounded-[var(--r-md)] bg-[var(--surface-soft)] p-4">
+          <div className="space-y-4 rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] p-4">
             <div>
               <h3 className="font-display text-sm text-[var(--ink)]">仓库 Tools / Skills</h3>
               <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
@@ -205,7 +205,7 @@ export function RepositoryModal({
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-white/70 pt-4">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--line-default)] pt-4">
             <Button variant="secondary" onClick={closeModal} type="button" disabled={saving}>
               取消
             </Button>

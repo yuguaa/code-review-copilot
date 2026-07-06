@@ -47,7 +47,7 @@ export function MessageBubble({
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
             isUser
               ? 'bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
-              : 'assistant-message px-5 py-4 text-[var(--body-strong)] shadow-[0_10px_28px_-24px_rgba(31,39,34,0.36)] ring-1 ring-[rgba(31,39,34,0.055)]',
+              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[0_10px_28px_-24px_rgba(31,39,34,0.36)]',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
@@ -65,14 +65,14 @@ export function MessageBubble({
         <div className={cn('flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
           <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
           {canFeedback && (
-            <span className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-white/70 bg-[var(--surface-card)] px-1 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">
+            <span className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">
               <button
                 type="button"
                 onClick={() => onFeedback?.(message.id, 'up')}
                 aria-label="认可这条发现"
                 title="认可这条发现"
                 className={cn(
-                  'rounded-[var(--r-pill)] p-1 transition-[background-color,color,transform] hover:bg-white active:scale-95',
+                  'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
                   feedback === 'up' ? 'bg-[var(--brand-mint)] text-[var(--ink)]' : 'text-[var(--muted)]',
                 )}
               >
@@ -84,7 +84,7 @@ export function MessageBubble({
                 aria-label="否定这条发现"
                 title="否定这条发现"
                 className={cn(
-                  'rounded-[var(--r-pill)] p-1 transition-[background-color,color,transform] hover:bg-white active:scale-95',
+                  'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
                   feedback === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',
                 )}
               >
@@ -96,7 +96,7 @@ export function MessageBubble({
             <button
               type="button"
               onClick={() => onBranchFrom?.(message.id)}
-              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-white/70 bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,transform] hover:bg-white active:scale-95"
+              className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-white active:scale-95"
               title={isUser ? '重新回答' : '从这里继续'}
             >
               {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}

@@ -26,7 +26,7 @@ export function AuthorDetailsTable({ authors }: { authors: DashboardBucket[] }) 
     <Card className="space-y-5">
       <SectionTitle title="人员明细" meta="用于定位高频触发者与风险集中点" />
       <div className="overflow-x-auto">
-        <div className="min-w-[760px] divide-y divide-[var(--hairline)]">
+        <div className="min-w-[760px] divide-y divide-[var(--line-subtle)]">
           <div className="grid grid-cols-[2.1fr_0.7fr_0.7fr_0.8fr_0.8fr_1.4fr] gap-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
             <span>人员</span>
             <span>会话</span>
@@ -39,7 +39,7 @@ export function AuthorDetailsTable({ authors }: { authors: DashboardBucket[] }) 
             <div key={author.key} className="dashboard-list-item grid grid-cols-[2.1fr_0.7fr_0.7fr_0.8fr_0.8fr_1.4fr] items-center gap-3 py-3 text-sm">
               <span className="flex min-w-0 items-center gap-3">
                 <span className="caption w-6 shrink-0 text-[var(--muted)]">{String(index + 1).padStart(2, '0')}</span>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--surface-card)] text-[var(--ink)]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--ink)]">
                   <UserRound size={14} />
                 </span>
                 <span className="min-w-0">

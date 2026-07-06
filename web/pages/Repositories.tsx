@@ -21,7 +21,7 @@ export function Repositories() {
   };
 
   return (
-    <PageShell title="仓库配置">
+    <PageShell title="仓库配置" maxWidth="max-w-6xl">
       <WebhookIntro webhookUrl={webhookUrl} onAdd={page.openAdd} />
       <RepositoryModal
         accounts={page.accounts}

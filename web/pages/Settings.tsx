@@ -64,7 +64,7 @@ export function Settings() {
   };
 
   return (
-    <PageShell title="设置">
+    <PageShell title="设置" maxWidth="max-w-6xl">
       <SettingsStatsGrid stats={stats} />
       <ToolSkillSettingsCard
         tools={tools}

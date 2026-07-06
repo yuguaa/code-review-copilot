@@ -20,12 +20,12 @@ export function DashboardChartSections({
 }: DashboardChartSectionsProps) {
   return (
     <>
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
         <TrendChartCard timeline={timeline} generatedAt={generatedAt} />
         <StatusChartCard statusChart={statusChart} failureRate={failureRate} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.28fr_0.72fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.28fr_0.72fr]">
         <AuthorRiskChartCard authorChart={authorChart} />
         <RepositoryHeatChartCard repositoryChart={repositoryChart} />
       </div>

@@ -106,7 +106,7 @@ function ChatEmptyState() {
             <div
               key={item}
               data-empty-step
-              className="flex items-center justify-between rounded-[var(--r-md)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)] ring-1 ring-[var(--hairline)]"
+              className="flex items-center justify-between rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)]"
             >
               <span>{item}</span>
               <span data-empty-dot className="h-2 w-2 rounded-full bg-[var(--accent)]" />
@@ -208,7 +208,7 @@ function ChatThread({
       </div>
 
       <div className="composer-dock z-10 px-4 py-4 max-md:px-3 max-md:py-3">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-[860px]">
           <LazyComposer
             placeholder={
               reviewing

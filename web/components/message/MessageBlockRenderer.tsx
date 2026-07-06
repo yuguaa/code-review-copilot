@@ -60,7 +60,7 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
   const streaming = record.state === 'streaming';
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-white/80 bg-[rgba(251,252,248,0.82)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(251,252,248,0.82)] text-xs shadow-[var(--shadow-sm)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -70,7 +70,7 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
         <span className="caption truncate">REASONING{text && !open ? ` · ${text.slice(0, 72)}` : ''}</span>
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
-      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-white/70 bg-[rgba(238,242,236,0.76)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
+      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-[var(--line-subtle)] bg-[rgba(238,242,236,0.76)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
     </div>
   );
 }
@@ -81,7 +81,7 @@ function JsonPanel({ label, value, strong }: { label: string; value: unknown; st
       <span className="caption text-[var(--muted-soft)]">{label}</span>
       <pre
         className={cn(
-          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[rgba(238,242,236,0.72)] px-3 py-2.5 font-mono text-[11px] leading-relaxed ring-1 ring-[var(--hairline)]',
+          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-[rgba(238,242,236,0.72)] px-3 py-2.5 font-mono text-[11px] leading-relaxed',
           strong ? 'text-[var(--body-strong)]' : 'text-[var(--body)]',
         )}
       >
@@ -100,7 +100,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
   const running = !done && !errored;
   const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-white/80 bg-[rgba(251,252,248,0.84)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(251,252,248,0.84)] text-xs shadow-[var(--shadow-sm)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -115,7 +115,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="space-y-2 border-t border-white/70 bg-[rgba(238,242,236,0.72)] px-3 py-2.5">
+        <div className="space-y-2 border-t border-[var(--line-subtle)] bg-[rgba(238,242,236,0.72)] px-3 py-2.5">
           {record.input != null && <JsonPanel label="INPUT" value={record.input} />}
           {record.output != null && <JsonPanel label="OUTPUT" value={record.output} strong />}
           {errored && record.errorText != null && <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>}
@@ -128,7 +128,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
 function UnknownBlock({ part }: { part: MessagePart }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="overflow-hidden rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-soft)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] text-xs shadow-[var(--shadow-sm)]">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--muted)] transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]">
         <CircleDashed size={13} className="shrink-0" />
         <span className="caption truncate">{String(part.type)}</span>
@@ -163,11 +163,11 @@ export function MessageBlockRenderer({
           <MarkdownBlock text={part.text} streaming={isStreaming} />
         </Suspense>
         {messageId && onFindingFeedback && findings.length > 0 && (
-          <div className="mt-3 space-y-1.5 border-t border-white/70 pt-3">
+          <div className="mt-3 space-y-1.5 border-t border-[var(--line-subtle)] pt-3">
             {findings.map((finding) => (
               <div
                 key={finding.id}
-                className="flex items-start gap-2 rounded-[var(--r-sm)] bg-white/45 px-2.5 py-2 ring-1 ring-[var(--hairline)]"
+                className="flex items-start gap-2 rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-white/45 px-2.5 py-2"
               >
                 <span className="caption mt-0.5 shrink-0 text-[var(--muted-soft)]">{finding.severity}</span>
                 <p className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--body)]">{finding.text}</p>
@@ -211,7 +211,7 @@ function FindingFeedbackButtons({
         aria-label="认可这条发现"
         title="认可这条发现"
         className={cn(
-          'rounded-[var(--r-pill)] p-1 transition-[background-color,color,transform] hover:bg-white active:scale-95',
+          'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
           value === 'up' ? 'bg-[var(--brand-mint)] text-[var(--ink)]' : 'text-[var(--muted)]',
         )}
       >
@@ -223,7 +223,7 @@ function FindingFeedbackButtons({
         aria-label="否定这条发现"
         title="否定这条发现"
         className={cn(
-          'rounded-[var(--r-pill)] p-1 transition-[background-color,color,transform] hover:bg-white active:scale-95',
+          'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
           value === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',
         )}
       >

@@ -43,11 +43,11 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
   const statusView = statusViewByStatus[session.status as keyof typeof statusViewByStatus] ?? {
     label: session.status,
     icon: CircleDashed,
-    className: 'border-[var(--hairline)] bg-[var(--surface-card)] text-[var(--muted)]',
+    className: 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--muted)]',
   };
   const StatusIcon = statusView.icon;
   const pill =
-    'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] border border-white/70 bg-[var(--surface-card)] px-2.5 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
+    'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2.5 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
 
   return (
     <header className="chat-header sticky top-0 z-10 px-5 py-3 max-md:px-4">
@@ -84,7 +84,7 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
               href={session.webUrl}
               target="_blank"
               rel="noreferrer"
-              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[rgba(255,255,255,0.2)] bg-[var(--primary)] px-2.5 py-1 text-white shadow-[0_12px_24px_-18px_rgba(7,26,18,0.72)] transition-[background-color,transform] hover:bg-[var(--body-strong)] active:scale-95"
+              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] px-2.5 py-1 text-white shadow-[0_12px_24px_-18px_rgba(7,26,18,0.72)] transition-[background-color,transform] hover:bg-[var(--body-strong)] active:scale-95"
             >
               <ExternalLink size={12} /> GitLab
             </a>

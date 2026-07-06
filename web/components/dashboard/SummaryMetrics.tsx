@@ -7,7 +7,7 @@ import { MetricCard } from './DashboardPrimitives';
 
 export function SummaryMetrics({ summary, windowDays }: { summary: DashboardSummary; windowDays: number }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <MetricCard label="会话总量" value={summary.total} hint={`${windowDays} 天 · 审查 ${summary.reviewTotal} / 对话 ${summary.chatTotal}`} icon={BarChart3} tone="lime" />
       <MetricCard
         label="成功率"

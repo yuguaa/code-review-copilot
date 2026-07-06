@@ -45,8 +45,10 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   const sidebarClass = collapsed
-    ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[rgba(7,26,18,0.12)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
-    : 'sidebar-shell z-20 flex h-full w-[304px] shrink-0 flex-col border-r border-[rgba(7,26,18,0.12)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
+    ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[var(--line-default)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
+    : 'sidebar-shell z-20 flex h-full w-[304px] shrink-0 flex-col border-r border-[var(--line-default)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
+  const collapseTitle = collapsed ? '展开侧边栏' : '折叠侧边栏';
+  const collapseIcon = collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />;
 
   return (
     <aside className={sidebarClass}>
@@ -56,43 +58,56 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
             <span className="sidebar-logo flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] text-white">
               <ScanSearch size={16} />
             </span>
-            {!collapsed && <div className="min-w-0">
-              <span className="font-display block truncate text-[14px] text-[var(--ink)]">代码审查工作台</span>
-              <span className="caption block truncate text-[var(--muted)]">Review Console</span>
-            </div>}
+            {!collapsed && (
+              <div className="min-w-0">
+                <span className="font-display block truncate text-[14px] text-[var(--ink)]">代码审查工作台</span>
+                <span className="caption block truncate text-[var(--muted)]">Review Console</span>
+              </div>
+            )}
           </div>
           {!collapsed && (
-          <button
-            onClick={() => setNewChatOpen(true)}
-            title="新对话"
-            aria-label="新对话"
-            className="sidebar-action-button flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:translate-y-px active:scale-95"
-          >
-            <MessageSquarePlus size={17} />
-          </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCollapsed(true)}
+                title={collapseTitle}
+                aria-label={collapseTitle}
+                className="flex h-9 w-9 items-center justify-center rounded-[var(--r-md)] border border-[var(--line-default)] bg-white/42 text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-white/76 hover:text-[var(--ink)] active:scale-95"
+              >
+                {collapseIcon}
+              </button>
+              <button
+                onClick={() => setNewChatOpen(true)}
+                title="新对话"
+                aria-label="新对话"
+                className="sidebar-action-button flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:translate-y-px active:scale-95"
+              >
+                <MessageSquarePlus size={16} />
+              </button>
+            </div>
           )}
         </div>
-        <div className={collapsed ? 'mt-3 grid gap-2' : 'mt-3 flex items-center gap-2'}>
-          {collapsed && (
+        {collapsed && (
+          <div className="mt-3 grid place-items-center gap-2">
             <button
               onClick={() => setNewChatOpen(true)}
               title="新对话"
               aria-label="新对话"
-              className="sidebar-action-button flex h-9 w-full items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:scale-95"
+              className="sidebar-action-button flex h-10 w-10 items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:scale-95"
             >
-              <MessageSquarePlus size={15} />
+              <MessageSquarePlus size={16} />
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setCollapsed((value) => !value)}
-            title={collapsed ? '展开侧边栏' : '折叠侧边栏'}
-            aria-label={collapsed ? '展开侧边栏' : '折叠侧边栏'}
-            className="flex h-9 flex-1 items-center justify-center rounded-[var(--r-md)] border border-[rgba(7,26,18,0.08)] bg-white/42 text-[var(--muted)] transition-[background-color,color,transform] hover:bg-white/76 hover:text-[var(--ink)] active:scale-95"
-          >
-            {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              title={collapseTitle}
+              aria-label={collapseTitle}
+              className="flex h-10 w-10 items-center justify-center rounded-[var(--r-md)] border border-[var(--line-default)] bg-white/42 text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-white/76 hover:text-[var(--ink)] active:scale-95"
+            >
+              {collapseIcon}
+            </button>
+          </div>
+        )}
       </div>
 
       <SessionList

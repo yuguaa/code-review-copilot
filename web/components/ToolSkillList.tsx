@@ -42,7 +42,7 @@ export function ToolSkillList({
         {items.map((item) => (
           <label
             key={item.key}
-            className="flex cursor-pointer items-start gap-2 rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)] transition-[background-color,transform] hover:bg-white active:scale-[0.99]"
+            className="flex cursor-pointer items-start gap-2 rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-white active:scale-[0.99]"
           >
             <input
               type="checkbox"
@@ -53,11 +53,11 @@ export function ToolSkillList({
             <span className="min-w-0">
               <span className="flex flex-wrap items-center gap-1.5">
                 <span className="text-sm font-semibold text-[var(--ink)]">{item.name}</span>
-                <span className="caption rounded-[var(--r-pill)] bg-[var(--surface-card)] px-1.5 py-0.5 text-[var(--muted)]">
+                <span className="line-tag caption rounded-[var(--r-pill)] bg-[var(--surface-card)] px-1.5 py-0.5 text-[var(--muted)]">
                   {item.category ?? item.mode ?? item.key}
                 </span>
                 {item.defaultEnabled && (
-                  <span className="caption rounded-[var(--r-pill)] bg-[var(--brand-mint)] px-1.5 py-0.5 text-[var(--ink)]">
+                  <span className="line-tag caption rounded-[var(--r-pill)] bg-[var(--brand-mint)] px-1.5 py-0.5 text-[var(--ink)]">
                     {defaultLabel}
                   </span>
                 )}

@@ -101,7 +101,7 @@ export function Login() {
   };
 
   const fieldClass =
-    'w-full rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none ring-1 ring-[var(--hairline)] transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
+    'w-full rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
 
   return (
     <div ref={rootRef} className="line-canvas measure-rails blueprint-backdrop min-h-full">

@@ -14,7 +14,7 @@ export function FailureSamples({ failures }: { failures: FailureItem[] }) {
       <SectionTitle title="失败样本" meta="最近 8 条" />
       <div className="space-y-3">
         {failures.map((failure) => (
-          <Link key={failure.id} to={`/c/${failure.id}`} className="dashboard-list-item block rounded-[var(--r-md)] bg-[var(--brand-coral)]/8 px-3 py-3 transition-[background-color,transform] hover:bg-[var(--brand-coral)]/12 active:scale-[0.99]">
+          <Link key={failure.id} to={`/c/${failure.id}`} className="dashboard-list-item block rounded-[var(--r-md)] border border-[var(--brand-coral)]/20 bg-[var(--brand-coral)]/8 px-3 py-3 transition-[background-color,border-color,transform] hover:border-[var(--brand-coral)]/35 hover:bg-[var(--brand-coral)]/12 active:scale-[0.99]">
             <div className="flex items-center gap-2 text-sm font-semibold text-[var(--brand-coral)]">
               <AlertCircle size={15} />
               <span className="min-w-0 flex-1 truncate">{failure.title}</span>
@@ -35,10 +35,10 @@ export function RecentActivity({ recent }: { recent: RecentItem[] }) {
   return (
     <Card className="space-y-4">
       <SectionTitle title="最近活动" meta="最新 12 条会话" />
-      <div className="divide-y divide-[var(--hairline)]">
+      <div className="divide-y divide-[var(--line-subtle)]">
         {recent.map((item) => (
           <Link key={item.id} to={`/c/${item.id}`} className="dashboard-list-item grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 py-3 transition-[background-color,transform] hover:bg-[var(--surface-soft)] active:scale-[0.99] max-md:grid-cols-[auto_minmax(0,1fr)]">
-            <span className={cn('mt-0.5 flex h-8 w-8 items-center justify-center rounded-[var(--r-pill)]', statusColor[item.status] ?? 'bg-[var(--surface-card)] text-[var(--muted)]')}>
+            <span className={cn('mt-0.5 flex h-8 w-8 items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-default)]', statusColor[item.status] ?? 'bg-[var(--surface-card)] text-[var(--muted)]')}>
               {item.status === 'failed' ? <AlertCircle size={15} /> : item.status === 'running' ? <Clock3 size={15} /> : <CheckCircle2 size={15} />}
             </span>
             <span className="min-w-0">

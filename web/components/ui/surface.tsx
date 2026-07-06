@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/cn';
-import { GlassSurface } from './glass-surface';
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <GlassSurface className="rounded-[var(--r-lg)]" contentClassName={cn('p-6', className)} radius={12}>
+    <div className={cn('tech-panel rounded-[var(--r-lg)] p-6', className)}>
       {children}
-    </GlassSurface>
+    </div>
   );
 }
 
@@ -33,8 +32,11 @@ export function ColorBlock({
   const surface = COLOR_BLOCK_SURFACE[tone];
   return (
     <div
-      className={cn('rounded-[var(--r-xl)] p-8', surface.dark ? 'text-white' : 'text-[var(--ink)]', className)}
-      style={{ backgroundColor: surface.bg }}
+      className={cn('tech-panel rounded-[var(--r-lg)] p-8', surface.dark ? 'is-dark text-white' : 'text-[var(--ink)]', className)}
+      style={{
+        backgroundColor: surface.bg,
+        borderColor: surface.dark ? 'var(--line-strong)' : 'var(--line-default)',
+      }}
     >
       {children}
     </div>
@@ -49,7 +51,7 @@ export function BadgePill({ children, className }: { children: ReactNode; classN
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-soft)] px-2.5 py-1 text-[13px] font-medium text-[var(--body-strong)] ring-1 ring-[var(--hairline)]',
+        'line-tag inline-flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-soft)] px-2.5 py-1 text-[13px] font-medium text-[var(--body-strong)]',
         className,
       )}
     >

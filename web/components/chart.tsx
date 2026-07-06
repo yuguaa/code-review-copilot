@@ -49,7 +49,7 @@ export function ChartContainer({
         data-slot="chart"
         data-chart={chartId}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-[var(--muted)] [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-[var(--hairline)] [&_.recharts-curve.recharts-tooltip-cursor]:stroke-[var(--hairline)] [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-[var(--hairline)] [&_.recharts-radial-bar-background-sector]:fill-[var(--surface-card)] [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-[var(--surface-card)] [&_.recharts-reference-line_[stroke='#ccc']]:stroke-[var(--hairline)] [&_.recharts-sector]:outline-none [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-none",
+          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-[var(--muted)] [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-[var(--line-subtle)] [&_.recharts-curve.recharts-tooltip-cursor]:stroke-[var(--line-accent)] [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-[var(--line-subtle)] [&_.recharts-radial-bar-background-sector]:fill-[var(--surface-card)] [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-[var(--surface-soft)] [&_.recharts-reference-line_[stroke='#ccc']]:stroke-[var(--line-default)] [&_.recharts-sector]:outline-none [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-none",
           className,
         )}
         {...props}
@@ -134,7 +134,7 @@ export function ChartTooltipContent({
   return (
     <div
       className={cn(
-        'grid min-w-32 items-start gap-1.5 rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] px-2.5 py-1.5 text-xs text-[var(--ink)] shadow-[var(--shadow-md)] ring-1 ring-[var(--hairline)]',
+        'grid min-w-32 items-start gap-1.5 rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2.5 py-1.5 text-xs text-[var(--ink)] shadow-[var(--shadow-md)]',
         className,
       )}
     >
