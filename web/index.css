@@ -521,6 +521,54 @@ a:focus-visible {
 .markdown-body > :first-child {
   margin-top: 0;
 }
+
+.streamdown-body [data-streamdown='code-block'] {
+  overflow: hidden;
+  gap: 0;
+  border: 1px solid rgba(7, 26, 18, 0.14);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(180deg, rgba(8, 35, 24, 0.98), rgba(11, 31, 23, 0.98)),
+    var(--surface-dark);
+  box-shadow:
+    0 22px 54px -38px rgba(7, 26, 18, 0.84),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.streamdown-body [data-streamdown='code-block-header'] {
+  height: 34px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(90deg, rgba(23, 77, 53, 0.28), transparent 54%),
+    rgba(255, 255, 255, 0.035);
+  color: rgba(226, 239, 229, 0.74);
+}
+
+.streamdown-body [data-streamdown='code-block-actions'] {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(8, 35, 24, 0.74);
+  color: rgba(226, 239, 229, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.streamdown-body [data-streamdown='code-block-body'] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(226, 239, 229, 0.9);
+  font-size: 0.8125rem;
+  line-height: 1.66;
+  padding: 1rem;
+}
+
+.streamdown-body [data-streamdown='code-block-body'] pre,
+.streamdown-body [data-streamdown='code-block-body'] code {
+  font-family: var(--font-mono);
+}
+
+.streamdown-body [data-streamdown='code-block-body'] code > span::before {
+  color: rgba(178, 196, 184, 0.42);
+}
 .streamdown-body > :last-child,
 .markdown-body > :last-child {
   margin-bottom: 0;
