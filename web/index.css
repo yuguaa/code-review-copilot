@@ -651,8 +651,13 @@ a:focus-visible {
   opacity: 0.52;
 }
 
-.composer-shell > * {
+.composer-shell > :not(.command-palette) {
   position: relative;
+}
+
+.composer-shell > .command-palette {
+  position: absolute;
+  z-index: 30;
 }
 
 .composer-editor p {
