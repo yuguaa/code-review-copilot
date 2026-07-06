@@ -45,15 +45,15 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   const sidebarClass = collapsed
-    ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[rgba(7,26,18,0.12)] bg-[rgba(238,243,238,0.92)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
-    : 'sidebar-shell z-20 flex h-full w-[308px] shrink-0 flex-col border-r border-[rgba(7,26,18,0.12)] bg-[rgba(238,243,238,0.92)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
+    ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[rgba(7,26,18,0.12)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
+    : 'sidebar-shell z-20 flex h-full w-[304px] shrink-0 flex-col border-r border-[rgba(7,26,18,0.12)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
 
   return (
     <aside className={sidebarClass}>
-      <div className="px-3 pb-2.5 pt-3">
+      <div className="sidebar-brand px-3 pb-2.5 pt-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[0_14px_32px_-18px_rgba(7,26,18,0.74)] ring-1 ring-white/15">
+            <span className="sidebar-logo flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] text-white">
               <ScanSearch size={16} />
             </span>
             {!collapsed && <div className="min-w-0">
@@ -66,7 +66,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
             onClick={() => setNewChatOpen(true)}
             title="新对话"
             aria-label="新对话"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[0_16px_34px_-20px_rgba(7,26,18,0.7)] transition-[opacity,transform,background-color] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
+            className="sidebar-action-button flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:translate-y-px active:scale-95"
           >
             <MessageSquarePlus size={17} />
           </button>
@@ -78,7 +78,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
               onClick={() => setNewChatOpen(true)}
               title="新对话"
               aria-label="新对话"
-              className="flex h-9 w-full items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[0_14px_28px_-20px_rgba(7,26,18,0.74)] transition-[opacity,transform,background-color] hover:bg-[var(--body-strong)] active:scale-95"
+              className="sidebar-action-button flex h-9 w-full items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:scale-95"
             >
               <MessageSquarePlus size={15} />
             </button>
@@ -88,7 +88,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
             onClick={() => setCollapsed((value) => !value)}
             title={collapsed ? '展开侧边栏' : '折叠侧边栏'}
             aria-label={collapsed ? '展开侧边栏' : '折叠侧边栏'}
-            className="flex h-9 flex-1 items-center justify-center rounded-[var(--r-md)] border border-[rgba(7,26,18,0.08)] bg-white/62 text-[var(--muted)] shadow-[var(--shadow-sm)] transition-[background-color,color,transform] hover:bg-white hover:text-[var(--ink)] active:scale-95"
+            className="flex h-9 flex-1 items-center justify-center rounded-[var(--r-md)] border border-[rgba(7,26,18,0.08)] bg-white/42 text-[var(--muted)] transition-[background-color,color,transform] hover:bg-white/76 hover:text-[var(--ink)] active:scale-95"
           >
             {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
           </button>

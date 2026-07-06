@@ -91,10 +91,13 @@ body {
 
 #root::before {
   background:
-    radial-gradient(circle at 12% -8%, rgba(23, 77, 53, 0.12), transparent 26rem),
-    radial-gradient(circle at 88% 8%, rgba(8, 35, 24, 0.09), transparent 28rem),
-    linear-gradient(180deg, rgba(247, 250, 247, 0.96), rgba(241, 247, 241, 0.94));
+    radial-gradient(circle at 10% -8%, rgba(23, 77, 53, 0.13), transparent 25rem),
+    radial-gradient(circle at 86% 0%, rgba(8, 35, 24, 0.11), transparent 30rem),
+    radial-gradient(circle at 74% 76%, rgba(23, 77, 53, 0.06), transparent 24rem),
+    linear-gradient(180deg, rgba(247, 250, 247, 0.96), rgba(238, 246, 238, 0.94));
   background-size:
+    auto,
+    auto,
     auto,
     auto;
 }
@@ -238,9 +241,9 @@ a:focus-visible {
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(circle at 78% 18%, rgba(23, 77, 53, 0.09), transparent 24rem),
-    radial-gradient(circle at 48% 92%, rgba(8, 35, 24, 0.055), transparent 26rem),
-    linear-gradient(180deg, rgba(248, 251, 248, 0.98), rgba(240, 247, 240, 0.94));
+    radial-gradient(circle at 74% 16%, rgba(23, 77, 53, 0.1), transparent 25rem),
+    radial-gradient(circle at 52% 96%, rgba(8, 35, 24, 0.06), transparent 26rem),
+    linear-gradient(180deg, rgba(248, 251, 248, 0.98), rgba(238, 246, 238, 0.94));
 }
 
 .review-workbench {
@@ -252,18 +255,20 @@ a:focus-visible {
   content: '';
   position: absolute;
   inset: 0 0 0 auto;
-  width: min(28vw, 420px);
+  width: min(34vw, 560px);
   z-index: -1;
   background:
-    linear-gradient(90deg, transparent, rgba(8, 35, 24, 0.035)),
-    radial-gradient(circle at 70% 18%, rgba(23, 77, 53, 0.14), transparent 18rem);
-  opacity: 0.9;
+    linear-gradient(90deg, transparent, rgba(8, 35, 24, 0.045)),
+    radial-gradient(circle at 58% 14%, rgba(23, 77, 53, 0.16), transparent 19rem),
+    linear-gradient(180deg, transparent 0 58%, rgba(8, 35, 24, 0.04));
+  opacity: 0.88;
 }
 
 .chat-main {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(247, 250, 247, 0.88)),
-    rgba(247, 250, 247, 0.82);
+    radial-gradient(circle at 74% 8%, rgba(8, 35, 24, 0.055), transparent 26rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(245, 250, 245, 0.9)),
+    rgba(247, 250, 247, 0.84);
 }
 
 .chat-header {
@@ -277,6 +282,12 @@ a:focus-visible {
 
 .sidebar-shell {
   position: relative;
+  background:
+    linear-gradient(180deg, rgba(245, 249, 245, 0.94), rgba(232, 241, 232, 0.88)),
+    rgba(238, 243, 238, 0.9);
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, 0.54),
+    22px 0 60px -54px rgba(7, 26, 18, 0.75);
   transition:
     width 0.24s var(--ease-out),
     background-color 0.24s var(--ease-out);
@@ -289,9 +300,9 @@ a:focus-visible {
   inset: 0 0 auto;
   height: 172px;
   background:
-    linear-gradient(180deg, rgba(8, 35, 24, 0.085), transparent),
-    radial-gradient(circle at 26px 26px, rgba(23, 77, 53, 0.18), transparent 86px);
-  opacity: 0.75;
+    linear-gradient(180deg, rgba(8, 35, 24, 0.08), transparent),
+    radial-gradient(circle at 26px 28px, rgba(23, 77, 53, 0.16), transparent 88px);
+  opacity: 0.68;
 }
 
 .sidebar-shell::before {
@@ -300,6 +311,60 @@ a:focus-visible {
 
 .sidebar-shell > * {
   position: relative;
+}
+
+.sidebar-brand {
+  border-bottom: 1px solid rgba(7, 26, 18, 0.055);
+}
+
+.sidebar-logo,
+.sidebar-action-button {
+  background:
+    linear-gradient(180deg, rgba(18, 58, 40, 0.98), rgba(7, 31, 21, 0.98)),
+    var(--primary);
+  box-shadow:
+    0 16px 34px -24px rgba(7, 26, 18, 0.86),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+
+.sidebar-action-button:hover {
+  background:
+    linear-gradient(180deg, rgba(28, 75, 52, 0.98), rgba(8, 35, 24, 0.98)),
+    var(--body-strong);
+}
+
+.sidebar-session-list {
+  scrollbar-gutter: stable;
+}
+
+.sidebar-session-row {
+  margin-bottom: 2px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+}
+
+.sidebar-session-row.is-active {
+  border-color: rgba(7, 26, 18, 0.085);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(248, 251, 248, 0.72)),
+    rgba(255, 255, 255, 0.78);
+  box-shadow: 0 12px 30px -28px rgba(7, 26, 18, 0.62);
+}
+
+.sidebar-session-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.sidebar-session-icon.is-active {
+  color: var(--ink);
+  background: rgba(23, 77, 53, 0.08);
 }
 
 .review-paper {

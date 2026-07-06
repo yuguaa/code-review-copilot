@@ -1,6 +1,4 @@
 import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
-import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
-import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
 import GitPullRequest from 'lucide-react/dist/esm/icons/git-pull-request';
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
@@ -31,7 +29,7 @@ export function SessionList({
   onDelete,
 }: SessionListProps) {
   return (
-    <div className={cn('flex-1 space-y-1 overflow-y-auto py-2 max-md:max-h-56', collapsed ? 'px-2' : 'px-2')}>
+    <div className={cn('sidebar-session-list flex-1 overflow-y-auto py-2 max-md:max-h-56', collapsed ? 'px-2' : 'px-3')}>
       {loadError && (
         <div className="mx-1 space-y-2 rounded-[var(--r-md)] border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/8 px-3 py-3 text-center">
           <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-coral)]">
@@ -54,8 +52,9 @@ export function SessionList({
       )}
 
       {!collapsed && !loadError && sessions.length > 0 && (
-        <div className="px-2 pb-1 pt-1">
-          <span className="eyebrow text-[var(--muted)]">最近审查</span>
+        <div className="mb-2 flex items-center justify-between px-1.5 pt-1">
+          <span className="caption text-[var(--muted)]">最近审查</span>
+          <span className="font-mono text-[10px] text-[var(--muted-soft)]">{sessions.length}</span>
         </div>
       )}
 
@@ -65,43 +64,36 @@ export function SessionList({
           <div
             key={s.id}
             className={cn(
-              'group relative overflow-hidden rounded-[var(--r-md)] transition-[background-color,box-shadow,transform]',
-              active
-                ? 'bg-white shadow-[0_12px_28px_-24px_rgba(31,39,34,0.42)] ring-1 ring-[rgba(31,39,34,0.06)]'
-                : 'hover:bg-white/70',
+              'sidebar-session-row group relative overflow-hidden transition-[background-color,box-shadow,transform]',
+              active ? 'is-active' : 'hover:bg-white/48',
             )}
           >
-            {active && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[var(--accent)] shadow-[0_0_0_4px_rgba(158,196,106,0.14)]" />}
+            {active && <span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[var(--accent)]" />}
             <button
               onClick={() => onSelect(s.id)}
               title={sessionLabel(s)}
               className={cn(
-                'grid w-full items-center gap-2 rounded-[var(--r-md)] text-left active:scale-[0.99]',
-                collapsed ? 'h-10 grid-cols-1 place-items-center px-0 py-0' : 'grid-cols-[auto_minmax(0,1fr)_auto] px-3 py-2.5 pr-8',
+                'grid w-full items-center rounded-[var(--r-md)] text-left transition-transform active:scale-[0.99]',
+                collapsed ? 'h-10 grid-cols-1 place-items-center px-0 py-0' : 'grid-cols-[auto_minmax(0,1fr)_auto] gap-2.5 px-3 py-2.5 pr-8',
               )}
             >
-              {s.kind === 'review' ? (
-                <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
-              ) : (
-                <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
-              )}
+              <span className={cn('sidebar-session-icon', active && 'is-active')}>
+                {s.kind === 'review' ? <GitPullRequest size={13} /> : <MessageSquare size={13} />}
+              </span>
               {!collapsed && <span className="min-w-0">
-                <span className={cn('block truncate text-[13px]', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}>
+                <span className={cn('block truncate text-[13px] leading-5', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}>
                   {sessionLabel(s)}
                 </span>
-                <span className="caption mt-1 flex min-w-0 items-center gap-1 truncate text-[var(--muted)]">
-                  <FolderGit2 size={10} className="shrink-0" />
+                <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-[var(--muted-soft)]">
                   <span className="truncate">{repositoryLabel(s)}</span>
-                </span>
-                <span className="caption mt-0.5 flex min-w-0 items-center gap-1 truncate text-[var(--muted-soft)]">
-                  {s.sourceBranch || s.targetBranch ? <GitBranch size={10} className="shrink-0" /> : null}
-                  <span className="truncate">{sessionMeta(s)}</span>
+                  <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-[var(--muted-soft)]/60" />
+                  <span className="truncate font-mono">{sessionMeta(s)}</span>
                 </span>
               </span>}
               {!collapsed && <span
                 title={statusLabel[s.status] ?? s.status}
                 className={cn(
-                  'ml-auto h-1.5 w-1.5 shrink-0 rounded-full',
+                  'ml-auto h-1.5 w-1.5 shrink-0 rounded-full opacity-80',
                   statusColor[s.status] ?? 'bg-[var(--muted-soft)]',
                   s.status === 'running' && 'status-breathe',
                 )}
