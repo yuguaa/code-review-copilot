@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { resolveModel, resolveRepositoryModelConfig, resolveReviewModelConfigs } from '../ai-models/ai-models.service';
 import { buildTools, type ReviewContext } from './tools';
-import { buildInstructions } from './review-agent';
+import { buildInstructions, hasDelegateToolsAvailable } from './review-agent';
+import { buildDelegateTools } from './subagents';
 import type { ReviewBlueprint } from './review-blueprint';
 import { createReviewRuntimeMemory } from './review-runtime-memory';
 import { signedUrl } from '../../shared/dingtalk/dingtalk.service';
@@ -104,6 +105,22 @@ describe('resolveRepositoryModelConfig', () => {
     ).toMatchObject({ provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' });
   });
 
+  it('仓库绑定模型已停用时回退到全局默认模型', () => {
+    expect(
+      resolveRepositoryModelConfig(
+        repo({
+          defaultAIModelId: 'repo-model',
+          defaultAIModel: model({ id: 'repo-model', provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key', isActive: false }),
+        }),
+        model({ id: 'global-model', modelId: 'global-model' }),
+      ),
+    ).toMatchObject({ provider: 'openai-compatible', modelId: 'global-model', apiKey: 'global-key' });
+  });
+
+  it('全局默认模型已停用时快速失败', () => {
+    expect(() => resolveRepositoryModelConfig(repo(), model({ isActive: false }))).toThrow('全局默认模型已停用');
+  });
+
   it('仓库自定义模型优先于仓库绑定和全局默认模型', () => {
     expect(
       resolveRepositoryModelConfig(
@@ -121,7 +138,7 @@ describe('resolveRepositoryModelConfig', () => {
 });
 
 describe('resolveReviewModelConfigs', () => {
-  it('主审查使用仓库模型，专项与验证模型使用激活模型池', () => {
+  it('主审查使用仓库模型，专项只使用启用模型池', () => {
     const repoModel = model({ id: 'repo-model', provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' });
     const configs = resolveReviewModelConfigs(
       repo({ defaultAIModelId: 'repo-model', defaultAIModel: repoModel }),
@@ -141,7 +158,7 @@ describe('resolveReviewModelConfigs', () => {
     const configs = resolveReviewModelConfigs(repo(), model(), []);
 
     expect(configs.verifier).toEqual(configs.primary);
-    expect(configs.delegates).toEqual([configs.primary]);
+    expect(configs.delegates).toEqual([]);
   });
 });
 
@@ -256,6 +273,12 @@ describe('输出工具的开关控制', () => {
     await tools.record_evidence!.execute!({ evidence: 'review-agent.ts:12 蓝图输入' }, toolOpts);
     expect(runtimeMemory.evidenceItems).toEqual(['review-agent.ts:12 蓝图输入']);
   });
+
+  it('没有启用模型池时不暴露专项委派工具', () => {
+    const tools = buildDelegateTools(fakeContext(), []);
+    expect(Object.keys(tools)).toEqual([]);
+    expect(hasDelegateToolsAvailable(undefined, 0)).toBe(false);
+  });
 });
 
 describe('buildInstructions（输出渠道按配置生成）', () => {
@@ -301,6 +324,12 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
     expect(text).toContain('运行期 CodeMem');
     expect(text).toContain('record_evidence');
     expect(text).toContain('只有蓝图中安全/架构/性能风险明确且复杂时才调用');
+  });
+
+  it('没有启用专项模型时 prompt 不声明 delegate 工具', () => {
+    const text = buildInstructions(repo(), [], undefined, undefined, { delegateToolsAvailable: false });
+    expect(text).not.toContain('delegate_security');
+    expect(text).toContain('当前没有启用的专项审查模型');
   });
 
   it('仓库自定义审查要求追加在指令末尾', () => {

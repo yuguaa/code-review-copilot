@@ -166,6 +166,15 @@ export function useSettingsPageData() {
       .then(() => toast.success('已设为默认模型'));
   };
 
+  const updateModelActive = (model: AIModel, isActive: boolean) => {
+    setSavingModel(true);
+    api(`/api/settings/models/${model.id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) })
+      .then(load)
+      .then(() => toast.success(isActive ? '已启用模型' : '已停用模型'))
+      .catch((e) => toast.error(e instanceof Error ? e.message : isActive ? '启用失败' : '停用失败'))
+      .finally(() => setSavingModel(false));
+  };
+
   const removeModel = (model: AIModel) => {
     return api(`/api/settings/models/${model.id}`, { method: 'DELETE' })
       .then(load)
@@ -232,6 +241,7 @@ export function useSettingsPageData() {
     remove,
     addModel,
     setDefaultModel,
+    updateModelActive,
     removeModel,
     saveNotification,
     saveToolSkills,

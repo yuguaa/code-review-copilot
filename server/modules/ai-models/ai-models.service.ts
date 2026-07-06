@@ -17,7 +17,7 @@ export type ModelConfig = {
 
 type RepositoryForModel = NonNullable<SessionWithRepository['repository']>;
 type GlobalDefaultModel = RepositoryForModel['defaultAIModel'];
-type StoredAIModel = Pick<AIModel, 'provider' | 'modelId' | 'apiKey' | 'apiBaseUrl' | 'maxSteps'>;
+type StoredAIModel = Pick<AIModel, 'provider' | 'modelId' | 'apiKey' | 'apiBaseUrl' | 'maxSteps' | 'isActive'>;
 
 export type ReviewModelConfigs = {
   primary: ModelConfig;
@@ -54,6 +54,7 @@ function modelConfigOf(model: StoredAIModel): ModelConfig {
 /** 仅用全局默认模型解析配置（未绑定仓库的会话用）。 */
 export function resolveGlobalModelConfig(globalDefaultModel: GlobalDefaultModel): ModelConfig {
   if (!globalDefaultModel) throw new Error('未配置全局默认模型，无法解析模型');
+  if (!globalDefaultModel.isActive) throw new Error(`全局默认模型已停用：${globalDefaultModel.provider}/${globalDefaultModel.modelId}`);
   return {
     provider: globalDefaultModel.provider,
     modelId: globalDefaultModel.modelId,
@@ -84,8 +85,9 @@ export function resolveRepositoryModelConfig(
     };
   }
 
-  const model = repo.defaultAIModel ?? globalDefaultModel;
+  const model = repo.defaultAIModel?.isActive ? repo.defaultAIModel : globalDefaultModel;
   if (!model) throw new Error('未配置全局默认模型，无法解析模型');
+  if (!model.isActive) throw new Error(`全局默认模型已停用：${model.provider}/${model.modelId}`);
 
   return {
     provider: model.provider,
@@ -102,11 +104,10 @@ export function resolveReviewModelConfigs(
   activeModelConfigs: ModelConfig[],
 ): ReviewModelConfigs {
   const primary = resolveRepositoryModelConfig(repo, globalDefaultModel);
-  const pool = activeModelConfigs.length ? activeModelConfigs : [primary];
   return {
     primary,
-    delegates: pool,
-    verifier: pool.find((config) => !sameModelEndpoint(config, primary)) ?? primary,
+    delegates: activeModelConfigs,
+    verifier: activeModelConfigs.find((config) => !sameModelEndpoint(config, primary)) ?? primary,
   };
 }
 

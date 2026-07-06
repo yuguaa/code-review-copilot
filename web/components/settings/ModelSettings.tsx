@@ -51,10 +51,12 @@ export function ModelSettingsForm({
 export function ModelList({
   models,
   onSetDefault,
+  onActiveChange,
   onRemove,
 }: {
   models: AIModel[];
   onSetDefault: (id: string) => void;
+  onActiveChange: (model: AIModel, isActive: boolean) => void;
   onRemove: (model: AIModel) => void;
 }) {
   return (
@@ -71,9 +73,14 @@ export function ModelList({
                 Key {model.hasApiKey ? '已配置' : '缺失'} · 最大步数 {model.maxSteps} · {model.isActive ? '启用' : '停用'}
               </p>
             </div>
-            <Button variant="danger" className="max-md:w-full" onClick={() => onRemove(model)}>
-              删除
-            </Button>
+            <div className="flex shrink-0 gap-2 max-md:w-full max-md:flex-col">
+              <Button variant="secondary" className="max-md:w-full" onClick={() => onActiveChange(model, false)}>
+                停用
+              </Button>
+              <Button variant="danger" className="max-md:w-full" onClick={() => onRemove(model)}>
+                删除
+              </Button>
+            </div>
           </ColorBlock>
         ) : (
           <Card key={model.id} className="flex items-center gap-3 rounded-none border-0 p-5 shadow-none max-md:flex-col max-md:items-stretch">
@@ -86,8 +93,13 @@ export function ModelList({
               </p>
             </div>
             <div className="flex shrink-0 gap-2 border-l border-[var(--line-subtle)] pl-4 max-md:border-l-0 max-md:border-t max-md:pt-3 max-md:pl-0">
-              <Button variant="secondary" onClick={() => onSetDefault(model.id)}>
-                设默认
+              {model.isActive ? (
+                <Button variant="secondary" onClick={() => onSetDefault(model.id)}>
+                  设默认
+                </Button>
+              ) : null}
+              <Button variant="secondary" onClick={() => onActiveChange(model, !model.isActive)}>
+                {model.isActive ? '停用' : '启用'}
               </Button>
               <Button variant="danger" onClick={() => onRemove(model)}>
                 删除

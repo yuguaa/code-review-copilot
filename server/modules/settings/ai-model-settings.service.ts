@@ -11,6 +11,8 @@ function modelUpdateData(body: AIModelPayload) {
   for (const key of ['provider', 'modelId', 'apiBaseUrl', 'maxSteps', 'isDefault', 'isActive'] as const) {
     if (body[key] !== undefined) data[key] = body[key];
   }
+  if (body.isActive === false) data.isDefault = false;
+  if (body.isDefault === true) data.isActive = true;
   if (typeof body.apiKey === 'string' && body.apiKey.length > 0) data.apiKey = body.apiKey;
   return data;
 }
@@ -33,7 +35,7 @@ export async function createAIModel(body: AIModelPayload) {
         apiBaseUrl: body.apiBaseUrl || null,
         maxSteps: body.maxSteps ?? 16,
         isDefault: body.isDefault ?? false,
-        isActive: body.isActive ?? true,
+        isActive: body.isDefault === true ? true : body.isActive ?? true,
       },
     });
   });

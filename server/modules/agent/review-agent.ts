@@ -18,6 +18,11 @@ import { createReviewBlueprint, renderReviewBlueprint, type ReviewBlueprint } fr
 import { createReviewRuntimeMemory, renderReviewRuntimeMemory, type ReviewRuntimeMemory } from './review-runtime-memory';
 
 const log = createLogger('review-agent');
+const delegateToolKeys = ['delegate_security', 'delegate_architecture', 'delegate_performance'] as const;
+
+export function hasDelegateToolsAvailable(enabledTools: Set<string> | undefined, delegateModelCount: number): boolean {
+  return delegateModelCount > 0 && (!enabledTools || delegateToolKeys.some((key) => enabledTools.has(key)));
+}
 
 /**
  * 组合审查 agent 系统提示词。仅服务 webhook 触发的首轮审查。
@@ -28,9 +33,11 @@ export function buildInstructions(
   skills: SkillState = [],
   blueprint?: ReviewBlueprint,
   runtimeMemory?: ReviewRuntimeMemory,
+  options: { delegateToolsAvailable?: boolean } = {},
 ): string {
   const enableMrComment = repo?.enableMrComment ?? false;
   const enableDingtalk = repo?.enableDingtalk ?? false;
+  const delegateToolsAvailable = options.delegateToolsAvailable ?? true;
 
   const tools = [
     '- bash：跑只读命令自由探索（grep/rg/find/cat/sed/git log/git show 等，支持管道；仅只读，不能写文件或联网）',
@@ -38,8 +45,8 @@ export function buildInstructions(
     '- git_diff：查看本次审查变更（MR 为目标分支到当前 HEAD；Push 为 before 到 after）',
     '- read_memory：读取本仓库的项目记忆',
     '- record_evidence：把本轮已核验证据记录到运行期 CodeMem，供 verify loop 复核',
-    '- delegate_security / delegate_architecture / delegate_performance：委派专项 agent 复核',
-  ].join('\n');
+    delegateToolsAvailable ? '- delegate_security / delegate_architecture / delegate_performance：委派专项 agent 复核' : '',
+  ].filter(Boolean).join('\n');
 
   const publish = enableMrComment
     ? '- 不要自行发布评论；系统会在 verify loop 通过后，把最终总评确定性发布到 MR 或 Push commit。\n'
@@ -59,8 +66,7 @@ ${tools}
 - 本轮采用 DeepCode 风格链路：先遵循审查蓝图取证，再把已确认材料写入运行期 CodeMem，最后交给 verify loop 清洗。运行期 CodeMem 不是长期记忆。
 - 用 git_diff 看本次变更，再用 bash/read_file 顺着变更自由追溯：搜调用方、看相关实现、查历史、核对约定。不要只盯着 diff 文本，要理解真实上下文。
 - 聚焦真实问题：bug、安全风险、并发/边界、错误处理、破坏既有约定、明显的可维护性/性能问题。不堆砌琐碎风格意见。
-- 按审查蓝图自行判断是否需要委派 subagents：只有蓝图中安全/架构/性能风险明确且复杂时才调用对应 delegate 工具；简单、低风险、证据已充分的变更不要为了形式委派。
-- delegate 返回的是独立复核材料，你必须二次判断并整合；不要原样搬运无法取证的专项结论。
+${delegateToolsAvailable ? '- 按审查蓝图自行判断是否需要委派 subagents：只有蓝图中安全/架构/性能风险明确且复杂时才调用对应 delegate 工具；简单、低风险、证据已充分的变更不要为了形式委派。\n- delegate 返回的是独立复核材料，你必须二次判断并整合；不要原样搬运无法取证的专项结论。' : '- 当前没有启用的专项审查模型，本轮不提供 delegate 工具；你必须用主审查模型和只读工具完成取证。'}
 - 对每条准备输出的问题，先调用 record_evidence 记录文件/行号/影响链路等已核验证据；未记录或无法取证的问题不要输出。
 
 输出：
@@ -100,6 +106,7 @@ export async function createReviewStream(opts: { session: SessionWithRepository;
     ? await Promise.all([resolveRepositoryTools(repo.id), resolveRepositorySkills(repo.id)])
     : [undefined, [] as SkillState];
   if (enabledTools) ctx.enabledTools = enabledTools;
+  const delegateToolsAvailable = hasDelegateToolsAvailable(enabledTools, delegateModels.length);
   const blueprint = await createReviewBlueprint({
     ctx,
     model,
@@ -109,7 +116,7 @@ export async function createReviewStream(opts: { session: SessionWithRepository;
 
   const stream = streamText({
     model,
-    system: buildInstructions(repo, skills, blueprint, runtimeMemory),
+    system: buildInstructions(repo, skills, blueprint, runtimeMemory, { delegateToolsAvailable }),
     messages: await convertToModelMessages(opts.messages),
     tools,
     stopWhen: stepCountIs(modelConfigs.primary.maxSteps),

@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import type { AgentSkillItem, AgentToolItem } from '../lib/types';
 
 export type Account = { id: string; url: string };
-export type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean };
+export type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean; isActive: boolean };
 export type Project = { id: number; name: string; path: string; defaultBranch: string };
 export type Repo = {
   id: string;

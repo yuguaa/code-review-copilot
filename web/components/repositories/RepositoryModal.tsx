@@ -42,6 +42,8 @@ export function RepositoryModal({
   setSearch,
   submit,
 }: RepositoryModalProps) {
+  const selectableModels = models.filter((model) => model.isActive || model.id === form.defaultAIModelId);
+
   return (
     <Modal open={modalOpen} title={editingId ? '编辑仓库' : '添加仓库'} onClose={closeModal}>
       {accounts.length === 0 ? (
@@ -95,9 +97,9 @@ export function RepositoryModal({
           <Field label="仓库默认模型" hint="不选择时自动使用「设置」里的全局默认模型；需要特殊模型时再开启仓库自定义模型">
             <Select value={form.defaultAIModelId} onChange={(e) => setField('defaultAIModelId', e.target.value)}>
               <option value="">使用全局默认模型</option>
-              {models.map((model) => (
+              {selectableModels.map((model) => (
                 <option key={model.id} value={model.id}>
-                  {model.provider}/{model.modelId}{model.isDefault ? '（默认）' : ''}
+                  {model.provider}/{model.modelId}{model.isDefault ? '（默认）' : ''}{model.isActive ? '' : '（已停用）'}
                 </option>
               ))}
             </Select>

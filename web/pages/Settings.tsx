@@ -37,6 +37,7 @@ export function Settings() {
     remove,
     addModel,
     setDefaultModel,
+    updateModelActive,
     removeModel,
     saveNotification,
     saveToolSkills,
@@ -83,7 +84,7 @@ export function Settings() {
         onSave={saveNotification}
       />
       <ModelSettingsForm modelForm={modelForm} saving={savingModel} onModelChange={setModel} onAdd={addModel} />
-      <ModelList models={models} onSetDefault={setDefaultModel} onRemove={confirmRemoveModel} />
+      <ModelList models={models} onSetDefault={setDefaultModel} onActiveChange={updateModelActive} onRemove={confirmRemoveModel} />
       <GitLabAccountForm
         url={url}
         accessToken={accessToken}

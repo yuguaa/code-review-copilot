@@ -30,11 +30,9 @@ type SubagentSpec = {
  */
 export function buildDelegateTools(ctx: ReviewContext, models: LanguageModel[]) {
   const enabled = ctx.enabledTools;
-  const pool = models.length ? models : [];
+  if (models.length === 0) return {};
   const modelFor = (index: number) => {
-    const model = pool[index % pool.length];
-    if (!model) throw new Error('未配置可用的专项审查模型');
-    return model;
+    return models[index % models.length];
   };
 
   const delegate = (spec: SubagentSpec) =>
