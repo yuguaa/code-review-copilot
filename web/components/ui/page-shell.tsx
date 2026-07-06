@@ -14,7 +14,7 @@ export function PageShell({
 }) {
   return (
     <div className="ops-page-shell h-full overflow-y-auto">
-      <header className="ops-page-header sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--line-default)] bg-[rgba(247,250,247,0.92)] px-6 py-3.5 shadow-[0_18px_42px_-38px_rgba(31,39,34,0.5)] backdrop-blur">
+      <header className="ops-page-header sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--line-default)] bg-[rgba(247,250,247,0.92)] px-6 py-3.5 backdrop-blur">
         <Link
           to="/"
           aria-label="返回"

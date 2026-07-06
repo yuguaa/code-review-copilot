@@ -52,9 +52,9 @@
   --r-pill: 999px;
 
   --shadow-sm: 0 1px 2px rgba(31, 39, 34, 0.06), 0 1px 0 rgba(255, 255, 255, 0.68) inset;
-  --shadow-md: 0 16px 32px -24px rgba(31, 39, 34, 0.32);
-  --shadow-lg: 0 32px 70px -42px rgba(31, 39, 34, 0.45);
-  --shadow-popover: 0 24px 52px -28px rgba(31, 39, 34, 0.42);
+  --shadow-md: 0 8px 18px -14px rgba(31, 39, 34, 0.3);
+  --shadow-lg: 0 12px 24px -18px rgba(31, 39, 34, 0.38);
+  --shadow-popover: 0 12px 26px -18px rgba(31, 39, 34, 0.42);
 
   --font-display: 'Geist', 'Satoshi', ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-body: 'Geist', 'Satoshi', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
@@ -104,8 +104,8 @@ body {
     radial-gradient(circle at 74% 76%, rgba(23, 77, 53, 0.06), transparent 24rem),
     linear-gradient(180deg, rgba(247, 250, 247, 0.96), rgba(238, 246, 238, 0.94));
   background-size:
-    40px 40px,
-    40px 40px,
+    128px 128px,
+    128px 128px,
     auto,
     auto,
     auto,
@@ -257,8 +257,8 @@ a:focus-visible {
     radial-gradient(circle at 52% 96%, rgba(8, 35, 24, 0.06), transparent 26rem),
     linear-gradient(180deg, rgba(248, 251, 248, 0.98), rgba(238, 246, 238, 0.94));
   background-size:
-    40px 40px,
-    40px 40px,
+    128px 128px,
+    128px 128px,
     auto,
     auto,
     auto;
@@ -269,16 +269,7 @@ a:focus-visible {
 }
 
 .review-workbench::after {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: min(34vw, 560px);
-  z-index: -1;
-  background:
-    linear-gradient(90deg, transparent, var(--line-subtle)),
-    repeating-linear-gradient(0deg, transparent 0 31px, var(--line-subtle) 31px 32px);
-  opacity: 0.72;
+  display: none;
 }
 
 .chat-main {
@@ -289,8 +280,8 @@ a:focus-visible {
     radial-gradient(circle at 74% 8%, rgba(8, 35, 24, 0.045), transparent 26rem),
     linear-gradient(180deg, rgba(251, 253, 251, 0.9), rgba(244, 249, 244, 0.88));
   background-size:
-    40px 40px,
-    40px 40px,
+    128px 128px,
+    128px 128px,
     auto,
     auto,
     auto;
@@ -301,7 +292,7 @@ a:focus-visible {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 250, 247, 0.82)),
     rgba(255, 255, 255, 0.78);
-  box-shadow: 0 16px 36px -34px rgba(7, 26, 18, 0.55);
+  box-shadow: 0 6px 14px -12px rgba(7, 26, 18, 0.42);
   backdrop-filter: blur(18px);
 }
 
@@ -312,7 +303,7 @@ a:focus-visible {
     rgba(238, 243, 238, 0.9);
   box-shadow:
     inset -1px 0 0 var(--line-subtle),
-    22px 0 60px -54px rgba(7, 26, 18, 0.75);
+    8px 0 18px -18px rgba(7, 26, 18, 0.58);
   transition:
     width 0.24s var(--ease-out),
     background-color 0.24s var(--ease-out);
@@ -325,9 +316,9 @@ a:focus-visible {
   inset: 0 0 auto;
   height: 172px;
   background:
-    linear-gradient(180deg, rgba(8, 35, 24, 0.055), transparent),
-    repeating-linear-gradient(90deg, transparent 0 23px, var(--line-subtle) 23px 24px);
-  opacity: 0.78;
+    linear-gradient(180deg, rgba(8, 35, 24, 0.05), transparent),
+    linear-gradient(90deg, transparent, var(--line-subtle), transparent);
+  opacity: 0.64;
 }
 
 .sidebar-shell::before {
@@ -377,7 +368,7 @@ a:focus-visible {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(248, 251, 248, 0.72)),
     rgba(255, 255, 255, 0.78);
-  box-shadow: 0 12px 30px -28px rgba(7, 26, 18, 0.62);
+  box-shadow: 0 4px 10px -8px rgba(7, 26, 18, 0.5);
 }
 
 .sidebar-session-icon {
@@ -454,6 +445,11 @@ a:focus-visible {
 .technical-panel {
   position: relative;
   overflow: hidden;
+  border: 1px solid var(--line-default);
+  background: var(--surface-card);
+  box-shadow:
+    0 8px 18px -16px rgba(7, 26, 18, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 .technical-panel::before,
 .technical-panel::after {
@@ -463,14 +459,32 @@ a:focus-visible {
   inset: 0;
 }
 .technical-panel::before {
-  background:
-    radial-gradient(circle at 88% 12%, rgba(23, 77, 53, 0.12), transparent 12rem),
-    linear-gradient(90deg, rgba(23, 77, 53, 0.06), transparent 46%);
-  mask-image: linear-gradient(180deg, black, transparent 86%);
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-accent), transparent);
+  opacity: 0.66;
 }
 .technical-panel::after {
+  top: 0;
+  right: 0;
+  width: 42px;
+  height: 42px;
   border-top: 1px solid var(--line-accent);
-  transform: translateY(52px);
+  border-right: 1px solid var(--line-accent);
+  opacity: 0.62;
+}
+
+.technical-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.technical-panel[data-quiet='true']::after {
+  display: none;
+}
+
+.technical-panel[data-quiet='true']::before {
+  opacity: 0.48;
 }
 
 .blueprint-backdrop {
@@ -491,22 +505,13 @@ a:focus-visible {
   top: 10%;
   border: 1px solid rgba(31, 39, 34, 0.055);
   background:
-    repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 18px),
-    repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 18px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 96px 96px;
   transform: rotate(3deg);
 }
 .blueprint-backdrop::after {
-  width: min(30vw, 360px);
-  height: min(22vw, 260px);
-  left: max(14px, calc((100vw - 1160px) / 2 - 80px));
-  bottom: 12%;
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(31, 39, 34, 0.06) 0 1px,
-      transparent 1px 7px
-    );
-  mask-image: linear-gradient(135deg, transparent 8%, black 28%, black 72%, transparent 92%);
+  display: none;
 }
 
 .ops-page-shell {
@@ -518,8 +523,8 @@ a:focus-visible {
     radial-gradient(circle at 74% 12%, rgba(23, 77, 53, 0.08), transparent 24rem),
     linear-gradient(180deg, rgba(249, 252, 249, 0.98), rgba(241, 248, 241, 0.94));
   background-size:
-    36px 36px,
-    36px 36px,
+    128px 128px,
+    128px 128px,
     auto,
     auto,
     auto;
@@ -527,7 +532,7 @@ a:focus-visible {
 
 .ops-page-header {
   box-shadow:
-    0 18px 42px -38px rgba(31, 39, 34, 0.5),
+    0 6px 14px -12px rgba(31, 39, 34, 0.38),
     inset 0 -1px 0 rgba(255, 255, 255, 0.72);
 }
 
@@ -537,7 +542,7 @@ a:focus-visible {
   border: 1px solid var(--line-default);
   background: var(--surface-card);
   box-shadow:
-    0 16px 42px -36px rgba(7, 26, 18, 0.34),
+    0 8px 18px -16px rgba(7, 26, 18, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
@@ -623,7 +628,7 @@ a:focus-visible {
 
 .composer-dock {
   position: relative;
-  background: linear-gradient(180deg, transparent, rgba(247, 250, 247, 0.72) 42%, rgba(247, 250, 247, 0.9));
+  background: linear-gradient(180deg, transparent, rgba(247, 250, 247, 0.54) 48%, rgba(247, 250, 247, 0.82));
 }
 
 .composer-dock::before {
@@ -637,7 +642,13 @@ a:focus-visible {
 }
 
 .composer-shell::before {
-  display: none;
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-accent), transparent);
+  opacity: 0.52;
 }
 
 .composer-shell > * {
@@ -677,7 +688,7 @@ a:focus-visible {
     linear-gradient(180deg, rgba(8, 35, 24, 0.98), rgba(11, 31, 23, 0.98)),
     var(--surface-dark);
   box-shadow:
-    0 22px 54px -38px rgba(7, 26, 18, 0.84),
+    0 8px 18px -14px rgba(7, 26, 18, 0.64),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -867,7 +878,7 @@ a:focus-visible {
   border: 1px solid var(--line-default);
   border-radius: var(--r-lg);
   background: var(--surface-card);
-  box-shadow: 0 16px 42px -38px rgba(7, 26, 18, 0.36);
+  box-shadow: 0 6px 14px -12px rgba(7, 26, 18, 0.24);
 }
 
 .line-list > * + * {

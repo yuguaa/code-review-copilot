@@ -25,7 +25,7 @@ export function ConfirmDialog({
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div className="animate-fade-in w-full max-w-sm rounded-[var(--r-md)] bg-[var(--canvas)] p-6 shadow-[var(--shadow-lg)]">
+      <div className="tech-panel animate-fade-in w-full max-w-sm rounded-[var(--r-lg)] bg-[var(--canvas)] p-6">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]">
             <TriangleAlert size={18} />

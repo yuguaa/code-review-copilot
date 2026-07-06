@@ -101,7 +101,7 @@ export function Login() {
   };
 
   const fieldClass =
-    'w-full rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
+    'w-full rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
 
   return (
     <div ref={rootRef} className="line-canvas measure-rails blueprint-backdrop min-h-full">
@@ -141,7 +141,7 @@ export function Login() {
           </form>
         </div>
 
-        <div data-login-panel className="technical-panel hidden h-[430px] overflow-hidden rounded-[var(--r-xl)] shadow-[var(--shadow-lg)] ring-1 ring-white/70 lg:grid lg:grid-cols-2 lg:grid-rows-2">
+        <div data-login-panel className="technical-panel hidden h-[430px] overflow-hidden rounded-[var(--r-lg)] lg:grid lg:grid-cols-2 lg:grid-rows-2">
           <div data-login-tile className="bg-[var(--brand-lime)] p-8 will-change-transform">
             <p className="eyebrow text-[var(--ink)]">WEBHOOK</p>
             <p className="mt-20 font-display text-4xl leading-none text-[var(--ink)]">MR 触发</p>

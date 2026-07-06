@@ -62,7 +62,7 @@ export function MessageBubble({
             />
           ))}
         </div>
-        <div className={cn('flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
+        <div className={cn('flex items-center gap-1 opacity-45 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
           <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
           {canFeedback && (
             <span className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">

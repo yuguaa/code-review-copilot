@@ -23,7 +23,7 @@ export function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={cn('tech-panel animate-fade-in w-full overflow-hidden rounded-[var(--r-lg)] shadow-[var(--shadow-lg)]', maxWidth)}>
+      <div className={cn('tech-panel animate-fade-in w-full overflow-hidden rounded-[var(--r-lg)]', maxWidth)}>
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-lg)] border-b border-[var(--line-default)] bg-[rgba(251,252,248,0.94)] px-6 py-4 backdrop-blur">
           <h2 className="font-display text-lg text-[var(--ink)]">{title}</h2>
           <button

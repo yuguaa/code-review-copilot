@@ -89,7 +89,7 @@ function ChatEmptyState() {
 
   return (
     <div ref={rootRef} className="measure-rails grid h-full place-items-center px-6 py-10">
-      <div data-empty-shell className="technical-panel grid w-full max-w-3xl gap-8 rounded-[var(--r-xl)] bg-[var(--surface-card)] p-8 shadow-[var(--shadow-lg)] ring-1 ring-white/80 max-md:p-6 md:grid-cols-[1fr_0.72fr]">
+      <div data-empty-shell className="technical-panel grid w-full max-w-3xl gap-8 rounded-[var(--r-lg)] bg-[var(--surface-card)] p-8 max-md:p-6 md:grid-cols-[1fr_0.72fr]">
         <div className="min-w-0">
           <div data-empty-copy className="flex h-14 w-14 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
             <MessageSquare size={23} />

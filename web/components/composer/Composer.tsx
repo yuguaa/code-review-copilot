@@ -113,7 +113,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
   };
 
   return (
-    <div className="composer-shell relative flex min-h-[70px] items-end gap-2 rounded-[16px] border border-[var(--line-default)] bg-[rgba(255,255,255,0.86)] p-2 shadow-[0_18px_52px_-30px_rgba(7,26,18,0.48),0_4px_14px_-10px_rgba(7,26,18,0.32)] backdrop-blur-xl transition-[border-color,box-shadow,transform] focus-within:border-[var(--line-accent)] focus-within:shadow-[0_24px_64px_-32px_rgba(7,26,18,0.58),0_6px_18px_-12px_rgba(7,26,18,0.36)]">
+    <div className="composer-shell relative flex min-h-[70px] items-end gap-2 rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[rgba(255,255,255,0.74)] p-2 shadow-[0_8px_18px_-14px_rgba(7,26,18,0.38),0_1px_0_rgba(255,255,255,0.74)_inset] backdrop-blur-xl transition-[border-color,box-shadow] focus-within:border-[var(--line-accent)] focus-within:shadow-[0_10px_22px_-16px_rgba(7,26,18,0.42),0_0_0_3px_var(--ring)]">
       <div className="min-w-0 flex-1">
         <RichComposerEditor
           ref={editorRef}
@@ -142,7 +142,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
           onClick={onStop}
           aria-label="停止生成"
           title="停止生成"
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] text-white shadow-[0_14px_28px_-18px_rgba(7,26,18,0.78)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
+          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
         >
           <Square size={14} className="fill-current" />
         </button>
@@ -151,7 +151,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
           onClick={submit}
           disabled={editorDisabled || empty}
           aria-label="发送"
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] text-white shadow-[0_14px_28px_-18px_rgba(7,26,18,0.78)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <SendHorizontal size={16} />
         </button>

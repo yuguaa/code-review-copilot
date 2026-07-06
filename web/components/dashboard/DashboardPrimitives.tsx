@@ -92,7 +92,7 @@ export function MetricCard({
 
   if (tone === 'white') return <Card className="p-5">{content}</Card>;
   return (
-    <ColorBlock tone={tone} className="p-5 shadow-[0_18px_42px_-36px_rgba(7,26,18,0.52)]">
+    <ColorBlock tone={tone} className="p-5">
       {content}
     </ColorBlock>
   );
