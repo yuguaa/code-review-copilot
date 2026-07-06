@@ -113,7 +113,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
   };
 
   return (
-    <div className="composer-shell relative flex min-h-[70px] items-end gap-2 rounded-[16px] border border-[var(--line-default)] bg-transparent p-2 shadow-[0_18px_46px_-34px_rgba(7,26,18,0.68)] transition-[border-color,box-shadow,transform] focus-within:border-[var(--line-accent)] focus-within:shadow-[0_22px_56px_-36px_rgba(7,26,18,0.72)]">
+    <div className="composer-shell relative flex min-h-[70px] items-end gap-2 rounded-[16px] border border-[var(--line-default)] bg-[rgba(255,255,255,0.86)] p-2 shadow-[0_18px_52px_-30px_rgba(7,26,18,0.48),0_4px_14px_-10px_rgba(7,26,18,0.32)] backdrop-blur-xl transition-[border-color,box-shadow,transform] focus-within:border-[var(--line-accent)] focus-within:shadow-[0_24px_64px_-32px_rgba(7,26,18,0.58),0_6px_18px_-12px_rgba(7,26,18,0.36)]">
       <div className="min-w-0 flex-1">
         <RichComposerEditor
           ref={editorRef}

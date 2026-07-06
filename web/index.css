@@ -283,9 +283,17 @@ a:focus-visible {
 
 .chat-main {
   background:
-    radial-gradient(circle at 74% 8%, rgba(8, 35, 24, 0.055), transparent 26rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(245, 250, 245, 0.9)),
-    rgba(247, 250, 247, 0.84);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, transparent calc(50% - 430px), var(--line-subtle) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), var(--line-subtle) calc(50% + 430px), transparent calc(50% + 431px)),
+    radial-gradient(circle at 74% 8%, rgba(8, 35, 24, 0.045), transparent 26rem),
+    linear-gradient(180deg, rgba(251, 253, 251, 0.9), rgba(244, 249, 244, 0.88));
+  background-size:
+    40px 40px,
+    40px 40px,
+    auto,
+    auto,
+    auto;
 }
 
 .chat-header {
@@ -602,7 +610,7 @@ a:focus-visible {
 }
 .conversation-frame::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(247, 250, 247, 0.98), transparent);
+  background: linear-gradient(0deg, rgba(247, 250, 247, 0.88), transparent);
 }
 .conversation-frame.is-scrolled::before,
 .conversation-frame.can-scroll-more::after {
@@ -614,14 +622,8 @@ a:focus-visible {
 }
 
 .composer-dock {
-  border-top: 1px solid var(--line-default);
-  background:
-    linear-gradient(180deg, rgba(229, 238, 229, 0.88), rgba(247, 250, 247, 0.96)),
-    rgba(247, 250, 247, 0.9);
-  box-shadow:
-    0 -20px 52px -46px rgba(7, 26, 18, 0.82),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(18px);
+  position: relative;
+  background: linear-gradient(180deg, transparent, rgba(247, 250, 247, 0.72) 42%, rgba(247, 250, 247, 0.9));
 }
 
 .composer-dock::before {
@@ -630,8 +632,8 @@ a:focus-visible {
   display: block;
   height: 1px;
   width: min(860px, 100%);
-  margin: -1px auto 12px;
-  background: linear-gradient(90deg, transparent, var(--line-accent), transparent);
+  margin: 0 auto 10px;
+  background: linear-gradient(90deg, transparent, var(--line-subtle), transparent);
 }
 
 .composer-shell::before {
