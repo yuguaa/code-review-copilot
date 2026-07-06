@@ -6,11 +6,11 @@
 :root {
   color-scheme: light;
 
-  --canvas: #f5f7f2;
-  --surface-soft: #eef2ec;
-  --surface-card: #fbfcf8;
-  --surface-hover: #e8ede5;
-  --surface-strong: #dce4da;
+  --canvas: #ffffff;
+  --surface-soft: #f7f8f6;
+  --surface-card: #ffffff;
+  --surface-hover: #f0f2ef;
+  --surface-strong: #e8ece7;
   --surface-dark: #151a17;
   --hairline: rgba(31, 39, 34, 0.12);
 
@@ -91,15 +91,8 @@ body {
 
 #root::before {
   background:
-    linear-gradient(rgba(31, 39, 34, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(31, 39, 34, 0.035) 1px, transparent 1px),
-    repeating-linear-gradient(
-      135deg,
-      transparent 0 13px,
-      rgba(31, 39, 34, 0.025) 13px 14px
-    ),
-    radial-gradient(circle at 16% 12%, rgba(158, 196, 106, 0.13), transparent 28rem),
-    radial-gradient(circle at 92% 8%, rgba(49, 95, 80, 0.08), transparent 24rem);
+    radial-gradient(circle at 18% 0%, rgba(158, 196, 106, 0.055), transparent 28rem),
+    radial-gradient(circle at 90% 10%, rgba(49, 95, 80, 0.035), transparent 26rem);
   background-size:
     128px 128px,
     128px 128px,
@@ -109,15 +102,7 @@ body {
 }
 
 #root::after {
-  inset: 28px;
-  opacity: 0.54;
-  background:
-    linear-gradient(90deg, rgba(31, 39, 34, 0.12) 10px, transparent 10px) left top / 86px 1px no-repeat,
-    linear-gradient(rgba(31, 39, 34, 0.12) 10px, transparent 10px) left top / 1px 86px no-repeat,
-    linear-gradient(270deg, rgba(31, 39, 34, 0.12) 10px, transparent 10px) right bottom / 86px 1px no-repeat,
-    linear-gradient(0deg, rgba(31, 39, 34, 0.12) 10px, transparent 10px) right bottom / 1px 86px no-repeat,
-    radial-gradient(circle at 50% 38%, rgba(31, 39, 34, 0.12) 0 1px, transparent 1.5px),
-    linear-gradient(90deg, transparent calc(50% - 34px), rgba(31, 39, 34, 0.06) calc(50% - 34px), rgba(31, 39, 34, 0.06) calc(50% + 34px), transparent calc(50% + 34px));
+  display: none;
 }
 
 /* 产品 UI 标题：用字重与紧凑行高建层级，不靠营销式大标题。 */
@@ -144,6 +129,27 @@ body {
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.02em;
+}
+
+.glass-surface {
+  background: rgba(251, 252, 248, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -1px 0 rgba(31, 39, 34, 0.06),
+    var(--shadow-md);
+}
+
+.glass-surface::before {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.62), transparent 38%),
+    linear-gradient(315deg, rgba(49, 95, 80, 0.09), transparent 42%);
+  mix-blend-mode: screen;
+  opacity: 0.72;
 }
 
 @layer base {
@@ -233,15 +239,64 @@ a:focus-visible {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background:
-    linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(31, 39, 34, 0.09) calc(50% - 0.5px), rgba(31, 39, 34, 0.09) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
-    linear-gradient(90deg, rgba(110, 155, 89, 0.16), transparent 34%, transparent 66%, rgba(110, 155, 89, 0.12));
-  background-size:
-    100% 100%,
-    100% 1px;
-  background-position:
-    0 0,
-    0 38%;
+  background: linear-gradient(90deg, rgba(247, 248, 246, 0.96) 0 292px, rgba(255, 255, 255, 0.96) 292px);
+}
+
+.review-workbench {
+  background: #ffffff;
+}
+
+.sidebar-shell {
+  position: relative;
+}
+
+.sidebar-shell::before {
+  display: none;
+}
+
+.sidebar-shell > * {
+  position: relative;
+}
+
+.review-paper {
+  position: relative;
+}
+
+.review-paper::before {
+  display: none;
+}
+
+.assistant-message {
+  position: relative;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.assistant-message::before {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.64);
+}
+
+.tool-evidence-card {
+  position: relative;
+}
+
+.tool-evidence-card::before {
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(49, 95, 80, 0.08), transparent 36%);
+  opacity: 0.7;
+}
+
+.tool-evidence-card > * {
+  position: relative;
 }
 
 .line-canvas::after {

@@ -49,8 +49,8 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
     'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] border border-white/70 bg-[var(--surface-card)] px-2.5 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
 
   return (
-    <header className="sticky top-0 z-10 border-b border-white/70 bg-[rgba(245,247,242,0.9)] px-6 py-3.5 shadow-[0_18px_42px_-38px_rgba(31,39,34,0.5)] backdrop-blur max-md:px-4">
-      <div className="mx-auto flex max-w-4xl min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+    <header className="sticky top-0 z-10 border-b border-[rgba(31,39,34,0.08)] bg-[rgba(255,255,255,0.86)] px-5 py-3 backdrop-blur-xl max-md:px-4">
+      <div className="mx-auto flex max-w-6xl min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1 basis-64">
           <h1 className="font-display truncate text-lg text-[var(--ink)]">{sessionTitle(session)}</h1>
           {session.repository && (

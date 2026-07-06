@@ -1,13 +1,14 @@
 import { lazy, Suspense } from 'react';
 import type { ComponentProps } from 'react';
+import { GlassSurface } from '../ui/glass-surface';
 
 const Composer = lazy(() => import('../composer/Composer').then((module) => ({ default: module.Composer })));
 
 function ComposerFallback() {
   return (
-    <div className="flex min-h-[54px] items-center rounded-[var(--r-lg)] border border-white/70 bg-[var(--surface-card)] px-4 text-sm text-[var(--muted)] shadow-[var(--shadow-lg)] ring-1 ring-[var(--hairline)]">
+    <GlassSurface className="rounded-[var(--r-lg)] shadow-[var(--shadow-lg)]" contentClassName="flex min-h-[54px] items-center px-4 text-sm text-[var(--muted)]" radius={12}>
       加载输入器…
-    </div>
+    </GlassSurface>
   );
 }
 

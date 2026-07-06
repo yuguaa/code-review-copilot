@@ -2,6 +2,7 @@ import { generateText, tool, stepCountIs, type LanguageModel } from 'ai';
 import { z } from 'zod';
 import { buildReadTools, type ReviewContext } from './tools';
 import type { ToolKey } from '../tools/tools.service';
+import { recordRuntimeEvidence } from './review-runtime-memory';
 
 const RECON = '你工作在一个已 checkout 好的本地仓库（cwd 即仓库根），用 bash（grep/rg/find/cat/git log 等只读命令）、read_file、git_diff 在工作区自行取证。';
 
@@ -51,6 +52,11 @@ export function buildDelegateTools(ctx: ReviewContext, models: LanguageModel[]) 
           stopWhen: stepCountIs(8),
           abortSignal,
         });
+        if (ctx.runtimeMemory) {
+          recordRuntimeEvidence(ctx.runtimeMemory, {
+            delegateFinding: `${spec.label}专项：${r.text.trim() || '未返回发现'}`,
+          });
+        }
         return r.text;
       },
     });

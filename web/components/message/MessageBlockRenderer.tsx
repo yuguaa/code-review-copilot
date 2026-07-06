@@ -20,6 +20,7 @@ const TOOL_LABEL: Record<string, string> = {
   git_diff: '查看变更 diff',
   read_memory: '读取项目记忆',
   write_memory: '更新项目记忆',
+  record_evidence: '记录审查证据',
   post_review_comment: '发布审查评论',
   post_inline_comment: '发布行级评论',
   delegate_security: '委派安全审查',
@@ -59,7 +60,7 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
   const streaming = record.state === 'streaming';
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="overflow-hidden rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-white/80 bg-[rgba(251,252,248,0.82)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -69,7 +70,7 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
         <span className="caption truncate">REASONING{text && !open ? ` · ${text.slice(0, 72)}` : ''}</span>
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
-      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-white/70 bg-[var(--surface-soft)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
+      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-white/70 bg-[rgba(238,242,236,0.76)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
     </div>
   );
 }
@@ -80,7 +81,7 @@ function JsonPanel({ label, value, strong }: { label: string; value: unknown; st
       <span className="caption text-[var(--muted-soft)]">{label}</span>
       <pre
         className={cn(
-          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[var(--surface-soft)] px-2.5 py-2 font-mono text-[11px] leading-relaxed ring-1 ring-[var(--hairline)]',
+          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] bg-[rgba(238,242,236,0.72)] px-3 py-2.5 font-mono text-[11px] leading-relaxed ring-1 ring-[var(--hairline)]',
           strong ? 'text-[var(--body-strong)]' : 'text-[var(--body)]',
         )}
       >
@@ -99,7 +100,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
   const running = !done && !errored;
   const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
   return (
-    <div className="overflow-hidden rounded-[var(--r-md)] border border-white/70 bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-white/80 bg-[rgba(251,252,248,0.84)] text-xs shadow-[var(--shadow-sm)] ring-1 ring-[var(--hairline)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -114,7 +115,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="space-y-2 border-t border-white/70 bg-[var(--surface-soft)] px-3 py-2.5">
+        <div className="space-y-2 border-t border-white/70 bg-[rgba(238,242,236,0.72)] px-3 py-2.5">
           {record.input != null && <JsonPanel label="INPUT" value={record.input} />}
           {record.output != null && <JsonPanel label="OUTPUT" value={record.output} strong />}
           {errored && record.errorText != null && <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>}

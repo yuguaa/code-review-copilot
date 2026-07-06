@@ -40,14 +40,14 @@ export function MessageBubble({
   });
   const canFeedback = !isUser && !isStreaming && Boolean(onFeedback) && !hasFindingFeedback;
   return (
-    <div className={cn('group flex py-3', isUser ? 'justify-end pl-12' : 'justify-start pr-8 max-md:pr-0')}>
+    <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12' : 'justify-start pr-8 max-md:pr-0')}>
       <div className={cn('flex max-w-full items-start gap-2', isUser && 'flex-row-reverse')}>
         <div
           className={cn(
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
             isUser
               ? 'bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
-              : 'bg-[rgba(251,252,248,0.46)] px-4 py-3 text-[var(--body-strong)] shadow-[var(--shadow-sm)] ring-1 ring-white/70',
+              : 'assistant-message px-5 py-4 text-[var(--body-strong)] shadow-[0_10px_28px_-24px_rgba(31,39,34,0.36)] ring-1 ring-[rgba(31,39,34,0.055)]',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}

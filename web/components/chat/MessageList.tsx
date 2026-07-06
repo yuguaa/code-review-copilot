@@ -31,7 +31,7 @@ export function MessageList({
   const isTriggerFirst = session.kind === 'review' && messages[0]?.role === 'user';
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-5 max-md:px-4">
+    <div className="review-paper mx-auto min-h-full max-w-3xl px-5 py-10 max-md:px-4 max-md:py-5">
       {/* 审查失败原因必须直接可见，让用户能自助修复配置 */}
       {session.status === 'failed' && session.error && (
         <div className="mb-4 flex items-start gap-2.5 rounded-[var(--r-md)] bg-[var(--brand-coral)] px-4 py-3 text-sm text-white">

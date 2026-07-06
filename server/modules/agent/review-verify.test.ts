@@ -36,4 +36,10 @@ describe('VERIFY_INSTRUCTIONS', () => {
     expect(VERIFY_INSTRUCTIONS).toContain('用户反馈阈值沉淀');
     expect(VERIFY_INSTRUCTIONS).toContain('单次 findingFeedbacks 不是可采信证据');
   });
+
+  it('要求对照审查蓝图与运行期 CodeMem', () => {
+    expect(VERIFY_INSTRUCTIONS).toContain('审查蓝图');
+    expect(VERIFY_INSTRUCTIONS).toContain('运行期 CodeMem');
+    expect(VERIFY_INSTRUCTIONS).toContain('不能替代代码取证');
+  });
 });

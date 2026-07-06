@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/cn';
+import { GlassSurface } from './glass-surface';
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded-[var(--r-lg)] border border-white/70 bg-[var(--surface-card)] p-6 shadow-[var(--shadow-md)] ring-1 ring-[var(--hairline)]', className)}>{children}</div>
+    <GlassSurface className="rounded-[var(--r-lg)]" contentClassName={cn('p-6', className)} radius={12}>
+      {children}
+    </GlassSurface>
   );
 }
 

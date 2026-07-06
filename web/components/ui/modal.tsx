@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import X from 'lucide-react/dist/esm/icons/x';
 import { cn } from '../../lib/cn';
+import { GlassSurface } from './glass-surface';
 
 export function Modal({
   open,
@@ -23,7 +24,7 @@ export function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={cn('animate-fade-in w-full rounded-[var(--r-lg)] bg-[var(--surface-card)] shadow-[var(--shadow-lg)] ring-1 ring-white/70', maxWidth)}>
+      <GlassSurface className={cn('animate-fade-in w-full rounded-[var(--r-lg)] shadow-[var(--shadow-lg)]', maxWidth)} contentClassName="overflow-hidden" radius={12}>
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-lg)] border-b border-white/70 bg-[rgba(251,252,248,0.92)] px-6 py-4 backdrop-blur">
           <h2 className="font-display text-lg text-[var(--ink)]">{title}</h2>
           <button
@@ -36,7 +37,7 @@ export function Modal({
           </button>
         </div>
         <div className="max-h-[calc(100vh-11rem)] overflow-y-auto px-6 py-6">{children}</div>
-      </div>
+      </GlassSurface>
     </div>
   );
 }

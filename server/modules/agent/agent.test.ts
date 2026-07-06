@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { resolveModel, resolveRepositoryModelConfig, resolveReviewModelConfigs } from '../ai-models/ai-models.service';
 import { buildTools, type ReviewContext } from './tools';
 import { buildInstructions } from './review-agent';
+import type { ReviewBlueprint } from './review-blueprint';
+import { createReviewRuntimeMemory } from './review-runtime-memory';
 import { signedUrl } from '../../shared/dingtalk/dingtalk.service';
 import type { GitLabService } from '../../shared/gitlab/gitlab.service';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
@@ -244,6 +246,16 @@ describe('输出工具的开关控制', () => {
     expect('write_memory' in tools).toBe(false);
     expect('read_memory' in tools).toBe(true);
   });
+
+  it('record_evidence 只写运行期 CodeMem，不开启长期记忆写入', async () => {
+    const runtimeMemory = createReviewRuntimeMemory();
+    const tools = buildTools(fakeContext({ runtimeMemory }), { publish: false, memoryWrite: false });
+
+    expect('write_memory' in tools).toBe(false);
+    expect('record_evidence' in tools).toBe(true);
+    await tools.record_evidence!.execute!({ evidence: 'review-agent.ts:12 蓝图输入' }, toolOpts);
+    expect(runtimeMemory.evidenceItems).toEqual(['review-agent.ts:12 蓝图输入']);
+  });
 });
 
 describe('buildInstructions（输出渠道按配置生成）', () => {
@@ -271,6 +283,24 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
     expect(text).toContain('用户否定的问题模式');
     expect(text).toContain('不要机械复读');
     expect(text).toContain('不要写项目记忆');
+  });
+
+  it('主审查 prompt 消费审查蓝图与运行期 CodeMem', () => {
+    const blueprint: ReviewBlueprint = {
+      scope: ['server/modules/agent/review-agent.ts'],
+      riskAreas: ['多智能体流程变化'],
+      requiredEvidence: ['核验 verify 前无副作用'],
+      delegatePlan: ['architecture'],
+      verificationChecklist: ['对照蓝图逐条删除无证据问题'],
+    };
+    const runtimeMemory = createReviewRuntimeMemory();
+    const text = buildInstructions(repo(), [], blueprint, runtimeMemory);
+
+    expect(text).toContain('DeepCode 风格链路');
+    expect(text).toContain('审查蓝图');
+    expect(text).toContain('运行期 CodeMem');
+    expect(text).toContain('record_evidence');
+    expect(text).toContain('只有蓝图中安全/架构/性能风险明确且复杂时才调用');
   });
 
   it('仓库自定义审查要求追加在指令末尾', () => {

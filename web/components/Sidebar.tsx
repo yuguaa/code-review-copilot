@@ -42,15 +42,15 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   return (
-    <aside className="z-20 flex h-full w-80 shrink-0 flex-col border-r border-white/70 bg-[var(--surface-soft)] shadow-[10px_0_34px_-32px_rgba(31,39,34,0.55)] ring-1 ring-[var(--hairline)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
-      <div className="px-4 py-4">
+    <aside className="sidebar-shell z-20 flex h-full w-[292px] shrink-0 flex-col border-r border-[rgba(31,39,34,0.08)] bg-[rgba(247,248,246,0.94)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0">
+      <div className="px-3 pb-2.5 pt-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] ring-1 ring-white/20">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[0_12px_28px_-16px_rgba(21,26,23,0.55)] ring-1 ring-white/20">
               <ScanSearch size={16} />
             </span>
             <div className="min-w-0">
-              <span className="font-display block truncate text-[15px] text-[var(--ink)]">代码审查工作台</span>
+              <span className="font-display block truncate text-[14px] text-[var(--ink)]">代码审查工作台</span>
               <span className="caption block truncate text-[var(--muted)]">REVIEW CONSOLE</span>
             </div>
           </div>
@@ -58,7 +58,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
             onClick={() => setNewChatOpen(true)}
             title="新对话"
             aria-label="新对话"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[opacity,transform,background-color] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[0_14px_30px_-18px_rgba(21,26,23,0.62)] transition-[opacity,transform,background-color] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
           >
             <Plus size={17} />
           </button>

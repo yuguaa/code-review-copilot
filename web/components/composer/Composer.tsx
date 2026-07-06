@@ -6,6 +6,7 @@ import { CommandPalette } from './CommandPalette';
 import type { ComposerCommand } from './composer-types';
 import { RichComposerEditor, type RichComposerEditorHandle } from './RichComposerEditor';
 import { useComposerCommands } from './useComposerCommands';
+import { GlassSurface } from '../ui/glass-surface';
 
 export type { ComposerCommand } from './composer-types';
 
@@ -113,7 +114,12 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
   };
 
   return (
-    <div className="relative flex items-end gap-2 rounded-[var(--r-lg)] border border-white/80 bg-[var(--surface-card)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[var(--hairline)] transition-[border-color,box-shadow,transform] focus-within:border-[var(--accent)] focus-within:shadow-[0_24px_60px_-42px_rgba(31,39,34,0.52)]">
+    <GlassSurface
+      className="rounded-[16px] border-[rgba(31,39,34,0.1)] bg-white shadow-[0_16px_44px_-34px_rgba(31,39,34,0.42)] transition-[border-color,box-shadow,transform] focus-within:border-[rgba(49,95,80,0.3)] focus-within:shadow-[0_18px_48px_-34px_rgba(31,39,34,0.48)]"
+      contentClassName="relative flex min-h-[70px] items-end gap-2 p-2"
+      radius={16}
+      interactive
+    >
       <div className="min-w-0 flex-1">
         <RichComposerEditor
           ref={editorRef}
@@ -142,7 +148,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
           onClick={onStop}
           aria-label="停止生成"
           title="停止生成"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--primary)] text-white shadow-[0_12px_24px_-16px_rgba(21,26,23,0.72)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
         >
           <Square size={14} className="fill-current" />
         </button>
@@ -151,11 +157,11 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
           onClick={submit}
           disabled={editorDisabled || empty}
           aria-label="发送"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95 disabled:opacity-40"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--primary)] text-white shadow-[0_12px_24px_-16px_rgba(21,26,23,0.72)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95 disabled:opacity-40"
         >
           <SendHorizontal size={16} />
         </button>
       )}
-    </div>
+    </GlassSurface>
   );
 }

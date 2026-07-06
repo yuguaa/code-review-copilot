@@ -29,7 +29,7 @@ export function SessionList({
   onDelete,
 }: SessionListProps) {
   return (
-    <div className="flex-1 space-y-1 overflow-y-auto px-2.5 py-2 max-md:max-h-56">
+    <div className="flex-1 space-y-1 overflow-y-auto px-2 py-2 max-md:max-h-56">
       {loadError && (
         <div className="mx-1 space-y-2 rounded-[var(--r-md)] border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/8 px-3 py-3 text-center">
           <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-coral)]">
@@ -63,11 +63,13 @@ export function SessionList({
           <div
             key={s.id}
             className={cn(
-              'group relative rounded-[var(--r-md)] transition-[background-color,box-shadow,transform]',
-              active ? 'bg-[var(--surface-card)] shadow-[var(--shadow-sm)] ring-1 ring-white/70' : 'hover:bg-[var(--surface-card)] hover:shadow-[var(--shadow-sm)]',
+              'group relative overflow-hidden rounded-[var(--r-md)] transition-[background-color,box-shadow,transform]',
+              active
+                ? 'bg-white shadow-[0_12px_28px_-24px_rgba(31,39,34,0.42)] ring-1 ring-[rgba(31,39,34,0.06)]'
+                : 'hover:bg-white/70',
             )}
           >
-            {active && <span className="absolute left-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[var(--accent)] shadow-[0_0_0_4px_rgba(158,196,106,0.18)]" />}
+            {active && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[var(--accent)] shadow-[0_0_0_4px_rgba(158,196,106,0.14)]" />}
             <button
               onClick={() => onSelect(s.id)}
               className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-3 py-2.5 pr-8 text-left active:scale-[0.99]"
@@ -78,9 +80,7 @@ export function SessionList({
                 <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
               )}
               <span className="min-w-0">
-                <span
-                  className={cn('block truncate text-[13px]', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}
-                >
+                <span className={cn('block truncate text-[13px]', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}>
                   {sessionLabel(s)}
                 </span>
                 <span className="caption mt-1 flex min-w-0 items-center gap-1 truncate text-[var(--muted)]">

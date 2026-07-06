@@ -52,6 +52,8 @@ export async function runReviewSession(sessionId: string): Promise<void> {
       messages: finalMessages,
       model: reviewRun.verifierModel,
       maxSteps: reviewRun.verifierConfig.maxSteps,
+      blueprint: reviewRun.blueprint,
+      runtimeMemory: reviewRun.runtimeMemory,
     });
     finalMessages = withVerifiedReviewText(finalMessages, verifiedText);
     await saveMessages(sessionId, finalMessages);

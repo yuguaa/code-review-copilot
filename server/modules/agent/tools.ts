@@ -13,6 +13,7 @@ import {
   writeRepositoryMemory,
 } from '../repositories/repositories.service';
 import { isReadOnlyCommand } from './read-only-command';
+import { recordRuntimeEvidence, type ReviewRuntimeMemory } from './review-runtime-memory';
 
 const exec = promisify(execFile);
 const MAX_CHARS = 30_000; // 单次工具返回上限，避免撑爆上下文
@@ -38,6 +39,7 @@ export type ReviewContext = WorkspaceContext & {
   commitSha: string | null;
   diffRefs: { base_sha: string; head_sha: string; start_sha: string } | null;
   enableMrComment: boolean;
+  runtimeMemory?: ReviewRuntimeMemory;
 };
 
 function toolEnabled(ctx: WorkspaceContext, key: ToolKey): boolean {
@@ -161,6 +163,25 @@ export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memory
             description: '更新本仓库的项目记忆（整体覆盖）。把本次审查得到的、对后续有用的项目认知沉淀进去。',
             inputSchema: z.object({ content: z.string().describe('完整的 Markdown 记忆内容') }),
             execute: ({ content }) => writeRepositoryMemory(ctx.repoId, content),
+          }),
+        }
+      : {}),
+
+    ...(ctx.runtimeMemory && toolEnabled(ctx, 'record_evidence')
+      ? {
+          record_evidence: tool({
+            description:
+              '记录本轮审查已经亲自核验过的 CodeMem 证据。只记录能被代码、diff、调用方或项目记忆支撑的材料，供 verify loop 复核。',
+            inputSchema: z.object({
+              fileSummary: z.string().optional().describe('关键文件或模块摘要'),
+              evidence: z.string().optional().describe('已确认的问题证据，需包含文件/行号或取证来源'),
+              dependencyNote: z.string().optional().describe('调用关系、依赖关系或配置影响'),
+            }),
+            execute: ({ fileSummary, evidence, dependencyNote }) => {
+              if (!ctx.runtimeMemory) return '运行期 CodeMem 未启用。';
+              recordRuntimeEvidence(ctx.runtimeMemory, { fileSummary, evidence, dependencyNote });
+              return '已记录到本轮运行期 CodeMem。';
+            },
           }),
         }
       : {}),
