@@ -119,6 +119,37 @@ describe('notifyReviewCompleted', () => {
     );
   });
 
+  it('优先把最后的 Verify 结论作为钉钉正文，不混入未验证草稿', async () => {
+    await notifyReviewCompleted(session(), [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: '未验证草稿' },
+          messagePart({
+            type: 'tool-bash',
+            state: 'output-available',
+            toolCallId: 'tool-1',
+            input: { command: 'git diff' },
+            output: 'diff output',
+          }),
+          { type: 'text', text: '## Verify 结论\nverified 总评' },
+        ],
+      },
+    ]);
+
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('## Verify 结论\nverified 总评'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.not.stringContaining('未验证草稿'),
+    );
+  });
+
   it('优先把 post_review_comment 的 markdown 作为钉钉正文', async () => {
     await notifyReviewCompleted(session(), [
       {

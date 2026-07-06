@@ -61,13 +61,21 @@ function toolReviewTextOf(messages: UIMessage[]): string {
 function finalAssistantTextOf(messages: UIMessage[]): string {
   const assistantMessages = messages.filter((message) => message.role === 'assistant');
   const textBlocks = assistantMessages
-    .map((message) => message.parts.map((part) => textPartValue(part)).filter(Boolean).join('\n\n').trim())
+    .flatMap((message) => message.parts.map((part) => textPartValue(part)))
     .filter(Boolean);
   return textBlocks.at(-1) ?? '';
 }
 
+function verifiedReviewTextOf(messages: UIMessage[]): string {
+  const assistantMessages = messages.filter((message) => message.role === 'assistant');
+  const textBlocks = assistantMessages
+    .flatMap((message) => message.parts.map((part) => textPartValue(part)))
+    .filter((text) => text.startsWith('## Verify 结论'));
+  return textBlocks.at(-1) ?? '';
+}
+
 function finalReviewTextOf(messages: UIMessage[]): string {
-  return toolReviewTextOf(messages) || finalAssistantTextOf(messages);
+  return verifiedReviewTextOf(messages) || toolReviewTextOf(messages) || finalAssistantTextOf(messages);
 }
 
 function titleOf(session: SessionWithRepository): string {

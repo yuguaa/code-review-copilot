@@ -31,19 +31,19 @@ function latestAssistantText(messages: UIMessage[]): string {
 }
 
 export function withVerifiedReviewText(messages: UIMessage[], verifiedText: string): UIMessage[] {
+  const verifiedPart = { type: 'text', text: `## Verify 结论\n${verifiedText}` } as const;
   const index = messages.findLastIndex((message) => message.role === 'assistant');
   if (index < 0) {
     return [
       ...messages,
-      { id: `verified-${Date.now()}`, role: 'assistant', parts: [{ type: 'text', text: verifiedText }] },
+      { id: `verified-${Date.now()}`, role: 'assistant', parts: [verifiedPart] },
     ];
   }
   return messages.map((message, currentIndex) => {
     if (currentIndex !== index) return message;
-    const processParts = message.parts.filter((part) => part.type !== 'text');
     return {
       ...message,
-      parts: [...processParts, { type: 'text', text: verifiedText }],
+      parts: [...message.parts, verifiedPart],
     };
   });
 }

@@ -3,7 +3,7 @@ import type { UIMessage } from 'ai';
 import { VERIFY_INSTRUCTIONS, withVerifiedReviewText } from './review-verify';
 
 describe('withVerifiedReviewText', () => {
-  it('保留最后一条 assistant 的工具过程并替换文本结论', () => {
+  it('保留最后一条 assistant 的全部 parts 并追加 verified 结论', () => {
     const messages: UIMessage[] = [
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: '请审查' }] },
       {
@@ -22,8 +22,9 @@ describe('withVerifiedReviewText', () => {
         id: 'a1',
         role: 'assistant',
         parts: [
+          { type: 'text', text: '未验证草稿' },
           { type: 'tool-bash', state: 'output-available', toolCallId: 'tool-1', input: {}, output: 'ok' } as UIMessage['parts'][number],
-          { type: 'text', text: 'verified 总评' },
+          { type: 'text', text: '## Verify 结论\nverified 总评' },
         ],
       },
     ]);
@@ -34,7 +35,7 @@ describe('withVerifiedReviewText', () => {
 
     expect(result).toHaveLength(2);
     expect(result[1].role).toBe('assistant');
-    expect(result[1].parts).toEqual([{ type: 'text', text: 'verified 总评' }]);
+    expect(result[1].parts).toEqual([{ type: 'text', text: '## Verify 结论\nverified 总评' }]);
   });
 });
 
