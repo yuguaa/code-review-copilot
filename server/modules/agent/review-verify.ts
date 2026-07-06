@@ -40,9 +40,10 @@ export function withVerifiedReviewText(messages: UIMessage[], verifiedText: stri
   }
   return messages.map((message, currentIndex) => {
     if (currentIndex !== index) return message;
+    const processParts = message.parts.filter((part) => part.type !== 'text');
     return {
       ...message,
-      parts: [{ type: 'text', text: verifiedText }],
+      parts: [...processParts, { type: 'text', text: verifiedText }],
     };
   });
 }
