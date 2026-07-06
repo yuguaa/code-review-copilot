@@ -40,6 +40,27 @@ const feedbackMemoryHeader = '## 用户反馈阈值沉淀';
 const legacyFeedbackMemoryHeader = '## 用户反馈沉淀';
 const feedbackThreshold = { minTotal: 3, minNet: 2 } as const;
 
+function trimSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+function projectWebUrl(repo: { path: string; gitLabAccount?: { url: string } | null } | null): string | null {
+  if (!repo?.gitLabAccount?.url) return null;
+  return `${trimSlash(repo.gitLabAccount.url)}/${repo.path}`;
+}
+
+function sessionWebUrl(session: {
+  mrIid: number | null;
+  commitSha: string | null;
+  repository: { path: string; gitLabAccount?: { url: string } | null } | null;
+}): string | null {
+  const base = projectWebUrl(session.repository);
+  if (!base) return null;
+  if (session.mrIid != null) return `${base}/-/merge_requests/${session.mrIid}`;
+  if (session.commitSha) return `${base}/-/commit/${session.commitSha}`;
+  return base;
+}
+
 /** 会话 + 仓库（含模型配置），供 chat route / agent 使用。 */
 export function getSessionWithRepository(id: string) {
   return prisma.session.findUnique({
@@ -58,7 +79,7 @@ export async function listSessions(kind?: string) {
     where: kind ? { kind } : undefined,
     orderBy: { updatedAt: 'desc' },
     include: {
-      repository: { select: { name: true, path: true } },
+      repository: { select: { name: true, path: true, gitLabAccount: { select: { url: true } } } },
       messages: { orderBy: { createdAt: 'desc' }, take: 1 },
     },
     take: 200,
@@ -71,7 +92,8 @@ export async function listSessions(kind?: string) {
     mrIid: s.mrIid,
     sourceBranch: s.sourceBranch,
     targetBranch: s.targetBranch,
-    repository: s.repository,
+    repository: s.repository ? { name: s.repository.name, path: s.repository.path, webUrl: projectWebUrl(s.repository) } : null,
+    webUrl: sessionWebUrl(s),
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
     preview: previewOf(s.messages[0]?.parts),

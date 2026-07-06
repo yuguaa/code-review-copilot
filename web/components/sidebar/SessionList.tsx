@@ -12,6 +12,7 @@ import { repositoryLabel, sessionLabel, sessionMeta, statusColor, statusLabel } 
 type SessionListProps = {
   sessions: SessionListItem[];
   activeSessionId?: string;
+  collapsed?: boolean;
   loadError: string | null;
   loaded: boolean;
   onRetry: () => void;
@@ -22,6 +23,7 @@ type SessionListProps = {
 export function SessionList({
   sessions,
   activeSessionId,
+  collapsed,
   loadError,
   loaded,
   onRetry,
@@ -29,7 +31,7 @@ export function SessionList({
   onDelete,
 }: SessionListProps) {
   return (
-    <div className="flex-1 space-y-1 overflow-y-auto px-2 py-2 max-md:max-h-56">
+    <div className={cn('flex-1 space-y-1 overflow-y-auto py-2 max-md:max-h-56', collapsed ? 'px-2' : 'px-2')}>
       {loadError && (
         <div className="mx-1 space-y-2 rounded-[var(--r-md)] border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/8 px-3 py-3 text-center">
           <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-coral)]">
@@ -51,7 +53,7 @@ export function SessionList({
         </p>
       )}
 
-      {!loadError && sessions.length > 0 && (
+      {!collapsed && !loadError && sessions.length > 0 && (
         <div className="px-2 pb-1 pt-1">
           <span className="eyebrow text-[var(--muted)]">最近审查</span>
         </div>
@@ -72,14 +74,18 @@ export function SessionList({
             {active && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-[var(--accent)] shadow-[0_0_0_4px_rgba(158,196,106,0.14)]" />}
             <button
               onClick={() => onSelect(s.id)}
-              className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-md)] px-3 py-2.5 pr-8 text-left active:scale-[0.99]"
+              title={sessionLabel(s)}
+              className={cn(
+                'grid w-full items-center gap-2 rounded-[var(--r-md)] text-left active:scale-[0.99]',
+                collapsed ? 'h-10 grid-cols-1 place-items-center px-0 py-0' : 'grid-cols-[auto_minmax(0,1fr)_auto] px-3 py-2.5 pr-8',
+              )}
             >
               {s.kind === 'review' ? (
                 <GitPullRequest size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
               ) : (
                 <MessageSquare size={13} className={cn('shrink-0', active ? 'text-[var(--ink)]' : 'text-[var(--muted)]')} />
               )}
-              <span className="min-w-0">
+              {!collapsed && <span className="min-w-0">
                 <span className={cn('block truncate text-[13px]', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}>
                   {sessionLabel(s)}
                 </span>
@@ -91,17 +97,17 @@ export function SessionList({
                   {s.sourceBranch || s.targetBranch ? <GitBranch size={10} className="shrink-0" /> : null}
                   <span className="truncate">{sessionMeta(s)}</span>
                 </span>
-              </span>
-              <span
+              </span>}
+              {!collapsed && <span
                 title={statusLabel[s.status] ?? s.status}
                 className={cn(
                   'ml-auto h-1.5 w-1.5 shrink-0 rounded-full',
                   statusColor[s.status] ?? 'bg-[var(--muted-soft)]',
                   s.status === 'running' && 'status-breathe',
                 )}
-              />
+              />}
             </button>
-            <button
+            {!collapsed && <button
               type="button"
               aria-label="删除会话"
               title="删除会话"
@@ -112,7 +118,7 @@ export function SessionList({
               className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[var(--r-sm)] text-[var(--muted-soft)] opacity-0 transition-[opacity,background-color,color,transform] hover:bg-[var(--brand-coral)]/12 hover:text-[var(--brand-coral)] active:scale-95 group-focus-within:opacity-100 group-hover:opacity-100"
             >
               <Trash2 size={13} />
-            </button>
+            </button>}
           </div>
         );
       })}

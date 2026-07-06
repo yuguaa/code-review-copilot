@@ -8,7 +8,8 @@ export type SessionListItem = {
   mrIid: number | null;
   sourceBranch: string | null;
   targetBranch: string | null;
-  repository: { name: string; path: string } | null;
+  repository: { name: string; path: string; webUrl?: string | null } | null;
+  webUrl?: string | null;
   createdAt: string;
   updatedAt: string;
   preview: string;
@@ -28,7 +29,8 @@ export type SessionDetail = {
     author: string | null;
     error: string | null;
     updatedAt: string;
-    repository: { id: string; name: string; path: string } | null;
+    repository: { id: string; name: string; path: string; webUrl?: string | null } | null;
+    webUrl?: string | null;
   };
   messages: UIMessage[];
   messageTree: MessageTreeNode[];

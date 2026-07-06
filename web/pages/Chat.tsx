@@ -18,9 +18,9 @@ export function Chat() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="review-workbench line-canvas blueprint-backdrop flex h-full min-h-0 overflow-x-hidden max-md:flex-col">
+    <div className="review-workbench line-canvas flex h-full min-h-0 overflow-x-hidden max-md:flex-col">
       <Sidebar refreshKey={refreshKey} />
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <main className="chat-main relative flex min-h-0 min-w-0 flex-1 flex-col">
         {sessionId ? (
           <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
         ) : (
@@ -207,8 +207,8 @@ function ChatThread({
         </div>
       </div>
 
-      <div className="z-10 bg-[rgba(255,255,255,0.86)] px-4 pb-6 pt-3 backdrop-blur-xl max-md:px-3 max-md:pb-3">
-        <div className="mx-auto max-w-3xl">
+      <div className="composer-dock z-10 px-4 py-4 max-md:px-3 max-md:py-3">
+        <div className="mx-auto max-w-4xl">
           <LazyComposer
             placeholder={
               reviewing

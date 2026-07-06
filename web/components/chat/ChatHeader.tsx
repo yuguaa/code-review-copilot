@@ -4,6 +4,7 @@ import CircleDashed from 'lucide-react/dist/esm/icons/circle-dashed';
 import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
 import GitBranch from 'lucide-react/dist/esm/icons/git-branch';
 import Hash from 'lucide-react/dist/esm/icons/hash';
+import ExternalLink from 'lucide-react/dist/esm/icons/external-link';
 import UserRound from 'lucide-react/dist/esm/icons/user-round';
 import { cn } from '../../lib/cn';
 import type { SessionDetail } from '../../lib/types';
@@ -49,7 +50,7 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
     'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] border border-white/70 bg-[var(--surface-card)] px-2.5 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
 
   return (
-    <header className="sticky top-0 z-10 border-b border-[rgba(31,39,34,0.08)] bg-[rgba(255,255,255,0.86)] px-5 py-3 backdrop-blur-xl max-md:px-4">
+    <header className="chat-header sticky top-0 z-10 px-5 py-3 max-md:px-4">
       <div className="mx-auto flex max-w-6xl min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1 basis-64">
           <h1 className="font-display truncate text-lg text-[var(--ink)]">{sessionTitle(session)}</h1>
@@ -77,6 +78,16 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
             <span className={pill}>
               <UserRound size={12} className="shrink-0 text-[var(--muted-soft)]" /> <span className="truncate">{session.author}</span>
             </span>
+          )}
+          {session.webUrl && (
+            <a
+              href={session.webUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[rgba(255,255,255,0.2)] bg-[var(--primary)] px-2.5 py-1 text-white shadow-[0_12px_24px_-18px_rgba(7,26,18,0.72)] transition-[background-color,transform] hover:bg-[var(--body-strong)] active:scale-95"
+            >
+              <ExternalLink size={12} /> GitLab
+            </a>
           )}
         </div>
       </div>

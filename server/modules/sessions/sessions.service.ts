@@ -16,6 +16,27 @@ import {
 } from './session-events.service';
 import { markReviewSessionRunning } from './session-lifecycle.service';
 
+function trimSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+function projectWebUrl(repo: { path: string; gitLabAccount?: { url: string } | null } | null): string | null {
+  if (!repo?.gitLabAccount?.url) return null;
+  return `${trimSlash(repo.gitLabAccount.url)}/${repo.path}`;
+}
+
+function sessionWebUrl(session: {
+  mrIid: number | null;
+  commitSha: string | null;
+  repository: { path: string; gitLabAccount?: { url: string } | null } | null;
+}): string | null {
+  const base = projectWebUrl(session.repository);
+  if (!base) return null;
+  if (session.mrIid != null) return `${base}/-/merge_requests/${session.mrIid}`;
+  if (session.commitSha) return `${base}/-/commit/${session.commitSha}`;
+  return base;
+}
+
 export function listSessionSummaries(kind?: string) {
   return listSessions(kind);
 }
@@ -38,8 +59,9 @@ export function loadSessionDetail(id: string) {
         error: session.error,
         updatedAt: session.updatedAt,
         repository: session.repository
-          ? { id: session.repository.id, name: session.repository.name, path: session.repository.path }
+          ? { id: session.repository.id, name: session.repository.name, path: session.repository.path, webUrl: projectWebUrl(session.repository) }
           : null,
+        webUrl: sessionWebUrl(session),
       },
       messages: tree.messages,
       messageTree: tree.messageTree,
