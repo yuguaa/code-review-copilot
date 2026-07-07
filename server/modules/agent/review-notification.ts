@@ -58,24 +58,37 @@ function toolReviewTextOf(messages: UIMessage[]): string {
   return inlineComments.length ? ['## 行级问题', ...inlineComments].join('\n') : '';
 }
 
-function finalAssistantTextOf(messages: UIMessage[]): string {
+function assistantTextBlocksOf(messages: UIMessage[]): string[] {
   const assistantMessages = messages.filter((message) => message.role === 'assistant');
-  const textBlocks = assistantMessages
+  return assistantMessages
     .flatMap((message) => message.parts.map((part) => textPartValue(part)))
     .filter(Boolean);
+}
+
+function isVerifiedReviewText(text: string): boolean {
+  return text.startsWith('## Verify 结论');
+}
+
+function finalAssistantTextOf(messages: UIMessage[]): string {
+  const textBlocks = assistantTextBlocksOf(messages);
   return textBlocks.at(-1) ?? '';
 }
 
 function verifiedReviewTextOf(messages: UIMessage[]): string {
-  const assistantMessages = messages.filter((message) => message.role === 'assistant');
-  const textBlocks = assistantMessages
-    .flatMap((message) => message.parts.map((part) => textPartValue(part)))
-    .filter((text) => text.startsWith('## Verify 结论'));
+  const textBlocks = assistantTextBlocksOf(messages).filter((text) => isVerifiedReviewText(text));
+  return textBlocks.at(-1) ?? '';
+}
+
+function finalAssistantTextBeforeVerifyOf(messages: UIMessage[]): string {
+  const textBlocks = assistantTextBlocksOf(messages).filter((text) => !isVerifiedReviewText(text));
   return textBlocks.at(-1) ?? '';
 }
 
 function finalReviewTextOf(messages: UIMessage[]): string {
-  return verifiedReviewTextOf(messages) || toolReviewTextOf(messages) || finalAssistantTextOf(messages);
+  const verifiedText = verifiedReviewTextOf(messages);
+  const mainReviewText = toolReviewTextOf(messages) || (verifiedText ? finalAssistantTextBeforeVerifyOf(messages) : finalAssistantTextOf(messages));
+  if (mainReviewText && verifiedText) return [mainReviewText, '', '---', '', verifiedText].join('\n');
+  return mainReviewText || verifiedText;
 }
 
 function titleOf(session: SessionWithRepository): string {

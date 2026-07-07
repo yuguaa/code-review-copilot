@@ -119,7 +119,7 @@ describe('notifyReviewCompleted', () => {
     );
   });
 
-  it('优先把最后的 Verify 结论作为钉钉正文，不混入未验证草稿', async () => {
+  it('钉钉正文同时包含主审查输出和 Verify 结论', async () => {
     await notifyReviewCompleted(session(), [
       {
         id: 'a1',
@@ -146,7 +146,43 @@ describe('notifyReviewCompleted', () => {
     expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
-      expect.not.stringContaining('未验证草稿'),
+      expect.stringContaining('未验证草稿'),
+    );
+  });
+
+  it('有平台总评工具结果时，钉钉正文同时包含工具总评和 Verify 结论', async () => {
+    await notifyReviewCompleted(session(), [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
+          messagePart({
+            type: 'tool-post_review_comment',
+            state: 'output-available',
+            toolCallId: 'tool-1',
+            input: { markdown: '## 严重\n- Dockerfile:12 构建产物路径错误，会导致镜像构建失败。' },
+            output: { posted: true },
+          }),
+          { type: 'text', text: '## Verify 结论\nverified 总评' },
+        ],
+      },
+    ]);
+
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('Dockerfile:12 构建产物路径错误'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('## Verify 结论\nverified 总评'),
+    );
+    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.not.stringContaining('我会先读取项目记忆'),
     );
   });
 
