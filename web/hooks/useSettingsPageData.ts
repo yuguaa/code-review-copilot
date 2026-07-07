@@ -22,6 +22,10 @@ export type AIModel = {
   hasApiKey: boolean;
 };
 
+type AIModelDetail = Omit<AIModel, 'hasApiKey'> & {
+  apiKey: string;
+};
+
 export type Stats = {
   repositoryCount: number;
   activeRepositoryCount: number;
@@ -68,6 +72,7 @@ export function useSettingsPageData() {
   const [accessToken, setAccessToken] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [modelForm, setModelForm] = useState({ ...emptyModelForm });
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [savingNotification, setSavingNotification] = useState(false);
@@ -106,6 +111,11 @@ export function useSettingsPageData() {
     setModelForm((current) => ({ ...current, [key]: value }));
   };
 
+  const resetModelForm = () => {
+    setEditingModelId(null);
+    setModelForm({ ...emptyModelForm, isDefault: models.length === 0 });
+  };
+
   const add = () => {
     if (!url || !accessToken) {
       toast.error('请填写实例地址与访问令牌');
@@ -141,22 +151,40 @@ export function useSettingsPageData() {
       .catch((e) => toast.error(e instanceof Error ? e.message : '删除失败'));
   };
 
-  const addModel = () => {
+  const editModel = (model: AIModel) => {
+    setEditingModelId(model.id);
+    api<{ model: AIModelDetail }>(`/api/settings/models/${model.id}`)
+      .then(({ model: detail }) => {
+        setModelForm({
+          provider: detail.provider,
+          modelId: detail.modelId,
+          apiKey: detail.apiKey,
+          apiBaseUrl: detail.apiBaseUrl ?? '',
+          maxSteps: detail.maxSteps,
+          isDefault: detail.isDefault,
+        });
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '模型配置加载失败'));
+  };
+
+  const saveModel = () => {
     if (!modelForm.provider || !modelForm.modelId || !modelForm.apiKey) {
       toast.error('请填写模型 Provider、模型 ID 与 API Key');
       return;
     }
+    const method = editingModelId ? 'PATCH' : 'POST';
+    const path = editingModelId ? `/api/settings/models/${editingModelId}` : '/api/settings/models';
     setSavingModel(true);
-    api('/api/settings/models', {
-      method: 'POST',
+    api(path, {
+      method,
       body: JSON.stringify(modelForm),
     })
       .then(() => {
-        setModelForm({ ...emptyModelForm, isDefault: models.length === 0 });
+        resetModelForm();
         return load();
       })
-      .then(() => toast.success('已添加全局模型'))
-      .catch((e) => toast.error(e instanceof Error ? e.message : '添加失败'))
+      .then(() => toast.success(editingModelId ? '已保存模型配置' : '已添加全局模型'))
+      .catch((e) => toast.error(e instanceof Error ? e.message : editingModelId ? '保存失败' : '添加失败'))
       .finally(() => setSavingModel(false));
   };
 
@@ -225,6 +253,7 @@ export function useSettingsPageData() {
     accessToken,
     webhookSecret,
     modelForm,
+    editingModelId,
     saving,
     savingModel,
     savingNotification,
@@ -239,7 +268,9 @@ export function useSettingsPageData() {
     add,
     test,
     remove,
-    addModel,
+    editModel,
+    saveModel,
+    resetModelForm,
     setDefaultModel,
     updateModelActive,
     removeModel,

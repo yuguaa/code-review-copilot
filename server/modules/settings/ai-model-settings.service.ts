@@ -22,6 +22,10 @@ export async function listAIModels() {
   return models.map(maskModel);
 }
 
+export function getAIModel(id: string) {
+  return prisma.aIModel.findUnique({ where: { id } });
+}
+
 export async function createAIModel(body: AIModelPayload) {
   const model = await prisma.$transaction(async (tx) => {
     if (body.isDefault === true) {

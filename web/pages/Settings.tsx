@@ -21,6 +21,7 @@ export function Settings() {
     accessToken,
     webhookSecret,
     modelForm,
+    editingModelId,
     saving,
     savingModel,
     savingNotification,
@@ -35,7 +36,9 @@ export function Settings() {
     add,
     test,
     remove,
-    addModel,
+    editModel,
+    saveModel,
+    resetModelForm,
     setDefaultModel,
     updateModelActive,
     removeModel,
@@ -83,8 +86,15 @@ export function Settings() {
         onChange={setNotification}
         onSave={saveNotification}
       />
-      <ModelSettingsForm modelForm={modelForm} saving={savingModel} onModelChange={setModel} onAdd={addModel} />
-      <ModelList models={models} onSetDefault={setDefaultModel} onActiveChange={updateModelActive} onRemove={confirmRemoveModel} />
+      <ModelSettingsForm
+        modelForm={modelForm}
+        editing={Boolean(editingModelId)}
+        saving={savingModel}
+        onModelChange={setModel}
+        onSave={saveModel}
+        onCancelEdit={resetModelForm}
+      />
+      <ModelList models={models} onSetDefault={setDefaultModel} onActiveChange={updateModelActive} onEdit={editModel} onRemove={confirmRemoveModel} />
       <GitLabAccountForm
         url={url}
         accessToken={accessToken}

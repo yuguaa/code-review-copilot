@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createAIModel, deleteAIModel, listAIModels, updateAIModel } from './ai-model-settings.service';
+import { createAIModel, deleteAIModel, getAIModel, listAIModels, updateAIModel } from './ai-model-settings.service';
 import { listToolSkillSettings, updateToolSkillSettings } from './tool-skill-settings.service';
 import {
   createGitLabAccount,
@@ -51,6 +51,12 @@ settingsRoutes.get('/gitlab/:id/projects', async (c) => {
 /** 全局 AI 模型列表。 */
 settingsRoutes.get('/models', async (c) => {
   return c.json({ models: await listAIModels() });
+});
+
+settingsRoutes.get('/models/:id', async (c) => {
+  const model = await getAIModel(c.req.param('id'));
+  if (!model) return c.json({ error: '模型不存在' }, 404);
+  return c.json({ model });
 });
 
 /** 新增全局 AI 模型。 */
