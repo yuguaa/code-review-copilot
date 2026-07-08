@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import TriangleAlert from 'lucide-react/dist/esm/icons/triangle-alert';
 import { Button } from './button';
 
@@ -17,38 +18,61 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const titleId = useId();
+  const descriptionId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onCancel, open]);
+
   if (!open) return null;
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--surface-dark)]/40 px-4"
+      className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/48 px-4 py-6 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div className="tech-panel animate-fade-in w-full max-w-sm rounded-[var(--r-lg)] bg-[var(--canvas)] p-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="tech-panel animate-fade-in w-full max-w-[420px] rounded-[var(--r-lg)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-popover)] sm:p-6"
+      >
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]">
             <TriangleAlert size={18} />
           </span>
           <div className="min-w-0 space-y-1">
-            <h2 className="font-display text-base text-[var(--ink)]">{title}</h2>
-            <p className="text-sm leading-relaxed text-[var(--muted)]">{description}</p>
+            <h2 id={titleId} className="font-display text-base text-[var(--ink)]">
+              {title}
+            </h2>
+            <p id={descriptionId} className="text-sm leading-relaxed text-[var(--muted)]">
+              {description}
+            </p>
           </div>
         </div>
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={onCancel} type="button" autoFocus>
             取消
           </Button>
           <Button
             onClick={onConfirm}
             type="button"
-            className="border-transparent bg-[var(--brand-coral)] text-white hover:opacity-90"
+            className="border-transparent bg-[var(--brand-coral)] text-white hover:bg-[var(--brand-coral)] hover:brightness-95"
           >
             {confirmLabel}
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
