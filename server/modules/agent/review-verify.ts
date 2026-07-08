@@ -55,6 +55,7 @@ export function verifyReviewResult({
   maxSteps,
   blueprint,
   runtimeMemory,
+  abortSignal,
 }: {
   ctx: ReviewContext;
   messages: UIMessage[];
@@ -62,6 +63,7 @@ export function verifyReviewResult({
   maxSteps: number;
   blueprint?: ReviewBlueprint;
   runtimeMemory?: ReviewRuntimeMemory;
+  abortSignal?: AbortSignal;
 }): Promise<string> {
   const draft = latestAssistantText(messages).trim();
   const prompt = [
@@ -81,5 +83,6 @@ export function verifyReviewResult({
     prompt,
     tools: buildReadTools(ctx),
     stopWhen: stepCountIs(Math.max(1, Math.min(maxSteps, 8))),
+    abortSignal,
   }).then((result) => result.text.trim() || '未发现需要阻塞的实质问题。');
 }

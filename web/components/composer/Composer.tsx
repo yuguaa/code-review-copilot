@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Command from 'lucide-react/dist/esm/icons/command';
+import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import SendHorizontal from 'lucide-react/dist/esm/icons/send-horizontal';
 import Square from 'lucide-react/dist/esm/icons/square';
 import { CommandPalette } from './CommandPalette';
@@ -16,9 +17,22 @@ type ComposerProps = {
   onStop: () => void;
   onSubmit: (text: string) => void;
   placeholder: string;
+  stoppable?: boolean;
+  stopping?: boolean;
+  stopLabel?: string;
 };
 
-export function Composer({ placeholder, disabled, busy, commands, onSubmit, onStop }: ComposerProps) {
+export function Composer({
+  placeholder,
+  disabled,
+  busy,
+  commands,
+  onSubmit,
+  onStop,
+  stoppable,
+  stopping,
+  stopLabel = '停止生成',
+}: ComposerProps) {
   const [empty, setEmpty] = useState(true);
   const {
     activeCommand,
@@ -34,6 +48,7 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
   const activeCommandRef = useRef<ComposerCommand | undefined>(activeCommand);
   const editorRef = useRef<RichComposerEditorHandle>(null);
   const editorDisabled = Boolean(disabled || busy);
+  const canStop = Boolean(busy || stoppable);
 
   useEffect(() => {
     activeCommandRef.current = activeCommand;
@@ -137,14 +152,15 @@ export function Composer({ placeholder, disabled, busy, commands, onSubmit, onSt
       >
         <Command size={16} />
       </button>
-      {busy ? (
+      {canStop ? (
         <button
           onClick={onStop}
-          aria-label="停止生成"
-          title="停止生成"
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95"
+          disabled={Boolean(stopping)}
+          aria-label={stopLabel}
+          title={stopLabel}
+          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,transform,opacity] hover:bg-[var(--body-strong)] active:translate-y-px active:scale-95 disabled:cursor-wait disabled:opacity-65"
         >
-          <Square size={14} className="fill-current" />
+          {stopping ? <Loader2 size={16} className="animate-spin" /> : <Square size={14} className="fill-current" />}
         </button>
       ) : (
         <button

@@ -37,6 +37,7 @@ export function useChatThreadController({
   const sessionId = detail.session.id;
   const [parentMessageId, setParentMessageId] = useState<string | null>(null);
   const [commandRunning, setCommandRunning] = useState(false);
+  const [stoppingReview, setStoppingReview] = useState(false);
   const transport = useMemo(
     () => new DefaultChatTransport({ api: '/api/chat', body: { sessionId } }),
     [sessionId],
@@ -103,6 +104,36 @@ export function useChatThreadController({
       .finally(() => setCommandRunning(false));
   }, [canRunReviewCommand, commandRunning, markNearBottom, onActivity, sessionId, setMessages, updateDetail]);
 
+  const stopReview = useCallback(() => {
+    if (!reviewing || stoppingReview) return;
+    setStoppingReview(true);
+    api<{ error?: string }>(`/api/sessions/${sessionId}/stop-review`, { method: 'POST' })
+      .then((result) => {
+        updateDetail((current) =>
+          current
+            ? {
+                ...current,
+                session: {
+                  ...current.session,
+                  status: 'failed',
+                  error: result.error ?? '用户手动停止审查',
+                },
+              }
+            : current,
+        );
+        onActivity();
+        toast.success('已停止审查');
+        api<SessionDetail>(`/api/sessions/${sessionId}`)
+          .then((next) => {
+            updateDetail(next);
+            setMessages(next.messages);
+          })
+          .catch(() => undefined);
+      })
+      .catch((e) => toast.error(errorMessage(e, '停止审查失败')))
+      .finally(() => setStoppingReview(false));
+  }, [onActivity, reviewing, sessionId, stoppingReview, updateDetail]);
+
   const switchToMessage = useCallback((messageId: string) => {
     if (busy) return;
     api<MessageTreePayload>(`/api/sessions/${sessionId}/active-message`, {
@@ -156,6 +187,8 @@ export function useChatThreadController({
     scroll,
     status,
     stop,
+    stopReview,
+    stoppingReview,
     submit,
     submitFeedback,
     switchToMessage,

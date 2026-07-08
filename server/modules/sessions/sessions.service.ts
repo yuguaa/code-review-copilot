@@ -1,4 +1,4 @@
-import { runReviewSession } from '../agent/run-review';
+import { runReviewSession, stopRunningReviewSession } from '../agent/run-review';
 import {
   getSessionWithRepository,
   listSessions,
@@ -14,7 +14,7 @@ import {
   publishSessionListChanged,
   publishSessionMessages,
 } from './session-events.service';
-import { markReviewSessionRunning } from './session-lifecycle.service';
+import { markReviewSessionRunning, markReviewSessionStopped, STOPPED_REVIEW_ERROR } from './session-lifecycle.service';
 
 function trimSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -165,5 +165,25 @@ export function runReviewCommand(sessionId: string): Promise<ReviewCommandResult
           return { kind: 'started' as const, tree: next };
         });
     });
+  });
+}
+
+type StopReviewResult =
+  | { kind: 'missing' }
+  | { kind: 'invalid-kind' }
+  | { kind: 'not-running' }
+  | { kind: 'stopped'; error: string };
+
+export function stopReviewSession(sessionId: string): Promise<StopReviewResult> {
+  return getSessionWithRepository(sessionId).then((session) => {
+    if (!session) return { kind: 'missing' as const };
+    if (session.kind !== 'review') return { kind: 'invalid-kind' as const };
+    if (session.status !== 'running') return { kind: 'not-running' as const };
+
+    stopRunningReviewSession(sessionId);
+    return markReviewSessionStopped(sessionId).then(() => ({
+      kind: 'stopped' as const,
+      error: STOPPED_REVIEW_ERROR,
+    }));
   });
 }

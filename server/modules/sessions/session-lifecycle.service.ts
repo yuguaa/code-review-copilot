@@ -7,6 +7,8 @@ import {
   publishSessionStatus,
 } from './session-events.service';
 
+export const STOPPED_REVIEW_ERROR = '用户手动停止审查';
+
 export async function markReviewSessionRunning(sessionId: string, activeLeafMessageId: string): Promise<void> {
   await prisma.session.update({
     where: { id: sessionId },
@@ -33,4 +35,8 @@ export async function markReviewSessionFailed(sessionId: string, error: string):
   publishSessionError(sessionId, error);
   publishSessionStatus(sessionId, 'failed');
   publishSessionListChanged();
+}
+
+export function markReviewSessionStopped(sessionId: string): Promise<void> {
+  return markReviewSessionFailed(sessionId, STOPPED_REVIEW_ERROR);
 }

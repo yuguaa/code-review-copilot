@@ -77,10 +77,12 @@ export function createReviewBlueprint({
   ctx,
   model,
   maxSteps,
+  abortSignal,
 }: {
   ctx: ReviewContext;
   model: LanguageModel;
   maxSteps: number;
+  abortSignal?: AbortSignal;
 }): Promise<ReviewBlueprint> {
   return generateText({
     model,
@@ -88,5 +90,6 @@ export function createReviewBlueprint({
     prompt: '请为本次代码审查生成 DeepCode 风格的审查蓝图。',
     tools: buildReadTools(ctx),
     stopWhen: stepCountIs(Math.max(1, Math.min(maxSteps, 6))),
+    abortSignal,
   }).then((result) => parseReviewBlueprint(result.text));
 }

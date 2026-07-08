@@ -161,6 +161,8 @@ function ChatThread({
     scroll,
     status,
     stop,
+    stopReview,
+    stoppingReview,
     submit,
     submitFeedback,
     switchToMessage,
@@ -219,7 +221,10 @@ function ChatThread({
             }
             disabled={reviewing}
             busy={busy}
-            onStop={stop}
+            stoppable={reviewing}
+            stopping={stoppingReview}
+            stopLabel={reviewing ? '停止审查' : '停止生成'}
+            onStop={reviewing ? stopReview : stop}
             onSubmit={submit}
             commands={composerCommands}
           />

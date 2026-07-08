@@ -10,6 +10,7 @@ import {
   loadSessionDetail,
   runReviewCommand,
   sessionExists,
+  stopReviewSession,
   submitMessageFeedback,
   switchActiveMessage,
 } from './sessions.service';
@@ -90,6 +91,16 @@ sessionRoutes.post('/:id/review-command', async (c) => {
     return c.json({ error: '会话缺少审查种子消息，无法重新执行 review' }, 400);
   }
   return c.json(result.tree);
+});
+
+/** 手动停止正在运行的代码审查。 */
+sessionRoutes.post('/:id/stop-review', async (c) => {
+  const sessionId = c.req.param('id');
+  const result = await stopReviewSession(sessionId);
+  if (result.kind === 'missing') return c.json({ error: '会话不存在' }, 404);
+  if (result.kind === 'invalid-kind') return c.json({ error: '只能停止代码审查会话' }, 400);
+  if (result.kind === 'not-running') return c.json({ error: '当前审查未在运行中' }, 409);
+  return c.json({ success: true, error: result.error });
 });
 
 /** 新建普通对话会话（可选绑定仓库以便用其模型配置）。 */
