@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
-import { readRepositoryMemory, writeRepositoryMemory } from './repositories.service';
+import { readRepositoryMemory, updateRepository, writeRepositoryMemory } from './repositories.service';
 
 vi.mock('../../infrastructure/prisma/prisma.service', () => ({
   prisma: {
@@ -12,11 +12,15 @@ vi.mock('../../infrastructure/prisma/prisma.service', () => ({
 }));
 
 vi.mock('../tools/tools.service', () => ({
-  listActiveTools: vi.fn(),
+  assertKnownToolKeys: vi.fn(),
+  filterToolKeys: vi.fn((keys: string[]) => new Set(keys)),
+  listActiveTools: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../skills/skills.service', () => ({
-  listActiveSkills: vi.fn(),
+  assertKnownSkillKeys: vi.fn(),
+  filterSkillKeys: vi.fn((keys: string[]) => new Set(keys)),
+  listActiveSkills: vi.fn().mockResolvedValue([]),
 }));
 
 describe('repositories.service memory', () => {
@@ -47,6 +51,23 @@ describe('repositories.service memory', () => {
     expect(prisma.repository.update).toHaveBeenCalledWith({
       where: { id: 'repo-1' },
       data: { memory: '新的记忆' },
+    });
+  });
+});
+
+describe('repositories.service update', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('更新仓库时把空字符串默认模型归一化为 null', async () => {
+    vi.mocked(prisma.repository.update).mockResolvedValue({ id: 'repo-1', defaultAIModel: null } as never);
+
+    await updateRepository('repo-1', { defaultAIModelId: '' });
+
+    expect(prisma.repository.update).toHaveBeenCalledWith({
+      where: { id: 'repo-1' },
+      data: { defaultAIModelId: null },
     });
   });
 });

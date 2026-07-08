@@ -40,6 +40,11 @@ function requireString(value: unknown, label: string): string {
   return value;
 }
 
+function optionalForeignKey(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  return value || null;
+}
+
 function maskRepo<
   T extends {
     customApiKey?: string | null;
@@ -67,7 +72,7 @@ function createRepositoryData(body: RepositoryPayload) {
     description: body.description ?? null,
     watchBranches: body.watchBranches ?? null,
     autoReview: body.autoReview ?? true,
-    defaultAIModelId: body.defaultAIModelId || null,
+    defaultAIModelId: optionalForeignKey(body.defaultAIModelId) ?? null,
     customProvider: body.customProvider || null,
     customModelId: body.customModelId || null,
     customApiKey: body.customApiKey || null,
@@ -90,7 +95,6 @@ function updateRepositoryData(body: RepositoryPayload) {
     'description',
     'watchBranches',
     'autoReview',
-    'defaultAIModelId',
     'customProvider',
     'customModelId',
     'customApiBaseUrl',
@@ -103,6 +107,7 @@ function updateRepositoryData(body: RepositoryPayload) {
   ] as const) {
     if (body[key] !== undefined) data[key] = body[key];
   }
+  if (body.defaultAIModelId !== undefined) data.defaultAIModelId = optionalForeignKey(body.defaultAIModelId);
   if (body.gitLabProjectId !== undefined) data.gitLabProjectId = Number(body.gitLabProjectId);
   if (body.customApiKey === null) data.customApiKey = null;
   if (typeof body.customApiKey === 'string' && body.customApiKey.length > 0) data.customApiKey = body.customApiKey;

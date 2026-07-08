@@ -183,6 +183,7 @@ export function useRepositoriesPageData() {
     setSaving(true);
     const payload = {
       ...form,
+      defaultAIModelId: form.defaultAIModelId || null,
       customProvider: form.useCustomModel ? form.customProvider : null,
       customModelId: form.useCustomModel ? form.customModelId : null,
       customApiKey: form.useCustomModel ? form.customApiKey : null,
