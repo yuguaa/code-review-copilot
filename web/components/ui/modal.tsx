@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import X from 'lucide-react/dist/esm/icons/x';
 import { cn } from '../../lib/cn';
 
@@ -16,7 +17,7 @@ export function Modal({
   maxWidth?: string;
 }) {
   if (!open) return null;
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--surface-dark)]/48 px-4 py-10 backdrop-blur-[2px]"
       onMouseDown={(e) => {
@@ -37,6 +38,7 @@ export function Modal({
         </div>
         <div className="max-h-[calc(100vh-11rem)] overflow-y-auto px-6 py-6">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
