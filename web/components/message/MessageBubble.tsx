@@ -47,7 +47,7 @@ export function MessageBubble({
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
             isUser
               ? 'bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
-              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[0_10px_28px_-24px_rgba(31,39,34,0.36)]',
+              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-md)]',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
@@ -73,7 +73,7 @@ export function MessageBubble({
                 title="认可这条发现"
                 className={cn(
                   'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
-                  feedback === 'up' ? 'bg-[var(--brand-mint)] text-[var(--ink)]' : 'text-[var(--muted)]',
+                  feedback === 'up' ? 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]' : 'text-[var(--muted)]',
                 )}
               >
                 <ThumbsUp size={12} />
@@ -96,7 +96,7 @@ export function MessageBubble({
             <button
               type="button"
               onClick={() => onBranchFrom?.(message.id)}
-              className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-white active:scale-95"
+              className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-95"
               title={isUser ? '重新回答' : '从这里继续'}
             >
               {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}

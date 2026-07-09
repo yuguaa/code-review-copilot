@@ -11,8 +11,8 @@ type CommandPaletteProps = {
 
 export function CommandPalette({ activeCommand, commands, onSelect }: CommandPaletteProps) {
   return (
-    <div className="command-palette bottom-[calc(100%+0.5rem)] left-0 right-0 overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[rgba(255,255,255,0.96)] shadow-[var(--shadow-popover)] backdrop-blur-xl">
-      <div className="border-b border-[var(--line-subtle)] bg-[rgba(247,250,247,0.82)] px-3 py-2">
+    <div className="command-palette bottom-[calc(100%+0.5rem)] left-0 right-0 overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-popover)]">
+      <div className="border-b border-[var(--line-subtle)] bg-[var(--surface-soft)] px-3 py-2">
         <span className="caption text-[var(--muted)]">输入 / 选择指令</span>
       </div>
       {commands.length === 0 && (

@@ -52,7 +52,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
         <div className="space-y-3 py-2 text-center">
           <p className="text-sm text-[var(--body-strong)]">还没有可用仓库</p>
           <p className="text-xs text-[var(--muted)]">对话需要挂在一个仓库下，Agent 才能读取它的代码与记忆。</p>
-          <Link to="/repositories" onClick={onClose} className="inline-block text-sm font-semibold text-[var(--brand-coral)] hover:underline">
+          <Link to="/repositories" onClick={onClose} className="inline-block text-sm font-semibold text-[var(--brand-magenta)] hover:underline">
             去仓库配置 →
           </Link>
         </div>
@@ -67,7 +67,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
                   'flex cursor-pointer items-center gap-2.5 rounded-[var(--r-md)] border px-3 py-2.5 text-sm transition-colors',
                   selected === r.id
                     ? 'border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--ink)] shadow-[var(--shadow-sm)]'
-                    : 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--body)] hover:border-[var(--line-accent)] hover:bg-white',
+                    : 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--body)] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)]',
                 )}
               >
                 <input
@@ -75,7 +75,7 @@ export function NewChatModal({ open, onClose }: { open: boolean; onClose: () => 
                   name="new-chat-repo"
                   checked={selected === r.id}
                   onChange={() => setSelected(r.id)}
-                  className="accent-[var(--accent)]"
+                  className="accent-[var(--brand-magenta)]"
                 />
                 <FolderGit2 size={14} className="shrink-0 text-[var(--muted)]" />
                 <span className="min-w-0">

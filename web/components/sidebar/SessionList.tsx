@@ -65,10 +65,10 @@ export function SessionList({
             key={s.id}
             className={cn(
               'sidebar-session-row group relative overflow-hidden transition-[background-color,border-color,box-shadow,transform]',
-              active ? 'is-active' : 'hover:bg-white/48',
+              active ? 'is-active' : 'hover:bg-[var(--surface-card)]/70',
             )}
           >
-            {active && <span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[var(--accent)]" />}
+            {active && <span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[var(--brand-magenta)]" />}
             <button
               onClick={() => onSelect(s.id)}
               title={sessionLabel(s)}

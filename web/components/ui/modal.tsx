@@ -30,7 +30,7 @@ export function Modal({
   if (!open) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/48 px-4 py-6 backdrop-blur-[2px] sm:py-10"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/42 px-4 py-6 sm:py-10"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -41,7 +41,7 @@ export function Modal({
         aria-labelledby={titleId}
         className={cn('tech-panel animate-fade-in w-full overflow-hidden rounded-[var(--r-lg)]', maxWidth)}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-lg)] border-b border-[var(--line-default)] bg-[rgba(251,252,248,0.94)] px-6 py-4 backdrop-blur">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-lg)] border-b border-[var(--line-default)] bg-[var(--surface-card)] px-6 py-4">
           <h2 id={titleId} className="font-display text-lg text-[var(--ink)]">
             {title}
           </h2>
@@ -49,7 +49,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="关闭弹窗"
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-[var(--r-md)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-soft)] hover:text-[var(--ink)] active:scale-95"
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
           >
             <X size={16} />
           </button>

@@ -42,7 +42,7 @@ export function ToolSkillList({
         {items.map((item) => (
           <label
             key={item.key}
-            className="flex cursor-pointer items-start gap-2 rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-white active:scale-[0.99]"
+            className="flex cursor-pointer items-start gap-2 rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] px-3 py-2.5 shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-95"
           >
             <input
               type="checkbox"
@@ -57,7 +57,7 @@ export function ToolSkillList({
                   {item.category ?? item.mode ?? item.key}
                 </span>
                 {item.defaultEnabled && (
-                  <span className="line-tag caption rounded-[var(--r-pill)] bg-[var(--brand-mint)] px-1.5 py-0.5 text-[var(--ink)]">
+                  <span className="line-tag caption rounded-[var(--r-pill)] bg-[var(--brand-cyan)]/18 px-1.5 py-0.5 text-[var(--ink)]">
                     {defaultLabel}
                   </span>
                 )}

@@ -167,7 +167,7 @@ export function MessageBlockRenderer({
             {findings.map((finding) => (
               <div
                 key={finding.id}
-                className="flex items-start gap-2 rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-white/45 px-2.5 py-2"
+                className="flex items-start gap-2 rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-[var(--surface-soft)]/70 px-2.5 py-2"
               >
                 <span className="caption mt-0.5 shrink-0 text-[var(--muted-soft)]">{finding.severity}</span>
                 <p className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--body)]">{finding.text}</p>
@@ -212,7 +212,7 @@ function FindingFeedbackButtons({
         title="认可这条发现"
         className={cn(
           'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
-          value === 'up' ? 'bg-[var(--brand-mint)] text-[var(--ink)]' : 'text-[var(--muted)]',
+          value === 'up' ? 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]' : 'text-[var(--muted)]',
         )}
       >
         <CircleCheck size={12} />

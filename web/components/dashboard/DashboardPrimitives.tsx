@@ -7,14 +7,14 @@ import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 export const chartColors = {
-  ink: '#17201c',
-  muted: '#758078',
-  hairline: '#dce4da',
-  lime: '#9ec46a',
-  mint: '#b7d8bf',
-  coral: '#c25f52',
-  teal: '#315f50',
-  lilac: '#d7dfd1',
+  ink: '#262330',
+  muted: '#756f79',
+  hairline: '#d9d1c4',
+  lime: '#be167f',
+  mint: '#b9e7ef',
+  coral: '#c6534a',
+  teal: '#2cafcb',
+  lilac: '#e4d9ea',
 };
 
 export const trendChartConfig = {
@@ -40,7 +40,7 @@ export const repositoryChartConfig = {
 } satisfies ChartConfig;
 
 export const statusColor: Record<string, string> = {
-  completed: 'bg-[var(--brand-mint)] text-[var(--ink)]',
+  completed: 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]',
   failed: 'bg-[var(--brand-coral)] text-white',
   running: 'bg-[var(--brand-cream)] text-[var(--ink)]',
 };
@@ -100,8 +100,8 @@ export function MetricCard({
 
 export function SectionTitle({ title, meta }: { title: string; meta?: string }) {
   return (
-    <div className="flex items-end justify-between gap-3">
-      <h2 className="font-display text-lg text-[var(--ink)]">{title}</h2>
+    <div className="flex items-end justify-between gap-3 border-b border-[var(--line-subtle)] pb-3">
+      <h2 className="font-display text-xl leading-none text-[var(--ink)]">{title}</h2>
       {meta && <span className="caption text-[var(--muted)]">{meta}</span>}
     </div>
   );
@@ -119,7 +119,7 @@ export function SignalCard({
   icon: IconComponent;
 }) {
   return (
-    <div className="rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] p-4">
+    <div className="rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-soft)] p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="eyebrow text-[var(--muted)]">{label}</span>
         <Icon size={16} className="text-[var(--muted)]" />

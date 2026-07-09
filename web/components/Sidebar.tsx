@@ -45,8 +45,8 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
   };
 
   const sidebarClass = collapsed
-    ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[var(--line-default)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
-    : 'sidebar-shell z-20 flex h-full w-[304px] shrink-0 flex-col border-r border-[var(--line-default)] backdrop-blur-xl max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
+    ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[var(--line-default)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
+    : 'sidebar-shell z-20 flex h-full w-[304px] shrink-0 flex-col border-r border-[var(--line-default)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
   const collapseTitle = collapsed ? '展开侧边栏' : '折叠侧边栏';
   const collapseIcon = collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />;
 
@@ -72,7 +72,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
                 onClick={() => setCollapsed(true)}
                 title={collapseTitle}
                 aria-label={collapseTitle}
-                className="flex h-9 w-9 items-center justify-center rounded-[var(--r-md)] border border-[var(--line-default)] bg-white/42 text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-white/76 hover:text-[var(--ink)] active:scale-95"
+                className="flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
               >
                 {collapseIcon}
               </button>
@@ -102,7 +102,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
               onClick={() => setCollapsed(false)}
               title={collapseTitle}
               aria-label={collapseTitle}
-              className="flex h-10 w-10 items-center justify-center rounded-[var(--r-md)] border border-[var(--line-default)] bg-white/42 text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-white/76 hover:text-[var(--ink)] active:scale-95"
+              className="flex h-10 w-10 items-center justify-center rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
             >
               {collapseIcon}
             </button>

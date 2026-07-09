@@ -84,7 +84,7 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
               href={session.webUrl}
               target="_blank"
               rel="noreferrer"
-              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-strong)] bg-[var(--primary)] px-2.5 py-1 text-white shadow-[0_12px_24px_-18px_rgba(7,26,18,0.72)] transition-[background-color,transform] hover:bg-[var(--body-strong)] active:scale-95"
+              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1 text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--brand-magenta)] hover:bg-[var(--brand-magenta)] active:scale-95"
             >
               <ExternalLink size={12} /> GitLab
             </a>

@@ -74,7 +74,7 @@ export function RepositoryModal({
                 <button
                   key={project.id}
                   onClick={() => pickProject(project)}
-                  className="block w-full cursor-pointer rounded-[var(--r-sm)] border border-transparent px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color,border-color,transform] hover:border-[var(--line-subtle)] hover:bg-white hover:text-[var(--ink)] active:scale-[0.99]"
+                  className="block w-full cursor-pointer rounded-[var(--r-sm)] border border-transparent px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color,border-color,transform] hover:border-[var(--line-subtle)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
                 >
                   {project.path} <span className="text-[var(--muted-soft)]">#{project.id}</span>
                 </button>

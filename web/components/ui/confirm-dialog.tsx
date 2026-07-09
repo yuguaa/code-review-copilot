@@ -33,7 +33,7 @@ export function ConfirmDialog({
   if (!open) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/48 px-4 py-6 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/42 px-4 py-6"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -46,7 +46,7 @@ export function ConfirmDialog({
         className="tech-panel animate-fade-in w-full max-w-[420px] rounded-[var(--r-lg)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-popover)] sm:p-6"
       >
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--brand-coral)]/12 text-[var(--brand-coral)]">
             <TriangleAlert size={18} />
           </span>
           <div className="min-w-0 space-y-1">

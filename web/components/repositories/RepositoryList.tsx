@@ -24,19 +24,19 @@ export function RepositoryList({
     <div className="line-list">
       {repos.map((repo) => (
         <Card key={repo.id} className="flex items-center gap-4 rounded-none border-0 p-4 shadow-none max-md:flex-col max-md:items-stretch">
-          <span className={cn('h-12 w-1 shrink-0 rounded-full max-md:hidden', repo.autoReview ? 'bg-[var(--success)]' : 'bg-[var(--line-strong)]')} />
+          <span className={cn('h-12 w-1 shrink-0 rounded-full max-md:hidden', repo.autoReview ? 'bg-[var(--brand-cyan)]' : 'bg-[var(--line-strong)]')} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-[var(--ink)]">{repo.path}</p>
               <span
                 className={cn(
                   'line-tag rounded-full px-2 py-0.5 text-[11px] font-medium',
-                  repo.autoReview ? 'bg-[var(--success)]/12 text-[var(--success)]' : 'bg-[var(--surface-strong)] text-[var(--muted)]',
+                  repo.autoReview ? 'bg-[var(--brand-cyan)]/16 text-[var(--ink)]' : 'bg-[var(--surface-strong)] text-[var(--muted)]',
                 )}
               >
                 {repo.autoReview ? '自动审查' : '手动'}
               </span>
-              {repo.enableMrComment && <span className="line-tag rounded-full bg-[var(--brand-lilac)]/45 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">平台评论</span>}
+              {repo.enableMrComment && <span className="line-tag rounded-full bg-[var(--brand-lilac)]/65 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">平台评论</span>}
               {repo.enableDingtalk && <span className="line-tag rounded-full bg-[var(--brand-cream)] px-2 py-0.5 text-[11px] text-[var(--body-strong)]">钉钉</span>}
             </div>
             <p className="mt-1 text-[11px] text-[var(--muted)]">

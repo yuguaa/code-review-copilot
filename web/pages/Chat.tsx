@@ -91,11 +91,13 @@ function ChatEmptyState() {
     <div ref={rootRef} className="measure-rails grid h-full place-items-center px-6 py-10">
       <div data-empty-shell className="technical-panel grid w-full max-w-3xl gap-8 rounded-[var(--r-lg)] bg-[var(--surface-card)] p-8 max-md:p-6 md:grid-cols-[1fr_0.72fr]">
         <div className="min-w-0">
-          <div data-empty-copy className="flex h-14 w-14 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
+          <div data-empty-copy className="flex h-14 w-14 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
             <MessageSquare size={23} />
           </div>
-          <p data-empty-copy className="font-display mt-8 max-w-lg text-[34px] leading-[1.04] text-[var(--ink)] max-sm:text-[28px]">
-            选择一次审查，继续追问上下文
+          <p data-empty-copy className="font-display mt-8 max-w-lg text-[42px] leading-[0.98] text-[var(--ink)] max-sm:text-[32px]">
+            选择一次审查，
+            <br />
+            <span className="italic text-[var(--muted)]">继续追问</span>
           </p>
           <p data-empty-copy className="mt-4 max-w-md text-sm leading-relaxed text-[var(--muted)]">
             Webhook 触发的审查会沉淀成会话。你可以追问风险原因、改动范围、分支差异，也可以从任意消息分叉继续。
@@ -106,10 +108,10 @@ function ChatEmptyState() {
             <div
               key={item}
               data-empty-step
-              className="flex items-center justify-between rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)]"
+              className="flex items-center justify-between rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)]"
             >
               <span>{item}</span>
-              <span data-empty-dot className="h-2 w-2 rounded-full bg-[var(--accent)]" />
+              <span data-empty-dot className="h-2 w-2 rounded-full bg-[var(--brand-cyan)]" />
             </div>
           ))}
         </div>

@@ -101,26 +101,28 @@ export function Login() {
   };
 
   const fieldClass =
-    'w-full rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
+    'w-full rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
 
   return (
     <div ref={rootRef} className="line-canvas measure-rails blueprint-backdrop min-h-full">
-      <div className="mx-auto grid min-h-full max-w-6xl items-center gap-12 px-6 py-16 lg:grid-cols-[0.92fr_1.08fr]">
+      <div className="mx-auto grid min-h-full max-w-6xl items-center gap-14 px-6 py-16 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="mx-auto w-full max-w-md">
-          <span data-login-copy className="flex h-12 w-12 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
-            <span className="font-display text-xl">R</span>
+          <span data-login-copy className="flex h-12 w-12 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
+            <span className="font-display text-2xl leading-none">审</span>
           </span>
-          <SectionLabel data-login-copy className="mt-8 block">代码审查 AGENT</SectionLabel>
-          <h1 data-login-copy className="font-display mt-3 text-[44px] leading-[1.05] text-[var(--ink)] max-sm:text-[36px]">
-            让每次评审
+          <SectionLabel data-login-copy className="mt-8 block text-[var(--brand-magenta)]">§ 01 · CODE REVIEW AGENT</SectionLabel>
+          <h1 data-login-copy className="font-display mt-3 text-[56px] leading-[0.98] text-[var(--ink)] max-sm:text-[42px]">
+            让每次
             <br />
-            都可以追问
+            <span className="italic text-[var(--muted)]">评审</span>
+            <br />
+            <span className="text-[var(--brand-magenta)]">都可追问。</span>
           </h1>
-          <p data-login-copy className="mt-4 text-[15px] leading-relaxed text-[var(--muted)]">
+          <p data-login-copy className="mt-5 text-[15px] leading-relaxed text-[var(--muted)]">
             Webhook 触发审查，结论沉淀成一次可对话的会话——上下文、风险、结论，随时接着问。
           </p>
 
-          <form data-login-copy onSubmit={submit} className="mt-8 space-y-3">
+          <form data-login-copy onSubmit={submit} className="mt-8 space-y-3 border-t border-[var(--line-default)] pt-5">
             <input
               className={fieldClass}
               placeholder="账号"
@@ -142,21 +144,21 @@ export function Login() {
         </div>
 
         <div data-login-panel className="technical-panel hidden h-[430px] overflow-hidden rounded-[var(--r-lg)] lg:grid lg:grid-cols-2 lg:grid-rows-2">
-          <div data-login-tile className="bg-[var(--brand-lime)] p-8 will-change-transform">
-            <p className="eyebrow text-[var(--ink)]">WEBHOOK</p>
-            <p className="mt-20 font-display text-4xl leading-none text-[var(--ink)]">MR 触发</p>
+          <div data-login-tile className="bg-[var(--brand-magenta)] p-8 text-white will-change-transform">
+            <p className="eyebrow text-white/72">WEBHOOK</p>
+            <p className="mt-20 font-display text-[42px] leading-none">MR 触发</p>
           </div>
-          <div data-login-tile className="bg-[var(--brand-lilac)] p-8 will-change-transform">
+          <div data-login-tile className="bg-[var(--surface-card)] p-8 will-change-transform">
             <p className="eyebrow text-[var(--ink)]">REVIEW</p>
-            <p className="mt-20 font-display text-4xl leading-none text-[var(--ink)]">结论沉淀</p>
+            <p className="mt-20 font-display text-[42px] leading-none text-[var(--ink)]">结论沉淀</p>
           </div>
           <div data-login-tile className="bg-[var(--brand-navy)] p-8 text-white will-change-transform">
             <p className="eyebrow text-white/70">THREAD</p>
-            <p className="mt-20 font-display text-4xl leading-none">继续追问</p>
+            <p className="mt-20 font-display text-[42px] leading-none">继续追问</p>
           </div>
-          <div data-login-tile className="bg-[var(--brand-mint)] p-8 will-change-transform">
+          <div data-login-tile className="bg-[var(--brand-cyan)] p-8 will-change-transform">
             <p className="eyebrow text-[var(--ink)]">MEMORY</p>
-            <p className="mt-20 font-display text-4xl leading-none text-[var(--ink)]">上下文复用</p>
+            <p className="mt-20 font-display text-[42px] leading-none text-[var(--ink)]">上下文复用</p>
           </div>
         </div>
       </div>
