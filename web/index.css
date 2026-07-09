@@ -18,7 +18,7 @@
   --line-default: rgba(38, 35, 48, 0.14);
   --line-strong: rgba(38, 35, 48, 0.26);
   --line-accent: rgba(176, 24, 118, 0.45);
-  --grid-line: rgba(38, 35, 48, 0.032);
+  --grid-line: rgba(38, 35, 48, 0.018);
   --line-invert: rgba(255, 255, 255, 0.16);
   --hairline: var(--line-default);
 
@@ -112,8 +112,8 @@ body {
     linear-gradient(90deg, transparent calc(50% - 580px), rgba(176, 24, 118, 0.048) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(33, 140, 163, 0.048) calc(50% + 580px), transparent calc(50% + 581px)),
     linear-gradient(180deg, rgba(245, 242, 236, 0.98), rgba(240, 236, 228, 0.96));
   background-size:
-    96px 96px,
-    96px 96px,
+    128px 128px,
+    128px 128px,
     auto,
     auto;
 }
@@ -241,8 +241,9 @@ a:focus-visible {
     linear-gradient(90deg, transparent calc(50% - 560px), rgba(176, 24, 118, 0.045) calc(50% - 560px), transparent calc(50% - 559px), transparent calc(50% + 559px), rgba(33, 140, 163, 0.045) calc(50% + 560px), transparent calc(50% + 561px)),
     linear-gradient(180deg, rgba(245, 242, 236, 0.98), rgba(239, 234, 225, 0.96));
   background-size:
-    96px 96px,
-    96px 96px,
+    128px 128px,
+    128px 128px,
+    auto,
     auto;
 }
 
@@ -256,13 +257,10 @@ a:focus-visible {
 
 .chat-main {
   background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 430px), rgba(38, 35, 48, 0.045) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), rgba(38, 35, 48, 0.045) calc(50% + 430px), transparent calc(50% + 431px)),
-    linear-gradient(180deg, rgba(253, 251, 246, 0.9), rgba(242, 238, 230, 0.86));
+    linear-gradient(90deg, transparent calc(50% - 430px), rgba(38, 35, 48, 0.028) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), rgba(38, 35, 48, 0.028) calc(50% + 430px), transparent calc(50% + 431px)),
+    linear-gradient(180deg, rgba(255, 253, 248, 0.72), rgba(246, 242, 235, 0.7));
   background-size:
-    96px 96px,
-    96px 96px,
+    auto,
     auto;
 }
 
@@ -507,6 +505,7 @@ a:focus-visible {
   background-size:
     96px 96px,
     96px 96px,
+    auto,
     auto;
 }
 
