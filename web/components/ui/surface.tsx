@@ -10,7 +10,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
 }
 
 const COLOR_BLOCK_SURFACE: Record<string, { bg: string; dark: boolean }> = {
-  lime: { bg: 'var(--brand-magenta)', dark: true },
+  lime: { bg: 'var(--brand-lime)', dark: false },
   lilac: { bg: 'var(--brand-lilac)', dark: false },
   cream: { bg: 'var(--brand-cream)', dark: false },
   mint: { bg: 'var(--brand-mint)', dark: false },
@@ -44,7 +44,7 @@ export function ColorBlock({
 }
 
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn('eyebrow text-[var(--muted)]', className)}>{children}</span>;
+  return <span className={cn('caption text-[var(--muted)]', className)}>{children}</span>;
 }
 
 export function BadgePill({ children, className }: { children: ReactNode; className?: string }) {

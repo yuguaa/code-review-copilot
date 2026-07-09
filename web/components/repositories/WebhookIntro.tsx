@@ -9,7 +9,7 @@ export function WebhookIntro({ webhookUrl, onAdd }: { webhookUrl: string; onAdd:
           <h2 className="font-display text-lg">Webhook 接入</h2>
           <p className="text-sm opacity-80">在 GitLab 项目里添加 Webhook，勾选 Merge Request events 和 Push events。</p>
         </div>
-        <Button onClick={onAdd} type="button">
+        <Button onClick={onAdd} type="button" variant="onColor">
           添加仓库
         </Button>
       </div>

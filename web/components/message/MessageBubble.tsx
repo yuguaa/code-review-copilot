@@ -40,14 +40,14 @@ export function MessageBubble({
   });
   const canFeedback = !isUser && !isStreaming && Boolean(onFeedback) && !hasFindingFeedback;
   return (
-    <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12' : 'justify-start pr-8 max-md:pr-0')}>
+    <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12 max-md:pl-6' : 'justify-start pr-8 max-md:pr-0')}>
       <div className={cn('flex max-w-full items-start gap-2', isUser && 'flex-row-reverse')}>
         <div
           className={cn(
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
             isUser
-              ? 'bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
-              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-md)]',
+              ? 'max-w-[min(640px,100%)] bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
+              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-sm)]',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
@@ -62,7 +62,7 @@ export function MessageBubble({
             />
           ))}
         </div>
-        <div className={cn('flex items-center gap-1 opacity-45 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
+        <div className={cn('flex items-center gap-1 opacity-50 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
           <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
           {canFeedback && (
             <span className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">

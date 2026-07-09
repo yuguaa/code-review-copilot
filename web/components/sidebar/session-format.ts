@@ -1,7 +1,7 @@
 import type { SessionListItem } from '../../lib/types';
 
 export const statusColor: Record<string, string> = {
-  running: 'bg-[var(--brand-cream)]',
+  running: 'bg-[var(--warning)]',
   completed: 'bg-[var(--success)]',
   failed: 'bg-[var(--error)]',
 };

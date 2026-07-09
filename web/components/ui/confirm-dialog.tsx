@@ -33,7 +33,7 @@ export function ConfirmDialog({
   if (!open) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/42 px-4 py-6"
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/42 px-4 py-6"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}

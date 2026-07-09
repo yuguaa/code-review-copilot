@@ -10,10 +10,10 @@ export const chartColors = {
   ink: '#262330',
   muted: '#756f79',
   hairline: '#d9d1c4',
-  lime: '#be167f',
-  mint: '#b9e7ef',
-  coral: '#c6534a',
-  teal: '#2cafcb',
+  lime: '#d7dfad',
+  mint: '#c7e5e8',
+  coral: '#bd5148',
+  teal: '#218ca3',
   lilac: '#e4d9ea',
 };
 
@@ -26,7 +26,7 @@ export const trendChartConfig = {
 export const statusChartConfig = {
   completed: { label: '完成', color: chartColors.mint },
   failed: { label: '失败', color: chartColors.coral },
-  running: { label: '运行中', color: chartColors.lime },
+  running: { label: '运行中', color: '#9b6c22' },
 } satisfies ChartConfig;
 
 export const authorChartConfig = {
@@ -40,9 +40,9 @@ export const repositoryChartConfig = {
 } satisfies ChartConfig;
 
 export const statusColor: Record<string, string> = {
-  completed: 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]',
-  failed: 'bg-[var(--brand-coral)] text-white',
-  running: 'bg-[var(--brand-cream)] text-[var(--ink)]',
+  completed: 'bg-[var(--state-success-bg)] text-[var(--success)]',
+  failed: 'bg-[var(--state-error-bg)] text-[var(--error)]',
+  running: 'bg-[var(--state-warning-bg)] text-[var(--warning)]',
 };
 
 export function fmtTime(value: string | null): string {
@@ -77,14 +77,15 @@ export function MetricCard({
   icon: IconComponent;
   tone?: 'white' | 'lime' | 'coral' | 'navy';
 }) {
+  const isLightTone = tone === 'white' || tone === 'lime';
   const content = (
     <div className="flex min-h-24 items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="eyebrow opacity-70">{label}</p>
+        <p className="caption opacity-70">{label}</p>
         <p className="mt-2 font-display text-3xl tabular-nums">{value}</p>
         <p className="mt-1 truncate text-xs opacity-70">{hint}</p>
       </div>
-      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-pill)] border', tone === 'white' ? 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--ink)]' : 'border-white/20 bg-white/20')}>
+      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-sm)] border', isLightTone ? 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--ink)]' : 'border-white/20 bg-white/20')}>
         <Icon size={18} />
       </span>
     </div>
@@ -119,13 +120,13 @@ export function SignalCard({
   icon: IconComponent;
 }) {
   return (
-    <div className="rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-soft)] p-4">
+    <div className="rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-sm)]">
       <div className="flex items-center justify-between gap-3">
-        <span className="eyebrow text-[var(--muted)]">{label}</span>
+        <span className="caption text-[var(--muted)]">{label}</span>
         <Icon size={16} className="text-[var(--muted)]" />
       </div>
       <p className="mt-3 truncate text-sm font-semibold text-[var(--ink)]">{bucket?.label ?? '暂无'}</p>
-      <p className="caption mt-1 text-[var(--muted)]">{bucket ? value(bucket) : 'NO DATA'}</p>
+      <p className="caption mt-1 text-[var(--muted)]">{bucket ? value(bucket) : '暂无数据'}</p>
     </div>
   );
 }

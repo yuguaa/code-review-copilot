@@ -6,12 +6,13 @@ import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuth } from '../App';
 import { Button } from '../components/ui/button';
-import { SectionLabel } from '../components/ui/surface';
+import { Field, Input } from '../components/ui/forms';
 
 export function Login() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [username, setUsername] = useState('');
   const [secret, setSecret] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { refresh } = useAuth();
@@ -24,13 +25,13 @@ export function Login() {
       timeline
         .fromTo(
           '[data-login-copy]',
-          { y: 18, filter: 'blur(4px)' },
+          { y: 18, opacity: 0 },
           {
             y: 0,
-            filter: 'blur(0px)',
+            opacity: 1,
             duration: 0.72,
             stagger: 0.07,
-            clearProps: 'transform,filter',
+            clearProps: 'transform,opacity',
           },
         )
         .fromTo(
@@ -92,16 +93,22 @@ export function Login() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim() || !secret.trim()) {
+      setFormError('请输入账号和密钥');
+      return;
+    }
+    setFormError(null);
     setLoading(true);
     api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, secret }) })
       .then(() => refresh())
       .then(() => navigate('/', { replace: true }))
-      .catch((err) => toast.error(err instanceof Error ? err.message : '登录失败'))
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : '登录失败';
+        setFormError(message);
+        toast.error(message);
+      })
       .finally(() => setLoading(false));
   };
-
-  const fieldClass =
-    'w-full rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted-soft)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--ring)]';
 
   return (
     <div ref={rootRef} className="line-canvas measure-rails blueprint-backdrop min-h-full">
@@ -110,7 +117,7 @@ export function Login() {
           <span data-login-copy className="flex h-12 w-12 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
             <span className="font-display text-2xl leading-none">审</span>
           </span>
-          <SectionLabel data-login-copy className="mt-8 block text-[var(--brand-magenta)]">§ 01 · CODE REVIEW AGENT</SectionLabel>
+          <p data-login-copy className="caption mt-8 text-[var(--brand-magenta)]">代码审查 Agent</p>
           <h1 data-login-copy className="font-display mt-3 text-[56px] leading-[0.98] text-[var(--ink)] max-sm:text-[42px]">
             让每次
             <br />
@@ -119,24 +126,32 @@ export function Login() {
             <span className="text-[var(--brand-magenta)]">都可追问。</span>
           </h1>
           <p data-login-copy className="mt-5 text-[15px] leading-relaxed text-[var(--muted)]">
-            Webhook 触发审查，结论沉淀成一次可对话的会话——上下文、风险、结论，随时接着问。
+            Webhook 触发审查，结论沉淀成一次可对话的会话。上下文、风险和结论，随时接着问。
           </p>
 
-          <form data-login-copy onSubmit={submit} className="mt-8 space-y-3 border-t border-[var(--line-default)] pt-5">
-            <input
-              className={fieldClass}
-              placeholder="账号"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-            />
-            <input
-              className={fieldClass}
-              placeholder="密钥"
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-            />
+          <form data-login-copy onSubmit={submit} className="mt-8 space-y-4 border-t border-[var(--line-default)] pt-5">
+            <Field label="账号" hint="使用平台分配的审查工作台账号登录。">
+              <Input
+                placeholder="请输入账号"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setFormError(null);
+                }}
+                autoFocus
+              />
+            </Field>
+            <Field label="密钥" error={formError}>
+              <Input
+                placeholder="请输入密钥"
+                type="password"
+                value={secret}
+                onChange={(e) => {
+                  setSecret(e.target.value);
+                  setFormError(null);
+                }}
+              />
+            </Field>
             <Button type="submit" disabled={loading} className="w-full py-3">
               {loading ? '登录中…' : '登录'}
             </Button>
@@ -145,19 +160,19 @@ export function Login() {
 
         <div data-login-panel className="technical-panel hidden h-[430px] overflow-hidden rounded-[var(--r-lg)] lg:grid lg:grid-cols-2 lg:grid-rows-2">
           <div data-login-tile className="bg-[var(--brand-magenta)] p-8 text-white will-change-transform">
-            <p className="eyebrow text-white/72">WEBHOOK</p>
+            <p className="caption text-white/72">触发源</p>
             <p className="mt-20 font-display text-[42px] leading-none">MR 触发</p>
           </div>
           <div data-login-tile className="bg-[var(--surface-card)] p-8 will-change-transform">
-            <p className="eyebrow text-[var(--ink)]">REVIEW</p>
+            <p className="caption text-[var(--ink)]">审查流</p>
             <p className="mt-20 font-display text-[42px] leading-none text-[var(--ink)]">结论沉淀</p>
           </div>
           <div data-login-tile className="bg-[var(--brand-navy)] p-8 text-white will-change-transform">
-            <p className="eyebrow text-white/70">THREAD</p>
+            <p className="caption text-white/70">会话</p>
             <p className="mt-20 font-display text-[42px] leading-none">继续追问</p>
           </div>
           <div data-login-tile className="bg-[var(--brand-cyan)] p-8 will-change-transform">
-            <p className="eyebrow text-[var(--ink)]">MEMORY</p>
+            <p className="caption text-[var(--ink)]">上下文</p>
             <p className="mt-20 font-display text-[42px] leading-none text-[var(--ink)]">上下文复用</p>
           </div>
         </div>

@@ -2,35 +2,37 @@
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
-/* 设计 token：纸面网格、编辑排版、洋红/青色信号。 */
+/* 设计 token：纸面网格、编辑排版、克制信号色。 */
 :root {
   color-scheme: light;
 
-  --canvas: #f4f1ea;
-  --surface-soft: #ebe6dd;
-  --surface-card: #fbfaf6;
-  --surface-hover: #e4ded3;
-  --surface-strong: #d9d1c4;
+  --canvas: #f5f2ec;
+  --canvas-quiet: #f0ece4;
+  --surface-soft: #ece6dc;
+  --surface-card: #fffdf8;
+  --surface-hover: #e3dcd0;
+  --surface-selected: #f7edf3;
+  --surface-strong: #d8d0c4;
   --surface-dark: #262330;
-  --line-subtle: rgba(38, 35, 48, 0.06);
-  --line-default: rgba(38, 35, 48, 0.13);
-  --line-strong: rgba(38, 35, 48, 0.24);
-  --line-accent: rgba(190, 22, 127, 0.42);
-  --grid-line: rgba(38, 35, 48, 0.045);
+  --line-subtle: rgba(38, 35, 48, 0.055);
+  --line-default: rgba(38, 35, 48, 0.14);
+  --line-strong: rgba(38, 35, 48, 0.26);
+  --line-accent: rgba(176, 24, 118, 0.45);
+  --grid-line: rgba(38, 35, 48, 0.032);
   --line-invert: rgba(255, 255, 255, 0.16);
   --hairline: var(--line-default);
 
-  --brand-magenta: #be167f;
-  --brand-cyan: #2cafcb;
-  --brand-iris: #7b57f1;
-  --brand-lime: #be167f;
-  --brand-lilac: #e4d9ea;
+  --brand-magenta: #b01876;
+  --brand-cyan: #218ca3;
+  --brand-iris: #8b718f;
+  --brand-lime: #d7dfad;
+  --brand-lilac: #e6d9e4;
   --brand-cream: #eee5d2;
-  --brand-mint: #b9e7ef;
-  --brand-pink: #be167f;
-  --brand-coral: #c6534a;
+  --brand-mint: #c7e5e8;
+  --brand-pink: #b01876;
+  --brand-coral: #bd5148;
   --brand-navy: #262330;
-  --brand-teal: #2cafcb;
+  --brand-teal: #218ca3;
 
   --primary: #262330;
   --ink: #262330;
@@ -40,12 +42,17 @@
   --muted-soft: #9a929b;
   --on-primary: #ffffff;
 
-  --success: #16849a;
+  --success: #187c8f;
   --warning: #9b6c22;
-  --error: #c6534a;
+  --error: #bd5148;
 
   --accent: var(--brand-magenta);
-  --ring: rgba(190, 22, 127, 0.17);
+  --ring: rgba(176, 24, 118, 0.18);
+  --state-info-bg: rgba(33, 140, 163, 0.12);
+  --state-success-bg: rgba(33, 140, 163, 0.1);
+  --state-warning-bg: rgba(155, 108, 34, 0.12);
+  --state-error-bg: rgba(189, 81, 72, 0.12);
+  --state-selected-bg: rgba(176, 24, 118, 0.09);
 
   --r-xs: 2px;
   --r-sm: 4px;
@@ -54,10 +61,10 @@
   --r-xl: 8px;
   --r-pill: 999px;
 
-  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.74) inset, 0 1px 2px rgba(38, 35, 48, 0.06);
-  --shadow-md: 0 10px 22px -20px rgba(38, 35, 48, 0.45);
-  --shadow-lg: 0 16px 34px -28px rgba(38, 35, 48, 0.52);
-  --shadow-popover: 0 18px 42px -28px rgba(38, 35, 48, 0.56);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.72) inset, 0 1px 2px rgba(38, 35, 48, 0.045);
+  --shadow-md: 0 3px 8px -7px rgba(38, 35, 48, 0.46);
+  --shadow-lg: 0 6px 14px -12px rgba(38, 35, 48, 0.5);
+  --shadow-popover: 0 10px 14px -10px rgba(38, 35, 48, 0.42);
 
   --font-display: ui-serif, 'Songti SC', 'STSong', Georgia, 'Times New Roman', serif;
   --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
@@ -102,8 +109,8 @@ body {
   background:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 580px), rgba(190, 22, 127, 0.08) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(44, 175, 203, 0.08) calc(50% + 580px), transparent calc(50% + 581px)),
-    linear-gradient(180deg, rgba(244, 241, 234, 0.98), rgba(240, 236, 227, 0.96));
+    linear-gradient(90deg, transparent calc(50% - 580px), rgba(176, 24, 118, 0.048) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(33, 140, 163, 0.048) calc(50% + 580px), transparent calc(50% + 581px)),
+    linear-gradient(180deg, rgba(245, 242, 236, 0.98), rgba(240, 236, 228, 0.96));
   background-size:
     96px 96px,
     96px 96px,
@@ -141,21 +148,6 @@ body {
   letter-spacing: 0.06em;
 }
 
-.glass-surface {
-  background: var(--surface-card);
-  box-shadow: var(--shadow-md);
-}
-
-.glass-surface::before {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--line-accent), transparent 34%);
-  opacity: 0.18;
-}
-
 @layer base {
   button,
   input,
@@ -172,7 +164,7 @@ a:focus-visible {
 }
 
 ::selection {
-  background: rgba(190, 22, 127, 0.22);
+  background: rgba(176, 24, 118, 0.22);
   color: var(--ink);
 }
 
@@ -246,8 +238,8 @@ a:focus-visible {
   background:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 560px), rgba(190, 22, 127, 0.08) calc(50% - 560px), transparent calc(50% - 559px), transparent calc(50% + 559px), rgba(44, 175, 203, 0.08) calc(50% + 560px), transparent calc(50% + 561px)),
-    linear-gradient(180deg, rgba(244, 241, 234, 0.98), rgba(239, 234, 225, 0.96));
+    linear-gradient(90deg, transparent calc(50% - 560px), rgba(176, 24, 118, 0.045) calc(50% - 560px), transparent calc(50% - 559px), transparent calc(50% + 559px), rgba(33, 140, 163, 0.045) calc(50% + 560px), transparent calc(50% + 561px)),
+    linear-gradient(180deg, rgba(245, 242, 236, 0.98), rgba(239, 234, 225, 0.96));
   background-size:
     96px 96px,
     96px 96px,
@@ -266,8 +258,8 @@ a:focus-visible {
   background:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 430px), rgba(38, 35, 48, 0.07) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), rgba(38, 35, 48, 0.07) calc(50% + 430px), transparent calc(50% + 431px)),
-    linear-gradient(180deg, rgba(250, 248, 242, 0.88), rgba(241, 237, 229, 0.86));
+    linear-gradient(90deg, transparent calc(50% - 430px), rgba(38, 35, 48, 0.045) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), rgba(38, 35, 48, 0.045) calc(50% + 430px), transparent calc(50% + 431px)),
+    linear-gradient(180deg, rgba(253, 251, 246, 0.9), rgba(242, 238, 230, 0.86));
   background-size:
     96px 96px,
     96px 96px,
@@ -276,16 +268,16 @@ a:focus-visible {
 
 .chat-header {
   border-bottom: 1px solid var(--line-default);
-  background: rgba(251, 250, 246, 0.94);
-  box-shadow: 0 8px 18px -18px rgba(38, 35, 48, 0.36);
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: var(--shadow-md);
 }
 
 .sidebar-shell {
   position: relative;
-  background: rgba(235, 230, 221, 0.94);
+  background: rgba(236, 230, 220, 0.96);
   box-shadow:
     inset -1px 0 0 var(--line-subtle),
-    10px 0 24px -24px rgba(38, 35, 48, 0.54);
+    4px 0 8px -8px rgba(38, 35, 48, 0.42);
   transition:
     width 0.24s var(--ease-out),
     background-color 0.24s var(--ease-out);
@@ -301,7 +293,7 @@ a:focus-visible {
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 48px 48px;
-  opacity: 0.78;
+  opacity: 0.46;
 }
 
 .sidebar-shell::before {
@@ -320,7 +312,7 @@ a:focus-visible {
 .sidebar-action-button {
   background: var(--primary);
   box-shadow:
-    0 16px 34px -28px rgba(38, 35, 48, 0.86),
+    0 5px 8px -7px rgba(38, 35, 48, 0.86),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
@@ -343,8 +335,8 @@ a:focus-visible {
 }
 
 .sidebar-session-row.is-active {
-  border-color: var(--line-default);
-  background: var(--surface-card);
+  border-color: var(--line-accent);
+  background: var(--surface-selected);
   box-shadow: var(--shadow-sm);
 }
 
@@ -361,7 +353,7 @@ a:focus-visible {
 
 .sidebar-session-icon.is-active {
   color: var(--ink);
-  background: rgba(190, 22, 127, 0.1);
+  background: var(--state-selected-bg);
 }
 
 .review-paper {
@@ -375,7 +367,7 @@ a:focus-visible {
 
 .assistant-message {
   position: relative;
-  background: rgba(251, 250, 246, 0.94);
+  background: rgba(255, 253, 248, 0.96);
 }
 
 .assistant-message::before {
@@ -386,7 +378,7 @@ a:focus-visible {
   border-radius: inherit;
   border-top: 1px solid rgba(255, 255, 255, 0.76);
   border-bottom: 1px solid var(--line-subtle);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
 }
 
 .tool-evidence-card {
@@ -399,8 +391,8 @@ a:focus-visible {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(44, 175, 203, 0.1), transparent 38%);
-  opacity: 0.78;
+  background: linear-gradient(90deg, var(--state-info-bg), transparent 36%);
+  opacity: 0.82;
 }
 
 .tool-evidence-card > * {
@@ -419,39 +411,53 @@ a:focus-visible {
   display: none;
 }
 
-.technical-panel {
+.technical-panel,
+.tech-panel,
+.glass-surface {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--line-default);
   background: var(--surface-card);
   box-shadow:
-    var(--shadow-md),
+    var(--shadow-sm),
     inset 0 1px 0 rgba(255, 255, 255, 0.74);
 }
 .technical-panel::before,
-.technical-panel::after {
+.technical-panel::after,
+.tech-panel::before,
+.tech-panel::after,
+.glass-surface::before,
+.glass-surface::after {
   pointer-events: none;
   content: '';
   position: absolute;
   inset: 0;
 }
-.technical-panel::before {
+.technical-panel::before,
+.tech-panel::before,
+.glass-surface::before {
   inset: 0 0 auto;
   height: 1px;
   background: var(--line-accent);
-  opacity: 0.74;
+  opacity: 0.46;
 }
-.technical-panel::after {
+.technical-panel::after,
+.tech-panel::after,
+.glass-surface::after {
   top: 0;
   right: 0;
-  width: 42px;
-  height: 42px;
+  left: auto;
+  bottom: auto;
+  width: 34px;
+  height: 34px;
   border-top: 1px solid var(--line-accent);
   border-right: 1px solid var(--line-accent);
-  opacity: 0.42;
+  opacity: 0.28;
 }
 
-.technical-panel > * {
+.technical-panel > *,
+.tech-panel > *,
+.glass-surface > * {
   position: relative;
   z-index: 1;
 }
@@ -496,7 +502,7 @@ a:focus-visible {
   background:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 580px), rgba(190, 22, 127, 0.08) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(44, 175, 203, 0.08) calc(50% + 580px), transparent calc(50% + 581px)),
+    linear-gradient(90deg, transparent calc(50% - 580px), rgba(176, 24, 118, 0.05) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(33, 140, 163, 0.05) calc(50% + 580px), transparent calc(50% + 581px)),
     linear-gradient(180deg, rgba(248, 246, 240, 0.98), rgba(240, 236, 227, 0.94));
   background-size:
     96px 96px,
@@ -506,51 +512,13 @@ a:focus-visible {
 
 .ops-page-header {
   box-shadow:
-    0 8px 18px -18px rgba(38, 35, 48, 0.38),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.58);
-}
-
-.tech-panel {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--line-default);
-  background: var(--surface-card);
-  box-shadow:
     var(--shadow-md),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74);
-}
-
-.tech-panel::before {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: var(--line-accent);
-  opacity: 0.72;
+    inset 0 -1px 0 rgba(255, 255, 255, 0.58);
 }
 
 .tech-panel.is-dark::before {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent);
-  opacity: 0.7;
-}
-
-.tech-panel::after {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 42px;
-  height: 42px;
-  border-top: 1px solid var(--line-accent);
-  border-right: 1px solid var(--line-accent);
-  opacity: 0.42;
-}
-
-.tech-panel > * {
-  position: relative;
-  z-index: 1;
+  opacity: 0.55;
 }
 
 @media (max-width: 767px) {
@@ -585,11 +553,11 @@ a:focus-visible {
 }
 .conversation-frame::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(244, 241, 234, 0.98), transparent);
+  background: linear-gradient(180deg, rgba(245, 242, 236, 0.96), transparent);
 }
 .conversation-frame::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(244, 241, 234, 0.88), transparent);
+  background: linear-gradient(0deg, rgba(245, 242, 236, 0.88), transparent);
 }
 .conversation-frame.is-scrolled::before,
 .conversation-frame.can-scroll-more::after {
@@ -602,7 +570,7 @@ a:focus-visible {
 
 .composer-dock {
   position: relative;
-  background: linear-gradient(180deg, transparent, rgba(244, 241, 234, 0.58) 48%, rgba(244, 241, 234, 0.86));
+  background: linear-gradient(180deg, transparent, rgba(245, 242, 236, 0.56) 48%, rgba(245, 242, 236, 0.92));
 }
 
 .composer-dock::before {
@@ -665,7 +633,7 @@ a:focus-visible {
   border-radius: var(--r-md);
   background: var(--surface-dark);
   box-shadow:
-    0 8px 18px -14px rgba(38, 35, 48, 0.64),
+    0 5px 8px -7px rgba(38, 35, 48, 0.64),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -673,7 +641,7 @@ a:focus-visible {
   height: 34px;
   border-bottom: 1px solid var(--line-invert);
   background:
-    linear-gradient(90deg, rgba(190, 22, 127, 0.26), transparent 54%),
+    linear-gradient(90deg, rgba(176, 24, 118, 0.2), transparent 54%),
     rgba(255, 255, 255, 0.035);
   color: rgba(246, 241, 247, 0.74);
 }
@@ -786,7 +754,7 @@ a:focus-visible {
 .markdown-body pre code {
   padding: 0;
   background: transparent;
-  color: #f5f5f5;
+  color: #f5f2ec;
   font-size: 0.8125rem;
   line-height: 1.6;
 }
@@ -806,7 +774,7 @@ a:focus-visible {
 .markdown-body blockquote {
   margin: 0.7em 0;
   padding: 0.1em 0.9em;
-  border-left: 2px solid var(--line-accent);
+  border-left: 1px solid var(--line-accent);
   color: var(--muted);
 }
 .streamdown-body table,
@@ -854,7 +822,7 @@ a:focus-visible {
   border: 1px solid var(--line-default);
   border-radius: var(--r-lg);
   background: var(--surface-card);
-  box-shadow: 0 8px 18px -18px rgba(38, 35, 48, 0.28);
+  box-shadow: var(--shadow-sm);
 }
 
 .line-list > * + * {

@@ -13,17 +13,17 @@ const statusViewByStatus = {
   running: {
     label: '审查中',
     icon: CircleDashed,
-    className: 'border-[var(--warning)]/20 bg-[var(--brand-cream)]/70 text-[var(--ink)]',
+    className: 'border-[var(--warning)]/24 bg-[var(--state-warning-bg)] text-[var(--ink)]',
   },
   completed: {
     label: '已完成',
     icon: CheckCircle2,
-    className: 'border-[var(--success)]/20 bg-[var(--surface-card)] text-[var(--success)]',
+    className: 'border-[var(--success)]/24 bg-[var(--state-success-bg)] text-[var(--success)]',
   },
   failed: {
     label: '失败',
     icon: AlertCircle,
-    className: 'border-[var(--error)]/25 bg-[var(--surface-card)] text-[var(--error)]',
+    className: 'border-[var(--error)]/28 bg-[var(--state-error-bg)] text-[var(--error)]',
   },
 };
 
@@ -47,21 +47,21 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
   };
   const StatusIcon = statusView.icon;
   const pill =
-    'caption inline-flex max-w-56 items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2.5 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
+    'caption inline-flex max-w-60 items-center gap-1 rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
 
   return (
     <header className="chat-header sticky top-0 z-10 px-5 py-3 max-md:px-4">
-      <div className="mx-auto flex max-w-6xl min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="mx-auto grid max-w-6xl min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 flex-1 basis-64">
-          <h1 className="font-display truncate text-lg text-[var(--ink)]">{sessionTitle(session)}</h1>
+          <h1 className="font-display truncate text-lg leading-tight text-[var(--ink)]">{sessionTitle(session)}</h1>
           {session.repository && (
             <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[var(--muted)]">
               <FolderGit2 size={12} className="shrink-0 text-[var(--muted-soft)]" /> {session.repository.path}
             </p>
           )}
         </div>
-        <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5 text-[11px] font-medium">
-          <span className={cn('caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border px-2.5 py-1 shadow-[var(--shadow-sm)]', statusView.className)}>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] font-medium lg:justify-end">
+          <span className={cn('caption inline-flex items-center gap-1 rounded-[var(--r-sm)] border px-2 py-1 shadow-[var(--shadow-sm)]', statusView.className)}>
             <StatusIcon size={12} className={session.status === 'running' ? 'animate-spin' : undefined} /> {statusView.label}
           </span>
           {branchText && (
@@ -84,7 +84,7 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
               href={session.webUrl}
               target="_blank"
               rel="noreferrer"
-              className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1 text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--brand-magenta)] hover:bg-[var(--brand-magenta)] active:scale-95"
+              className="caption inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] px-2 py-1 text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--brand-magenta)] hover:bg-[var(--brand-magenta)] active:scale-[0.98]"
             >
               <ExternalLink size={12} /> GitLab
             </a>

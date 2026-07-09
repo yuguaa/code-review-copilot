@@ -60,17 +60,17 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
   const streaming = record.state === 'streaming';
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(251,252,248,0.82)] text-xs shadow-[var(--shadow-sm)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(255,253,248,0.88)] text-xs shadow-[var(--shadow-sm)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--body-strong)] transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]"
       >
         {streaming ? <Loader2 size={13} className="shrink-0 animate-spin text-[var(--warning)]" /> : <Brain size={13} className="shrink-0 text-[var(--muted)]" />}
-        <span className="caption truncate">REASONING{text && !open ? ` · ${text.slice(0, 72)}` : ''}</span>
+        <span className="caption truncate">推理过程{text && !open ? ` · ${text.slice(0, 72)}` : ''}</span>
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
-      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-[var(--line-subtle)] bg-[rgba(238,242,236,0.76)] px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
+      {open && <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t border-[var(--line-subtle)] bg-[var(--surface-soft)]/80 px-3 py-2.5 text-[var(--muted)]">{text}</pre>}
     </div>
   );
 }
@@ -100,7 +100,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
   const running = !done && !errored;
   const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(251,252,248,0.84)] text-xs shadow-[var(--shadow-sm)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(255,253,248,0.9)] text-xs shadow-[var(--shadow-sm)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -115,9 +115,9 @@ function ToolBlock({ part }: { part: MessagePart }) {
         <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
       </button>
       {open && (
-        <div className="space-y-2 border-t border-[var(--line-subtle)] bg-[rgba(238,242,236,0.72)] px-3 py-2.5">
-          {record.input != null && <JsonPanel label="INPUT" value={record.input} />}
-          {record.output != null && <JsonPanel label="OUTPUT" value={record.output} strong />}
+        <div className="space-y-2 border-t border-[var(--line-subtle)] bg-[var(--surface-soft)]/78 px-3 py-2.5">
+          {record.input != null && <JsonPanel label="输入" value={record.input} />}
+          {record.output != null && <JsonPanel label="输出" value={record.output} strong />}
           {errored && record.errorText != null && <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>}
         </div>
       )}
@@ -134,7 +134,7 @@ function UnknownBlock({ part }: { part: MessagePart }) {
         <span className="caption truncate">{String(part.type)}</span>
         <ChevronRight size={12} className={cn('ml-auto shrink-0 transition-transform', open && 'rotate-90')} />
       </button>
-      {open && <JsonPanel label="PART" value={part} />}
+      {open && <JsonPanel label="内容" value={part} />}
     </div>
   );
 }

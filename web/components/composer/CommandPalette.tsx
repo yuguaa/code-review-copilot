@@ -28,7 +28,7 @@ export function CommandPalette({ activeCommand, commands, onSelect }: CommandPal
             disabled={command.disabled}
             className={cn(
               'relative flex w-full cursor-pointer items-start gap-3 border-b border-[var(--line-subtle)] px-3 py-3 text-left transition-[background-color,border-color] last:border-b-0 hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-50',
-              selected && 'bg-[var(--surface-hover)] before:absolute before:bottom-2 before:left-0 before:top-2 before:w-[2px] before:rounded-r-full before:bg-[var(--accent)]',
+              selected && 'bg-[var(--surface-selected)] before:absolute before:bottom-2 before:left-0 before:top-2 before:w-px before:bg-[var(--accent)]',
             )}
           >
             <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">

@@ -52,13 +52,13 @@ function ChatEmptyState() {
         )
         .fromTo(
           '[data-empty-copy]',
-          { y: 16, filter: 'blur(4px)' },
+          { y: 14, opacity: 0 },
           {
             y: 0,
-            filter: 'blur(0px)',
+            opacity: 1,
             duration: 0.56,
             stagger: 0.06,
-            clearProps: 'transform,filter',
+            clearProps: 'transform,opacity',
           },
           '-=0.34',
         )
@@ -108,7 +108,7 @@ function ChatEmptyState() {
             <div
               key={item}
               data-empty-step
-              className="flex items-center justify-between rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)]"
+              className="flex items-center justify-between rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)] shadow-[var(--shadow-sm)]"
             >
               <span>{item}</span>
               <span data-empty-dot className="h-2 w-2 rounded-full bg-[var(--brand-cyan)]" />

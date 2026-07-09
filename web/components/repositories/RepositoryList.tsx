@@ -24,7 +24,7 @@ export function RepositoryList({
     <div className="line-list">
       {repos.map((repo) => (
         <Card key={repo.id} className="flex items-center gap-4 rounded-none border-0 p-4 shadow-none max-md:flex-col max-md:items-stretch">
-          <span className={cn('h-12 w-1 shrink-0 rounded-full max-md:hidden', repo.autoReview ? 'bg-[var(--brand-cyan)]' : 'bg-[var(--line-strong)]')} />
+          <span className={cn('h-12 w-px shrink-0 max-md:hidden', repo.autoReview ? 'bg-[var(--brand-cyan)]' : 'bg-[var(--line-strong)]')} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-[var(--ink)]">{repo.path}</p>

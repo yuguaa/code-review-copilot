@@ -68,7 +68,7 @@ export function SessionList({
               active ? 'is-active' : 'hover:bg-[var(--surface-card)]/70',
             )}
           >
-            {active && <span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[var(--brand-magenta)]" />}
+            {active && <span className="absolute bottom-2 left-0 top-2 w-px bg-[var(--brand-magenta)]" />}
             <button
               onClick={() => onSelect(s.id)}
               title={sessionLabel(s)}
@@ -93,7 +93,7 @@ export function SessionList({
               {!collapsed && <span
                 title={statusLabel[s.status] ?? s.status}
                 className={cn(
-                  'ml-auto h-1.5 w-1.5 shrink-0 rounded-full opacity-80',
+                  'ml-auto h-1.5 w-1.5 shrink-0 rounded-full opacity-85 ring-2 ring-[var(--surface-card)]',
                   statusColor[s.status] ?? 'bg-[var(--muted-soft)]',
                   s.status === 'running' && 'status-breathe',
                 )}

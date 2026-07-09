@@ -14,7 +14,7 @@ export function FailureSamples({ failures }: { failures: FailureItem[] }) {
       <SectionTitle title="失败样本" meta="最近 8 条" />
       <div className="space-y-3">
         {failures.map((failure) => (
-          <Link key={failure.id} to={`/c/${failure.id}`} className="dashboard-list-item block rounded-[var(--r-md)] border border-[var(--brand-coral)]/20 bg-[var(--brand-coral)]/8 px-3 py-3 transition-[background-color,border-color,transform] hover:border-[var(--brand-coral)]/35 hover:bg-[var(--brand-coral)]/12 active:scale-[0.99]">
+          <Link key={failure.id} to={`/c/${failure.id}`} className="dashboard-list-item block rounded-[var(--r-md)] border border-[var(--error)]/24 bg-[var(--state-error-bg)] px-3 py-3 transition-[background-color,border-color,transform] hover:border-[var(--error)]/40 hover:bg-[var(--state-error-bg)] active:scale-[0.99]">
             <div className="flex items-center gap-2 text-sm font-semibold text-[var(--brand-coral)]">
               <AlertCircle size={15} />
               <span className="min-w-0 flex-1 truncate">{failure.title}</span>
@@ -53,7 +53,7 @@ export function RecentActivity({ recent }: { recent: RecentItem[] }) {
             </span>
             <span className="text-right max-md:col-start-2 max-md:flex max-md:items-center max-md:gap-3 max-md:text-left">
               <span className="caption block text-[var(--muted)]">{dashboardStatusText[item.status] ?? item.status}</span>
-              <span className="caption block text-[var(--muted-soft)]">{item.messages} MSG</span>
+              <span className="caption block text-[var(--muted-soft)]">{item.messages} 条消息</span>
               <span className="caption block text-[var(--muted-soft)]">{fmtTime(item.updatedAt)}</span>
             </span>
           </Link>
