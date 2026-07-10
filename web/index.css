@@ -3,84 +3,85 @@
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
-/* 黑曜石审查工作台：深色层级、粉白能量弧和克制的状态色。 */
+/* 火山引擎式企业工作台：浅色高对比、蓝色主操作和清晰内容层级。 */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --canvas: #0a0a0f;
-  --canvas-quiet: #0d0b12;
-  --surface-soft: #171720;
-  --surface-card: #111118;
-  --surface-hover: #1b1b25;
-  --surface-selected: rgba(176, 48, 136, 0.14);
-  --surface-strong: #24232e;
-  --surface-dark: #08080c;
-  --header-surface: rgba(13, 11, 18, 0.94);
-  --line-subtle: rgba(255, 255, 255, 0.055);
-  --line-default: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --line-accent: rgba(240, 110, 210, 0.46);
-  --grid-line: rgba(255, 255, 255, 0.045);
+  --canvas: #f4f7fc;
+  --canvas-quiet: #eef3fb;
+  --surface-soft: #f7f9fc;
+  --surface-card: #ffffff;
+  --surface-hover: #edf3ff;
+  --surface-selected: #eaf1ff;
+  --surface-strong: #e8eef8;
+  --surface-dark: #020814;
+  --header-surface: rgba(255, 255, 255, 0.96);
+  --line-subtle: rgba(2, 8, 20, 0.06);
+  --line-default: #e5e7eb;
+  --line-strong: #cbd5e1;
+  --line-accent: rgba(22, 100, 255, 0.42);
+  --grid-line: rgba(22, 100, 255, 0.035);
   --line-invert: rgba(255, 255, 255, 0.16);
   --hairline: var(--line-default);
 
-  --brand-magenta: #b04090;
-  --brand-cyan: #63b9c8;
-  --brand-iris: #c8a0e0;
-  --brand-lime: #a9c56f;
-  --brand-lilac: #c8a0e0;
-  --brand-cream: #d8d2c7;
-  --brand-mint: #63c4b7;
-  --brand-pink: #d246af;
-  --brand-coral: #f06f75;
-  --brand-navy: #1e1e2c;
-  --brand-teal: #63b9c8;
+  --brand-magenta: #1664ff;
+  --brand-cyan: #0f91a8;
+  --brand-iris: #5b6b85;
+  --brand-lime: #79a520;
+  --brand-lilac: #eaf1ff;
+  --brand-cream: #f7f9fc;
+  --brand-mint: #dff7ef;
+  --brand-pink: #1664ff;
+  --brand-coral: #d92d20;
+  --brand-navy: #020814;
+  --brand-teal: #0f91a8;
 
-  --primary: #1e1e2c;
-  --ink: #f0f0f5;
-  --body-strong: #d7d4df;
-  --body: #b2adbd;
-  --muted: #8888a8;
-  --muted-soft: #aaa6b8;
-  --on-primary: #f7f6fa;
-  --on-light: #0a0a0f;
-  --light-control-hover: #dedee5;
+  --primary: #1664ff;
+  --primary-hover: #0d55e8;
+  --ink: #020814;
+  --body-strong: #1d2939;
+  --body: #344054;
+  --muted: #667085;
+  --muted-soft: #667085;
+  --on-primary: #ffffff;
+  --on-light: #020814;
+  --light-control-hover: #f4f7fc;
 
-  --success: #63c4b7;
-  --warning: #d9a85f;
-  --error: #f06f75;
+  --success: #067647;
+  --warning: #b54708;
+  --error: #d92d20;
 
-  --accent: #dc83c2;
-  --focus-ring: #f0b5df;
-  --ring: rgba(240, 110, 210, 0.18);
-  --state-info-bg: rgba(99, 185, 200, 0.11);
-  --state-success-bg: rgba(99, 196, 183, 0.1);
-  --state-warning-bg: rgba(217, 168, 95, 0.11);
-  --state-error-bg: rgba(240, 111, 117, 0.11);
-  --state-selected-bg: rgba(176, 48, 136, 0.16);
-  --metric-neutral: #191922;
-  --metric-lime: #1b2118;
-  --metric-lilac: #211a28;
-  --metric-mint: #142321;
-  --metric-pink: #25151f;
-  --metric-coral: #271719;
-  --metric-navy: #1e1e2c;
-  --metric-teal: #132328;
+  --accent: #1664ff;
+  --focus-ring: #1664ff;
+  --ring: rgba(22, 100, 255, 0.16);
+  --state-info-bg: rgba(22, 100, 255, 0.08);
+  --state-success-bg: rgba(6, 118, 71, 0.08);
+  --state-warning-bg: rgba(181, 71, 8, 0.08);
+  --state-error-bg: rgba(217, 45, 32, 0.08);
+  --state-selected-bg: rgba(22, 100, 255, 0.1);
+  --metric-neutral: #ffffff;
+  --metric-lime: #f3f8e8;
+  --metric-lilac: #f2f5ff;
+  --metric-mint: #ecfdf7;
+  --metric-pink: #eef4ff;
+  --metric-coral: #fff1f0;
+  --metric-navy: #eaf1ff;
+  --metric-teal: #eefbfc;
 
   --r-xs: 2px;
   --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 6px;
-  --r-xl: 8px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
   --r-pill: 999px;
 
-  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 8px 18px -16px rgba(0, 0, 0, 0.95);
-  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 14px 34px -26px rgba(0, 0, 0, 0.98);
-  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 22px 48px -30px rgba(0, 0, 0, 1);
-  --shadow-popover: inset 0 1px 0 rgba(255, 255, 255, 0.065), 0 24px 56px -22px rgba(0, 0, 0, 1);
+  --shadow-sm: 0 1px 2px rgba(2, 8, 20, 0.06);
+  --shadow-md: 0 6px 18px rgba(2, 8, 20, 0.08);
+  --shadow-lg: 0 14px 36px rgba(2, 8, 20, 0.1);
+  --shadow-popover: 0 18px 48px rgba(2, 8, 20, 0.16);
 
   --font-display: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-body: 'PingFang SC', 'Inter', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -97,6 +98,7 @@ body {
   background: var(--canvas);
   color: var(--body);
   font-family: var(--font-body);
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -118,37 +120,11 @@ body {
 }
 
 #root::before {
-  background:
-    radial-gradient(
-      ellipse 72% 52% at 58% -12%,
-      transparent 60%,
-      rgba(176, 48, 136, 0.03) 63%,
-      rgba(176, 48, 136, 0.08) 65%,
-      rgba(176, 48, 136, 0.16) 67%,
-      rgba(176, 48, 136, 0.28) 69%,
-      rgba(176, 48, 136, 0.4) 71%,
-      rgba(176, 48, 136, 0.52) 73%,
-      rgba(176, 48, 136, 0.64) 75%,
-      rgba(176, 48, 136, 0.74) 77%,
-      rgba(176, 48, 136, 0.82) 79%,
-      rgba(210, 70, 175, 0.9) 85%,
-      rgba(240, 110, 210, 0.82) 87%,
-      rgba(255, 205, 250, 0.78) 91%,
-      rgba(255, 240, 255, 0.86) 93%,
-      rgba(255, 255, 255, 0.88) 94%,
-      transparent 97%
-    ),
-    radial-gradient(circle at 58% 12%, rgba(120, 40, 180, 0.075), transparent 42%),
-    var(--canvas);
+  background: var(--canvas);
 }
 
 #root::after {
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse 72% 52% at 58% -12%, transparent 60%, black 78%, transparent 97%);
-  opacity: 0.7;
+  display: none;
 }
 
 /* 标题与正文统一使用 Inter，靠字重和明度建立密集工具界面的层级。 */
@@ -164,17 +140,17 @@ body {
 
 .eyebrow {
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .caption {
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
 
 @layer base {
@@ -193,13 +169,13 @@ a:focus-visible {
 }
 
 ::selection {
-  background: rgba(176, 48, 136, 0.32);
+  background: rgba(22, 100, 255, 0.2);
   color: var(--ink);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-color: rgba(2, 8, 20, 0.2) transparent;
 }
 ::-webkit-scrollbar {
   width: 8px;
@@ -209,10 +185,10 @@ a:focus-visible {
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 9999px;
-  background-color: rgba(255, 255, 255, 0.14);
+  background-color: rgba(2, 8, 20, 0.18);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.24);
+  background-color: rgba(2, 8, 20, 0.28);
 }
 
 @keyframes fade-in {
@@ -259,17 +235,7 @@ a:focus-visible {
   isolation: isolate;
 }
 .line-canvas::before {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(circle at 64% -55%, black 0%, rgba(0, 0, 0, 0.55) 45%, transparent 78%);
-  opacity: 0.38;
+  display: none;
 }
 
 .review-workbench {
@@ -281,54 +247,31 @@ a:focus-visible {
 }
 
 .chat-main {
-  background:
-    linear-gradient(90deg, transparent calc(50% - 430px), rgba(255, 255, 255, 0.025) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), rgba(255, 255, 255, 0.025) calc(50% + 430px), transparent calc(50% + 431px)),
-    linear-gradient(180deg, rgba(13, 11, 18, 0.76), rgba(10, 10, 15, 0.88));
-  background-size:
-    auto,
-    auto;
+  background: var(--canvas);
 }
 
 .chat-header {
   border-bottom: 1px solid var(--line-default);
   background: var(--header-surface);
-  backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 1px 4px rgba(2, 8, 20, 0.05);
 }
 
 .sidebar-shell {
   position: relative;
-  background: rgba(15, 15, 22, 0.97);
-  box-shadow:
-    inset -1px 0 0 var(--line-subtle),
-    16px 0 32px -30px rgba(0, 0, 0, 0.96);
+  background: var(--surface-card);
+  box-shadow: 1px 0 0 var(--line-default);
   transition:
     width 0.24s var(--ease-out),
     background-color 0.24s var(--ease-out);
 }
 
 .sidebar-shell::after {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 220px;
-  background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: linear-gradient(black, transparent);
-  opacity: 0.42;
+  display: none;
 }
 
 .sidebar-shell::before {
-  pointer-events: none;
-  content: '';
-  position: absolute;
-  inset: -150px -80px auto;
-  height: 300px;
-  background: radial-gradient(circle, rgba(210, 70, 175, 0.18), transparent 68%);
-  opacity: 0.55;
+  display: none;
 }
 
 .sidebar-shell > * {
@@ -342,19 +285,12 @@ a:focus-visible {
 .sidebar-logo,
 .sidebar-action-button {
   background: var(--primary);
-  box-shadow:
-    6px 6px 12px rgba(0, 0, 0, 0.38),
-    -4px -4px 10px rgba(255, 255, 255, 0.025),
-    inset 1px 1px 1px rgba(255, 255, 255, 0.055),
-    inset 4px 4px 8px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 4px 10px rgba(22, 100, 255, 0.2);
 }
 
 .sidebar-action-button:hover {
-  background: #292735;
-  box-shadow:
-    0 0 0 1px var(--line-accent),
-    0 0 22px rgba(210, 70, 175, 0.16),
-    inset 1px 1px 1px rgba(255, 255, 255, 0.06);
+  background: var(--primary-hover);
+  box-shadow: 0 6px 14px rgba(22, 100, 255, 0.24);
 }
 
 .sidebar-session-list {
@@ -385,7 +321,7 @@ a:focus-visible {
   height: 24px;
   border-radius: var(--r-sm);
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface-soft);
 }
 
 .sidebar-session-icon.is-active {
@@ -395,7 +331,7 @@ a:focus-visible {
 
 .review-paper {
   position: relative;
-  max-width: 860px;
+  max-width: 1120px;
 }
 
 .review-paper::before {
@@ -404,7 +340,7 @@ a:focus-visible {
 
 .assistant-message {
   position: relative;
-  background: rgba(17, 17, 24, 0.96);
+  background: var(--surface-card);
 }
 
 .assistant-message::before {
@@ -413,9 +349,8 @@ a:focus-visible {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border-top: 1px solid rgba(255, 255, 255, 0.075);
+  border-top: 1px solid var(--line-subtle);
   border-bottom: 1px solid var(--line-subtle);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .tool-evidence-card {
@@ -455,9 +390,7 @@ a:focus-visible {
   overflow: hidden;
   border: 1px solid var(--line-default);
   background: var(--surface-card);
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  box-shadow: var(--shadow-sm);
 }
 .technical-panel::before,
 .technical-panel::after,
@@ -473,22 +406,12 @@ a:focus-visible {
 .technical-panel::before,
 .tech-panel::before,
 .glass-surface::before {
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 240, 255, 0.66), rgba(210, 70, 175, 0.34), transparent);
-  opacity: 0.34;
+  display: none;
 }
 .technical-panel::after,
 .tech-panel::after,
 .glass-surface::after {
-  top: 0;
-  right: 0;
-  left: auto;
-  bottom: auto;
-  width: 90px;
-  height: 90px;
-  background: radial-gradient(circle at top right, rgba(240, 110, 210, 0.12), transparent 68%);
-  opacity: 0.7;
+  display: none;
 }
 
 .technical-panel > *,
@@ -518,12 +441,7 @@ a:focus-visible {
   opacity: 0.68;
 }
 .blueprint-backdrop::before {
-  width: min(56vw, 760px);
-  height: min(56vw, 760px);
-  right: max(-200px, calc((100vw - 1160px) / 2 - 260px));
-  top: -38%;
-  background: radial-gradient(circle, rgba(210, 70, 175, 0.14), transparent 66%);
-  filter: blur(8px);
+  display: none;
 }
 .blueprint-backdrop::after {
   display: none;
@@ -531,51 +449,19 @@ a:focus-visible {
 
 .ops-page-shell {
   position: relative;
-  background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 580px), rgba(240, 110, 210, 0.035) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(99, 185, 200, 0.035) calc(50% + 580px), transparent calc(50% + 581px)),
-    linear-gradient(180deg, rgba(13, 11, 18, 0.96), rgba(10, 10, 15, 0.98));
-  background-size:
-    40px 40px,
-    40px 40px,
-    auto,
-    auto;
+  background: var(--canvas);
 }
 
 .ops-page-header {
-  backdrop-filter: blur(16px);
-  box-shadow:
-    var(--shadow-md),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 1px 4px rgba(2, 8, 20, 0.05);
 }
 
 .tech-panel.is-dark::before {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent);
-  opacity: 0.55;
+  display: none;
 }
 
 @media (max-width: 767px) {
-  #root::before {
-    background:
-      radial-gradient(
-        ellipse 100% 30% at 50% -20%,
-        transparent 60%,
-        rgba(176, 48, 136, 0.06) 66%,
-        rgba(176, 48, 136, 0.22) 72%,
-        rgba(210, 70, 175, 0.58) 80%,
-        rgba(240, 110, 210, 0.66) 86%,
-        rgba(255, 240, 255, 0.72) 92%,
-        transparent 97%
-      ),
-      radial-gradient(circle at 50% 4%, rgba(120, 40, 180, 0.06), transparent 34%),
-      var(--canvas);
-  }
-
-  #root::after {
-    mask-image: radial-gradient(ellipse 100% 30% at 50% -20%, transparent 60%, black 78%, transparent 97%);
-  }
-
   .measure-rails::before,
   .measure-rails::after {
     display: none;
@@ -607,11 +493,11 @@ a:focus-visible {
 }
 .conversation-frame::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(10, 10, 15, 0.96), transparent);
+  background: linear-gradient(180deg, rgba(244, 247, 252, 0.98), transparent);
 }
 .conversation-frame::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(10, 10, 15, 0.9), transparent);
+  background: linear-gradient(0deg, rgba(244, 247, 252, 0.96), transparent);
 }
 .conversation-frame.is-scrolled::before,
 .conversation-frame.can-scroll-more::after {
@@ -624,7 +510,7 @@ a:focus-visible {
 
 .composer-dock {
   position: relative;
-  background: linear-gradient(180deg, transparent, rgba(10, 10, 15, 0.64) 48%, rgba(10, 10, 15, 0.96));
+  background: linear-gradient(180deg, transparent, rgba(244, 247, 252, 0.8) 48%, var(--canvas));
 }
 
 .composer-dock::before {
@@ -670,8 +556,8 @@ a:focus-visible {
 /* Markdown 正文排版：assistant 像文档流，不像卡片墙。 */
 .streamdown-body,
 .markdown-body {
-  font-size: 0.9375rem;
-  line-height: 1.72;
+  font-size: 1rem;
+  line-height: 1.75;
   overflow-wrap: break-word;
   color: var(--body-strong);
 }
@@ -695,7 +581,7 @@ a:focus-visible {
   height: 34px;
   border-bottom: 1px solid var(--line-invert);
   background:
-    linear-gradient(90deg, rgba(176, 48, 136, 0.2), transparent 54%),
+    linear-gradient(90deg, rgba(22, 100, 255, 0.2), transparent 54%),
     rgba(255, 255, 255, 0.035);
   color: rgba(246, 241, 247, 0.74);
 }
@@ -885,12 +771,11 @@ a:focus-visible {
 
 .line-tag {
   border: 1px solid var(--line-default);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
-/* 登录页沿用审查产品语义，将 Xero 的能量弧和光束改造成 MR -> Review -> Verify 管线。 */
+/* 登录页使用浅色企业视觉，将 MR -> Review -> Verify 管线作为产品能力说明。 */
 .login-shell {
-  background: rgba(10, 10, 15, 0.44);
+  background: var(--canvas);
 }
 
 .login-layout {
@@ -900,70 +785,45 @@ a:focus-visible {
 
 .login-mark {
   position: relative;
-  box-shadow:
-    8px 8px 16px rgba(0, 0, 0, 0.48),
-    -6px -6px 14px rgba(255, 255, 255, 0.028),
-    inset 1px 1px 2px rgba(255, 255, 255, 0.06),
-    inset 6px 6px 12px rgba(0, 0, 0, 0.46);
+  box-shadow: 0 8px 20px rgba(22, 100, 255, 0.22);
 }
 
 .login-mark::after {
   content: '';
   position: absolute;
   inset: -7px;
-  border: 1px dotted rgba(255, 255, 255, 0.13);
+  border: 1px dotted rgba(22, 100, 255, 0.28);
   border-radius: inherit;
 }
 
 .login-heading-accent {
   margin-top: 5px;
-  background: linear-gradient(90deg, #ffffff, #a98597);
-  background-clip: text;
-  color: transparent;
+  color: var(--primary);
 }
 
 .login-visual {
   isolation: isolate;
-  background: #0d0b12;
+  background: var(--surface-card);
 }
 
 .login-visual::before {
-  inset: 0;
-  height: auto;
-  background: radial-gradient(
-    ellipse 78% 68% at 50% -22%,
-    transparent 60%,
-    rgba(176, 48, 136, 0.04) 63%,
-    rgba(176, 48, 136, 0.12) 67%,
-    rgba(176, 48, 136, 0.28) 70%,
-    rgba(176, 48, 136, 0.48) 74%,
-    rgba(210, 70, 175, 0.78) 82%,
-    rgba(240, 110, 210, 0.86) 87%,
-    rgba(255, 240, 255, 0.84) 93%,
-    transparent 97%
-  );
-  opacity: 1;
+  display: none;
 }
 
 .login-visual::after {
-  inset: 0;
-  width: auto;
-  height: auto;
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse 78% 68% at 50% -22%, transparent 60%, black 80%, transparent 97%);
-  opacity: 0.7;
+  display: none;
 }
 
 .login-visual-grid {
   pointer-events: none;
   position: absolute;
-  inset: 18% 18% 12%;
+  inset: 0;
   z-index: 0;
-  background: radial-gradient(circle, rgba(176, 48, 136, 0.09), transparent 68%);
-  filter: blur(18px);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(black, transparent 76%);
 }
 
 .login-pipeline {
@@ -979,22 +839,18 @@ a:focus-visible {
   flex: 0 0 52px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line-default);
   border-radius: 50%;
-  color: rgba(255, 255, 255, 0.76);
-  background: #1a1a24;
-  box-shadow:
-    6px 6px 12px rgba(0, 0, 0, 0.42),
-    -4px -4px 10px rgba(255, 255, 255, 0.026),
-    inset 1px 1px 1px rgba(255, 255, 255, 0.05),
-    inset 4px 4px 8px rgba(0, 0, 0, 0.42);
+  color: var(--primary);
+  background: var(--surface-card);
+  box-shadow: 0 6px 18px rgba(2, 8, 20, 0.1);
 }
 
 .pipeline-node::after {
   content: '';
   position: absolute;
   inset: -7px;
-  border: 1px dotted rgba(255, 255, 255, 0.12);
+  border: 1px dotted rgba(22, 100, 255, 0.28);
   border-radius: inherit;
 }
 
@@ -1003,13 +859,8 @@ a:focus-visible {
   height: 66px;
   flex-basis: 66px;
   color: white;
-  background: #1e1e2c;
-  box-shadow:
-    8px 8px 16px rgba(0, 0, 0, 0.5),
-    -6px -6px 14px rgba(255, 255, 255, 0.035),
-    inset 1px 1px 2px rgba(255, 255, 255, 0.06),
-    inset 6px 6px 12px rgba(0, 0, 0, 0.5),
-    0 0 34px rgba(210, 70, 175, 0.12);
+  background: var(--primary);
+  box-shadow: 0 10px 24px rgba(22, 100, 255, 0.28);
 }
 
 .pipeline-node.is-center::before {
@@ -1018,7 +869,7 @@ a:focus-visible {
   inset: -22px;
   z-index: -1;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 77, 200, 0.46), transparent 68%);
+  background: radial-gradient(circle, rgba(22, 100, 255, 0.2), transparent 68%);
   animation: pipeline-splash 3.4s ease-out infinite;
 }
 
@@ -1028,7 +879,7 @@ a:focus-visible {
   left: 50%;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0;
   transform: translateX(-50%);
@@ -1041,15 +892,15 @@ a:focus-visible {
   width: min(126px, 18vw);
   height: 1px;
   overflow: hidden;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.055));
+  background: #d7e4ff;
 }
 
 .pipeline-beam > span {
   position: absolute;
   inset: -2px auto -2px 0;
   width: 34%;
-  background: linear-gradient(90deg, transparent, #b04090, #ffffff, transparent);
-  filter: drop-shadow(0 0 4px rgba(240, 110, 210, 0.9));
+  background: linear-gradient(90deg, transparent, #1664ff, #79a7ff, transparent);
+  filter: drop-shadow(0 0 3px rgba(22, 100, 255, 0.5));
   animation: pipeline-beam 1.6s ease-in-out infinite;
 }
 
@@ -1085,13 +936,11 @@ a:focus-visible {
 /* 多 Agent 活动卡使用真实编排数据驱动节点状态，而不是装饰性流程图。 */
 .review-agent-pipeline {
   position: relative;
-  background:
-    radial-gradient(circle at 12% -60%, rgba(210, 70, 175, 0.18), transparent 38%),
-    var(--surface-card);
+  background: var(--surface-card);
 }
 
 .review-agent-pipeline > header {
-  background: rgba(23, 23, 32, 0.76);
+  background: #f5f8ff;
 }
 
 .review-agent-row {
@@ -1101,39 +950,32 @@ a:focus-visible {
 .review-agent-row:not(:last-child)::after {
   content: '';
   position: absolute;
-  top: 34px;
-  bottom: -8px;
-  left: 25.5px;
+  top: 40px;
+  bottom: -10px;
+  left: 31.5px;
   z-index: 0;
   width: 1px;
-  background: linear-gradient(var(--line-default), rgba(176, 48, 136, 0.24), var(--line-default));
+  background: linear-gradient(var(--line-default), rgba(22, 100, 255, 0.22), var(--line-default));
 }
 
 .review-agent-node {
   position: relative;
   z-index: 1;
-  box-shadow:
-    4px 4px 9px rgba(0, 0, 0, 0.38),
-    -3px -3px 8px rgba(255, 255, 255, 0.022),
-    inset 1px 1px 1px rgba(255, 255, 255, 0.045),
-    inset 3px 3px 6px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 3px 8px rgba(2, 8, 20, 0.08);
 }
 
 .review-agent-node::after {
   content: '';
   position: absolute;
   inset: -4px;
-  border: 1px dotted rgba(255, 255, 255, 0.09);
+  border: 1px dotted rgba(22, 100, 255, 0.22);
   border-radius: inherit;
 }
 
 .review-agent-node.is-running {
-  border-color: rgba(240, 110, 210, 0.34);
-  color: #f4d7ed;
-  box-shadow:
-    0 0 0 1px rgba(176, 48, 136, 0.12),
-    0 0 20px rgba(210, 70, 175, 0.16),
-    inset 3px 3px 6px rgba(0, 0, 0, 0.4);
+  border-color: rgba(22, 100, 255, 0.42);
+  color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(22, 100, 255, 0.1);
 }
 
 .review-agent-node.is-completed {

@@ -18,7 +18,7 @@ type RichComposerEditorProps = {
 };
 
 const editorClass =
-  'composer-editor min-h-10 max-h-40 w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-sm leading-6 text-[var(--ink)] outline-none placeholder:text-[var(--muted-soft)]';
+  'composer-editor min-h-10 max-h-40 w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-base leading-7 text-[var(--ink)] outline-none placeholder:text-[var(--muted)]';
 
 function syncHeight(element: HTMLTextAreaElement) {
   element.style.height = 'auto';

@@ -1,20 +1,19 @@
 import type { ComponentType } from 'react';
 import type { ChartConfig } from '../chart';
 import { Card, ColorBlock } from '../ui/surface';
-import { cn } from '../../lib/cn';
 import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 export const chartColors = {
-  ink: '#f0f0f5',
-  muted: '#8888a8',
-  hairline: '#32313d',
-  lime: '#a9c56f',
-  mint: '#63c4b7',
-  coral: '#f06f75',
-  teal: '#63b9c8',
-  lilac: '#c8a0e0',
+  ink: '#1664ff',
+  muted: '#667085',
+  hairline: '#e5e7eb',
+  lime: '#79a520',
+  mint: '#0f9f6e',
+  coral: '#d92d20',
+  teal: '#0f91a8',
+  lilac: '#6b7cff',
 };
 
 export const trendChartConfig = {
@@ -26,7 +25,7 @@ export const trendChartConfig = {
 export const statusChartConfig = {
   completed: { label: '完成', color: chartColors.mint },
   failed: { label: '失败', color: chartColors.coral },
-  running: { label: '运行中', color: '#d9a85f' },
+  running: { label: '运行中', color: '#b54708' },
 } satisfies ChartConfig;
 
 export const authorChartConfig = {
@@ -77,15 +76,14 @@ export function MetricCard({
   icon: IconComponent;
   tone?: 'white' | 'lime' | 'coral' | 'navy';
 }) {
-  const isLightTone = tone === 'white';
   const content = (
     <div className="flex min-h-24 items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="caption opacity-70">{label}</p>
+        <p className="caption text-[var(--muted)]">{label}</p>
         <p className="mt-2 font-display text-3xl tabular-nums">{value}</p>
-        <p className="mt-1 truncate text-xs opacity-70">{hint}</p>
+        <p className="mt-1 truncate text-[13px] text-[var(--muted)]">{hint}</p>
       </div>
-      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-sm)] border', isLightTone ? 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--ink)]' : 'border-white/20 bg-white/20')}>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--primary)]">
         <Icon size={18} />
       </span>
     </div>

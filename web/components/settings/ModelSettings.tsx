@@ -81,11 +81,11 @@ export function ModelList({
         model.isDefault ? (
           <ColorBlock key={model.id} tone="navy" className="flex items-center gap-3 rounded-none border-0 p-5 shadow-none max-md:flex-col max-md:items-stretch">
             <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 truncate text-sm font-semibold">
-                {model.provider}/{model.modelId}
-                <span className="rounded-full border border-white/25 bg-white/20 px-2 py-0.5 text-[11px]">默认</span>
+              <p className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+                <span className="min-w-0 truncate">{model.provider}/{model.modelId}</span>
+                <span className="rounded-[var(--r-pill)] border border-[var(--primary)]/24 bg-[var(--state-info-bg)] px-2 py-0.5 text-xs font-medium text-[var(--primary)]">默认</span>
               </p>
-              <p className="text-[11px] opacity-70">
+              <p className="mt-1 text-[13px] text-[var(--muted)]">
                 Key {model.hasApiKey ? '已配置' : '缺失'} · 最大步数 {model.maxSteps} · {model.isActive ? '启用' : '停用'}
               </p>
             </div>
@@ -107,30 +107,30 @@ export function ModelList({
               <p className="truncate text-sm text-[var(--ink)]">
                 {model.provider}/{model.modelId}
               </p>
-              <p className="text-[11px] text-[var(--muted)]">
+              <p className="mt-1 text-[13px] text-[var(--muted)]">
                 Key {model.hasApiKey ? '已配置' : '缺失'} · 最大步数 {model.maxSteps} · {model.isActive ? '启用' : '停用'}
               </p>
             </div>
-            <div className="flex shrink-0 gap-2 border-l border-[var(--line-subtle)] pl-4 max-md:border-l-0 max-md:border-t max-md:pt-3 max-md:pl-0">
+            <div className="flex shrink-0 gap-2 border-l border-[var(--line-subtle)] pl-4 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:border-l-0 max-md:border-t max-md:pt-3 max-md:pl-0">
               {model.isActive ? (
-                <Button variant="secondary" onClick={() => onSetDefault(model.id)}>
+                <Button variant="secondary" className="max-md:w-full" onClick={() => onSetDefault(model.id)}>
                   设默认
                 </Button>
               ) : null}
-              <Button variant="secondary" onClick={() => onActiveChange(model, !model.isActive)}>
+              <Button variant="secondary" className="max-md:w-full" onClick={() => onActiveChange(model, !model.isActive)}>
                 {model.isActive ? '停用' : '启用'}
               </Button>
-              <Button variant="secondary" onClick={() => onEdit(model)}>
+              <Button variant="secondary" className="max-md:w-full" onClick={() => onEdit(model)}>
                 编辑
               </Button>
-              <Button variant="danger" onClick={() => onRemove(model)}>
+              <Button variant="danger" className="max-md:w-full" onClick={() => onRemove(model)}>
                 删除
               </Button>
             </div>
           </Card>
         ),
       )}
-      {models.length === 0 && <p className="text-center text-xs text-[var(--muted)]">还没有全局模型配置</p>}
+      {models.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">还没有全局模型配置</p>}
     </div>
   );
 }

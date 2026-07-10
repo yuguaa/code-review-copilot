@@ -60,7 +60,7 @@ export function MessageBubble({
           ))}
         </div>
         {!isReviewActivity && (
-          <div className={cn('flex items-center gap-1 opacity-50 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
+          <div className={cn('flex items-center gap-1 opacity-75 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
             <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
             {canBranch && (
               <button

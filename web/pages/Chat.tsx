@@ -212,7 +212,7 @@ function ChatThread({
       </div>
 
       <div className="composer-dock z-10 px-4 pb-5 pt-2 max-md:px-3 max-md:pb-3">
-        <div className="mx-auto max-w-[860px]">
+        <div className="mx-auto max-w-[1040px]">
           <LazyComposer
             placeholder={
               reviewing

@@ -158,7 +158,7 @@ export function Composer({
           disabled={Boolean(stopping)}
           aria-label={stopLabel}
           title={stopLabel}
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform,opacity] hover:border-[var(--brand-magenta)] hover:bg-[var(--brand-magenta)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-65"
+          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform,opacity] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-65"
         >
           {stopping ? <Loader2 size={16} className="animate-spin" /> : <Square size={14} className="fill-current" />}
         </button>
@@ -167,7 +167,7 @@ export function Composer({
           onClick={submit}
           disabled={editorDisabled || empty}
           aria-label="发送"
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform,opacity] hover:border-[var(--brand-magenta)] hover:bg-[var(--brand-magenta)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform,opacity] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <SendHorizontal size={16} />
         </button>

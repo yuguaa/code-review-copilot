@@ -45,23 +45,23 @@ function AgentRow({ agent }: { agent: ReviewAgentActivity }) {
   const AgentIcon = agentIcon(agent);
   const StatusIcon = statusIcon(agent.status);
   return (
-    <div className="review-agent-row grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2.5">
+    <div className="review-agent-row grid grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 px-4 py-3.5">
       <span
         className={cn(
-          'review-agent-node mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-subtle)] bg-[var(--surface-strong)] text-[var(--body-strong)]',
+          'review-agent-node mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--body-strong)]',
           `is-${agent.status}`,
         )}
       >
-        <AgentIcon size={14} />
+        <AgentIcon size={15} />
       </span>
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-xs font-semibold text-[var(--ink)]">{agent.label}</span>
+          <span className="text-sm font-semibold text-[var(--ink)]">{agent.label}</span>
           <span className="caption max-w-full truncate text-[var(--muted)]" title={`${agent.provider}/${agent.modelId}`}>
             {agent.provider}/{agent.modelId}
           </span>
         </div>
-        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-[var(--body)]">{agent.task}</p>
+        <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-[var(--body)]">{agent.task}</p>
       </div>
       <span
         className={cn(
@@ -88,9 +88,9 @@ export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
       aria-busy={data.phase !== 'completed' && data.phase !== 'failed'}
       className="review-agent-pipeline overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]"
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line-subtle)] bg-[var(--surface-soft)]/72 px-3 py-2.5">
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ink)]">
-          <Network size={14} className="text-[var(--accent)]" />
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3">
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--ink)]">
+          <Network size={15} className="text-[var(--accent)]" />
           {orchestrationLabel(data)}
         </span>
         <span className="caption text-[var(--muted)]">当前阶段：{PHASE_LABEL[data.phase]}</span>
@@ -100,7 +100,7 @@ export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
           {data.agents.map((agent) => <AgentRow key={agent.id} agent={agent} />)}
         </div>
       ) : (
-        <div className="flex items-center gap-2 px-3 py-3 text-xs text-[var(--muted)]">
+        <div className="flex items-center gap-2 px-4 py-4 text-sm text-[var(--muted)]">
           <Loader2 size={13} className="animate-spin text-[var(--accent)]" />
           正在解析本次审查使用的模型与 Agent 编排
         </div>

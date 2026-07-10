@@ -13,9 +13,9 @@ export function SettingsStatsGrid({ stats }: { stats: Stats | null }) {
         ['消息', String(stats.messageCount), stats.latestSessionAt ? `最近 ${new Date(stats.latestSessionAt).toLocaleString()}` : '暂无会话', 'cream'],
       ] as const).map(([label, value, hint, tone]) => (
         <ColorBlock key={label} tone={tone} className="space-y-1 p-5">
-          <p className="caption opacity-70">{label}</p>
+          <p className="caption text-[var(--muted)]">{label}</p>
           <p className="font-display text-3xl tabular-nums">{value}</p>
-          <p className="caption truncate opacity-70">{hint}</p>
+          <p className="mt-1 truncate text-[13px] text-[var(--muted)]">{hint}</p>
         </ColorBlock>
       ))}
     </div>

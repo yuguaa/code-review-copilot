@@ -125,7 +125,7 @@ export function Login() {
             让每次评审
             <span className="login-heading-accent block">都有证据可追问。</span>
           </h1>
-          <p data-login-copy className="mt-5 text-[15px] leading-relaxed text-[var(--muted)]">
+          <p data-login-copy className="mt-5 text-base leading-7 text-[var(--muted)]">
             Webhook 触发审查，结论沉淀成一次可对话的会话。上下文、风险和结论，随时接着问。
           </p>
 
@@ -193,7 +193,7 @@ export function Login() {
             ].map(([index, label]) => (
               <div key={index} className="border-r border-[var(--line-subtle)] px-5 py-4 last:border-r-0">
                 <p className="caption text-[var(--muted-soft)]">{index}</p>
-                <p className="mt-1 text-xs font-medium text-[var(--body-strong)]">{label}</p>
+                <p className="mt-1 text-[13px] font-medium text-[var(--body-strong)]">{label}</p>
               </div>
             ))}
           </div>

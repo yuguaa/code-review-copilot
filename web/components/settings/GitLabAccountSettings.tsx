@@ -56,7 +56,7 @@ export function GitLabAccountList({
         <Card key={account.id} className="flex items-center gap-3 rounded-none border-0 p-5 shadow-none max-md:flex-col max-md:items-stretch">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm text-[var(--ink)]">{account.url}</p>
-            <p className="text-[11px] text-[var(--muted)]">
+            <p className="mt-1 text-[13px] text-[var(--muted)]">
               令牌 {account.hasAccessToken ? '已配置' : '缺失'} · Webhook 密钥 {account.hasWebhookSecret ? '已配置' : '未配置'}
             </p>
           </div>
@@ -70,7 +70,7 @@ export function GitLabAccountList({
           </div>
         </Card>
       ))}
-      {accounts.length === 0 && <p className="text-center text-xs text-[var(--muted)]">还没有 GitLab 账号</p>}
+      {accounts.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">还没有 GitLab 账号</p>}
     </div>
   );
 }

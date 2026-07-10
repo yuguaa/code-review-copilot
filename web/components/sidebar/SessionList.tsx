@@ -35,7 +35,7 @@ export function SessionList({
           <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-[var(--brand-coral)]">
             <AlertCircle size={13} /> 会话列表加载失败
           </p>
-          <p className="break-words text-[11px] text-[var(--muted)]">{loadError}</p>
+          <p className="break-words text-xs leading-relaxed text-[var(--muted)]">{loadError}</p>
           <Button variant="secondary" className="h-7 px-3 py-0 text-xs" onClick={onRetry}>
             重试
           </Button>
@@ -54,7 +54,7 @@ export function SessionList({
       {!collapsed && !loadError && sessions.length > 0 && (
         <div className="mb-2 flex items-center justify-between px-1.5 pt-1">
           <span className="caption text-[var(--muted)]">最近审查</span>
-          <span className="font-mono text-[10px] text-[var(--muted-soft)]">{sessions.length}</span>
+          <span className="caption text-[var(--muted)]">{sessions.length}</span>
         </div>
       )}
 
@@ -74,17 +74,17 @@ export function SessionList({
               title={sessionLabel(s)}
               className={cn(
                 'grid w-full cursor-pointer items-center rounded-[var(--r-md)] text-left transition-transform active:scale-[0.99]',
-                collapsed ? 'h-10 grid-cols-1 place-items-center px-0 py-0' : 'grid-cols-[auto_minmax(0,1fr)_auto] gap-2.5 px-3 py-2.5 pr-8',
+                collapsed ? 'h-10 grid-cols-1 place-items-center px-0 py-0' : 'grid-cols-[auto_minmax(0,1fr)_auto] gap-3 px-3 py-3 pr-8',
               )}
             >
               <span className={cn('sidebar-session-icon', active && 'is-active')}>
                 {s.kind === 'review' ? <GitPullRequest size={13} /> : <MessageSquare size={13} />}
               </span>
               {!collapsed && <span className="min-w-0">
-                <span className={cn('block truncate text-[13px] leading-5', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}>
+                <span className={cn('block truncate text-sm leading-5', active ? 'font-semibold text-[var(--ink)]' : 'font-medium text-[var(--body-strong)]')}>
                   {sessionLabel(s)}
                 </span>
-                <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-[var(--muted-soft)]">
+                <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs leading-[18px] text-[var(--muted)]">
                   <span className="truncate">{repositoryLabel(s)}</span>
                   <span className="h-0.5 w-0.5 shrink-0 rounded-full bg-[var(--muted-soft)]/60" />
                   <span className="truncate font-mono">{sessionMeta(s)}</span>

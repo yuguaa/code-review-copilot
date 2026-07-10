@@ -50,17 +50,17 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
     'caption inline-flex max-w-60 items-center gap-1 rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
 
   return (
-    <header className="chat-header sticky top-0 z-10 px-5 py-3 max-md:px-4">
-      <div className="mx-auto grid max-w-6xl min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+    <header className="chat-header sticky top-0 z-10 px-6 py-4 max-md:px-4 max-md:py-3">
+      <div className="mx-auto grid max-w-7xl min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 flex-1 basis-64">
-          <h1 className="font-display truncate text-lg leading-tight text-[var(--ink)]">{sessionTitle(session)}</h1>
+          <h1 className="font-display truncate text-xl leading-tight text-[var(--ink)]">{sessionTitle(session)}</h1>
           {session.repository && (
-            <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[var(--muted)]">
-              <FolderGit2 size={12} className="shrink-0 text-[var(--muted-soft)]" /> {session.repository.path}
+            <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] text-[var(--muted)]">
+              <FolderGit2 size={13} className="shrink-0 text-[var(--muted)]" /> {session.repository.path}
             </p>
           )}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] font-medium lg:justify-end">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-medium lg:justify-end">
           <span className={cn('caption inline-flex items-center gap-1 rounded-[var(--r-sm)] border px-2 py-1 shadow-[var(--shadow-sm)]', statusView.className)}>
             <StatusIcon size={12} className={session.status === 'running' ? 'animate-spin' : undefined} /> {statusView.label}
           </span>
@@ -84,7 +84,7 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
               href={session.webUrl}
               target="_blank"
               rel="noreferrer"
-              className="caption inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] px-2 py-1 text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--brand-magenta)] hover:bg-[var(--brand-magenta)] active:scale-[0.98]"
+              className="caption inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1.5 text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.98]"
             >
               <ExternalLink size={12} /> GitLab
             </a>

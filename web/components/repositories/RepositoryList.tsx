@@ -18,7 +18,7 @@ export function RepositoryList({
   onEdit: (repo: Repo) => void;
   onRemove: (repo: Repo) => void;
 }) {
-  if (repos.length === 0) return <p className="text-center text-xs text-[var(--muted)]">还没有配置仓库</p>;
+  if (repos.length === 0) return <p className="text-center text-sm text-[var(--muted)]">还没有配置仓库</p>;
 
   return (
     <div className="line-list">
@@ -30,16 +30,16 @@ export function RepositoryList({
               <p className="truncate text-sm font-semibold text-[var(--ink)]">{repo.path}</p>
               <span
                 className={cn(
-                  'line-tag rounded-full px-2 py-0.5 text-[11px] font-medium',
+                  'line-tag rounded-[var(--r-pill)] px-2 py-0.5 text-xs font-medium',
                   repo.autoReview ? 'bg-[var(--brand-cyan)]/16 text-[var(--ink)]' : 'bg-[var(--surface-strong)] text-[var(--muted)]',
                 )}
               >
                 {repo.autoReview ? '自动审查' : '手动'}
               </span>
-              {repo.enableMrComment && <span className="line-tag rounded-full bg-[var(--brand-lilac)]/65 px-2 py-0.5 text-[11px] text-[var(--body-strong)]">平台评论</span>}
-              {repo.enableDingtalk && <span className="line-tag rounded-full bg-[var(--brand-cream)] px-2 py-0.5 text-[11px] text-[var(--body-strong)]">钉钉</span>}
+              {repo.enableMrComment && <span className="line-tag rounded-[var(--r-pill)] bg-[var(--brand-lilac)]/65 px-2 py-0.5 text-xs text-[var(--body-strong)]">平台评论</span>}
+              {repo.enableDingtalk && <span className="line-tag rounded-[var(--r-pill)] bg-[var(--brand-cream)] px-2 py-0.5 text-xs text-[var(--body-strong)]">钉钉</span>}
             </div>
-            <p className="mt-1 text-[11px] text-[var(--muted)]">
+            <p className="mt-1 text-[13px] leading-5 text-[var(--muted)]">
               模型 {modelLabel(repo)} · 监听 {repo.watchBranches || '全部'} · Skills {repo.enabledSkills.length} · Tools {repo.enabledTools.length}
             </p>
           </div>

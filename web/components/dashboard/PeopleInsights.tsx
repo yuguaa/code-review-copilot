@@ -27,7 +27,7 @@ export function AuthorDetailsTable({ authors }: { authors: DashboardBucket[] }) 
       <SectionTitle title="人员明细" meta="用于定位高频触发者与风险集中点" />
       <div className="overflow-x-auto">
         <div className="min-w-[760px] divide-y divide-[var(--line-subtle)]">
-          <div className="grid grid-cols-[2.1fr_0.7fr_0.7fr_0.8fr_0.8fr_1.4fr] gap-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+          <div className="grid grid-cols-[2.1fr_0.7fr_0.7fr_0.8fr_0.8fr_1.4fr] gap-3 pb-2 text-xs font-semibold text-[var(--muted)]">
             <span>人员</span>
             <span>会话</span>
             <span>失败</span>

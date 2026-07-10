@@ -45,7 +45,7 @@ function isTool(part: MessagePart): boolean {
 function MarkdownFallback({ text, streaming }: { text: string; streaming?: boolean }) {
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
+    <div className="min-w-0 whitespace-pre-wrap break-words text-base leading-7">
       {text}
       {streaming && <StreamingCursor />}
     </div>
@@ -54,7 +54,7 @@ function MarkdownFallback({ text, streaming }: { text: string; streaming?: boole
 
 function PlainTextBlock({ text }: { text: string }) {
   if (!text.trim()) return null;
-  return <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>;
+  return <p className="whitespace-pre-wrap break-words text-base leading-7">{text}</p>;
 }
 
 function ReasoningBlock({ part }: { part: MessagePart }) {
@@ -175,7 +175,7 @@ export function MessageBlockRenderer({
                 className="flex items-start gap-2 rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-[var(--surface-soft)]/70 px-2.5 py-2"
               >
                 <span className="caption mt-0.5 shrink-0 text-[var(--muted-soft)]">{finding.severity}</span>
-                <p className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--body)]">{finding.text}</p>
+                <p className="min-w-0 flex-1 text-sm leading-6 text-[var(--body-strong)]">{finding.text}</p>
                 <FindingFeedbackButtons
                   value={finding.feedback}
                   onFeedback={(feedback) => onFindingFeedback(messageId, feedback, finding.text)}
