@@ -110,6 +110,27 @@ describe('message feedback helpers', () => {
     });
   });
 
+  it('同一问题同时存在于草稿和 Verify 时只更新最终 Verify part', () => {
+    const finding = 'a.ts:1 问题：空指针 影响：崩溃 修复建议：判空';
+    const parts = [
+      { type: 'text', text: `## 严重\n- ${finding}` },
+      { type: 'text', text: `## Verify 结论\n## 严重\n1. ${finding}` },
+    ];
+
+    const result = applyMessageFeedback(parts, 'up', finding);
+
+    expect(result[0]).not.toHaveProperty('findingFeedbacks');
+    expect(result[1]).toMatchObject({
+      findingFeedbacks: [{ text: finding, feedback: 'up' }],
+    });
+  });
+
+  it('找不到对应问题时不把反馈写入无关文本', () => {
+    const parts = [{ type: 'text', text: '## Verify 结论\n未发现问题' }];
+
+    expect(applyMessageFeedback(parts, 'down', 'a.ts:1 不存在的问题')).toEqual(parts);
+  });
+
   it('按问题模式归一化反馈文本', () => {
     expect(feedbackPatternOf('server/a.ts:10 问题：空指针 影响：运行崩溃 修复建议：增加判空')).toBe('空指针');
     expect(feedbackPatternOf('- web/b.tsx:2 重复请求会浪费资源')).toBe('重复请求会浪费资源');

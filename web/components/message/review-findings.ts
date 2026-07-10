@@ -1,4 +1,6 @@
+import type { UIMessage } from 'ai';
 import type { MessageFeedbackValue, MessageFindingFeedback } from '../../lib/types';
+import { normalizeFindingText, parseReviewFindings } from '../../../shared/review-findings';
 
 export type ReviewFinding = {
   id: string;
@@ -7,44 +9,23 @@ export type ReviewFinding = {
   feedback: MessageFeedbackValue | null;
 };
 
-const severityHeadings = new Set(['严重', '一般', '建议']);
-
 export function extractReviewFindings(text: string, feedbacks: MessageFindingFeedback[] = []): ReviewFinding[] {
   const feedbackByText = new Map(feedbacks.map((item) => [normalizeFindingText(item.text), item.feedback]));
-  const findings: ReviewFinding[] = [];
-  let severity = '';
-
-  for (const rawLine of text.split('\n')) {
-    const heading = headingOf(rawLine);
-    if (heading) {
-      severity = heading;
-      continue;
-    }
-    const item = listItemOf(rawLine);
-    if (!severity || !item) continue;
-    const normalized = normalizeFindingText(item);
-    if (!normalized || normalized.length < 8) continue;
-    findings.push({
-      id: `${severity}-${findings.length}`,
-      severity,
-      text: item,
-      feedback: feedbackByText.get(normalized) ?? null,
-    });
-  }
-
-  return findings;
+  return parseReviewFindings(text).map((finding) => ({
+    id: finding.id,
+    severity: finding.severity,
+    text: finding.title,
+    feedback: feedbackByText.get(normalizeFindingText(finding.title)) ?? null,
+  }));
 }
 
-export function normalizeFindingText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
+/** 一条审查消息只允许在最终 Verify 结论上反馈；旧消息则回退到最后一个含问题的文本块。 */
+export function findingFeedbackPartIndex(parts: UIMessage['parts']): number {
+  const verifyIndex = parts.findLastIndex((part) =>
+    part.type === 'text' && /^\s*##\s+Verify\s+结论(?:\s|$)/m.test(part.text),
+  );
+  if (verifyIndex >= 0) return extractReviewFindings((parts[verifyIndex] as { text: string }).text).length > 0 ? verifyIndex : -1;
+  return parts.findLastIndex((part) => part.type === 'text' && extractReviewFindings(part.text).length > 0);
 }
 
-function headingOf(line: string): string {
-  const text = line.replace(/^#+\s*/, '').replace(/[*_`：:]/g, '').trim();
-  return severityHeadings.has(text) ? text : '';
-}
-
-function listItemOf(line: string): string {
-  const match = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.+)$/);
-  return match?.[1]?.trim() ?? '';
-}
+export { normalizeFindingText } from '../../../shared/review-findings';

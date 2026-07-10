@@ -8,9 +8,10 @@ import CircleX from 'lucide-react/dist/esm/icons/circle-x';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { cn } from '../../lib/cn';
 import { StreamingCursor } from './StreamingCursor';
-import { isBoundaryPart, type MessagePart } from './message-types';
+import { isBoundaryPart, isReviewActivityPart, type MessagePart } from './message-types';
 import { extractReviewFindings } from './review-findings';
 import type { MessageFeedbackValue, MessageFindingFeedback } from '../../lib/types';
+import { ReviewAgentActivity } from './ReviewAgentActivity';
 
 const MarkdownBlock = lazy(() => import('./MarkdownBlock').then((module) => ({ default: module.MarkdownBlock })));
 
@@ -23,6 +24,7 @@ const TOOL_LABEL: Record<string, string> = {
   record_evidence: '记录审查证据',
   post_review_comment: '发布审查评论',
   post_inline_comment: '发布行级评论',
+  send_dingtalk_notification: '发送钉钉通知',
   delegate_security: '委派安全审查',
   delegate_architecture: '委派架构审查',
   delegate_performance: '委派性能审查',
@@ -153,6 +155,7 @@ export function MessageBlockRenderer({
   onFindingFeedback?: (messageId: string, feedback: MessageFeedbackValue, findingText: string) => void;
 }) {
   if (isBoundaryPart(part)) return null;
+  if (isReviewActivityPart(part)) return <ReviewAgentActivity data={part.data} />;
   if (part.type === 'text') {
     if (role !== 'assistant') return <PlainTextBlock text={part.text} />;
     const isStreaming = streaming || (part as { state?: string }).state === 'streaming';
@@ -208,8 +211,8 @@ function FindingFeedbackButtons({
       <button
         type="button"
         onClick={() => onFeedback('up')}
-        aria-label="认可这条发现"
-        title="认可这条发现"
+        aria-label="确认这个问题真实存在"
+        title="确认这个问题真实存在"
         className={cn(
           'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
           value === 'up' ? 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]' : 'text-[var(--muted)]',
@@ -220,8 +223,8 @@ function FindingFeedbackButtons({
       <button
         type="button"
         onClick={() => onFeedback('down')}
-        aria-label="否定这条发现"
-        title="否定这条发现"
+        aria-label="认为这个问题是误报"
+        title="认为这个问题是误报"
         className={cn(
           'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
           value === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',

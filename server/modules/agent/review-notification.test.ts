@@ -7,12 +7,12 @@ import {
   publishVerifiedReview,
   rememberVerifiedReview,
 } from './review-notification';
-import { sendReviewDingtalkNotification } from '../notifications/notifications.service';
+import { sendRepositoryDingtalkNotification } from '../notifications/notifications.service';
 import { readRepositoryMemory, writeRepositoryMemory } from '../repositories/repositories.service';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
 
 vi.mock('../notifications/notifications.service', () => ({
-  sendReviewDingtalkNotification: vi.fn().mockResolvedValue('sent'),
+  sendRepositoryDingtalkNotification: vi.fn().mockResolvedValue('sent'),
 }));
 
 vi.mock('../repositories/repositories.service', () => ({
@@ -85,7 +85,7 @@ describe('notifyReviewCompleted', () => {
   it('仓库开启钉钉且全局配置存在时发送完成通知', async () => {
     const s = session();
     await expect(notifyReviewCompleted(s, messages)).resolves.toBe('sent');
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       s.repository,
       expect.stringContaining('polit-agent'),
       expect.stringContaining('审查通过。'),
@@ -94,7 +94,7 @@ describe('notifyReviewCompleted', () => {
 
   it('没有 assistant 文本时仍发送完成通知', async () => {
     await notifyReviewCompleted(session(), [{ id: 'm1', role: 'assistant', parts: [{ type: 'step-start' }] } as UIMessage]);
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('模型没有返回可展示的文本结果'),
@@ -107,19 +107,19 @@ describe('notifyReviewCompleted', () => {
       { id: 'u1', role: 'user', parts: [{ type: 'text', text: '追问' }] },
       { id: 'a2', role: 'assistant', parts: [{ type: 'text', text: '最新首答' }] },
     ]);
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.not.stringContaining('旧回复'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('最新首答'),
     );
   });
 
-  it('钉钉正文同时包含主审查输出和 Verify 结论', async () => {
+  it('有 Verify 结论时钉钉正文只发送最终核验结果', async () => {
     await notifyReviewCompleted(session(), [
       {
         id: 'a1',
@@ -138,19 +138,19 @@ describe('notifyReviewCompleted', () => {
       },
     ]);
 
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('## Verify 结论\nverified 总评'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
-      expect.stringContaining('未验证草稿'),
+      expect.not.stringContaining('未验证草稿'),
     );
   });
 
-  it('有平台总评工具结果时，钉钉正文同时包含工具总评和 Verify 结论', async () => {
+  it('有 Verify 结论时不再发送可能已被推翻的平台总评', async () => {
     await notifyReviewCompleted(session(), [
       {
         id: 'a1',
@@ -169,17 +169,17 @@ describe('notifyReviewCompleted', () => {
       },
     ]);
 
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
-      expect.stringContaining('Dockerfile:12 构建产物路径错误'),
+      expect.not.stringContaining('Dockerfile:12 构建产物路径错误'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('## Verify 结论\nverified 总评'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.not.stringContaining('我会先读取项目记忆'),
@@ -205,12 +205,12 @@ describe('notifyReviewCompleted', () => {
       },
     ]);
 
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('Dockerfile:12 构建产物路径错误'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.not.stringContaining('我会先读取项目记忆'),
@@ -251,22 +251,22 @@ describe('notifyReviewCompleted', () => {
       },
     ]);
 
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('Dockerfile:12'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('构建产物路径与根 build:all 契约不一致'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('Dockerfile:1'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.not.stringContaining('我会先读取项目记忆'),
@@ -301,17 +301,17 @@ describe('notifyReviewCompleted', () => {
       },
     ]);
 
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('## 总评'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('## 行级问题'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('Dockerfile:12'),
@@ -340,12 +340,12 @@ describe('notifyReviewCompleted', () => {
       },
     ]);
 
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('nginx.conf:8'),
     );
-    expect(sendReviewDingtalkNotification).toHaveBeenCalledWith(
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.not.stringContaining('行级评论已发布'),
@@ -358,7 +358,7 @@ describe('notifyReviewCompleted', () => {
     });
 
     await expect(notifyReviewCompleted(s, messages)).resolves.toBe('skipped');
-    expect(sendReviewDingtalkNotification).not.toHaveBeenCalled();
+    expect(sendRepositoryDingtalkNotification).not.toHaveBeenCalled();
   });
 });
 
@@ -380,6 +380,7 @@ describe('publishVerifiedReview', () => {
           commitSha: 'head',
           diffRefs: null,
           enableMrComment: true,
+          dingtalkRepository: { enableDingtalk: false, dingtalkWebhook: null, dingtalkSecret: null },
         },
         'verified 总评',
       ),
@@ -405,6 +406,7 @@ describe('publishVerifiedReview', () => {
           commitSha: 'head',
           diffRefs: null,
           enableMrComment: false,
+          dingtalkRepository: { enableDingtalk: false, dingtalkWebhook: null, dingtalkSecret: null },
         },
         'verified 总评',
       ),
@@ -435,6 +437,7 @@ describe('verified review memory', () => {
         commitSha: 'head',
         diffRefs: null,
         enableMrComment: false,
+        dingtalkRepository: { enableDingtalk: false, dingtalkWebhook: null, dingtalkSecret: null },
       },
       'verified 总评',
     );

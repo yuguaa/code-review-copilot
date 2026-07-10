@@ -25,18 +25,18 @@ export function resolveDingtalkConfig(
       : null;
 }
 
-export async function loadReviewDingtalkConfig(repo: DingtalkRepositoryConfig): Promise<DingtalkConfig | null> {
+export async function loadRepositoryDingtalkConfig(repo: DingtalkRepositoryConfig): Promise<DingtalkConfig | null> {
   if (!repo.enableDingtalk) return null;
   const notification = await prisma.notificationSetting.findUnique({ where: { scope: 'global' } });
   return resolveDingtalkConfig(repo, notification);
 }
 
-export async function sendReviewDingtalkNotification(
+export async function sendRepositoryDingtalkNotification(
   repo: DingtalkRepositoryConfig,
   title: string,
   text: string,
 ): Promise<'sent' | 'skipped'> {
-  const config = await loadReviewDingtalkConfig(repo);
+  const config = await loadRepositoryDingtalkConfig(repo);
   if (!config) return 'skipped';
   await sendDingtalk(config, title, text);
   return 'sent';

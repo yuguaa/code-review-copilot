@@ -4,6 +4,7 @@ import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { Message } from '../Message';
 import type { MessageFeedbackValue, MessageTreeNode, SessionDetail } from '../../lib/types';
+import { isReviewActivityPart } from '../message/message-types';
 
 type MessageListProps = {
   session: SessionDetail['session'];
@@ -29,6 +30,7 @@ export function MessageList({
   onFeedback,
 }: MessageListProps) {
   const isTriggerFirst = session.kind === 'review' && messages[0]?.role === 'user';
+  const hasReviewActivity = messages.some((message) => message.parts.some(isReviewActivityPart));
 
   return (
     <div className="review-paper mx-auto min-h-full max-w-3xl px-5 py-9 max-md:px-4 max-md:py-5">
@@ -69,7 +71,7 @@ export function MessageList({
           <Loader2 size={13} className="animate-spin text-[var(--accent)]" />
         </div>
       )}
-      {!busy && reviewing && (
+      {!busy && reviewing && !hasReviewActivity && (
         <div className="caption inline-flex items-center gap-2 rounded-[var(--r-sm)] border border-[var(--warning)]/24 bg-[var(--state-warning-bg)] px-3 py-1.5 text-[var(--ink)] shadow-[var(--shadow-sm)]">
           <Activity size={13} /> 后台审查进行中，回复会实时同步到这里
         </div>

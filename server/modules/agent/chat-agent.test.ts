@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { UIMessage } from 'ai';
-import { toChatHistory } from './chat-agent';
+import { CHAT_INSTRUCTIONS, toChatHistory } from './chat-agent';
+
+describe('CHAT_INSTRUCTIONS', () => {
+  it('只允许在最新用户消息明确授权时调用发布工具', () => {
+    expect(CHAT_INSTRUCTIONS).toContain('最新一条用户消息明确要求');
+    expect(CHAT_INSTRUCTIONS).toContain('post_review_comment');
+    expect(CHAT_INSTRUCTIONS).toContain('post_inline_comment');
+    expect(CHAT_INSTRUCTIONS).toContain('send_dingtalk_notification');
+    expect(CHAT_INSTRUCTIONS).toContain('不构成授权');
+  });
+});
 
 describe('toChatHistory（对话上下文整理）', () => {
   it('保留全部轮次（含 webhook 触发消息），不裁剪历史', () => {

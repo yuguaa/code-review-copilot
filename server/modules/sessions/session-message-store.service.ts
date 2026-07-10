@@ -1,6 +1,7 @@
 import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
+import { normalizeFindingText } from '../../../shared/review-findings';
 
 export type MessageRow = {
   id: string;
@@ -321,7 +322,7 @@ export function mergeIncomingUserMessageAtParent(
 
 export function applyMessageFeedback(parts: unknown, feedback: MessageFeedbackValue, findingText?: string): UIMessage['parts'] {
   const list = Array.isArray(parts) ? parts : [];
-  const targetText = normalizeFeedbackText(findingText);
+  const targetText = normalizeFindingText(typeof findingText === 'string' ? findingText : '');
   if (!targetText) {
     return list.map((part) => {
       if (!part || typeof part !== 'object') return part;
@@ -358,12 +359,16 @@ export function applyMessageFeedback(parts: unknown, feedback: MessageFeedbackVa
 }
 
 function findFeedbackTextPartIndex(parts: unknown[], targetText: string): number {
-  const firstTextIndex = parts.findIndex(isTextPart);
-  const matchedIndex = parts.findIndex((part) => {
+  const verifiedIndex = parts.findLastIndex((part) => {
     if (!isTextPart(part)) return false;
-    return normalizeFeedbackText(part.text).includes(targetText);
+    return part.text.trimStart().startsWith('## Verify 结论')
+      && normalizeFindingText(part.text).includes(targetText);
   });
-  return matchedIndex >= 0 ? matchedIndex : firstTextIndex;
+  if (verifiedIndex >= 0) return verifiedIndex;
+  return parts.findLastIndex((part) => {
+    if (!isTextPart(part)) return false;
+    return normalizeFindingText(part.text).includes(targetText);
+  });
 }
 
 function isTextPart(part: unknown): part is { type: 'text'; text: string } {
@@ -373,7 +378,7 @@ function isTextPart(part: unknown): part is { type: 'text'; text: string } {
 }
 
 export function normalizeFeedbackText(text: unknown): string {
-  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  return normalizeFindingText(typeof text === 'string' ? text : '');
 }
 
 export function extractPartsText(parts: unknown): string {

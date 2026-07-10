@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createGitLabService, type GitLabService } from '../../shared/gitlab/gitlab.service';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
@@ -14,6 +14,10 @@ import {
 } from '../repositories/repositories.service';
 import { isReadOnlyCommand } from './read-only-command';
 import { recordRuntimeEvidence, type ReviewRuntimeMemory } from './review-runtime-memory';
+import {
+  sendRepositoryDingtalkNotification,
+  type DingtalkRepositoryConfig,
+} from '../notifications/notifications.service';
 
 const exec = promisify(execFile);
 const MAX_CHARS = 30_000; // 单次工具返回上限，避免撑爆上下文
@@ -31,43 +35,68 @@ export type WorkspaceContext = {
   enabledTools?: Set<ToolKey>;
 };
 
-/** 审查上下文 = 工作区 + MR 信息与输出配置。 */
-export type ReviewContext = WorkspaceContext & {
+type DiffRefs = { base_sha: string; head_sha: string; start_sha: string };
+type InlineCommentResult =
+  | { posted: false; error: string }
+  | { posted: true; noteId: string | number | undefined }
+  | { posted: true; discussionId: string | number };
+
+/** 发布上下文不依赖本地工作区，追问即使无法读取代码也能按用户要求发送。 */
+export type PublishContext = {
   gitlab: GitLabService;
   projectId: number;
   mrIid: number | null;
   commitSha: string | null;
-  diffRefs: { base_sha: string; head_sha: string; start_sha: string } | null;
+  diffRefs: DiffRefs | null;
+  loadDiffRefs?: () => Promise<DiffRefs | null>;
   enableMrComment: boolean;
+  dingtalkRepository: DingtalkRepositoryConfig;
+  enabledTools?: Set<ToolKey>;
+};
+
+/** 审查上下文 = 工作区 + MR 信息与输出配置。 */
+export type ReviewContext = WorkspaceContext & PublishContext & {
   runtimeMemory?: ReviewRuntimeMemory;
 };
 
-function toolEnabled(ctx: WorkspaceContext, key: ToolKey): boolean {
+function toolEnabled(ctx: { enabledTools?: Set<ToolKey> }, key: ToolKey): boolean {
   return ctx.enabledTools?.has(key) ?? true;
 }
 
 /**
- * 从会话 + 已就绪的工作区构造审查上下文。
- * 异步：行级评论需要 MR 的 diff_refs（base/start/head sha），在此拉一次。
+ * 从会话构造发布上下文。行级评论需要的 MR diff_refs 在实际调用工具时按需加载。
  */
-export async function buildReviewContext(
-  session: SessionWithRepository,
-  workspace: Workspace,
-): Promise<ReviewContext> {
+export function buildPublishContext(session: SessionWithRepository): PublishContext {
   const repo = session.repository;
-  if (!repo) throw new Error('会话未绑定仓库，无法构造审查上下文');
+  if (!repo) throw new Error('会话未绑定仓库，无法构造发布上下文');
   const gitlab = createGitLabService(repo.gitLabAccount.url, repo.gitLabAccount.accessToken);
-  const mr = session.mrIid != null ? await gitlab.getMergeRequest(repo.gitLabProjectId, session.mrIid) : null;
   return {
     gitlab,
     projectId: repo.gitLabProjectId,
     mrIid: session.mrIid,
-    repoId: repo.id,
+    commitSha: session.commitSha,
+    diffRefs: null,
+    loadDiffRefs: session.mrIid == null
+      ? undefined
+      : () => gitlab.getMergeRequest(repo.gitLabProjectId, session.mrIid!).then((mr) => mr.diff_refs ?? null),
+    enableMrComment: repo.enableMrComment,
+    dingtalkRepository: {
+      enableDingtalk: repo.enableDingtalk,
+      dingtalkWebhook: repo.dingtalkWebhook,
+      dingtalkSecret: repo.dingtalkSecret,
+    },
+  };
+}
+
+export function buildReviewContext(
+  session: SessionWithRepository,
+  workspace: Workspace,
+): ReviewContext {
+  return {
+    ...buildPublishContext(session),
+    repoId: session.repository!.id,
     workdir: workspace.dir,
     diffRef: workspace.diffRef,
-    commitSha: session.commitSha,
-    diffRefs: mr?.diff_refs ?? null,
-    enableMrComment: repo.enableMrComment,
   };
 }
 
@@ -76,6 +105,27 @@ function safeResolve(workdir: string, p: string): string | null {
   const abs = path.resolve(workdir, p);
   const rel = path.relative(workdir, abs);
   return rel.startsWith('..') || path.isAbsolute(rel) ? null : abs;
+}
+
+export function readWorkspaceLine(
+  workdir: string,
+  filePath: string,
+  line: number,
+): Promise<{ path: string; line: number; text: string }> {
+  if (!Number.isInteger(line) || line < 1) return Promise.reject(new Error(`无效行号：${line}`));
+  const abs = safeResolve(workdir, filePath);
+  if (!abs) return Promise.reject(new Error(`路径越界：${filePath}`));
+  return Promise.all([realpath(workdir), realpath(abs)])
+    .then(([realWorkdir, realFile]) => {
+      const rel = path.relative(realWorkdir, realFile);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`路径越界：${filePath}`);
+      return readFile(realFile, 'utf8');
+    })
+    .then((content) => {
+      const lines = content.split(/\r?\n/);
+      if (line > lines.length) throw new Error(`行号越界：${filePath}:${line}（文件共 ${lines.length} 行）`);
+      return { path: path.relative(workdir, abs), line, text: lines[line - 1] ?? '' };
+    });
 }
 
 /** 只读探索工具集（在工作区里跑）——审查主 agent、subagent 与对话 agent 共用。 */
@@ -147,15 +197,15 @@ export function buildReadTools(ctx: WorkspaceContext) {
 }
 
 /**
- * 审查主 agent 工具集 = 只读探索 + 记忆沉淀 + 平台评论（enableMrComment 关闭时干脆不提供发布工具）。
- * 钉钉推送不是工具：审查完成后由系统按 enableDingtalk 确定性发送。
+ * Agent 工具集 = 只读探索 + 可选记忆沉淀 + 发布工具。
+ * Webhook 主审查关闭 publish，由 verify 后的系统流程确定性发布；追问对话按仓库配置暴露发布工具。
  */
 export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memoryWrite?: boolean } = {}) {
   const publish = opts.publish ?? true;
   const memoryWrite = opts.memoryWrite ?? true;
   return {
     ...buildReadTools(ctx),
-    ...(publish && ctx.enableMrComment ? buildPublishTools(ctx) : {}),
+    ...(publish ? buildPublishTools(ctx) : {}),
 
     ...(memoryWrite && toolEnabled(ctx, 'write_memory')
       ? {
@@ -188,13 +238,13 @@ export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memory
   };
 }
 
-/** 平台评论发布工具：仅在仓库开启 enableMrComment 时挂载。 */
-function buildPublishTools(ctx: ReviewContext) {
+/** 发布工具：渠道配置和仓库 Tool 开关共同决定是否挂载。 */
+export function buildPublishTools(ctx: PublishContext) {
   return {
-    ...(toolEnabled(ctx, 'post_review_comment')
+    ...(ctx.enableMrComment && toolEnabled(ctx, 'post_review_comment')
       ? {
           post_review_comment: tool({
-            description: '把审查总评作为一条 Markdown 评论发布到 MR 或 Push commit。完成审查、整理好所有问题后调用一次。',
+            description: '仅当最新用户消息明确要求发布 GitLab 评论时调用，把完整 Markdown 内容发布到当前 MR 或 Push commit。',
             inputSchema: z.object({ markdown: z.string().describe('完整的 Markdown 审查总评，按严重级别分组') }),
             execute: async ({ markdown }) => {
               if (ctx.mrIid == null) {
@@ -209,31 +259,52 @@ function buildPublishTools(ctx: ReviewContext) {
         }
       : {}),
 
-    ...(toolEnabled(ctx, 'post_inline_comment')
+    ...(ctx.enableMrComment && toolEnabled(ctx, 'post_inline_comment')
       ? {
           post_inline_comment: tool({
-            description: '在 MR 某文件的具体行上发表行级评论（精准定位问题）。',
+            description: '仅当最新用户消息明确要求发布 GitLab 行级评论时调用，在当前 MR 或 Push commit 的具体文件行发表评论。',
             inputSchema: z.object({
               path: z.string().describe('文件路径（new_path）'),
               line: z.number().describe('新文件中的行号'),
               body: z.string().describe('该行的评论内容（Markdown）'),
             }),
-            execute: async ({ path: p, line, body }) => {
+            execute: ({ path: p, line, body }): Promise<InlineCommentResult> => {
               if (ctx.mrIid == null) {
-                if (!ctx.commitSha) return '当前会话未绑定 commit，无法发布行级评论。';
-                const res = await ctx.gitlab.createCommitComment(ctx.projectId, ctx.commitSha, body, { path: p, line, line_type: 'new' });
-                return { posted: true, noteId: res.id ?? res.note_id };
+                if (!ctx.commitSha) return Promise.resolve({ posted: false, error: '当前会话未绑定 commit，无法发布行级评论。' });
+                return ctx.gitlab.createCommitComment(ctx.projectId, ctx.commitSha, body, { path: p, line, line_type: 'new' })
+                  .then((res) => ({ posted: true, noteId: res.id ?? res.note_id }));
               }
-              if (!ctx.diffRefs) return '缺少 MR diff_refs，无法定位行级评论。';
-              const res = await ctx.gitlab.createMergeRequestComment(ctx.projectId, ctx.mrIid, body, {
-                ...ctx.diffRefs,
-                old_path: p,
-                new_path: p,
-                new_line: line,
-                position_type: 'text',
+              const diffRefs: Promise<DiffRefs | null> = ctx.diffRefs
+                ? Promise.resolve(ctx.diffRefs)
+                : ctx.loadDiffRefs?.() ?? Promise.resolve(null);
+              return diffRefs.then<InlineCommentResult>((refs) => {
+                if (!refs) return { posted: false, error: '缺少 MR diff_refs，无法定位行级评论。' };
+                return ctx.gitlab.createMergeRequestComment(ctx.projectId, ctx.mrIid!, body, {
+                  ...refs,
+                  old_path: p,
+                  new_path: p,
+                  new_line: line,
+                  position_type: 'text',
+                }).then((res) => ({ posted: true, discussionId: res.id }));
               });
-              return { posted: true, discussionId: res.id };
             },
+          }),
+        }
+      : {}),
+
+    ...(ctx.dingtalkRepository.enableDingtalk && toolEnabled(ctx, 'send_dingtalk_notification')
+      ? {
+          send_dingtalk_notification: tool({
+            description: '仅当最新用户消息明确要求发送钉钉时调用，把指定 Markdown 内容发送到仓库配置的钉钉机器人。',
+            inputSchema: z.object({
+              title: z.string().trim().min(1).max(200).describe('钉钉通知标题'),
+              markdown: z.string().trim().min(1).max(30_000).describe('钉钉通知 Markdown 正文'),
+            }),
+            execute: ({ title, markdown }) =>
+              sendRepositoryDingtalkNotification(ctx.dingtalkRepository, title, markdown).then((result) => ({
+                sent: result === 'sent',
+                result,
+              })),
           }),
         }
       : {}),

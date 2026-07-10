@@ -3,7 +3,7 @@ import { sendDingtalk } from '../../shared/dingtalk/dingtalk.service';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
 import {
   resolveDingtalkConfig,
-  sendReviewDingtalkNotification,
+  sendRepositoryDingtalkNotification,
   type DingtalkRepositoryConfig,
 } from './notifications.service';
 
@@ -32,7 +32,7 @@ describe('notifications.service', () => {
 
   it('仓库关闭钉钉时不读取全局配置并跳过', async () => {
     await expect(
-      sendReviewDingtalkNotification({ ...repo, enableDingtalk: false }, '标题', '正文'),
+      sendRepositoryDingtalkNotification({ ...repo, enableDingtalk: false }, '标题', '正文'),
     ).resolves.toBe('skipped');
 
     expect(prisma.notificationSetting.findUnique).not.toHaveBeenCalled();
@@ -63,7 +63,7 @@ describe('notifications.service', () => {
       updatedAt: new Date(),
     });
 
-    await expect(sendReviewDingtalkNotification(repo, '标题', '正文')).resolves.toBe('sent');
+    await expect(sendRepositoryDingtalkNotification(repo, '标题', '正文')).resolves.toBe('sent');
     expect(sendDingtalk).toHaveBeenCalledWith({ webhook: 'https://global.example', secret: 'global-secret' }, '标题', '正文');
   });
 
@@ -78,7 +78,7 @@ describe('notifications.service', () => {
       updatedAt: new Date(),
     });
 
-    await expect(sendReviewDingtalkNotification(repo, '标题', '正文')).resolves.toBe('skipped');
+    await expect(sendRepositoryDingtalkNotification(repo, '标题', '正文')).resolves.toBe('skipped');
     expect(sendDingtalk).not.toHaveBeenCalled();
   });
 });

@@ -9,8 +9,8 @@ import { BranchSwitcher } from './BranchSwitcher';
 import { MessageBlockRenderer } from './MessageBlockRenderer';
 import { StreamingCursor } from './StreamingCursor';
 import { TriggerCard } from './TriggerCard';
-import { isBoundaryPart, type BranchInfo } from './message-types';
-import { extractReviewFindings } from './review-findings';
+import { isBoundaryPart, isReviewActivityPart, type BranchInfo } from './message-types';
+import { findingFeedbackPartIndex } from './review-findings';
 
 export function MessageBubble({
   message,
@@ -33,21 +33,23 @@ export function MessageBubble({
 
   const isUser = message.role === 'user';
   const visibleParts = message.parts.filter((part) => !isBoundaryPart(part));
-  const canBranch = !isStreaming && Boolean(onBranchFrom);
+  const isReviewActivity = !isUser && visibleParts.some(isReviewActivityPart);
+  const canBranch = !isReviewActivity && !isStreaming && Boolean(onBranchFrom);
   const feedback = feedbackOf(visibleParts);
-  const hasFindingFeedback = !isUser && !isStreaming && visibleParts.some((part) => {
-    return part.type === 'text' && extractReviewFindings(part.text).length > 0;
-  });
-  const canFeedback = !isUser && !isStreaming && Boolean(onFeedback) && !hasFindingFeedback;
+  const feedbackPartIndex = !isUser && !isStreaming ? findingFeedbackPartIndex(visibleParts) : -1;
+  const hasFindingFeedback = feedbackPartIndex >= 0;
+  const canFeedback = !isReviewActivity && !isUser && !isStreaming && Boolean(onFeedback) && !hasFindingFeedback;
   return (
-    <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12 max-md:pl-6' : 'justify-start pr-8 max-md:pr-0')}>
-      <div className={cn('flex max-w-full items-start gap-2', isUser && 'flex-row-reverse')}>
+    <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12 max-md:pl-6' : 'justify-start', !isReviewActivity && !isUser && 'pr-8 max-md:pr-0')}>
+      <div className={cn('flex max-w-full items-start gap-2', isUser && 'flex-row-reverse', isReviewActivity && 'w-full')}>
         <div
           className={cn(
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
             isUser
               ? 'max-w-[min(640px,100%)] bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
-              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-sm)]',
+              : isReviewActivity
+                ? 'w-full text-[var(--body-strong)]'
+                : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-sm)]',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
@@ -58,51 +60,53 @@ export function MessageBubble({
               role={message.role}
               streaming={isStreaming && index === visibleParts.length - 1}
               messageId={message.id}
-              onFindingFeedback={onFeedback}
+              onFindingFeedback={index === feedbackPartIndex ? onFeedback : undefined}
             />
           ))}
         </div>
-        <div className={cn('flex items-center gap-1 opacity-50 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
-          <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
-          {canFeedback && (
-            <span className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">
+        {!isReviewActivity && (
+          <div className={cn('flex items-center gap-1 opacity-50 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
+            <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
+            {canFeedback && (
+              <span className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">
+                <button
+                  type="button"
+                  onClick={() => onFeedback?.(message.id, 'up')}
+                  aria-label="认可这条发现"
+                  title="认可这条发现"
+                  className={cn(
+                    'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
+                    feedback === 'up' ? 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]' : 'text-[var(--muted)]',
+                  )}
+                >
+                  <ThumbsUp size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onFeedback?.(message.id, 'down')}
+                  aria-label="否定这条发现"
+                  title="否定这条发现"
+                  className={cn(
+                    'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
+                    feedback === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',
+                  )}
+                >
+                  <ThumbsDown size={12} />
+                </button>
+              </span>
+            )}
+            {canBranch && (
               <button
                 type="button"
-                onClick={() => onFeedback?.(message.id, 'up')}
-                aria-label="认可这条发现"
-                title="认可这条发现"
-                className={cn(
-                  'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
-                  feedback === 'up' ? 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]' : 'text-[var(--muted)]',
-                )}
+                onClick={() => onBranchFrom?.(message.id)}
+                className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-95"
+                title={isUser ? '重新回答' : '从这里继续'}
               >
-                <ThumbsUp size={12} />
+                {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}
               </button>
-              <button
-                type="button"
-                onClick={() => onFeedback?.(message.id, 'down')}
-                aria-label="否定这条发现"
-                title="否定这条发现"
-                className={cn(
-                  'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
-                  feedback === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',
-                )}
-              >
-                <ThumbsDown size={12} />
-              </button>
-            </span>
-          )}
-          {canBranch && (
-            <button
-              type="button"
-              onClick={() => onBranchFrom?.(message.id)}
-              className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-95"
-              title={isUser ? '重新回答' : '从这里继续'}
-            >
-              {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

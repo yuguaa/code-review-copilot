@@ -170,7 +170,15 @@ export function useChatThreadController({
       .then((next) => {
         setMessages(next.messages);
         updateDetail((current) => mergeMessageTree(current, next));
-        toast.success(feedback === 'up' ? '已记录认可，后续审查会参考' : '已记录否定，后续审查会避开');
+        toast.success(
+          findingText
+            ? feedback === 'up'
+              ? '已标记为真实问题，后续审查会参考'
+              : '已标记为误报，后续审查会降低同类结论权重'
+            : feedback === 'up'
+              ? '已记录认可，后续审查会参考'
+              : '已记录否定，后续审查会避开',
+        );
       })
       .catch((e) => toast.error(errorMessage(e, '反馈提交失败')));
   }, [busy, sessionId, setMessages, updateDetail]);

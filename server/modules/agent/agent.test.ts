@@ -8,6 +8,11 @@ import { createReviewRuntimeMemory } from './review-runtime-memory';
 import { signedUrl } from '../../shared/dingtalk/dingtalk.service';
 import type { GitLabService } from '../../shared/gitlab/gitlab.service';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
+import { sendRepositoryDingtalkNotification } from '../notifications/notifications.service';
+
+vi.mock('../notifications/notifications.service', () => ({
+  sendRepositoryDingtalkNotification: vi.fn().mockResolvedValue('sent'),
+}));
 
 // 工具执行时 AI SDK 传入的 options（这里只需占位）。
 const toolOpts = { toolCallId: 't1', messages: [] } as never;
@@ -183,7 +188,7 @@ function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
     createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'disc-1' }),
     createCommitComment: vi.fn().mockResolvedValue({ id: 'note-1' }),
   } as unknown as GitLabService;
-  return {
+  const context: ReviewContext = {
     gitlab,
     projectId: 1,
     mrIid: 42,
@@ -193,8 +198,13 @@ function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
     commitSha: 'h',
     diffRefs: { base_sha: 'b', head_sha: 'h', start_sha: 's' },
     enableMrComment: true,
-    ...overrides,
+    dingtalkRepository: {
+      enableDingtalk: true,
+      dingtalkWebhook: 'https://dingtalk.example',
+      dingtalkSecret: null,
+    },
   };
+  return { ...context, ...overrides };
 }
 
 describe('输出工具的开关控制', () => {
@@ -216,7 +226,7 @@ describe('输出工具的开关控制', () => {
   it('行级评论缺 diff_refs 时提示', async () => {
     const tools = buildTools(fakeContext({ diffRefs: null }));
     const out = await tools.post_inline_comment!.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
-    expect(out).toContain('diff_refs');
+    expect(out).toEqual({ posted: false, error: expect.stringContaining('diff_refs') });
   });
 
   it('行级评论携带 position 调用 GitLab', async () => {
@@ -231,6 +241,22 @@ describe('输出工具的开关控制', () => {
     );
   });
 
+  it('追问首次发布行级评论时按需加载 MR diff_refs', async () => {
+    const loadDiffRefs = vi.fn().mockResolvedValue({ base_sha: 'b2', head_sha: 'h2', start_sha: 's2' });
+    const ctx = fakeContext({ diffRefs: null, loadDiffRefs });
+    const tools = buildTools(ctx);
+
+    await tools.post_inline_comment!.execute!({ path: 'src/a.ts', line: 8, body: '这里存在空指针。' }, toolOpts);
+
+    expect(loadDiffRefs).toHaveBeenCalledOnce();
+    expect(ctx.gitlab.createMergeRequestComment).toHaveBeenCalledWith(
+      1,
+      42,
+      '这里存在空指针。',
+      expect.objectContaining({ base_sha: 'b2', new_path: 'src/a.ts', new_line: 8 }),
+    );
+  });
+
   it('Push 会话评论发布到 commit', async () => {
     const ctx = fakeContext({ mrIid: null, diffRefs: null, commitSha: 'abc123' });
     const tools = buildTools(ctx);
@@ -239,6 +265,30 @@ describe('输出工具的开关控制', () => {
     };
     expect(out.noteId).toBe('note-1');
     expect(ctx.gitlab.createCommitComment).toHaveBeenCalledWith(1, 'abc123', '# 审查');
+  });
+
+  it('开启钉钉渠道时发送用户指定内容', async () => {
+    const ctx = fakeContext();
+    const tools = buildTools(ctx);
+    const out = await tools.send_dingtalk_notification!.execute!(
+      { title: '复核结论', markdown: '已确认 2 个问题。' },
+      toolOpts,
+    );
+
+    expect(out).toEqual({ sent: true, result: 'sent' });
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
+      ctx.dingtalkRepository,
+      '复核结论',
+      '已确认 2 个问题。',
+    );
+  });
+
+  it('关闭钉钉渠道时不提供发送工具', () => {
+    const tools = buildTools(fakeContext({
+      dingtalkRepository: { enableDingtalk: false, dingtalkWebhook: null, dingtalkSecret: null },
+    }));
+
+    expect('send_dingtalk_notification' in tools).toBe(false);
   });
 
   it('无 diff 基准（纯对话工作区）时不提供 git_diff 工具', () => {
@@ -260,6 +310,7 @@ describe('输出工具的开关控制', () => {
     const tools = buildTools(fakeContext(), { publish: false, memoryWrite: false });
     expect('post_review_comment' in tools).toBe(false);
     expect('post_inline_comment' in tools).toBe(false);
+    expect('send_dingtalk_notification' in tools).toBe(false);
     expect('write_memory' in tools).toBe(false);
     expect('read_memory' in tools).toBe(true);
   });

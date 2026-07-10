@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
-import { sendReviewDingtalkNotification } from '../notifications/notifications.service';
+import { sendRepositoryDingtalkNotification } from '../notifications/notifications.service';
 import type { ReviewContext } from './tools';
 import { readRepositoryMemory, writeRepositoryMemory } from '../repositories/repositories.service';
 
@@ -79,16 +79,10 @@ function verifiedReviewTextOf(messages: UIMessage[]): string {
   return textBlocks.at(-1) ?? '';
 }
 
-function finalAssistantTextBeforeVerifyOf(messages: UIMessage[]): string {
-  const textBlocks = assistantTextBlocksOf(messages).filter((text) => !isVerifiedReviewText(text));
-  return textBlocks.at(-1) ?? '';
-}
-
 function finalReviewTextOf(messages: UIMessage[]): string {
   const verifiedText = verifiedReviewTextOf(messages);
-  const mainReviewText = toolReviewTextOf(messages) || (verifiedText ? finalAssistantTextBeforeVerifyOf(messages) : finalAssistantTextOf(messages));
-  if (mainReviewText && verifiedText) return [mainReviewText, '', '---', '', verifiedText].join('\n');
-  return mainReviewText || verifiedText;
+  if (verifiedText) return verifiedText;
+  return toolReviewTextOf(messages) || finalAssistantTextOf(messages);
 }
 
 function titleOf(session: SessionWithRepository): string {
@@ -124,7 +118,7 @@ export function notifyReviewCompleted(session: SessionWithRepository, messages: 
   const resultText = finalReviewTextOf(messages) || '审查已完成，但模型没有返回可展示的文本结果。请进入会话查看工具调用记录。';
   const title = titleOf(session);
   const text = [`## ${title}`, '', contextOf(session), '', '---', '', resultText].join('\n');
-  return sendReviewDingtalkNotification(repo, title, text);
+  return sendRepositoryDingtalkNotification(repo, title, text);
 }
 
 export function publishVerifiedReview(ctx: ReviewContext, markdown: string): Promise<'posted' | 'skipped'> {

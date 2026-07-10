@@ -16,6 +16,16 @@ import {
   markReviewSessionFailed,
   STOPPED_REVIEW_ERROR,
 } from '../sessions/session-lifecycle.service';
+import { randomUUID } from 'node:crypto';
+import {
+  createReviewActivityState,
+  failRunningReviewAgents,
+  setReviewActivityPhase,
+  updateReviewAgentActivity,
+  upsertReviewActivityMessage,
+  type ReviewActivityState,
+  type ReviewActivityReporter,
+} from './review-activity';
 
 const log = createLogger('run-review');
 const activeReviewControllers = new Map<string, AbortController>();
@@ -49,6 +59,15 @@ export async function runReviewSession(sessionId: string): Promise<void> {
   const controller = new AbortController();
   activeReviewControllers.set(sessionId, controller);
   let finalMessages: UIMessage[] | null = null;
+  let activity: ReviewActivityState | null = null;
+
+  const publishActivity: ReviewActivityReporter = (update, phase) => {
+    if (!activity || !finalMessages) return;
+    activity = updateReviewAgentActivity(activity, update);
+    if (phase) activity = setReviewActivityPhase(activity, phase);
+    finalMessages = upsertReviewActivityMessage(finalMessages, activity);
+    publishSessionMessages(sessionId, finalMessages);
+  };
 
   try {
     const session = await getSessionWithRepository(sessionId);
@@ -59,25 +78,46 @@ export async function runReviewSession(sessionId: string): Promise<void> {
 
     throwIfStopped(controller.signal);
     const initial = await loadMessages(sessionId);
-    finalMessages = initial;
-    const reviewRun = await createReviewStream({ session, messages: initial, abortSignal: controller.signal });
+    activity = createReviewActivityState(randomUUID());
+    finalMessages = upsertReviewActivityMessage(initial, activity);
+    await saveMessages(sessionId, finalMessages);
+    publishSessionMessages(sessionId, finalMessages);
+    const reviewRun = await createReviewStream({
+      session,
+      messages: initial,
+      abortSignal: controller.signal,
+      onActivity: publishActivity,
+    });
     throwIfStopped(controller.signal);
 
     const uiStream = reviewRun.stream.toUIMessageStream({
       originalMessages: initial,
-      onEnd: ({ messages }) => {
-        finalMessages = messages;
-      },
     });
 
     for await (const message of readUIMessageStream<UIMessage>({ stream: uiStream })) {
       throwIfStopped(controller.signal);
-      finalMessages = mergeStreamingMessage(initial, message);
+      finalMessages = upsertReviewActivityMessage(mergeStreamingMessage(initial, message), activity);
       publishSessionMessages(sessionId, finalMessages);
     }
 
     throwIfStopped(controller.signal);
+    publishActivity({
+      id: 'primary',
+      label: '主审查 Agent',
+      provider: reviewRun.primaryConfig.provider,
+      modelId: reviewRun.primaryConfig.modelId,
+      task: '主审查草稿与证据收集完成',
+      status: 'completed',
+    });
     finalMessages = ensureVisibleAssistantReply(finalMessages);
+    publishActivity({
+      id: 'verifier',
+      label: 'Verify Agent',
+      provider: reviewRun.verifierConfig.provider,
+      modelId: reviewRun.verifierConfig.modelId,
+      task: '逐条核验主审查结论与代码证据',
+      status: 'running',
+    }, 'verifying');
     const verifiedText = await verifyReviewResult({
       ctx: reviewRun.ctx,
       messages: finalMessages,
@@ -89,6 +129,14 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     });
     throwIfStopped(controller.signal);
     finalMessages = withVerifiedReviewText(finalMessages, verifiedText);
+    publishActivity({
+      id: 'verifier',
+      label: 'Verify Agent',
+      provider: reviewRun.verifierConfig.provider,
+      modelId: reviewRun.verifierConfig.modelId,
+      task: '结论复核完成',
+      status: 'completed',
+    }, 'completed');
     await saveMessages(sessionId, finalMessages);
     throwIfStopped(controller.signal);
     await rememberVerifiedReview(reviewRun.ctx, verifiedText);
@@ -101,6 +149,11 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     log.info(`审查完成 session=${sessionId}`);
   } catch (err) {
     const stopped = isAbortError(err);
+    if (activity && finalMessages) {
+      activity = failRunningReviewAgents(activity);
+      finalMessages = upsertReviewActivityMessage(finalMessages, activity);
+      publishSessionMessages(sessionId, finalMessages);
+    }
     if (finalMessages) await saveMessages(sessionId, finalMessages).catch(() => undefined);
     if (stopped) {
       log.info(`审查已手动停止 session=${sessionId}`);
