@@ -36,7 +36,7 @@ export function MessageBubble({
   const feedbackPartIndex = !isUser && !isStreaming ? findingFeedbackPartIndex(visibleParts) : -1;
   return (
     <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12 max-md:pl-6' : 'justify-start', !isReviewActivity && !isUser && 'pr-8 max-md:pr-0')}>
-      <div className={cn('flex max-w-full items-start gap-2', isUser && 'flex-row-reverse', isReviewActivity && 'w-full')}>
+      <div className={cn('flex max-w-full flex-col gap-1.5', isUser ? 'items-end' : 'items-start', isReviewActivity && 'w-full')}>
         <div
           className={cn(
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
@@ -60,7 +60,7 @@ export function MessageBubble({
           ))}
         </div>
         {!isReviewActivity && (
-          <div className={cn('flex items-center gap-1 opacity-75 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
+          <div className="flex items-center gap-1 px-1 opacity-75 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100">
             <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
             {canBranch && (
               <button
