@@ -15,7 +15,7 @@ type MessageListProps = {
   treeById: Map<string, MessageTreeNode>;
   onSelectSibling: (messageId: string) => void;
   onBranchFrom: (messageId: string) => void;
-  onFeedback: (messageId: string, feedback: MessageFeedbackValue, findingText?: string) => void;
+  onFeedback: (messageId: string, feedback: MessageFeedbackValue, findingText: string) => void;
 };
 
 export function MessageList({

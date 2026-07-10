@@ -22,7 +22,7 @@ type StoredAIModel = Pick<AIModel, 'provider' | 'modelId' | 'apiKey' | 'apiBaseU
 export type ReviewModelConfigs = {
   primary: ModelConfig;
   delegates: ModelConfig[];
-  verifier: ModelConfig;
+  verifiers: ModelConfig[];
 };
 
 export function loadGlobalDefaultModel(): Promise<GlobalDefaultModel> {
@@ -104,15 +104,34 @@ export function resolveReviewModelConfigs(
   activeModelConfigs: ModelConfig[],
 ): ReviewModelConfigs {
   const primary = resolveRepositoryModelConfig(repo, globalDefaultModel);
+  const distinctModels = uniqueModelConfigs([primary, ...activeModelConfigs]);
+  const alternativeVerifiers = distinctModels.filter((config) => !sameModelEndpoint(config, primary));
+  const verifiers = alternativeVerifiers.length >= 2
+    ? alternativeVerifiers
+    : [...alternativeVerifiers, primary];
+  if (verifiers.length < 2) {
+    throw new Error('多模型 Verify 至少需要配置两个不同的启用模型');
+  }
   return {
     primary,
     delegates: activeModelConfigs,
-    verifier: activeModelConfigs.find((config) => !sameModelEndpoint(config, primary)) ?? primary,
+    verifiers,
   };
 }
 
+function uniqueModelConfigs(configs: ModelConfig[]): ModelConfig[] {
+  return configs.filter((config, index) =>
+    configs.findIndex((candidate) => sameModelEndpoint(candidate, config)) === index,
+  );
+}
+
+export function modelEndpointKey(config: Pick<ModelConfig, 'provider' | 'modelId' | 'apiBaseUrl'>): string {
+  const apiBaseUrl = (config.apiBaseUrl ?? '').replace(/\/+$/, '');
+  return `${config.provider}\u0000${config.modelId}\u0000${apiBaseUrl}`;
+}
+
 function sameModelEndpoint(a: ModelConfig, b: ModelConfig): boolean {
-  return a.provider === b.provider && a.modelId === b.modelId && (a.apiBaseUrl ?? null) === (b.apiBaseUrl ?? null);
+  return modelEndpointKey(a) === modelEndpointKey(b);
 }
 
 /**

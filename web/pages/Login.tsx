@@ -2,6 +2,9 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
+import GitPullRequest from 'lucide-react/dist/esm/icons/git-pull-request';
+import ScanSearch from 'lucide-react/dist/esm/icons/scan-search';
+import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuth } from '../App';
@@ -111,19 +114,16 @@ export function Login() {
   };
 
   return (
-    <div ref={rootRef} className="line-canvas measure-rails blueprint-backdrop min-h-full">
-      <div className="mx-auto grid min-h-full max-w-6xl items-center gap-14 px-6 py-16 lg:grid-cols-[0.9fr_1.1fr]">
+    <div ref={rootRef} className="login-shell line-canvas measure-rails blueprint-backdrop min-h-full">
+      <div className="login-layout mx-auto grid min-h-full max-w-6xl items-center gap-14 px-6 py-16 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="mx-auto w-full max-w-md">
-          <span data-login-copy className="flex h-12 w-12 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
-            <span className="font-display text-2xl leading-none">审</span>
+          <span data-login-copy className="login-mark flex h-12 w-12 items-center justify-center rounded-[var(--r-pill)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
+            <ScanSearch size={19} />
           </span>
-          <p data-login-copy className="caption mt-8 text-[var(--brand-magenta)]">代码审查 Agent</p>
-          <h1 data-login-copy className="font-display mt-3 text-[56px] leading-[0.98] text-[var(--ink)] max-sm:text-[42px]">
-            让每次
-            <br />
-            <span className="italic text-[var(--muted)]">评审</span>
-            <br />
-            <span className="text-[var(--brand-magenta)]">都可追问。</span>
+          <p data-login-copy className="caption mt-8 text-[var(--accent)]">代码审查 Agent</p>
+          <h1 data-login-copy className="font-display mt-3 text-[54px] leading-[1.02] text-[var(--ink)] max-sm:text-[40px]">
+            让每次评审
+            <span className="login-heading-accent block">都有证据可追问。</span>
           </h1>
           <p data-login-copy className="mt-5 text-[15px] leading-relaxed text-[var(--muted)]">
             Webhook 触发审查，结论沉淀成一次可对话的会话。上下文、风险和结论，随时接着问。
@@ -158,22 +158,44 @@ export function Login() {
           </form>
         </div>
 
-        <div data-login-panel className="technical-panel hidden h-[430px] overflow-hidden rounded-[var(--r-lg)] lg:grid lg:grid-cols-2 lg:grid-rows-2">
-          <div data-login-tile className="bg-[var(--brand-magenta)] p-8 text-white will-change-transform">
-            <p className="caption text-white/72">触发源</p>
-            <p className="mt-20 font-display text-[42px] leading-none">MR 触发</p>
+        <div data-login-panel className="login-visual technical-panel hidden h-[430px] overflow-hidden rounded-[var(--r-lg)] lg:flex lg:flex-col lg:justify-between">
+          <div className="login-visual-grid" />
+          <div className="relative z-10 flex items-center justify-between px-8 pt-7">
+            <div>
+              <p className="caption text-[var(--muted)]">Review orchestration</p>
+              <p className="mt-1 text-sm font-semibold text-[var(--ink)]">多 Agent 证据链</p>
+            </div>
+            <span className="caption rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-soft)]/80 px-2.5 py-1 text-[var(--body)]">实时</span>
           </div>
-          <div data-login-tile className="bg-[var(--surface-card)] p-8 will-change-transform">
-            <p className="caption text-[var(--ink)]">审查流</p>
-            <p className="mt-20 font-display text-[42px] leading-none text-[var(--ink)]">结论沉淀</p>
+
+          <div className="login-pipeline relative z-10 flex items-center justify-center px-9">
+            <div data-login-tile className="pipeline-node will-change-transform">
+              <GitPullRequest size={19} />
+              <span>MR</span>
+            </div>
+            <div className="pipeline-beam"><span /></div>
+            <div data-login-tile className="pipeline-node is-center will-change-transform">
+              <ScanSearch size={22} />
+              <span>审查</span>
+            </div>
+            <div className="pipeline-beam is-reversed"><span /></div>
+            <div data-login-tile className="pipeline-node will-change-transform">
+              <ShieldCheck size={19} />
+              <span>Verify</span>
+            </div>
           </div>
-          <div data-login-tile className="bg-[var(--brand-navy)] p-8 text-white will-change-transform">
-            <p className="caption text-white/70">会话</p>
-            <p className="mt-20 font-display text-[42px] leading-none">继续追问</p>
-          </div>
-          <div data-login-tile className="bg-[var(--brand-cyan)] p-8 will-change-transform">
-            <p className="caption text-[var(--ink)]">上下文</p>
-            <p className="mt-20 font-display text-[42px] leading-none text-[var(--ink)]">上下文复用</p>
+
+          <div className="relative z-10 grid grid-cols-3 border-t border-[var(--line-subtle)] bg-[var(--canvas)]/38">
+            {[
+              ['01', '并行取证'],
+              ['02', '多模型复核'],
+              ['03', '结论发布'],
+            ].map(([index, label]) => (
+              <div key={index} className="border-r border-[var(--line-subtle)] px-5 py-4 last:border-r-0">
+                <p className="caption text-[var(--muted-soft)]">{index}</p>
+                <p className="mt-1 text-xs font-medium text-[var(--body-strong)]">{label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>

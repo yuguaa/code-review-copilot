@@ -1,8 +1,6 @@
 import type { UIMessage } from 'ai';
 import GitBranchPlus from 'lucide-react/dist/esm/icons/git-branch-plus';
 import RotateCcw from 'lucide-react/dist/esm/icons/rotate-ccw';
-import ThumbsDown from 'lucide-react/dist/esm/icons/thumbs-down';
-import ThumbsUp from 'lucide-react/dist/esm/icons/thumbs-up';
 import { cn } from '../../lib/cn';
 import type { MessageFeedbackValue } from '../../lib/types';
 import { BranchSwitcher } from './BranchSwitcher';
@@ -27,7 +25,7 @@ export function MessageBubble({
   branch?: BranchInfo;
   onSelectSibling?: (messageId: string) => void;
   onBranchFrom?: (messageId: string) => void;
-  onFeedback?: (messageId: string, feedback: MessageFeedbackValue, findingText?: string) => void;
+  onFeedback?: (messageId: string, feedback: MessageFeedbackValue, findingText: string) => void;
 }) {
   if (isTrigger) return <TriggerCard message={message} />;
 
@@ -35,10 +33,7 @@ export function MessageBubble({
   const visibleParts = message.parts.filter((part) => !isBoundaryPart(part));
   const isReviewActivity = !isUser && visibleParts.some(isReviewActivityPart);
   const canBranch = !isReviewActivity && !isStreaming && Boolean(onBranchFrom);
-  const feedback = feedbackOf(visibleParts);
   const feedbackPartIndex = !isUser && !isStreaming ? findingFeedbackPartIndex(visibleParts) : -1;
-  const hasFindingFeedback = feedbackPartIndex >= 0;
-  const canFeedback = !isReviewActivity && !isUser && !isStreaming && Boolean(onFeedback) && !hasFindingFeedback;
   return (
     <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12 max-md:pl-6' : 'justify-start', !isReviewActivity && !isUser && 'pr-8 max-md:pr-0')}>
       <div className={cn('flex max-w-full items-start gap-2', isUser && 'flex-row-reverse', isReviewActivity && 'w-full')}>
@@ -67,34 +62,6 @@ export function MessageBubble({
         {!isReviewActivity && (
           <div className={cn('flex items-center gap-1 opacity-50 transition-opacity group-hover:opacity-100 focus-within:opacity-100', isUser ? 'mt-1' : 'mt-0.5')}>
             <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
-            {canFeedback && (
-              <span className="caption inline-flex items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">
-                <button
-                  type="button"
-                  onClick={() => onFeedback?.(message.id, 'up')}
-                  aria-label="认可这条发现"
-                  title="认可这条发现"
-                  className={cn(
-                    'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
-                    feedback === 'up' ? 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]' : 'text-[var(--muted)]',
-                  )}
-                >
-                  <ThumbsUp size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onFeedback?.(message.id, 'down')}
-                  aria-label="否定这条发现"
-                  title="否定这条发现"
-                  className={cn(
-                    'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
-                    feedback === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',
-                  )}
-                >
-                  <ThumbsDown size={12} />
-                </button>
-              </span>
-            )}
             {canBranch && (
               <button
                 type="button"
@@ -110,12 +77,4 @@ export function MessageBubble({
       </div>
     </div>
   );
-}
-
-function feedbackOf(parts: UIMessage['parts']): MessageFeedbackValue | null {
-  for (const part of parts) {
-    const value = (part as { feedback?: unknown }).feedback;
-    if (value === 'up' || value === 'down') return value;
-  }
-  return null;
 }

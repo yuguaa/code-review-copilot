@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { UIMessage } from 'ai';
-import { parseReviewFindings } from '../../../shared/review-findings';
+import { parseReviewFindings, verifiedReviewPartKind } from '../../../shared/review-findings';
 import {
   assertReviewDraftIsDecidable,
   buildVerifiedReview,
+  mergeVerifyAgentResults,
   VERIFY_INSTRUCTIONS,
   withVerifiedReviewText,
 } from './review-verify';
@@ -30,7 +31,7 @@ describe('withVerifiedReviewText', () => {
         parts: [
           { type: 'text', text: '未验证草稿' },
           { type: 'tool-bash', state: 'output-available', toolCallId: 'tool-1', input: {}, output: 'ok' } as UIMessage['parts'][number],
-          { type: 'text', text: '## Verify 结论\nverified 总评' },
+          { type: 'text', text: '## Verify 结论\nverified 总评', reviewPartKind: verifiedReviewPartKind },
         ],
       },
     ]);
@@ -41,7 +42,11 @@ describe('withVerifiedReviewText', () => {
 
     expect(result).toHaveLength(2);
     expect(result[1].role).toBe('assistant');
-    expect(result[1].parts).toEqual([{ type: 'text', text: '## Verify 结论\nverified 总评' }]);
+    expect(result[1].parts).toEqual([{
+      type: 'text',
+      text: '## Verify 结论\nverified 总评',
+      reviewPartKind: verifiedReviewPartKind,
+    }]);
   });
 });
 
@@ -272,5 +277,114 @@ describe('assertReviewDraftIsDecidable', () => {
   it('拒绝用无问题短语掩盖未解析的问题', () => {
     const draft = '## 审查总评\n未发现需要阻塞的实质问题。\n## 严重\nsrc/auth.ts:10：接口缺少鉴权\n## 一般\n未发现一般问题。\n## 建议\n暂无。';
     expect(() => assertReviewDraftIsDecidable(draft, [])).toThrow('无法提取待裁决问题');
+  });
+});
+
+describe('mergeVerifyAgentResults', () => {
+  it('补漏 Agent 不能把已分配 finding 作为 additionalFinding 重新提交', () => {
+    const draftFindings = parseReviewFindings([
+      '## 严重',
+      '1. package.json:1：包配置会导致启动失败',
+      'Symptom：入口配置错误。',
+      'Consequence：服务无法启动。',
+      'Remedy：修正入口配置。',
+    ].join('\n'));
+    const rejectionEvidence = {
+      id: '00000000-0000-4000-8000-000000000011',
+      path: 'package.json',
+      line: 1,
+      claim: '入口配置实际有效',
+      sourceLine: '{',
+    };
+    const additionEvidence = {
+      id: '00000000-0000-4000-8000-000000000012',
+      path: 'package.json',
+      line: 1,
+      claim: '补漏 Agent 重复报告同一问题',
+      sourceLine: '{',
+    };
+
+    const markdown = mergeVerifyAgentResults([
+      {
+        submission: {
+          decisions: [{
+            findingId: '严重-0',
+            verdict: 'rejected',
+            reason: '入口配置实际有效',
+            evidenceIds: [rejectionEvidence.id],
+          }],
+          additionalFindings: [],
+        },
+        evidenceRecords: [rejectionEvidence],
+      },
+      {
+        submission: {
+          decisions: [],
+          additionalFindings: [{
+            severity: '严重',
+            title: '包配置导致启动失败',
+            problem: '入口配置错误',
+            impact: '服务无法启动',
+            remedy: '修正入口配置',
+            evidenceIds: [additionEvidence.id],
+          }],
+        },
+        evidenceRecords: [additionEvidence],
+      },
+    ], draftFindings);
+
+    expect(markdown).toContain('未发现需要阻塞的实质问题。');
+    expect(markdown).toContain('入口配置实际有效');
+    expect(markdown).not.toContain('**包配置导致启动失败**');
+  });
+
+  it('同一证据位置存在不同语义问题时仍保留真实补漏', () => {
+    const draftFindings = parseReviewFindings('## 严重\n1. package.json:1：入口配置错误');
+    const rejectionEvidence = {
+      id: '00000000-0000-4000-8000-000000000021',
+      path: 'package.json',
+      line: 1,
+      claim: '入口配置实际有效',
+      sourceLine: '{',
+    };
+    const additionEvidence = {
+      id: '00000000-0000-4000-8000-000000000022',
+      path: 'package.json',
+      line: 1,
+      claim: '配置中写入了明文敏感令牌',
+      sourceLine: '{ "token": "secret" }',
+    };
+
+    const markdown = mergeVerifyAgentResults([
+      {
+        submission: {
+          decisions: [{
+            findingId: '严重-0',
+            verdict: 'rejected',
+            reason: '入口配置实际有效',
+            evidenceIds: [rejectionEvidence.id],
+          }],
+          additionalFindings: [],
+        },
+        evidenceRecords: [rejectionEvidence],
+      },
+      {
+        submission: {
+          decisions: [],
+          additionalFindings: [{
+            severity: '严重',
+            title: '敏感令牌写入配置',
+            problem: '仓库中存在明文令牌',
+            impact: '凭据可能泄露',
+            remedy: '移除令牌并轮换凭据',
+            evidenceIds: [additionEvidence.id],
+          }],
+        },
+        evidenceRecords: [additionEvidence],
+      },
+    ], draftFindings);
+
+    expect(markdown).toContain('**敏感令牌写入配置**');
+    expect(markdown).toContain('package.json:1');
   });
 });

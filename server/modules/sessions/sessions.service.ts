@@ -85,6 +85,9 @@ export function switchActiveMessage(sessionId: string, messageId: string) {
 
 export function submitMessageFeedback(sessionId: string, messageId: unknown, feedback: unknown, findingText?: unknown) {
   if (typeof messageId !== 'string') return Promise.resolve({ kind: 'missing-message-id' as const });
+  if (typeof findingText !== 'string' || !findingText.trim()) {
+    return Promise.resolve({ kind: 'missing-finding-text' as const });
+  }
   if (!messageFeedbackValues.includes(feedback as MessageFeedbackValue)) {
     return Promise.resolve({ kind: 'invalid-feedback' as const });
   }
@@ -92,7 +95,7 @@ export function submitMessageFeedback(sessionId: string, messageId: unknown, fee
     sessionId,
     messageId,
     feedback as MessageFeedbackValue,
-    typeof findingText === 'string' ? findingText : undefined,
+    findingText,
   ).then((result) => {
     if (result.kind === 'updated') {
       publishSessionMessages(sessionId, result.tree);

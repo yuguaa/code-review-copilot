@@ -14,6 +14,14 @@ export type ReviewFileReference = {
   line: number;
 };
 
+export const verifiedReviewPartKind = 'verified-review' as const;
+
+export type VerifiedReviewPart = {
+  type: 'text';
+  text: string;
+  reviewPartKind: typeof verifiedReviewPartKind;
+};
+
 const severityHeadings = new Set<string>(reviewFindingSeverities);
 const detailLabelPattern = /^(?:位置|问题|影响|修复建议|症状|来源|后果|建议|symptom|source|consequence|remedy)\s*(?:（[^）]*）)?\s*[:：]/i;
 const fileReferencePattern = /(?:^|[\s`])(?:(?:[\w.-]+\/)+[\w.-]+\.[a-z0-9]+|[\w.-]+\.(?:ts|tsx|js|jsx|vue|css|scss|less|json|md|ya?ml|toml|lock|txt|prisma|sql|go|py|java|kt|rs|php|rb|sh)|Dockerfile|Makefile):\d+/i;
@@ -39,7 +47,7 @@ export function parseReviewFindings(text: string): ParsedReviewFinding[] {
 
     const sectionStart = index + 1;
     let sectionEnd = sectionStart;
-    while (sectionEnd < lines.length && !headingOf(lines[sectionEnd])) sectionEnd += 1;
+    while (sectionEnd < lines.length && !isReviewSectionBoundary(lines[sectionEnd])) sectionEnd += 1;
     const items = lines
       .slice(sectionStart, sectionEnd)
       .map((line, offset) => listItemOf(line, sectionStart + offset))
@@ -73,6 +81,14 @@ export function normalizeFindingText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+export function isVerifiedReviewPart(part: unknown): part is VerifiedReviewPart {
+  if (!part || typeof part !== 'object') return false;
+  const record = part as { type?: unknown; text?: unknown; reviewPartKind?: unknown };
+  return record.type === 'text'
+    && typeof record.text === 'string'
+    && record.reviewPartKind === verifiedReviewPartKind;
+}
+
 export function hasReviewFileReference(text: string): boolean {
   return fileReferencePattern.test(stripMarkdownDecoration(text));
 }
@@ -99,6 +115,10 @@ export function isExplicitNoFindingReview(text: string): boolean {
 function headingOf(line: string): ReviewFindingSeverity | null {
   const text = line.replace(/^#+\s*/, '').replace(/[*_`：:]/g, '').trim();
   return severityHeadings.has(text) ? text as ReviewFindingSeverity : null;
+}
+
+function isReviewSectionBoundary(line: string): boolean {
+  return headingOf(line) !== null || /^\s*#{1,2}\s+\S/.test(line);
 }
 
 function listItemOf(line: string, lineIndex: number): ParsedListItem | null {

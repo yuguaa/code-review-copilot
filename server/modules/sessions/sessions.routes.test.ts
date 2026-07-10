@@ -11,6 +11,8 @@ describe('session review command route', () => {
     expect(routeSource).toContain("sessionRoutes.post('/:id/stop-review'");
     expect(routeSource).toContain("sessionRoutes.post('/:id/message-feedback'");
     expect(routeSource).toContain('submitMessageFeedback(sessionId, body.messageId, body.feedback, body.findingText)');
+    expect(routeSource).toContain("result.kind === 'missing-finding-text'");
+    expect(routeSource).toContain("result.kind === 'missing-finding'");
     expect(routeSource).toContain('runReviewCommand(sessionId)');
     expect(routeSource).toContain('stopReviewSession(sessionId)');
     expect(routeSource).toContain("result.kind === 'invalid-kind'");

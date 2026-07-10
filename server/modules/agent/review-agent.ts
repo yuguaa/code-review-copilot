@@ -4,7 +4,6 @@ import {
   loadGlobalDefaultModel,
   resolveModel,
   resolveReviewModelConfigs,
-  type ModelConfig,
 } from '../ai-models/ai-models.service';
 import { buildReviewContext, buildTools } from './tools';
 import { buildDelegateTools } from './subagents';
@@ -13,7 +12,6 @@ import type { SessionWithRepository } from '../sessions/session-message-store.se
 import { renderSkillInstructions, resolveRepositorySkills, type SkillState } from '../skills/skills.service';
 import { resolveRepositoryTools } from '../tools/tools.service';
 import { createLogger } from '../../shared/logger/logger.service';
-import type { ReviewContext } from './tools';
 import { createReviewBlueprint, renderReviewBlueprint, type ReviewBlueprint } from './review-blueprint';
 import { createReviewRuntimeMemory, renderReviewRuntimeMemory, type ReviewRuntimeMemory } from './review-runtime-memory';
 import type { ReviewActivityReporter } from './review-activity';
@@ -103,6 +101,7 @@ export async function createReviewStream(opts: {
   const modelConfigs = resolveReviewModelConfigs(repo, globalDefaultModel, activeModelConfigs);
   const model = resolveModel(modelConfigs.primary);
   const delegateModels = modelConfigs.delegates.map((config) => ({ config, model: resolveModel(config) }));
+  const verifierModels = modelConfigs.verifiers.map((config) => ({ config, model: resolveModel(config) }));
   const primaryActivity = {
     id: 'primary',
     label: '主审查 Agent',
@@ -110,14 +109,6 @@ export async function createReviewStream(opts: {
     modelId: modelConfigs.primary.modelId,
   };
   opts.onActivity?.({ ...primaryActivity, task: '准备代码工作区', status: 'running' }, 'preparing');
-  opts.onActivity?.({
-    id: 'verifier',
-    label: 'Verify Agent',
-    provider: modelConfigs.verifier.provider,
-    modelId: modelConfigs.verifier.modelId,
-    task: '等待主审查完成后复核结论',
-    status: 'pending',
-  }, 'preparing');
   const workspace = await prepareWorkspace(opts.session);
   if (!workspace.diffRef) throw new Error('会话缺少 diff 基准，无法执行审查');
   const ctx = await buildReviewContext(opts.session, workspace);
@@ -176,11 +167,8 @@ export async function createReviewStream(opts: {
     blueprint,
     runtimeMemory,
     primaryConfig: modelConfigs.primary,
-    verifierModel: resolveModel(modelConfigs.verifier),
-    verifierConfig: modelConfigs.verifier,
+    verifiers: verifierModels,
   };
 }
 
 export type ReviewRun = Awaited<ReturnType<typeof createReviewStream>>;
-export type ReviewVerifyConfig = Pick<ModelConfig, 'maxSteps'>;
-export type ReviewVerifyContext = ReviewContext;

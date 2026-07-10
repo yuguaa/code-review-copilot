@@ -1,6 +1,11 @@
 import { streamText, stepCountIs, convertToModelMessages, type ToolSet, type UIMessage } from 'ai';
 import { loadGlobalDefaultModel, resolveGlobalModelConfig, resolveModel, resolveRepositoryModelConfig } from '../ai-models/ai-models.service';
-import { buildPublishContext, buildPublishTools, buildReadTools } from './tools';
+import {
+  buildPublishContext,
+  buildPublishTools,
+  buildReadTools,
+  type PublishToolKey,
+} from './tools';
 import { prepareWorkspace } from '../../infrastructure/workspace/workspace.service';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
 import { createLogger } from '../../shared/logger/logger.service';
@@ -44,6 +49,44 @@ export function toChatHistory(messages: UIMessage[]): UIMessage[] {
     .filter((message): message is UIMessage => message !== null);
 }
 
+function latestUserText(messages: UIMessage[]): string {
+  const message = [...messages].reverse().find((item) => item.role === 'user');
+  if (!message) return '';
+  return message.parts
+    .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text.trim() : ''))
+    .filter(Boolean)
+    .join('\n');
+}
+
+const publishQuestionPattern = /^(?:怎么|如何|能否|能不能|是否|可不可以|可以不可以|为什么|请解释|请说明|讨论|预览|改写|生成)/;
+const publishDiscussionPattern = /(?:怎么|如何|能否|能不能|是否|可不可以|可以不可以|讨论|预览|改写.{0,12}(?:文案|内容)|(?:发送|发布).{0,6}方案)/;
+const publishNegationPattern = /(?:不要|别|暂不|先不|无需|不必).{0,12}(?:发|发送|发布|回写|推送|同步|通知)/;
+const publishActionPattern = /(?:发|发送|发布|回写|推送|同步|通知)/;
+
+/** 只从最新用户消息签发本轮发布权限，历史消息、代码内容和模型判断都不能扩大权限。 */
+export function resolveChatPublishAuthorization(messages: UIMessage[]): ReadonlySet<PublishToolKey> {
+  const text = latestUserText(messages).trim();
+  const authorized = new Set<PublishToolKey>();
+  if (
+    !text
+    || publishQuestionPattern.test(text)
+    || publishDiscussionPattern.test(text)
+    || publishNegationPattern.test(text)
+    || /[吗么][？?]?$/.test(text)
+  ) {
+    return authorized;
+  }
+  if (!publishActionPattern.test(text)) return authorized;
+
+  if (/钉钉|dingtalk/i.test(text)) authorized.add('send_dingtalk_notification');
+  if (/行级|逐行|inline/i.test(text) && /gitlab|git\s*lab|mr|合并请求|评论/i.test(text)) {
+    authorized.add('post_inline_comment');
+  } else if (/gitlab|git\s*lab|mr|合并请求|评论/i.test(text)) {
+    authorized.add('post_review_comment');
+  }
+  return authorized;
+}
+
 /**
  * 创建一次追问对话的流式运行：直接和模型对话，必要时由模型自主调用只读或发布工具。
  * 发布工具不依赖工作区；工作区准备失败时，只读能力不可用但明确授权的发送请求仍可执行。
@@ -61,7 +104,7 @@ export async function createChatStream(opts: { session: SessionWithRepository; m
   if (repo) {
     const enabledTools = await resolveRepositoryTools(repo.id);
     const publishContext = { ...buildPublishContext(opts.session), enabledTools };
-    tools = buildPublishTools(publishContext);
+    tools = buildPublishTools(publishContext, resolveChatPublishAuthorization(opts.messages));
     try {
       const workspace = await prepareWorkspace(opts.session);
       tools = {

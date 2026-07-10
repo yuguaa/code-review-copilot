@@ -1,6 +1,10 @@
 import type { UIMessage } from 'ai';
 import type { MessageFeedbackValue, MessageFindingFeedback } from '../../lib/types';
-import { normalizeFindingText, parseReviewFindings } from '../../../shared/review-findings';
+import {
+  isVerifiedReviewPart,
+  normalizeFindingText,
+  parseReviewFindings,
+} from '../../../shared/review-findings';
 
 export type ReviewFinding = {
   id: string;
@@ -19,13 +23,11 @@ export function extractReviewFindings(text: string, feedbacks: MessageFindingFee
   }));
 }
 
-/** 一条审查消息只允许在最终 Verify 结论上反馈；旧消息则回退到最后一个含问题的文本块。 */
+/** 一条审查消息只允许在最终 Verify 结论上反馈。 */
 export function findingFeedbackPartIndex(parts: UIMessage['parts']): number {
-  const verifyIndex = parts.findLastIndex((part) =>
-    part.type === 'text' && /^\s*##\s+Verify\s+结论(?:\s|$)/m.test(part.text),
-  );
-  if (verifyIndex >= 0) return extractReviewFindings((parts[verifyIndex] as { text: string }).text).length > 0 ? verifyIndex : -1;
-  return parts.findLastIndex((part) => part.type === 'text' && extractReviewFindings(part.text).length > 0);
+  const verifyIndex = parts.findLastIndex(isVerifiedReviewPart);
+  if (verifyIndex < 0) return -1;
+  return extractReviewFindings((parts[verifyIndex] as { text: string }).text).length > 0 ? verifyIndex : -1;
 }
 
 export { normalizeFindingText } from '../../../shared/review-findings';

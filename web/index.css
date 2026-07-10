@@ -1,58 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
-/* 设计 token：纸面网格、编辑排版、克制信号色。 */
+/* 黑曜石审查工作台：深色层级、粉白能量弧和克制的状态色。 */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  --canvas: #f5f2ec;
-  --canvas-quiet: #f0ece4;
-  --surface-soft: #ece6dc;
-  --surface-card: #fffdf8;
-  --surface-hover: #e3dcd0;
-  --surface-selected: #f7edf3;
-  --surface-strong: #d8d0c4;
-  --surface-dark: #262330;
-  --line-subtle: rgba(38, 35, 48, 0.055);
-  --line-default: rgba(38, 35, 48, 0.14);
-  --line-strong: rgba(38, 35, 48, 0.26);
-  --line-accent: rgba(176, 24, 118, 0.45);
-  --grid-line: rgba(38, 35, 48, 0.018);
+  --canvas: #0a0a0f;
+  --canvas-quiet: #0d0b12;
+  --surface-soft: #171720;
+  --surface-card: #111118;
+  --surface-hover: #1b1b25;
+  --surface-selected: rgba(176, 48, 136, 0.14);
+  --surface-strong: #24232e;
+  --surface-dark: #08080c;
+  --header-surface: rgba(13, 11, 18, 0.94);
+  --line-subtle: rgba(255, 255, 255, 0.055);
+  --line-default: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --line-accent: rgba(240, 110, 210, 0.46);
+  --grid-line: rgba(255, 255, 255, 0.045);
   --line-invert: rgba(255, 255, 255, 0.16);
   --hairline: var(--line-default);
 
-  --brand-magenta: #b01876;
-  --brand-cyan: #218ca3;
-  --brand-iris: #8b718f;
-  --brand-lime: #d7dfad;
-  --brand-lilac: #e6d9e4;
-  --brand-cream: #eee5d2;
-  --brand-mint: #c7e5e8;
-  --brand-pink: #b01876;
-  --brand-coral: #bd5148;
-  --brand-navy: #262330;
-  --brand-teal: #218ca3;
+  --brand-magenta: #b04090;
+  --brand-cyan: #63b9c8;
+  --brand-iris: #c8a0e0;
+  --brand-lime: #a9c56f;
+  --brand-lilac: #c8a0e0;
+  --brand-cream: #d8d2c7;
+  --brand-mint: #63c4b7;
+  --brand-pink: #d246af;
+  --brand-coral: #f06f75;
+  --brand-navy: #1e1e2c;
+  --brand-teal: #63b9c8;
 
-  --primary: #262330;
-  --ink: #262330;
-  --body-strong: #3f3945;
-  --body: #5c5661;
-  --muted: #756f79;
-  --muted-soft: #9a929b;
-  --on-primary: #ffffff;
+  --primary: #1e1e2c;
+  --ink: #f0f0f5;
+  --body-strong: #d7d4df;
+  --body: #b2adbd;
+  --muted: #8888a8;
+  --muted-soft: #aaa6b8;
+  --on-primary: #f7f6fa;
+  --on-light: #0a0a0f;
+  --light-control-hover: #dedee5;
 
-  --success: #187c8f;
-  --warning: #9b6c22;
-  --error: #bd5148;
+  --success: #63c4b7;
+  --warning: #d9a85f;
+  --error: #f06f75;
 
-  --accent: var(--brand-magenta);
-  --ring: rgba(176, 24, 118, 0.18);
-  --state-info-bg: rgba(33, 140, 163, 0.12);
-  --state-success-bg: rgba(33, 140, 163, 0.1);
-  --state-warning-bg: rgba(155, 108, 34, 0.12);
-  --state-error-bg: rgba(189, 81, 72, 0.12);
-  --state-selected-bg: rgba(176, 24, 118, 0.09);
+  --accent: #dc83c2;
+  --focus-ring: #f0b5df;
+  --ring: rgba(240, 110, 210, 0.18);
+  --state-info-bg: rgba(99, 185, 200, 0.11);
+  --state-success-bg: rgba(99, 196, 183, 0.1);
+  --state-warning-bg: rgba(217, 168, 95, 0.11);
+  --state-error-bg: rgba(240, 111, 117, 0.11);
+  --state-selected-bg: rgba(176, 48, 136, 0.16);
+  --metric-neutral: #191922;
+  --metric-lime: #1b2118;
+  --metric-lilac: #211a28;
+  --metric-mint: #142321;
+  --metric-pink: #25151f;
+  --metric-coral: #271719;
+  --metric-navy: #1e1e2c;
+  --metric-teal: #132328;
 
   --r-xs: 2px;
   --r-sm: 4px;
@@ -61,14 +74,13 @@
   --r-xl: 8px;
   --r-pill: 999px;
 
-  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.72) inset, 0 1px 2px rgba(38, 35, 48, 0.045);
-  --shadow-md: 0 3px 8px -7px rgba(38, 35, 48, 0.46);
-  --shadow-lg: 0 6px 14px -12px rgba(38, 35, 48, 0.5);
-  --shadow-popover: 0 10px 14px -10px rgba(38, 35, 48, 0.42);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 8px 18px -16px rgba(0, 0, 0, 0.95);
+  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 14px 34px -26px rgba(0, 0, 0, 0.98);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 22px 48px -30px rgba(0, 0, 0, 1);
+  --shadow-popover: inset 0 1px 0 rgba(255, 255, 255, 0.065), 0 24px 56px -22px rgba(0, 0, 0, 1);
 
-  --font-display: ui-serif, 'Songti SC', 'STSong', Georgia, 'Times New Roman', serif;
-  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
-    'Microsoft YaHei', sans-serif;
+  --font-display: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -107,26 +119,43 @@ body {
 
 #root::before {
   background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 580px), rgba(176, 24, 118, 0.048) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(33, 140, 163, 0.048) calc(50% + 580px), transparent calc(50% + 581px)),
-    linear-gradient(180deg, rgba(245, 242, 236, 0.98), rgba(240, 236, 228, 0.96));
-  background-size:
-    128px 128px,
-    128px 128px,
-    auto,
-    auto;
+    radial-gradient(
+      ellipse 72% 52% at 58% -12%,
+      transparent 60%,
+      rgba(176, 48, 136, 0.03) 63%,
+      rgba(176, 48, 136, 0.08) 65%,
+      rgba(176, 48, 136, 0.16) 67%,
+      rgba(176, 48, 136, 0.28) 69%,
+      rgba(176, 48, 136, 0.4) 71%,
+      rgba(176, 48, 136, 0.52) 73%,
+      rgba(176, 48, 136, 0.64) 75%,
+      rgba(176, 48, 136, 0.74) 77%,
+      rgba(176, 48, 136, 0.82) 79%,
+      rgba(210, 70, 175, 0.9) 85%,
+      rgba(240, 110, 210, 0.82) 87%,
+      rgba(255, 205, 250, 0.78) 91%,
+      rgba(255, 240, 255, 0.86) 93%,
+      rgba(255, 255, 255, 0.88) 94%,
+      transparent 97%
+    ),
+    radial-gradient(circle at 58% 12%, rgba(120, 40, 180, 0.075), transparent 42%),
+    var(--canvas);
 }
 
 #root::after {
-  display: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 72% 52% at 58% -12%, transparent 60%, black 78%, transparent 97%);
+  opacity: 0.7;
 }
 
-/* 产品 UI 标题：衬线负责记忆点，正文保持工具界面的扫描效率。 */
+/* 标题与正文统一使用 Inter，靠字重和明度建立密集工具界面的层级。 */
 .font-display {
   font-family: var(--font-display);
-  font-weight: 650;
-  letter-spacing: -0.022em;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .font-mono {
@@ -159,18 +188,18 @@ body {
 
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--line-accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: rgba(176, 24, 118, 0.22);
+  background: rgba(176, 48, 136, 0.32);
   color: var(--ink);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(38, 35, 48, 0.24) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
 }
 ::-webkit-scrollbar {
   width: 8px;
@@ -180,10 +209,10 @@ a:focus-visible {
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 9999px;
-  background-color: rgba(38, 35, 48, 0.24);
+  background-color: rgba(255, 255, 255, 0.14);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(38, 35, 48, 0.44);
+  background-color: rgba(255, 255, 255, 0.24);
 }
 
 @keyframes fade-in {
@@ -235,16 +264,12 @@ a:focus-visible {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background:
+  background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 560px), rgba(176, 24, 118, 0.045) calc(50% - 560px), transparent calc(50% - 559px), transparent calc(50% + 559px), rgba(33, 140, 163, 0.045) calc(50% + 560px), transparent calc(50% + 561px)),
-    linear-gradient(180deg, rgba(245, 242, 236, 0.98), rgba(239, 234, 225, 0.96));
-  background-size:
-    128px 128px,
-    128px 128px,
-    auto,
-    auto;
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at 64% -55%, black 0%, rgba(0, 0, 0, 0.55) 45%, transparent 78%);
+  opacity: 0.38;
 }
 
 .review-workbench {
@@ -257,8 +282,8 @@ a:focus-visible {
 
 .chat-main {
   background:
-    linear-gradient(90deg, transparent calc(50% - 430px), rgba(38, 35, 48, 0.028) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), rgba(38, 35, 48, 0.028) calc(50% + 430px), transparent calc(50% + 431px)),
-    linear-gradient(180deg, rgba(255, 253, 248, 0.72), rgba(246, 242, 235, 0.7));
+    linear-gradient(90deg, transparent calc(50% - 430px), rgba(255, 255, 255, 0.025) calc(50% - 430px), transparent calc(50% - 429px), transparent calc(50% + 429px), rgba(255, 255, 255, 0.025) calc(50% + 430px), transparent calc(50% + 431px)),
+    linear-gradient(180deg, rgba(13, 11, 18, 0.76), rgba(10, 10, 15, 0.88));
   background-size:
     auto,
     auto;
@@ -266,16 +291,17 @@ a:focus-visible {
 
 .chat-header {
   border-bottom: 1px solid var(--line-default);
-  background: rgba(255, 253, 248, 0.96);
+  background: var(--header-surface);
+  backdrop-filter: blur(16px);
   box-shadow: var(--shadow-md);
 }
 
 .sidebar-shell {
   position: relative;
-  background: rgba(236, 230, 220, 0.96);
+  background: rgba(15, 15, 22, 0.97);
   box-shadow:
     inset -1px 0 0 var(--line-subtle),
-    4px 0 8px -8px rgba(38, 35, 48, 0.42);
+    16px 0 32px -30px rgba(0, 0, 0, 0.96);
   transition:
     width 0.24s var(--ease-out),
     background-color 0.24s var(--ease-out);
@@ -286,16 +312,23 @@ a:focus-visible {
   content: '';
   position: absolute;
   inset: 0 0 auto;
-  height: 172px;
+  height: 220px;
   background:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 48px 48px;
-  opacity: 0.46;
+  background-size: 40px 40px;
+  mask-image: linear-gradient(black, transparent);
+  opacity: 0.42;
 }
 
 .sidebar-shell::before {
-  display: none;
+  pointer-events: none;
+  content: '';
+  position: absolute;
+  inset: -150px -80px auto;
+  height: 300px;
+  background: radial-gradient(circle, rgba(210, 70, 175, 0.18), transparent 68%);
+  opacity: 0.55;
 }
 
 .sidebar-shell > * {
@@ -310,12 +343,18 @@ a:focus-visible {
 .sidebar-action-button {
   background: var(--primary);
   box-shadow:
-    0 5px 8px -7px rgba(38, 35, 48, 0.86),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    6px 6px 12px rgba(0, 0, 0, 0.38),
+    -4px -4px 10px rgba(255, 255, 255, 0.025),
+    inset 1px 1px 1px rgba(255, 255, 255, 0.055),
+    inset 4px 4px 8px rgba(0, 0, 0, 0.38);
 }
 
 .sidebar-action-button:hover {
-  background: var(--brand-magenta);
+  background: #292735;
+  box-shadow:
+    0 0 0 1px var(--line-accent),
+    0 0 22px rgba(210, 70, 175, 0.16),
+    inset 1px 1px 1px rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-session-list {
@@ -346,7 +385,7 @@ a:focus-visible {
   height: 24px;
   border-radius: var(--r-sm);
   color: var(--muted);
-  background: rgba(251, 250, 246, 0.52);
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .sidebar-session-icon.is-active {
@@ -365,7 +404,7 @@ a:focus-visible {
 
 .assistant-message {
   position: relative;
-  background: rgba(255, 253, 248, 0.96);
+  background: rgba(17, 17, 24, 0.96);
 }
 
 .assistant-message::before {
@@ -374,9 +413,9 @@ a:focus-visible {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border-top: 1px solid rgba(255, 255, 255, 0.76);
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
   border-bottom: 1px solid var(--line-subtle);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .tool-evidence-card {
@@ -389,8 +428,8 @@ a:focus-visible {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--state-info-bg), transparent 36%);
-  opacity: 0.82;
+  background: linear-gradient(90deg, var(--state-info-bg), transparent 48%);
+  opacity: 0.72;
 }
 
 .tool-evidence-card > * {
@@ -418,7 +457,7 @@ a:focus-visible {
   background: var(--surface-card);
   box-shadow:
     var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 .technical-panel::before,
 .technical-panel::after,
@@ -436,8 +475,8 @@ a:focus-visible {
 .glass-surface::before {
   inset: 0 0 auto;
   height: 1px;
-  background: var(--line-accent);
-  opacity: 0.46;
+  background: linear-gradient(90deg, transparent, rgba(255, 240, 255, 0.66), rgba(210, 70, 175, 0.34), transparent);
+  opacity: 0.34;
 }
 .technical-panel::after,
 .tech-panel::after,
@@ -446,11 +485,10 @@ a:focus-visible {
   right: 0;
   left: auto;
   bottom: auto;
-  width: 34px;
-  height: 34px;
-  border-top: 1px solid var(--line-accent);
-  border-right: 1px solid var(--line-accent);
-  opacity: 0.28;
+  width: 90px;
+  height: 90px;
+  background: radial-gradient(circle at top right, rgba(240, 110, 210, 0.12), transparent 68%);
+  opacity: 0.7;
 }
 
 .technical-panel > *,
@@ -480,16 +518,12 @@ a:focus-visible {
   opacity: 0.68;
 }
 .blueprint-backdrop::before {
-  width: min(36vw, 460px);
-  height: min(36vw, 460px);
-  right: max(16px, calc((100vw - 1160px) / 2 - 120px));
-  top: 10%;
-  border: 1px solid rgba(38, 35, 48, 0.07);
-  background:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 96px 96px;
-  transform: rotate(2deg);
+  width: min(56vw, 760px);
+  height: min(56vw, 760px);
+  right: max(-200px, calc((100vw - 1160px) / 2 - 260px));
+  top: -38%;
+  background: radial-gradient(circle, rgba(210, 70, 175, 0.14), transparent 66%);
+  filter: blur(8px);
 }
 .blueprint-backdrop::after {
   display: none;
@@ -500,19 +534,20 @@ a:focus-visible {
   background:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, transparent calc(50% - 580px), rgba(176, 24, 118, 0.05) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(33, 140, 163, 0.05) calc(50% + 580px), transparent calc(50% + 581px)),
-    linear-gradient(180deg, rgba(248, 246, 240, 0.98), rgba(240, 236, 227, 0.94));
+    linear-gradient(90deg, transparent calc(50% - 580px), rgba(240, 110, 210, 0.035) calc(50% - 580px), transparent calc(50% - 579px), transparent calc(50% + 579px), rgba(99, 185, 200, 0.035) calc(50% + 580px), transparent calc(50% + 581px)),
+    linear-gradient(180deg, rgba(13, 11, 18, 0.96), rgba(10, 10, 15, 0.98));
   background-size:
-    96px 96px,
-    96px 96px,
+    40px 40px,
+    40px 40px,
     auto,
     auto;
 }
 
 .ops-page-header {
+  backdrop-filter: blur(16px);
   box-shadow:
     var(--shadow-md),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.58);
+    inset 0 -1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .tech-panel.is-dark::before {
@@ -521,6 +556,26 @@ a:focus-visible {
 }
 
 @media (max-width: 767px) {
+  #root::before {
+    background:
+      radial-gradient(
+        ellipse 100% 30% at 50% -20%,
+        transparent 60%,
+        rgba(176, 48, 136, 0.06) 66%,
+        rgba(176, 48, 136, 0.22) 72%,
+        rgba(210, 70, 175, 0.58) 80%,
+        rgba(240, 110, 210, 0.66) 86%,
+        rgba(255, 240, 255, 0.72) 92%,
+        transparent 97%
+      ),
+      radial-gradient(circle at 50% 4%, rgba(120, 40, 180, 0.06), transparent 34%),
+      var(--canvas);
+  }
+
+  #root::after {
+    mask-image: radial-gradient(ellipse 100% 30% at 50% -20%, transparent 60%, black 78%, transparent 97%);
+  }
+
   .measure-rails::before,
   .measure-rails::after {
     display: none;
@@ -552,11 +607,11 @@ a:focus-visible {
 }
 .conversation-frame::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(245, 242, 236, 0.96), transparent);
+  background: linear-gradient(180deg, rgba(10, 10, 15, 0.96), transparent);
 }
 .conversation-frame::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(245, 242, 236, 0.88), transparent);
+  background: linear-gradient(0deg, rgba(10, 10, 15, 0.9), transparent);
 }
 .conversation-frame.is-scrolled::before,
 .conversation-frame.can-scroll-more::after {
@@ -569,7 +624,7 @@ a:focus-visible {
 
 .composer-dock {
   position: relative;
-  background: linear-gradient(180deg, transparent, rgba(245, 242, 236, 0.56) 48%, rgba(245, 242, 236, 0.92));
+  background: linear-gradient(180deg, transparent, rgba(10, 10, 15, 0.64) 48%, rgba(10, 10, 15, 0.96));
 }
 
 .composer-dock::before {
@@ -632,7 +687,7 @@ a:focus-visible {
   border-radius: var(--r-md);
   background: var(--surface-dark);
   box-shadow:
-    0 5px 8px -7px rgba(38, 35, 48, 0.64),
+    0 12px 24px -20px rgba(0, 0, 0, 0.96),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -640,14 +695,14 @@ a:focus-visible {
   height: 34px;
   border-bottom: 1px solid var(--line-invert);
   background:
-    linear-gradient(90deg, rgba(176, 24, 118, 0.2), transparent 54%),
+    linear-gradient(90deg, rgba(176, 48, 136, 0.2), transparent 54%),
     rgba(255, 255, 255, 0.035);
   color: rgba(246, 241, 247, 0.74);
 }
 
 .streamdown-body [data-streamdown='code-block-actions'] {
   border-color: var(--line-invert);
-  background: rgba(38, 35, 48, 0.82);
+  background: rgba(8, 8, 12, 0.9);
   color: rgba(246, 241, 247, 0.82);
 }
 
@@ -689,8 +744,8 @@ a:focus-visible {
 .markdown-body h4 {
   margin: 1.1em 0 0.45em;
   font-family: var(--font-display);
-  font-weight: 650;
-  letter-spacing: -0.015em;
+  font-weight: 600;
+  letter-spacing: 0;
   line-height: 1.25;
   color: var(--ink);
   text-wrap: balance;
@@ -753,7 +808,7 @@ a:focus-visible {
 .markdown-body pre code {
   padding: 0;
   background: transparent;
-  color: #f5f2ec;
+  color: #f0f0f5;
   font-size: 0.8125rem;
   line-height: 1.6;
 }
@@ -830,7 +885,270 @@ a:focus-visible {
 
 .line-tag {
   border: 1px solid var(--line-default);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+/* 登录页沿用审查产品语义，将 Xero 的能量弧和光束改造成 MR -> Review -> Verify 管线。 */
+.login-shell {
+  background: rgba(10, 10, 15, 0.44);
+}
+
+.login-layout {
+  position: relative;
+  z-index: 1;
+}
+
+.login-mark {
+  position: relative;
+  box-shadow:
+    8px 8px 16px rgba(0, 0, 0, 0.48),
+    -6px -6px 14px rgba(255, 255, 255, 0.028),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.06),
+    inset 6px 6px 12px rgba(0, 0, 0, 0.46);
+}
+
+.login-mark::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border: 1px dotted rgba(255, 255, 255, 0.13);
+  border-radius: inherit;
+}
+
+.login-heading-accent {
+  margin-top: 5px;
+  background: linear-gradient(90deg, #ffffff, #a98597);
+  background-clip: text;
+  color: transparent;
+}
+
+.login-visual {
+  isolation: isolate;
+  background: #0d0b12;
+}
+
+.login-visual::before {
+  inset: 0;
+  height: auto;
+  background: radial-gradient(
+    ellipse 78% 68% at 50% -22%,
+    transparent 60%,
+    rgba(176, 48, 136, 0.04) 63%,
+    rgba(176, 48, 136, 0.12) 67%,
+    rgba(176, 48, 136, 0.28) 70%,
+    rgba(176, 48, 136, 0.48) 74%,
+    rgba(210, 70, 175, 0.78) 82%,
+    rgba(240, 110, 210, 0.86) 87%,
+    rgba(255, 240, 255, 0.84) 93%,
+    transparent 97%
+  );
+  opacity: 1;
+}
+
+.login-visual::after {
+  inset: 0;
+  width: auto;
+  height: auto;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 78% 68% at 50% -22%, transparent 60%, black 80%, transparent 97%);
+  opacity: 0.7;
+}
+
+.login-visual-grid {
+  pointer-events: none;
+  position: absolute;
+  inset: 18% 18% 12%;
+  z-index: 0;
+  background: radial-gradient(circle, rgba(176, 48, 136, 0.09), transparent 68%);
+  filter: blur(18px);
+}
+
+.login-pipeline {
+  min-height: 168px;
+}
+
+.pipeline-node {
+  position: relative;
+  z-index: 3;
+  display: inline-flex;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.76);
+  background: #1a1a24;
+  box-shadow:
+    6px 6px 12px rgba(0, 0, 0, 0.42),
+    -4px -4px 10px rgba(255, 255, 255, 0.026),
+    inset 1px 1px 1px rgba(255, 255, 255, 0.05),
+    inset 4px 4px 8px rgba(0, 0, 0, 0.42);
+}
+
+.pipeline-node::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border: 1px dotted rgba(255, 255, 255, 0.12);
+  border-radius: inherit;
+}
+
+.pipeline-node.is-center {
+  width: 66px;
+  height: 66px;
+  flex-basis: 66px;
+  color: white;
+  background: #1e1e2c;
+  box-shadow:
+    8px 8px 16px rgba(0, 0, 0, 0.5),
+    -6px -6px 14px rgba(255, 255, 255, 0.035),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.06),
+    inset 6px 6px 12px rgba(0, 0, 0, 0.5),
+    0 0 34px rgba(210, 70, 175, 0.12);
+}
+
+.pipeline-node.is-center::before {
+  content: '';
+  position: absolute;
+  inset: -22px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 77, 200, 0.46), transparent 68%);
+  animation: pipeline-splash 3.4s ease-out infinite;
+}
+
+.pipeline-node > span {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 50%;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.pipeline-beam {
+  position: relative;
+  z-index: 2;
+  width: min(126px, 18vw);
+  height: 1px;
+  overflow: hidden;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.055));
+}
+
+.pipeline-beam > span {
+  position: absolute;
+  inset: -2px auto -2px 0;
+  width: 34%;
+  background: linear-gradient(90deg, transparent, #b04090, #ffffff, transparent);
+  filter: drop-shadow(0 0 4px rgba(240, 110, 210, 0.9));
+  animation: pipeline-beam 1.6s ease-in-out infinite;
+}
+
+.pipeline-beam.is-reversed > span {
+  animation-delay: 0.8s;
+}
+
+@keyframes pipeline-beam {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
+@keyframes pipeline-splash {
+  0%,
+  48% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  58% {
+    opacity: 0.62;
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+/* 多 Agent 活动卡使用真实编排数据驱动节点状态，而不是装饰性流程图。 */
+.review-agent-pipeline {
+  position: relative;
+  background:
+    radial-gradient(circle at 12% -60%, rgba(210, 70, 175, 0.18), transparent 38%),
+    var(--surface-card);
+}
+
+.review-agent-pipeline > header {
+  background: rgba(23, 23, 32, 0.76);
+}
+
+.review-agent-row {
+  position: relative;
+}
+
+.review-agent-row:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 34px;
+  bottom: -8px;
+  left: 25.5px;
+  z-index: 0;
+  width: 1px;
+  background: linear-gradient(var(--line-default), rgba(176, 48, 136, 0.24), var(--line-default));
+}
+
+.review-agent-node {
+  position: relative;
+  z-index: 1;
+  box-shadow:
+    4px 4px 9px rgba(0, 0, 0, 0.38),
+    -3px -3px 8px rgba(255, 255, 255, 0.022),
+    inset 1px 1px 1px rgba(255, 255, 255, 0.045),
+    inset 3px 3px 6px rgba(0, 0, 0, 0.38);
+}
+
+.review-agent-node::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1px dotted rgba(255, 255, 255, 0.09);
+  border-radius: inherit;
+}
+
+.review-agent-node.is-running {
+  border-color: rgba(240, 110, 210, 0.34);
+  color: #f4d7ed;
+  box-shadow:
+    0 0 0 1px rgba(176, 48, 136, 0.12),
+    0 0 20px rgba(210, 70, 175, 0.16),
+    inset 3px 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+.review-agent-node.is-completed {
+  color: var(--success);
+}
+
+.review-agent-node.is-failed {
+  color: var(--error);
+}
+
+@media (max-width: 767px) {
+  .login-layout {
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

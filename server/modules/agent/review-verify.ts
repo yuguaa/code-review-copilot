@@ -1,14 +1,18 @@
-import { generateText, hasToolCall, stepCountIs, tool, type LanguageModel, type UIMessage } from 'ai';
+import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage, type UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { buildReadTools, readWorkspaceLine, type ReviewContext } from './tools';
 import { renderReviewBlueprint, type ReviewBlueprint } from './review-blueprint';
 import { renderReviewRuntimeMemory, type ReviewRuntimeMemory } from './review-runtime-memory';
+import { modelEndpointKey, type ModelConfig } from '../ai-models/ai-models.service';
+import type { ReviewActivityReporter } from './review-activity';
 import {
   extractReviewFileReferences,
   isExplicitNoFindingReview,
+  normalizeFindingText,
   parseReviewFindings,
   reviewFindingSeverities,
+  verifiedReviewPartKind,
   type ParsedReviewFinding,
   type ReviewFindingSeverity,
 } from '../../../shared/review-findings';
@@ -22,6 +26,7 @@ export const VERIFY_INSTRUCTIONS = `你是代码审查 verify agent。你的任�
 - 删除无法取证、证据不足、重复、夸大或与「用户反馈阈值沉淀」冲突的问题；单次 findingFeedbacks 不是可采信证据。
 - 如发现草稿漏掉了高置信问题，可以补充，但必须给出文件:行和清晰证据。
 - 完成全部取证后，必须调用 submit_verified_review；普通文本不会被当作完成结果。
+- 配置步数是取证软预算；收到“开始收敛”提示后停止扩展方向，优先补齐待裁决问题并提交。
 - decisions 必须覆盖清单中的每个 findingId，不能遗漏、重复或增加未知 ID。
 - 每条裁决前必须调用 record_verify_evidence 读取真实文件行，并在裁决中引用它返回的 evidenceId。
 - confirmed 必须提交核验后的最终问题字段；rejected 必须说明能够推翻原问题的反证。
@@ -57,7 +62,29 @@ const verifiedReviewSubmissionSchema = z.object({
   additionalFindings: z.array(additionalFindingSchema).default([]),
 });
 
-type VerifiedReviewSubmission = z.infer<typeof verifiedReviewSubmissionSchema>;
+export type VerifiedReviewSubmission = z.infer<typeof verifiedReviewSubmissionSchema>;
+
+const MAX_VERIFY_CONTINUATION_STEPS = 8;
+const MIN_VERIFY_CONTINUATION_STEPS = 2;
+const VERIFY_FINALIZATION_ATTEMPTS = 3;
+
+export const VERIFY_CONTINUATION_INSTRUCTIONS = `已达到配置的取证软预算，现在进入收敛阶段：
+- 不再扩展新的审查方向，只处理待裁决问题清单。
+- 优先补齐尚未取证的问题；已有充分证据的问题不要重复读取。
+- 尽快调用 submit_verified_review。若工具返回 accepted=false，按 error 修正后重新提交。`;
+
+export const VERIFY_FINALIZATION_INSTRUCTIONS = `取证阶段已经结束。现在禁止继续读取代码或调用其它工具：
+- 立即调用 submit_verified_review，覆盖每个 findingId。
+- 只能引用本轮已经签发的 evidenceId。
+- 若上一次提交返回 accepted=false，严格按照 error 修正后再次提交。
+- 不要输出普通文本。`;
+
+export function verifyContinuationSteps(maxSteps: number): number {
+  return Math.min(
+    MAX_VERIFY_CONTINUATION_STEPS,
+    Math.max(MIN_VERIFY_CONTINUATION_STEPS, Math.ceil(Math.max(1, maxSteps) * 0.5)),
+  );
+}
 
 export type VerifyEvidence = {
   id: string;
@@ -67,15 +94,23 @@ export type VerifyEvidence = {
   sourceLine: string;
 };
 
-const submitVerifiedReview = tool({
-  description: '完成全部复核后，逐条提交主审查问题的裁决和证据。只有调用此工具，本次 Verify 才算完成。',
-  inputSchema: verifiedReviewSubmissionSchema,
-  execute: ({ decisions, additionalFindings }) => ({
-    accepted: true,
-    decisionCount: decisions.length,
-    additionalFindingCount: additionalFindings.length,
-  }),
-});
+export type ReviewVerifier = {
+  model: LanguageModel;
+  config: ModelConfig;
+};
+
+export type VerifyAssignment = {
+  id: string;
+  label: string;
+  task: string;
+  findings: ParsedReviewFinding[];
+  verifier: ReviewVerifier;
+};
+
+export type VerifyAgentResult = {
+  submission: VerifiedReviewSubmission;
+  evidenceRecords: VerifyEvidence[];
+};
 
 export function buildVerifiedReview(
   input: unknown,
@@ -151,8 +186,49 @@ function latestAssistantText(messages: UIMessage[]): string {
     .at(-1) ?? '';
 }
 
+function assignmentOffset(seed: string, count: number): number {
+  const value = Array.from(seed).reduce((total, char) => total + (char.codePointAt(0) ?? 0), 0);
+  return value % count;
+}
+
+export function createVerifyAssignments(
+  findings: ParsedReviewFinding[],
+  verifiers: ReviewVerifier[],
+  seed: string,
+): VerifyAssignment[] {
+  const distinctVerifiers = verifiers.filter((verifier, index) =>
+    verifiers.findIndex((candidate) => modelEndpointKey(candidate.config) === modelEndpointKey(verifier.config)) === index,
+  );
+  if (distinctVerifiers.length < 2) {
+    throw new Error('多模型 Verify 至少需要两个不同模型，不能由单个模型重复扮演多个 Verify Agent');
+  }
+
+  const assignmentCount = Math.min(distinctVerifiers.length, Math.max(2, findings.length));
+  const offset = assignmentOffset(seed, distinctVerifiers.length);
+  const assignments = Array.from({ length: assignmentCount }, (_, index) => ({
+    id: `verifier-${index + 1}`,
+    label: `Verify Agent ${index + 1}`,
+    task: '',
+    findings: [] as ParsedReviewFinding[],
+    verifier: distinctVerifiers[(offset + index) % distinctVerifiers.length],
+  }));
+
+  findings.forEach((finding, index) => {
+    assignments[index % assignmentCount].findings.push(finding);
+  });
+
+  return assignments.map((assignment) => ({
+    ...assignment,
+    task: assignment.findings.length > 0
+      ? `独立核验问题：${assignment.findings.map((finding) => finding.id).join('、')}`
+      : '独立补漏：检查主审查是否遗漏高置信问题',
+  }));
+}
+
 function renderDecisionChecklist(findings: ParsedReviewFinding[]): string {
-  if (findings.length === 0) return '- 主审查草稿没有提取到问题；decisions 必须提交空数组。';
+  if (findings.length === 0) {
+    return '- 当前 Verify 分片没有分配待裁决问题；decisions 必须提交空数组，只能通过 additionalFindings 报告漏检问题。';
+  }
   return findings.map((finding) => [
     `### ${finding.id} [${finding.severity}] ${finding.title}`,
     finding.markdown,
@@ -250,7 +326,11 @@ function escapeMarkdownInline(text: string): string {
 }
 
 export function withVerifiedReviewText(messages: UIMessage[], verifiedText: string): UIMessage[] {
-  const verifiedPart = { type: 'text', text: `## Verify 结论\n${verifiedText}` } as const;
+  const verifiedPart = {
+    type: 'text',
+    text: `## Verify 结论\n${verifiedText}`,
+    reviewPartKind: verifiedReviewPartKind,
+  } as UIMessage['parts'][number];
   const index = messages.findLastIndex((message) => message.role === 'assistant');
   if (index < 0) {
     return [
@@ -267,9 +347,10 @@ export function withVerifiedReviewText(messages: UIMessage[], verifiedText: stri
   });
 }
 
-export function verifyReviewResult({
+export function verifyReviewAgent({
   ctx,
-  messages,
+  draft,
+  draftFindings,
   model,
   maxSteps,
   blueprint,
@@ -277,19 +358,19 @@ export function verifyReviewResult({
   abortSignal,
 }: {
   ctx: ReviewContext;
-  messages: UIMessage[];
+  draft: string;
+  draftFindings: ParsedReviewFinding[];
   model: LanguageModel;
   maxSteps: number;
   blueprint?: ReviewBlueprint;
   runtimeMemory?: ReviewRuntimeMemory;
   abortSignal?: AbortSignal;
-}): Promise<string> {
-  const draft = latestAssistantText(messages).trim();
-  const draftFindings = parseReviewFindings(draft);
-  assertReviewDraftIsDecidable(draft, draftFindings);
+}): Promise<VerifyAgentResult> {
   const evidenceById = new Map<string, VerifyEvidence>();
+  let verifiedSubmission: VerifiedReviewSubmission | null = null;
   const prompt = [
-    '请复核下面的主审查草稿，并逐条裁决待裁决问题清单。',
+    '你只负责当前 Verify 分片。请复核下面的主审查草稿，并逐条裁决分配给你的待裁决问题。',
+    '不得裁决清单之外的主审查 finding；发现漏检问题时只能通过 additionalFindings 提交。',
     '',
     blueprint ? renderReviewBlueprint(blueprint) : '## 审查蓝图\n暂无',
     '',
@@ -321,26 +402,215 @@ export function verifyReviewResult({
       return evidence;
     }),
   });
+  const submitVerifiedReview = tool({
+    description: '完成全部复核后，逐条提交主审查问题的裁决和证据。只有服务端返回 accepted=true，本次 Verify 才算完成。',
+    inputSchema: verifiedReviewSubmissionSchema,
+    execute: (input) => {
+      try {
+        const submission = verifiedReviewSubmissionSchema.parse(input);
+        buildVerifiedReview(submission, draftFindings, [...evidenceById.values()]);
+        verifiedSubmission = submission;
+        return {
+          accepted: true,
+          decisionCount: submission.decisions.length,
+          additionalFindingCount: submission.additionalFindings.length,
+        };
+      } catch (error) {
+        return {
+          accepted: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  });
   const tools = {
     ...buildReadTools(ctx),
     record_verify_evidence: recordVerifyEvidence,
     submit_verified_review: submitVerifiedReview,
   };
+  const initialMessages: ModelMessage[] = [{ role: 'user', content: prompt }];
+  const completed = () => verifiedSubmission !== null;
+  const result = (): VerifyAgentResult | null => verifiedSubmission
+    ? { submission: verifiedSubmission, evidenceRecords: [...evidenceById.values()] }
+    : null;
   return generateText({
     model,
     system: VERIFY_INSTRUCTIONS,
-    prompt,
+    messages: initialMessages,
     tools,
-    stopWhen: [hasToolCall('submit_verified_review'), stepCountIs(Math.max(1, maxSteps))],
+    stopWhen: [completed, stepCountIs(Math.max(1, maxSteps))],
     abortSignal,
-  }).then((result) => {
-    const submission = result.toolCalls.findLast((call) => call?.toolName === 'submit_verified_review');
-    const input = submission?.input;
-    if (!input || typeof input !== 'object') {
-      throw new Error(
-        `Verify Agent 未在 ${result.steps.length} 步内提交最终结论（结束原因：${result.finishReason}）`,
-      );
-    }
-    return buildVerifiedReview(input, draftFindings, [...evidenceById.values()]);
+  }).then((investigation) => {
+    const investigationResult = result();
+    if (investigationResult) return investigationResult;
+    const continuationMessages: ModelMessage[] = [
+      ...initialMessages,
+      ...investigation.responseMessages,
+      { role: 'user', content: VERIFY_CONTINUATION_INSTRUCTIONS },
+    ];
+    return generateText({
+      model,
+      system: VERIFY_INSTRUCTIONS,
+      messages: continuationMessages,
+      tools,
+      stopWhen: [completed, stepCountIs(verifyContinuationSteps(maxSteps))],
+      abortSignal,
+    }).then((continuation) => {
+      const continuationResult = result();
+      if (continuationResult) return continuationResult;
+      const finalizationMessages: ModelMessage[] = [
+        ...continuationMessages,
+        ...continuation.responseMessages,
+        { role: 'user', content: VERIFY_FINALIZATION_INSTRUCTIONS },
+      ];
+      return generateText({
+        model,
+        system: VERIFY_FINALIZATION_INSTRUCTIONS,
+        messages: finalizationMessages,
+        tools: { submit_verified_review: submitVerifiedReview },
+        toolChoice: { type: 'tool', toolName: 'submit_verified_review' },
+        stopWhen: [completed, stepCountIs(VERIFY_FINALIZATION_ATTEMPTS)],
+        abortSignal,
+      }).then(() => {
+        const finalResult = result();
+        if (finalResult) return finalResult;
+        throw new Error(`Verify Agent 在收敛取证后仍未通过最终结论校验（已纠正 ${VERIFY_FINALIZATION_ATTEMPTS} 次）`);
+      });
+    });
   });
+}
+
+export function mergeVerifyAgentResults(
+  results: VerifyAgentResult[],
+  draftFindings: ParsedReviewFinding[],
+): string {
+  const decisions = results.flatMap((result) => result.submission.decisions);
+  const evidenceRecords = results.flatMap((result) => result.evidenceRecords);
+  const evidenceById = new Map(evidenceRecords.map((evidence) => [evidence.id, evidence]));
+  const draftTitles = new Set(draftFindings.map((finding) => normalizeFindingText(finding.title)));
+  const confirmedTitles = new Set(decisions.flatMap((decision) =>
+    decision.verdict === 'confirmed' ? [normalizeFindingText(decision.finalFinding.title)] : [],
+  ));
+  const additionalTitles = new Set<string>();
+  const acceptedAdditionalFindings: Array<{ title: string; evidenceLocations: string[] }> = [];
+  const additionalFindings = results
+    .flatMap((result) => result.submission.additionalFindings)
+    .filter((finding) => {
+      const title = normalizeFindingText(finding.title);
+      if (draftTitles.has(title) || confirmedTitles.has(title) || additionalTitles.has(title)) return false;
+      const evidenceLocations = finding.evidenceIds
+        .map((id) => evidenceById.get(id))
+        .filter((evidence): evidence is VerifyEvidence => Boolean(evidence))
+        .map((evidence) => evidenceLocationKey(evidence.path, evidence.line));
+      const duplicatesDraft = draftFindings.some((draftFinding) =>
+        sameFindingTitle(draftFinding.title, finding.title)
+        && extractReviewFileReferences(draftFinding.markdown).some((reference) =>
+          evidenceLocations.includes(evidenceLocationKey(reference.path, reference.line)),
+        ),
+      );
+      const duplicatesAdditional = acceptedAdditionalFindings.some((accepted) =>
+        sameFindingTitle(accepted.title, finding.title)
+        && accepted.evidenceLocations.some((location) => evidenceLocations.includes(location)),
+      );
+      if (duplicatesDraft || duplicatesAdditional) return false;
+      additionalTitles.add(title);
+      acceptedAdditionalFindings.push({ title: finding.title, evidenceLocations });
+      return true;
+    });
+  return buildVerifiedReview({ decisions, additionalFindings }, draftFindings, evidenceRecords);
+}
+
+function evidenceLocationKey(path: string, line: number): string {
+  return `${path.replace(/\\/g, '/').replace(/^\.\/+/, '')}:${line}`;
+}
+
+function sameFindingTitle(left: string, right: string): boolean {
+  const leftKey = findingTitleKey(left);
+  const rightKey = findingTitleKey(right);
+  if (!leftKey || !rightKey) return false;
+  if (leftKey === rightKey || leftKey.includes(rightKey) || rightKey.includes(leftKey)) return true;
+  const leftBigrams = characterBigrams(leftKey);
+  const rightBigrams = characterBigrams(rightKey);
+  const common = [...leftBigrams].filter((value) => rightBigrams.has(value)).length;
+  return (2 * common) / (leftBigrams.size + rightBigrams.size) >= 0.72;
+}
+
+function findingTitleKey(value: string): string {
+  return value
+    .replace(/^.*?:\d+\s*[:：-]?\s*/, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function characterBigrams(value: string): Set<string> {
+  if (value.length < 2) return new Set([value]);
+  return new Set(Array.from({ length: value.length - 1 }, (_, index) => value.slice(index, index + 2)));
+}
+
+export function verifyReviewResult({
+  ctx,
+  messages,
+  verifiers,
+  assignmentSeed,
+  blueprint,
+  runtimeMemory,
+  abortSignal,
+  onActivity,
+}: {
+  ctx: ReviewContext;
+  messages: UIMessage[];
+  verifiers: ReviewVerifier[];
+  assignmentSeed: string;
+  blueprint?: ReviewBlueprint;
+  runtimeMemory?: ReviewRuntimeMemory;
+  abortSignal?: AbortSignal;
+  onActivity?: ReviewActivityReporter;
+}): Promise<string> {
+  const draft = latestAssistantText(messages).trim();
+  const draftFindings = parseReviewFindings(draft);
+  assertReviewDraftIsDecidable(draft, draftFindings);
+  const assignments = createVerifyAssignments(draftFindings, verifiers, assignmentSeed);
+
+  assignments.forEach((assignment, index) => {
+    onActivity?.({
+      id: assignment.id,
+      label: assignment.label,
+      provider: assignment.verifier.config.provider,
+      modelId: assignment.verifier.config.modelId,
+      task: assignment.task,
+      status: 'pending',
+    }, index === 0 ? 'verifying' : undefined);
+  });
+
+  const verifierController = new AbortController();
+  const verifierSignal = abortSignal
+    ? AbortSignal.any([abortSignal, verifierController.signal])
+    : verifierController.signal;
+  return Promise.all(assignments.map((assignment) => {
+    const activity = {
+      id: assignment.id,
+      label: assignment.label,
+      provider: assignment.verifier.config.provider,
+      modelId: assignment.verifier.config.modelId,
+      task: assignment.task,
+    };
+    onActivity?.({ ...activity, status: 'running' });
+    return verifyReviewAgent({
+      ctx,
+      draft,
+      draftFindings: assignment.findings,
+      model: assignment.verifier.model,
+      maxSteps: assignment.verifier.config.maxSteps,
+      blueprint,
+      runtimeMemory,
+      abortSignal: verifierSignal,
+    }).then((result) => {
+      onActivity?.({ ...activity, status: 'completed' });
+      return result;
+    }).catch((error) => {
+      if (!verifierController.signal.aborted) verifierController.abort(error);
+      onActivity?.({ ...activity, status: 'failed' });
+      throw error;
+    });
+  })).then((results) => mergeVerifyAgentResults(results, draftFindings));
 }

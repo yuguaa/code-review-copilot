@@ -11,7 +11,7 @@ export function SidebarNav({ collapsed, onLogout }: { collapsed?: boolean; onLog
       : 'flex min-h-10 items-center gap-2.5 rounded-[var(--r-sm)] border border-transparent px-3 py-2 text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-card)] hover:text-[var(--ink)] active:scale-95';
 
   return (
-    <div className="space-y-0.5 border-t border-[var(--line-default)] bg-[rgba(251,252,248,0.58)] px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-2 max-md:gap-1 max-md:space-y-0">
+    <div className="sidebar-nav space-y-0.5 border-t border-[var(--line-default)] bg-[var(--surface-soft)]/60 px-2.5 py-2.5 text-sm max-md:grid max-md:grid-cols-2 max-md:gap-1 max-md:space-y-0">
       <Link
         to="/dashboard"
         title="数据看板"

@@ -1,4 +1,5 @@
 import type { UIMessage } from 'ai';
+import { isVerifiedReviewPart } from '../../../shared/review-findings';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
 import { sendRepositoryDingtalkNotification } from '../notifications/notifications.service';
 import type { ReviewContext } from './tools';
@@ -65,18 +66,19 @@ function assistantTextBlocksOf(messages: UIMessage[]): string[] {
     .filter(Boolean);
 }
 
-function isVerifiedReviewText(text: string): boolean {
-  return text.startsWith('## Verify 结论');
-}
-
 function finalAssistantTextOf(messages: UIMessage[]): string {
   const textBlocks = assistantTextBlocksOf(messages);
   return textBlocks.at(-1) ?? '';
 }
 
 function verifiedReviewTextOf(messages: UIMessage[]): string {
-  const textBlocks = assistantTextBlocksOf(messages).filter((text) => isVerifiedReviewText(text));
-  return textBlocks.at(-1) ?? '';
+  return messages
+    .filter((message) => message.role === 'assistant')
+    .flatMap((message) => message.parts)
+    .filter(isVerifiedReviewPart)
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .at(-1) ?? '';
 }
 
 function finalReviewTextOf(messages: UIMessage[]): string {
@@ -135,6 +137,32 @@ export function rememberVerifiedReview(ctx: ReviewContext, markdown: string): Pr
   return readRepositoryMemory(ctx.repoId)
     .then((current) => mergeVerifiedReviewMemory(current, entry))
     .then((next) => writeRepositoryMemory(ctx.repoId, next).then(() => next));
+}
+
+export type ReviewCompletionIntegrationFailure = {
+  integration: 'memory' | 'gitlab' | 'dingtalk';
+  error: unknown;
+};
+
+/** 审查结论持久化完成后并行执行外部集成；单个渠道失败不能反向污染审查状态。 */
+export function runReviewCompletionIntegrations(
+  ctx: ReviewContext,
+  session: SessionWithRepository,
+  messages: UIMessage[],
+  markdown: string,
+): Promise<ReviewCompletionIntegrationFailure[]> {
+  const integrations = [
+    { integration: 'memory' as const, run: () => rememberVerifiedReview(ctx, markdown) },
+    { integration: 'gitlab' as const, run: () => publishVerifiedReview(ctx, markdown) },
+    { integration: 'dingtalk' as const, run: () => notifyReviewCompleted(session, messages) },
+  ];
+  return Promise.allSettled(integrations.map(({ run }) => run())).then((results) =>
+    results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [{ integration: integrations[index]!.integration, error: result.reason }]
+        : [],
+    ),
+  );
 }
 
 export function buildVerifiedMemoryEntry(markdown: string): string {

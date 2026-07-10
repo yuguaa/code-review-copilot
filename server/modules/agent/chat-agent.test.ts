@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UIMessage } from 'ai';
-import { CHAT_INSTRUCTIONS, toChatHistory } from './chat-agent';
+import { CHAT_INSTRUCTIONS, resolveChatPublishAuthorization, toChatHistory } from './chat-agent';
 
 describe('CHAT_INSTRUCTIONS', () => {
   it('只允许在最新用户消息明确授权时调用发布工具', () => {
@@ -57,5 +57,35 @@ describe('toChatHistory（对话上下文整理）', () => {
     ];
 
     expect(toChatHistory(messages)).toEqual([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '你好' }] }]);
+  });
+});
+
+describe('resolveChatPublishAuthorization', () => {
+  function messages(latest: string, old = '把结果发送到钉钉和 GitLab'): UIMessage[] {
+    return [
+      { id: 'old', role: 'user', parts: [{ type: 'text', text: old }] },
+      { id: 'assistant', role: 'assistant', parts: [{ type: 'text', text: '好的。' }] },
+      { id: 'latest', role: 'user', parts: [{ type: 'text', text: latest }] },
+    ];
+  }
+
+  it('只根据最新用户消息授权明确指定的渠道', () => {
+    expect([...resolveChatPublishAuthorization(messages('把之前的问题发送到钉钉'))]).toEqual([
+      'send_dingtalk_notification',
+    ]);
+    expect([...resolveChatPublishAuthorization(messages('发布 GitLab 行级评论'))]).toEqual([
+      'post_inline_comment',
+    ]);
+    expect([...resolveChatPublishAuthorization(messages('把总评发布到 GitLab，并发送钉钉通知'))]).toEqual([
+      'send_dingtalk_notification',
+      'post_review_comment',
+    ]);
+  });
+
+  it('讨论、疑问、否定和历史授权都不能签发发布权限', () => {
+    expect(resolveChatPublishAuthorization(messages('怎么发送到钉钉？')).size).toBe(0);
+    expect(resolveChatPublishAuthorization(messages('先不要发布 GitLab 评论')).size).toBe(0);
+    expect(resolveChatPublishAuthorization(messages('帮我改写发送到钉钉的文案')).size).toBe(0);
+    expect(resolveChatPublishAuthorization(messages('继续分析这个问题')).size).toBe(0);
   });
 });

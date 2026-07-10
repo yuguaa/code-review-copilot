@@ -6,6 +6,8 @@ import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
 import CircleDashed from 'lucide-react/dist/esm/icons/circle-dashed';
 import CircleX from 'lucide-react/dist/esm/icons/circle-x';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
+import ThumbsDown from 'lucide-react/dist/esm/icons/thumbs-down';
+import ThumbsUp from 'lucide-react/dist/esm/icons/thumbs-up';
 import { cn } from '../../lib/cn';
 import { StreamingCursor } from './StreamingCursor';
 import { isBoundaryPart, isReviewActivityPart, type MessagePart } from './message-types';
@@ -62,7 +64,7 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
   const streaming = record.state === 'streaming';
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(255,253,248,0.88)] text-xs shadow-[var(--shadow-sm)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -83,7 +85,7 @@ function JsonPanel({ label, value, strong }: { label: string; value: unknown; st
       <span className="caption text-[var(--muted-soft)]">{label}</span>
       <pre
         className={cn(
-          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-[rgba(238,242,236,0.72)] px-3 py-2.5 font-mono text-[11px] leading-relaxed',
+          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-[var(--surface-soft)] px-3 py-2.5 font-mono text-[11px] leading-relaxed',
           strong ? 'text-[var(--body-strong)]' : 'text-[var(--body)]',
         )}
       >
@@ -102,7 +104,7 @@ function ToolBlock({ part }: { part: MessagePart }) {
   const running = !done && !errored;
   const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[rgba(255,253,248,0.9)] text-xs shadow-[var(--shadow-sm)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -212,25 +214,27 @@ function FindingFeedbackButtons({
         type="button"
         onClick={() => onFeedback('up')}
         aria-label="确认这个问题真实存在"
+        aria-pressed={value === 'up'}
         title="确认这个问题真实存在"
         className={cn(
           'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
           value === 'up' ? 'bg-[var(--brand-cyan)]/18 text-[var(--ink)]' : 'text-[var(--muted)]',
         )}
       >
-        <CircleCheck size={12} />
+        <ThumbsUp size={12} />
       </button>
       <button
         type="button"
         onClick={() => onFeedback('down')}
         aria-label="认为这个问题是误报"
+        aria-pressed={value === 'down'}
         title="认为这个问题是误报"
         className={cn(
           'cursor-pointer rounded-[var(--r-pill)] border border-transparent p-1 transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95',
           value === 'down' ? 'bg-[var(--brand-coral)]/15 text-[var(--brand-coral)]' : 'text-[var(--muted)]',
         )}
       >
-        <CircleX size={12} />
+        <ThumbsDown size={12} />
       </button>
     </span>
   );

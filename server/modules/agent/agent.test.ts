@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveModel, resolveRepositoryModelConfig, resolveReviewModelConfigs } from '../ai-models/ai-models.service';
-import { buildTools, type ReviewContext } from './tools';
+import {
+  modelEndpointKey,
+  resolveModel,
+  resolveRepositoryModelConfig,
+  resolveReviewModelConfigs,
+} from '../ai-models/ai-models.service';
+import { buildPublishTools, buildTools, type ReviewContext } from './tools';
 import { buildInstructions, hasDelegateToolsAvailable } from './review-agent';
 import { buildDelegateTools } from './subagents';
 import type { ReviewBlueprint } from './review-blueprint';
@@ -143,7 +148,7 @@ describe('resolveRepositoryModelConfig', () => {
 });
 
 describe('resolveReviewModelConfigs', () => {
-  it('主审查使用仓库模型，专项只使用启用模型池', () => {
+  it('主审查使用仓库模型，Verify 使用去重后的多模型池', () => {
     const repoModel = model({ id: 'repo-model', provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' });
     const configs = resolveReviewModelConfigs(
       repo({ defaultAIModelId: 'repo-model', defaultAIModel: repoModel }),
@@ -156,14 +161,43 @@ describe('resolveReviewModelConfigs', () => {
 
     expect(configs.primary).toMatchObject({ provider: 'openai', modelId: 'gpt-4o', apiKey: 'repo-key' });
     expect(configs.delegates).toHaveLength(2);
-    expect(configs.verifier).toMatchObject({ provider: 'anthropic', modelId: 'claude-sonnet-4' });
+    expect(configs.verifiers).toEqual([
+      expect.objectContaining({ provider: 'anthropic', modelId: 'claude-sonnet-4' }),
+      expect.objectContaining({ provider: 'openai', modelId: 'gpt-4o' }),
+    ]);
   });
 
-  it('只有一个可用模型时验证模型复用主模型', () => {
-    const configs = resolveReviewModelConfigs(repo(), model(), []);
+  it('网关地址末尾斜杠不同仍视为同一个模型端点', () => {
+    expect(modelEndpointKey({
+      provider: 'openai-compatible',
+      modelId: 'glm-code',
+      apiBaseUrl: 'https://gateway.test/v1/',
+    })).toBe(modelEndpointKey({
+      provider: 'openai-compatible',
+      modelId: 'glm-code',
+      apiBaseUrl: 'https://gateway.test/v1',
+    }));
+  });
 
-    expect(configs.verifier).toEqual(configs.primary);
-    expect(configs.delegates).toEqual([]);
+  it('只有一个可用模型时快速失败，不伪装成多模型 Verify', () => {
+    expect(() => resolveReviewModelConfigs(repo(), model(), [])).toThrow(
+      '多模型 Verify 至少需要配置两个不同的启用模型',
+    );
+  });
+
+  it('存在两个非主模型时 Verify 不再复用主审查模型', () => {
+    const primary = model({ id: 'primary', provider: 'openai', modelId: 'gpt-5', apiKey: 'primary-key' });
+    const configs = resolveReviewModelConfigs(
+      repo({ defaultAIModelId: 'primary', defaultAIModel: primary }),
+      primary,
+      [
+        { provider: 'openai', modelId: 'gpt-5', apiKey: 'primary-key', apiBaseUrl: 'https://example.com/v1', maxSteps: 16 },
+        { provider: 'openai-compatible', modelId: 'doubao-code', apiKey: 'doubao', apiBaseUrl: 'https://doubao.test/v1', maxSteps: 16 },
+        { provider: 'openai-compatible', modelId: 'glm-code', apiKey: 'glm', apiBaseUrl: 'https://glm.test/v1', maxSteps: 16 },
+      ],
+    );
+
+    expect(configs.verifiers.map((config) => config.modelId)).toEqual(['doubao-code', 'glm-code']);
   });
 });
 
@@ -209,7 +243,7 @@ function fakeContext(overrides: Partial<ReviewContext> = {}): ReviewContext {
 
 describe('输出工具的开关控制', () => {
   it('开启时 post_review_comment 返回 discussionId', async () => {
-    const tools = buildTools(fakeContext());
+    const tools = buildTools(fakeContext(), { publish: true });
     const out = (await tools.post_review_comment!.execute!({ markdown: '# 审查' }, toolOpts)) as {
       discussionId: string | number;
     };
@@ -217,21 +251,21 @@ describe('输出工具的开关控制', () => {
   });
 
   it('关闭平台评论时不提供发布工具', () => {
-    const tools = buildTools(fakeContext({ enableMrComment: false }));
+    const tools = buildTools(fakeContext({ enableMrComment: false }), { publish: true });
     expect('post_review_comment' in tools).toBe(false);
     expect('post_inline_comment' in tools).toBe(false);
     expect('write_memory' in tools).toBe(true);
   });
 
   it('行级评论缺 diff_refs 时提示', async () => {
-    const tools = buildTools(fakeContext({ diffRefs: null }));
+    const tools = buildTools(fakeContext({ diffRefs: null }), { publish: true });
     const out = await tools.post_inline_comment!.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
     expect(out).toEqual({ posted: false, error: expect.stringContaining('diff_refs') });
   });
 
   it('行级评论携带 position 调用 GitLab', async () => {
     const ctx = fakeContext();
-    const tools = buildTools(ctx);
+    const tools = buildTools(ctx, { publish: true });
     await tools.post_inline_comment!.execute!({ path: 'a.ts', line: 3, body: 'x' }, toolOpts);
     expect(ctx.gitlab.createMergeRequestComment).toHaveBeenCalledWith(
       1,
@@ -244,7 +278,7 @@ describe('输出工具的开关控制', () => {
   it('追问首次发布行级评论时按需加载 MR diff_refs', async () => {
     const loadDiffRefs = vi.fn().mockResolvedValue({ base_sha: 'b2', head_sha: 'h2', start_sha: 's2' });
     const ctx = fakeContext({ diffRefs: null, loadDiffRefs });
-    const tools = buildTools(ctx);
+    const tools = buildTools(ctx, { publish: true });
 
     await tools.post_inline_comment!.execute!({ path: 'src/a.ts', line: 8, body: '这里存在空指针。' }, toolOpts);
 
@@ -259,7 +293,7 @@ describe('输出工具的开关控制', () => {
 
   it('Push 会话评论发布到 commit', async () => {
     const ctx = fakeContext({ mrIid: null, diffRefs: null, commitSha: 'abc123' });
-    const tools = buildTools(ctx);
+    const tools = buildTools(ctx, { publish: true });
     const out = (await tools.post_review_comment!.execute!({ markdown: '# 审查' }, toolOpts)) as {
       noteId: string | number;
     };
@@ -269,7 +303,7 @@ describe('输出工具的开关控制', () => {
 
   it('开启钉钉渠道时发送用户指定内容', async () => {
     const ctx = fakeContext();
-    const tools = buildTools(ctx);
+    const tools = buildTools(ctx, { publish: true });
     const out = await tools.send_dingtalk_notification!.execute!(
       { title: '复核结论', markdown: '已确认 2 个问题。' },
       toolOpts,
@@ -286,7 +320,7 @@ describe('输出工具的开关控制', () => {
   it('关闭钉钉渠道时不提供发送工具', () => {
     const tools = buildTools(fakeContext({
       dingtalkRepository: { enableDingtalk: false, dingtalkWebhook: null, dingtalkSecret: null },
-    }));
+    }), { publish: true });
 
     expect('send_dingtalk_notification' in tools).toBe(false);
   });
@@ -304,6 +338,10 @@ describe('输出工具的开关控制', () => {
     expect('git_diff' in tools).toBe(false);
     expect('write_memory' in tools).toBe(false);
     expect('read_file' in tools).toBe(true);
+  });
+
+  it('没有服务端发布授权时不挂载任何发布工具', () => {
+    expect(Object.keys(buildPublishTools(fakeContext(), new Set()))).toEqual([]);
   });
 
   it('草稿审查 loop 可关闭写记忆工具，避免 verify 前副作用', () => {

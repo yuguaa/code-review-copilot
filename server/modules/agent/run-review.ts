@@ -6,7 +6,7 @@ import {
 } from '../sessions/session-message-store.service';
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
-import { notifyReviewCompleted, publishVerifiedReview, rememberVerifiedReview } from './review-notification';
+import { runReviewCompletionIntegrations } from './review-notification';
 import { verifyReviewResult, withVerifiedReviewText } from './review-verify';
 import { createLogger } from '../../shared/logger/logger.service';
 import { publishSessionMessages } from '../sessions/session-events.service';
@@ -68,6 +68,12 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     finalMessages = upsertReviewActivityMessage(finalMessages, activity);
     publishSessionMessages(sessionId, finalMessages);
   };
+  const publishPhase = (phase: ReviewActivityState['phase']) => {
+    if (!activity || !finalMessages) return;
+    activity = setReviewActivityPhase(activity, phase);
+    finalMessages = upsertReviewActivityMessage(finalMessages, activity);
+    publishSessionMessages(sessionId, finalMessages);
+  };
 
   try {
     const session = await getSessionWithRepository(sessionId);
@@ -110,42 +116,36 @@ export async function runReviewSession(sessionId: string): Promise<void> {
       status: 'completed',
     });
     finalMessages = ensureVisibleAssistantReply(finalMessages);
-    publishActivity({
-      id: 'verifier',
-      label: 'Verify Agent',
-      provider: reviewRun.verifierConfig.provider,
-      modelId: reviewRun.verifierConfig.modelId,
-      task: '逐条核验主审查结论与代码证据',
-      status: 'running',
-    }, 'verifying');
     const verifiedText = await verifyReviewResult({
       ctx: reviewRun.ctx,
       messages: finalMessages,
-      model: reviewRun.verifierModel,
-      maxSteps: reviewRun.verifierConfig.maxSteps,
+      verifiers: reviewRun.verifiers,
+      assignmentSeed: session.id,
       blueprint: reviewRun.blueprint,
       runtimeMemory: reviewRun.runtimeMemory,
       abortSignal: controller.signal,
+      onActivity: publishActivity,
     });
     throwIfStopped(controller.signal);
     finalMessages = withVerifiedReviewText(finalMessages, verifiedText);
-    publishActivity({
-      id: 'verifier',
-      label: 'Verify Agent',
-      provider: reviewRun.verifierConfig.provider,
-      modelId: reviewRun.verifierConfig.modelId,
-      task: '结论复核完成',
-      status: 'completed',
-    }, 'completed');
+    publishPhase('completed');
     await saveMessages(sessionId, finalMessages);
     throwIfStopped(controller.signal);
-    await rememberVerifiedReview(reviewRun.ctx, verifiedText);
-    throwIfStopped(controller.signal);
-    await publishVerifiedReview(reviewRun.ctx, verifiedText);
-    throwIfStopped(controller.signal);
-    await notifyReviewCompleted(session, finalMessages);
-    throwIfStopped(controller.signal);
     await markReviewSessionCompleted(sessionId);
+    const integrationFailures = await runReviewCompletionIntegrations(
+      reviewRun.ctx,
+      session,
+      finalMessages,
+      verifiedText,
+    );
+    if (integrationFailures.length) {
+      log.warn(`审查已完成，但部分外部集成失败 session=${sessionId}`, {
+        failures: integrationFailures.map(({ integration, error }) => ({
+          integration,
+          error: error instanceof Error ? error.message : String(error),
+        })),
+      });
+    }
     log.info(`审查完成 session=${sessionId}`);
   } catch (err) {
     const stopped = isAbortError(err);

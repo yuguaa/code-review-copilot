@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UIMessage } from 'ai';
+import { verifiedReviewPartKind } from '../../../shared/review-findings';
 import {
   buildVerifiedMemoryEntry,
   mergeVerifiedReviewMemory,
   notifyReviewCompleted,
   publishVerifiedReview,
   rememberVerifiedReview,
+  runReviewCompletionIntegrations,
 } from './review-notification';
 import { sendRepositoryDingtalkNotification } from '../notifications/notifications.service';
 import { readRepositoryMemory, writeRepositoryMemory } from '../repositories/repositories.service';
@@ -133,7 +135,11 @@ describe('notifyReviewCompleted', () => {
             input: { command: 'git diff' },
             output: 'diff output',
           }),
-          { type: 'text', text: '## Verify 结论\nverified 总评' },
+          messagePart({
+            type: 'text',
+            text: '## Verify 结论\nverified 总评',
+            reviewPartKind: verifiedReviewPartKind,
+          }),
         ],
       },
     ]);
@@ -164,7 +170,11 @@ describe('notifyReviewCompleted', () => {
             input: { markdown: '## 严重\n- Dockerfile:12 构建产物路径错误，会导致镜像构建失败。' },
             output: { posted: true },
           }),
-          { type: 'text', text: '## Verify 结论\nverified 总评' },
+          messagePart({
+            type: 'text',
+            text: '## Verify 结论\nverified 总评',
+            reviewPartKind: verifiedReviewPartKind,
+          }),
         ],
       },
     ]);
@@ -447,5 +457,36 @@ describe('verified review memory', () => {
       'r1',
       expect.stringContaining('verified 总评'),
     );
+  });
+});
+
+describe('runReviewCompletionIntegrations', () => {
+  it('单个外部渠道失败时仍完成其它集成并返回失败明细', async () => {
+    const gitlab = {
+      createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'discussion-1' }),
+    };
+    vi.mocked(sendRepositoryDingtalkNotification).mockRejectedValueOnce(new Error('钉钉不可用'));
+
+    const failures = await runReviewCompletionIntegrations(
+      {
+        gitlab: gitlab as never,
+        projectId: 1,
+        mrIid: 2,
+        repoId: 'r1',
+        workdir: '/tmp/repo',
+        diffRef: 'origin/main',
+        commitSha: 'head',
+        diffRefs: null,
+        enableMrComment: true,
+        dingtalkRepository: { enableDingtalk: true, dingtalkWebhook: null, dingtalkSecret: null },
+      },
+      session({ mrIid: 2 }),
+      messages,
+      'verified 总评',
+    );
+
+    expect(failures).toEqual([{ integration: 'dingtalk', error: expect.any(Error) }]);
+    expect(gitlab.createMergeRequestComment).toHaveBeenCalledWith(1, 2, 'verified 总评');
+    expect(writeRepositoryMemory).toHaveBeenCalled();
   });
 });

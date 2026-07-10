@@ -1,6 +1,7 @@
 import type { UIMessage } from 'ai';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { verifiedReviewPartKind } from '../../../shared/review-findings';
 import {
   applyMessageFeedback,
   buildThresholdFeedbackMemorySection,
@@ -79,27 +80,20 @@ describe('mergePersistedMessages', () => {
 });
 
 describe('message feedback helpers', () => {
-  it('把反馈写到 assistant 文本 part 上', () => {
-    const parts = [
-      { type: 'text', text: '发现一个问题' },
-      { type: 'tool-bash', state: 'output-available' },
-    ];
-
-    const result = applyMessageFeedback(parts, 'up');
-
-    expect(result[0]).toMatchObject({ type: 'text', text: '发现一个问题', feedback: 'up' });
-    expect((result[0] as { feedbackAt?: string }).feedbackAt).toBeTruthy();
-    expect(result[1]).toEqual(parts[1]);
-  });
-
   it('把单条发现反馈写到文本 part 的 findingFeedbacks 上', () => {
     const parts = [
-      { type: 'text', text: '## 严重\n- 文件:a.ts:1 问题：空指针 影响：崩溃 修复建议：判空' },
+      {
+        type: 'text',
+        text: '## Verify 结论\n## 严重\n- 文件:a.ts:1 问题：空指针 影响：崩溃 修复建议：判空',
+        reviewPartKind: verifiedReviewPartKind,
+      },
     ];
 
     const result = applyMessageFeedback(parts, 'down', '文件:a.ts:1 问题：空指针 影响：崩溃 修复建议：判空');
 
-    expect(result[0]).toMatchObject({
+    expect(result.kind).toBe('updated');
+    if (result.kind !== 'updated') throw new Error('反馈应写入最终 Verify finding');
+    expect(result.parts[0]).toMatchObject({
       type: 'text',
       findingFeedbacks: [
         {
@@ -114,21 +108,37 @@ describe('message feedback helpers', () => {
     const finding = 'a.ts:1 问题：空指针 影响：崩溃 修复建议：判空';
     const parts = [
       { type: 'text', text: `## 严重\n- ${finding}` },
-      { type: 'text', text: `## Verify 结论\n## 严重\n1. ${finding}` },
+      {
+        type: 'text',
+        text: `## Verify 结论\n## 严重\n1. ${finding}`,
+        reviewPartKind: verifiedReviewPartKind,
+      },
     ];
 
     const result = applyMessageFeedback(parts, 'up', finding);
 
-    expect(result[0]).not.toHaveProperty('findingFeedbacks');
-    expect(result[1]).toMatchObject({
+    expect(result.kind).toBe('updated');
+    if (result.kind !== 'updated') throw new Error('反馈应写入最终 Verify finding');
+    expect(result.parts[0]).not.toHaveProperty('findingFeedbacks');
+    expect(result.parts[1]).toMatchObject({
       findingFeedbacks: [{ text: finding, feedback: 'up' }],
     });
   });
 
-  it('找不到对应问题时不把反馈写入无关文本', () => {
-    const parts = [{ type: 'text', text: '## Verify 结论\n未发现问题' }];
+  it('找不到最终 Verify 问题时拒绝反馈', () => {
+    const parts = [{
+      type: 'text',
+      text: '## Verify 结论\n未发现问题',
+      reviewPartKind: verifiedReviewPartKind,
+    }];
 
-    expect(applyMessageFeedback(parts, 'down', 'a.ts:1 不存在的问题')).toEqual(parts);
+    expect(applyMessageFeedback(parts, 'down', 'a.ts:1 不存在的问题')).toEqual({ kind: 'missing-finding' });
+  });
+
+  it('普通回复即使包含审查分组也拒绝反馈', () => {
+    const parts = [{ type: 'text', text: '## 严重\n- a.ts:1 问题：追问中引用的问题' }];
+
+    expect(applyMessageFeedback(parts, 'up', 'a.ts:1 问题：追问中引用的问题')).toEqual({ kind: 'missing-finding' });
   });
 
   it('按问题模式归一化反馈文本', () => {
@@ -171,12 +181,18 @@ describe('message feedback helpers', () => {
 
   it('同一发现切换反馈时只保留当前反馈', () => {
     const first = applyMessageFeedback(
-      [{ type: 'text', text: '## 严重\n- a.ts:1 问题：空指针' }],
+      [{
+        type: 'text',
+        text: '## Verify 结论\n## 严重\n- a.ts:1 问题：空指针',
+        reviewPartKind: verifiedReviewPartKind,
+      }],
       'up',
       'a.ts:1 问题：空指针',
     );
-    const switched = applyMessageFeedback(first, 'down', 'a.ts:1 问题：空指针');
-    const stats = collectFeedbackStats([switched]);
+    if (first.kind !== 'updated') throw new Error('首次反馈应成功');
+    const switched = applyMessageFeedback(first.parts, 'down', 'a.ts:1 问题：空指针');
+    if (switched.kind !== 'updated') throw new Error('切换反馈应成功');
+    const stats = collectFeedbackStats([switched.parts]);
 
     expect(stats).toEqual([{ pattern: '空指针', up: 0, down: 1 }]);
   });

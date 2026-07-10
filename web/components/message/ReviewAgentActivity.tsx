@@ -20,7 +20,7 @@ const PHASE_LABEL: Record<ReviewActivityState['phase'], string> = {
 };
 
 function agentIcon(agent: ReviewAgentActivity) {
-  if (agent.id === 'verifier') return BadgeCheck;
+  if (agent.id === 'verifier' || agent.id.startsWith('verifier-')) return BadgeCheck;
   if (agent.id === 'delegate-security') return ShieldCheck;
   if (agent.id === 'delegate-architecture') return ScanSearch;
   if (agent.id === 'delegate-performance') return Gauge;
@@ -45,8 +45,13 @@ function AgentRow({ agent }: { agent: ReviewAgentActivity }) {
   const AgentIcon = agentIcon(agent);
   const StatusIcon = statusIcon(agent.status);
   return (
-    <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2.5">
-      <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-[var(--surface-card)] text-[var(--body-strong)]">
+    <div className="review-agent-row grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-2.5 px-3 py-2.5">
+      <span
+        className={cn(
+          'review-agent-node mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-[var(--r-pill)] border border-[var(--line-subtle)] bg-[var(--surface-strong)] text-[var(--body-strong)]',
+          `is-${agent.status}`,
+        )}
+      >
         <AgentIcon size={14} />
       </span>
       <div className="min-w-0">
@@ -76,7 +81,13 @@ function AgentRow({ agent }: { agent: ReviewAgentActivity }) {
 
 export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
   return (
-    <section className="overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+    <section
+      role="status"
+      aria-live="polite"
+      aria-atomic="false"
+      aria-busy={data.phase !== 'completed' && data.phase !== 'failed'}
+      className="review-agent-pipeline overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]"
+    >
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line-subtle)] bg-[var(--surface-soft)]/72 px-3 py-2.5">
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ink)]">
           <Network size={14} className="text-[var(--accent)]" />

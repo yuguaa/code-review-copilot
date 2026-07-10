@@ -74,9 +74,11 @@ sessionRoutes.post('/:id/message-feedback', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const result = await submitMessageFeedback(sessionId, body.messageId, body.feedback, body.findingText);
   if (result.kind === 'missing-message-id') return c.json({ error: '缺少 messageId' }, 400);
+  if (result.kind === 'missing-finding-text') return c.json({ error: '缺少审查问题内容' }, 400);
   if (result.kind === 'invalid-feedback') return c.json({ error: '反馈类型无效' }, 400);
   if (result.kind === 'missing-message') return c.json({ error: '消息不存在' }, 404);
   if (result.kind === 'missing-repository') return c.json({ error: '当前会话未绑定仓库，无法沉淀长期记忆' }, 400);
+  if (result.kind === 'missing-finding') return c.json({ error: '审查问题不存在于最终 Verify 结论' }, 400);
   return c.json(result.tree);
 });
 

@@ -1,7 +1,11 @@
 import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
-import { normalizeFindingText } from '../../../shared/review-findings';
+import {
+  isVerifiedReviewPart,
+  normalizeFindingText,
+  parseReviewFindings,
+} from '../../../shared/review-findings';
 
 export type MessageRow = {
   id: string;
@@ -35,7 +39,12 @@ export type MessageFeedbackValue = (typeof messageFeedbackValues)[number];
 export type MessageFeedbackResult =
   | { kind: 'missing-message' }
   | { kind: 'missing-repository' }
+  | { kind: 'missing-finding' }
   | { kind: 'updated'; tree: SessionMessageTree };
+
+export type MessageFeedbackApplication =
+  | { kind: 'missing-finding' }
+  | { kind: 'updated'; parts: UIMessage['parts'] };
 
 const feedbackMemoryHeader = '## 用户反馈阈值沉淀';
 const legacyFeedbackMemoryHeader = '## 用户反馈沉淀';
@@ -222,7 +231,7 @@ export async function setMessageFeedback(
   sessionId: string,
   messageId: string,
   feedback: MessageFeedbackValue,
-  findingText?: string,
+  findingText: string,
 ): Promise<MessageFeedbackResult> {
   const message = await prisma.message.findFirst({
     where: { id: messageId, sessionId, role: 'assistant' },
@@ -238,7 +247,9 @@ export async function setMessageFeedback(
   if (!message) return { kind: 'missing-message' };
   if (!message.session.repositoryId) return { kind: 'missing-repository' };
 
-  const nextParts = applyMessageFeedback(message.parts, feedback, findingText);
+  const application = applyMessageFeedback(message.parts, feedback, findingText);
+  if (application.kind === 'missing-finding') return application;
+  const nextParts = application.parts;
   const repositoryId = message.session.repositoryId;
 
   await prisma.message.update({
@@ -320,61 +331,51 @@ export function mergeIncomingUserMessageAtParent(
   return mergeIncomingUserMessage(baseMessages, incomingMessages);
 }
 
-export function applyMessageFeedback(parts: unknown, feedback: MessageFeedbackValue, findingText?: string): UIMessage['parts'] {
+export function applyMessageFeedback(
+  parts: unknown,
+  feedback: MessageFeedbackValue,
+  findingText: string,
+): MessageFeedbackApplication {
   const list = Array.isArray(parts) ? parts : [];
-  const targetText = normalizeFindingText(typeof findingText === 'string' ? findingText : '');
-  if (!targetText) {
-    return list.map((part) => {
-      if (!part || typeof part !== 'object') return part;
-      const record = part as Record<string, unknown>;
-      if (record.type !== 'text') return part;
-      return {
-        ...record,
-        feedback,
-        feedbackAt: new Date().toISOString(),
-      };
-    }) as UIMessage['parts'];
-  }
-
-  const textPartIndex = findFeedbackTextPartIndex(list, targetText);
+  const targetText = normalizeFindingText(findingText);
+  const target = findVerifiedFindingTarget(list, targetText);
+  if (!target) return { kind: 'missing-finding' };
   const feedbackAt = new Date().toISOString();
-  return list.map((part, index) => {
+  const nextParts = list.map((part, index) => {
     if (!part || typeof part !== 'object') return part;
     const record = part as Record<string, unknown>;
     if (record.type !== 'text') return part;
-    if (index !== textPartIndex) return part;
+    if (index !== target.partIndex) return part;
     const existing = Array.isArray(record.findingFeedbacks) ? record.findingFeedbacks : [];
     const findingFeedbacks = [
       ...existing.filter((item) => {
         const entry = item as { text?: unknown };
-        return entry.text !== targetText;
+        return normalizeFindingText(typeof entry.text === 'string' ? entry.text : '') !== target.text;
       }),
-      { text: targetText, feedback, feedbackAt },
+      { text: target.text, feedback, feedbackAt },
     ];
     return {
       ...record,
       findingFeedbacks,
     };
   }) as UIMessage['parts'];
+  return { kind: 'updated', parts: nextParts };
 }
 
-function findFeedbackTextPartIndex(parts: unknown[], targetText: string): number {
-  const verifiedIndex = parts.findLastIndex((part) => {
-    if (!isTextPart(part)) return false;
-    return part.text.trimStart().startsWith('## Verify 结论')
-      && normalizeFindingText(part.text).includes(targetText);
-  });
-  if (verifiedIndex >= 0) return verifiedIndex;
-  return parts.findLastIndex((part) => {
-    if (!isTextPart(part)) return false;
-    return normalizeFindingText(part.text).includes(targetText);
-  });
-}
-
-function isTextPart(part: unknown): part is { type: 'text'; text: string } {
-  if (!part || typeof part !== 'object') return false;
-  const record = part as { type?: unknown; text?: unknown };
-  return record.type === 'text' && typeof record.text === 'string';
+function findVerifiedFindingTarget(
+  parts: unknown[],
+  targetText: string,
+): { partIndex: number; text: string } | null {
+  if (!targetText) return null;
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (!isVerifiedReviewPart(part)) continue;
+    const finding = parseReviewFindings(part.text).find(
+      (item) => normalizeFindingText(item.title) === targetText,
+    );
+    if (finding) return { partIndex: index, text: normalizeFindingText(finding.title) };
+  }
+  return null;
 }
 
 export function normalizeFeedbackText(text: unknown): string {

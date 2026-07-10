@@ -41,6 +41,13 @@ type InlineCommentResult =
   | { posted: true; noteId: string | number | undefined }
   | { posted: true; discussionId: string | number };
 
+export type PublishToolKey = 'post_review_comment' | 'post_inline_comment' | 'send_dingtalk_notification';
+const ALL_PUBLISH_TOOLS = new Set<PublishToolKey>([
+  'post_review_comment',
+  'post_inline_comment',
+  'send_dingtalk_notification',
+]);
+
 /** 发布上下文不依赖本地工作区，追问即使无法读取代码也能按用户要求发送。 */
 export type PublishContext = {
   gitlab: GitLabService;
@@ -201,11 +208,11 @@ export function buildReadTools(ctx: WorkspaceContext) {
  * Webhook 主审查关闭 publish，由 verify 后的系统流程确定性发布；追问对话按仓库配置暴露发布工具。
  */
 export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memoryWrite?: boolean } = {}) {
-  const publish = opts.publish ?? true;
+  const publish = opts.publish ?? false;
   const memoryWrite = opts.memoryWrite ?? true;
   return {
     ...buildReadTools(ctx),
-    ...(publish ? buildPublishTools(ctx) : {}),
+    ...(publish ? buildPublishTools(ctx, ALL_PUBLISH_TOOLS) : {}),
 
     ...(memoryWrite && toolEnabled(ctx, 'write_memory')
       ? {
@@ -238,10 +245,10 @@ export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memory
   };
 }
 
-/** 发布工具：渠道配置和仓库 Tool 开关共同决定是否挂载。 */
-export function buildPublishTools(ctx: PublishContext) {
+/** 发布工具：服务端本轮授权、渠道配置和仓库 Tool 开关共同决定是否挂载。 */
+export function buildPublishTools(ctx: PublishContext, authorizedTools: ReadonlySet<PublishToolKey>) {
   return {
-    ...(ctx.enableMrComment && toolEnabled(ctx, 'post_review_comment')
+    ...(authorizedTools.has('post_review_comment') && ctx.enableMrComment && toolEnabled(ctx, 'post_review_comment')
       ? {
           post_review_comment: tool({
             description: '仅当最新用户消息明确要求发布 GitLab 评论时调用，把完整 Markdown 内容发布到当前 MR 或 Push commit。',
@@ -259,7 +266,7 @@ export function buildPublishTools(ctx: PublishContext) {
         }
       : {}),
 
-    ...(ctx.enableMrComment && toolEnabled(ctx, 'post_inline_comment')
+    ...(authorizedTools.has('post_inline_comment') && ctx.enableMrComment && toolEnabled(ctx, 'post_inline_comment')
       ? {
           post_inline_comment: tool({
             description: '仅当最新用户消息明确要求发布 GitLab 行级评论时调用，在当前 MR 或 Push commit 的具体文件行发表评论。',
@@ -292,7 +299,7 @@ export function buildPublishTools(ctx: PublishContext) {
         }
       : {}),
 
-    ...(ctx.dingtalkRepository.enableDingtalk && toolEnabled(ctx, 'send_dingtalk_notification')
+    ...(authorizedTools.has('send_dingtalk_notification') && ctx.dingtalkRepository.enableDingtalk && toolEnabled(ctx, 'send_dingtalk_notification')
       ? {
           send_dingtalk_notification: tool({
             description: '仅当最新用户消息明确要求发送钉钉时调用，把指定 Markdown 内容发送到仓库配置的钉钉机器人。',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractReviewFindings, findingFeedbackPartIndex } from '../../web/components/message/review-findings';
-import { extractReviewFileReferences } from '../../shared/review-findings';
+import { extractReviewFileReferences, verifiedReviewPartKind } from '../../shared/review-findings';
 
 describe('extractReviewFindings', () => {
   it('从审查总评分组里提取可反馈的单条发现', () => {
@@ -91,10 +91,35 @@ describe('extractReviewFindings', () => {
   it('有 Verify 结论时只选择最终结论文本块反馈', () => {
     const parts = [
       { type: 'text', text: '## 一般\n- src/draft.ts:1 问题：草稿问题' },
-      { type: 'text', text: '## Verify 结论\n## 一般\n1. **最终确认的问题**\n   - 位置: `src/final.ts:2`\n   - 问题: 确认存在缺陷' },
+      {
+        type: 'text',
+        text: '## Verify 结论\n## 一般\n1. **最终确认的问题**\n   - 位置: `src/final.ts:2`\n   - 问题: 确认存在缺陷',
+        reviewPartKind: verifiedReviewPartKind,
+      },
     ] as Parameters<typeof findingFeedbackPartIndex>[0];
 
     expect(findingFeedbackPartIndex(parts)).toBe(1);
+  });
+
+  it('普通追问回复不提供 finding 反馈入口', () => {
+    const parts = [
+      { type: 'text', text: '## Verify 结论\n## 一般\n- src/follow-up.ts:3 问题：这是追问里引用的审查问题' },
+    ] as Parameters<typeof findingFeedbackPartIndex>[0];
+
+    expect(findingFeedbackPartIndex(parts)).toBe(-1);
+  });
+
+  it('核验排除分组里的驳回项不作为 finding', () => {
+    const findings = extractReviewFindings([
+      '## 建议',
+      '暂无其他建议。',
+      '## 核验排除',
+      '1. **[严重-0] package.json:1：启动配置错误**',
+      '- 驳回原因：入口配置实际有效',
+      '- 反证：package.json:1 配置有效',
+    ].join('\n'));
+
+    expect(findings).toEqual([]);
   });
 });
 

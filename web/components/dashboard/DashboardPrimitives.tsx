@@ -7,14 +7,14 @@ import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 export const chartColors = {
-  ink: '#262330',
-  muted: '#756f79',
-  hairline: '#d9d1c4',
-  lime: '#d7dfad',
-  mint: '#c7e5e8',
-  coral: '#bd5148',
-  teal: '#218ca3',
-  lilac: '#e4d9ea',
+  ink: '#f0f0f5',
+  muted: '#8888a8',
+  hairline: '#32313d',
+  lime: '#a9c56f',
+  mint: '#63c4b7',
+  coral: '#f06f75',
+  teal: '#63b9c8',
+  lilac: '#c8a0e0',
 };
 
 export const trendChartConfig = {
@@ -26,7 +26,7 @@ export const trendChartConfig = {
 export const statusChartConfig = {
   completed: { label: '完成', color: chartColors.mint },
   failed: { label: '失败', color: chartColors.coral },
-  running: { label: '运行中', color: '#9b6c22' },
+  running: { label: '运行中', color: '#d9a85f' },
 } satisfies ChartConfig;
 
 export const authorChartConfig = {
@@ -77,7 +77,7 @@ export function MetricCard({
   icon: IconComponent;
   tone?: 'white' | 'lime' | 'coral' | 'navy';
 }) {
-  const isLightTone = tone === 'white' || tone === 'lime';
+  const isLightTone = tone === 'white';
   const content = (
     <div className="flex min-h-24 items-start justify-between gap-3">
       <div className="min-w-0">

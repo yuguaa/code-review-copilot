@@ -10,14 +10,14 @@ export function Card({ children, className }: { children: ReactNode; className?:
 }
 
 const COLOR_BLOCK_SURFACE: Record<string, { bg: string; dark: boolean }> = {
-  lime: { bg: 'var(--brand-lime)', dark: false },
-  lilac: { bg: 'var(--brand-lilac)', dark: false },
-  cream: { bg: 'var(--brand-cream)', dark: false },
-  mint: { bg: 'var(--brand-mint)', dark: false },
-  pink: { bg: 'var(--brand-pink)', dark: true },
-  coral: { bg: 'var(--brand-coral)', dark: true },
-  navy: { bg: 'var(--brand-navy)', dark: true },
-  teal: { bg: 'var(--brand-teal)', dark: true },
+  lime: { bg: 'var(--metric-lime)', dark: true },
+  lilac: { bg: 'var(--metric-lilac)', dark: true },
+  cream: { bg: 'var(--metric-neutral)', dark: true },
+  mint: { bg: 'var(--metric-mint)', dark: true },
+  pink: { bg: 'var(--metric-pink)', dark: true },
+  coral: { bg: 'var(--metric-coral)', dark: true },
+  navy: { bg: 'var(--metric-navy)', dark: true },
+  teal: { bg: 'var(--metric-teal)', dark: true },
 };
 
 export function ColorBlock({
