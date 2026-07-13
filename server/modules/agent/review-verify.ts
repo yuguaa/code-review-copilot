@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { buildReadTools, readWorkspaceLine, type ReviewContext } from './tools';
 import { renderReviewBlueprint, type ReviewBlueprint } from './review-blueprint';
 import { renderReviewRuntimeMemory, type ReviewRuntimeMemory } from './review-runtime-memory';
-import { modelEndpointKey, type ModelConfig } from '../ai-models/ai-models.service';
+import { modelEndpointKey, resolveModel, type ModelConfig } from '../ai-models/ai-models.service';
 import type { ReviewActivityReporter } from './review-activity';
+import { publicReviewError } from './review-error';
 import {
   extractReviewFileReferences,
   isExplicitNoFindingReview,
@@ -95,7 +96,7 @@ export type VerifyEvidence = {
 };
 
 export type ReviewVerifier = {
-  model: LanguageModel;
+  model?: LanguageModel;
   config: ModelConfig;
 };
 
@@ -111,6 +112,12 @@ export type VerifyAgentResult = {
   submission: VerifiedReviewSubmission;
   evidenceRecords: VerifyEvidence[];
 };
+
+function distinctReviewVerifiers(verifiers: ReviewVerifier[]): ReviewVerifier[] {
+  return verifiers.filter((verifier, index) =>
+    verifiers.findIndex((candidate) => modelEndpointKey(candidate.config) === modelEndpointKey(verifier.config)) === index,
+  );
+}
 
 export function buildVerifiedReview(
   input: unknown,
@@ -196,9 +203,7 @@ export function createVerifyAssignments(
   verifiers: ReviewVerifier[],
   seed: string,
 ): VerifyAssignment[] {
-  const distinctVerifiers = verifiers.filter((verifier, index) =>
-    verifiers.findIndex((candidate) => modelEndpointKey(candidate.config) === modelEndpointKey(verifier.config)) === index,
-  );
+  const distinctVerifiers = distinctReviewVerifiers(verifiers);
   if (distinctVerifiers.length < 2) {
     throw new Error('多模型 Verify 至少需要两个不同模型，不能由单个模型重复扮演多个 Verify Agent');
   }
@@ -570,6 +575,11 @@ export function verifyReviewResult({
   const draftFindings = parseReviewFindings(draft);
   assertReviewDraftIsDecidable(draft, draftFindings);
   const assignments = createVerifyAssignments(draftFindings, verifiers, assignmentSeed);
+  const distinctVerifiers = distinctReviewVerifiers(verifiers);
+  const verifierController = new AbortController();
+  const verifierSignal = abortSignal
+    ? AbortSignal.any([abortSignal, verifierController.signal])
+    : verifierController.signal;
 
   assignments.forEach((assignment, index) => {
     onActivity?.({
@@ -582,35 +592,65 @@ export function verifyReviewResult({
     }, index === 0 ? 'verifying' : undefined);
   });
 
-  const verifierController = new AbortController();
-  const verifierSignal = abortSignal
-    ? AbortSignal.any([abortSignal, verifierController.signal])
-    : verifierController.signal;
-  return Promise.all(assignments.map((assignment) => {
-    const activity = {
-      id: assignment.id,
-      label: assignment.label,
-      provider: assignment.verifier.config.provider,
-      modelId: assignment.verifier.config.modelId,
-      task: assignment.task,
+  const runAssignment = (assignment: VerifyAssignment): Promise<VerifyAgentResult> => {
+    const candidates = [
+      assignment.verifier,
+      ...distinctVerifiers.filter((verifier) =>
+        modelEndpointKey(verifier.config) !== modelEndpointKey(assignment.verifier.config),
+      ),
+    ];
+
+    const runCandidate = (candidateIndex: number): Promise<VerifyAgentResult> => {
+      if (verifierSignal.aborted) {
+        return Promise.reject(verifierSignal.reason ?? new Error('审查已中止'));
+      }
+      const candidate = candidates[candidateIndex];
+      if (!candidate) return Promise.reject(new Error(`Verify 分片 ${assignment.id} 的所有候选模型均不可用`));
+      const fallback = candidateIndex > 0;
+      const activity = {
+        id: fallback ? `${assignment.id}-fallback-${candidateIndex}` : assignment.id,
+        label: fallback ? `${assignment.label} 故障转移 ${candidateIndex}` : assignment.label,
+        provider: candidate.config.provider,
+        modelId: candidate.config.modelId,
+        task: assignment.task,
+      };
+      onActivity?.({ ...activity, status: 'running' });
+      return Promise.resolve().then(() => verifyReviewAgent({
+        ctx,
+        draft,
+        draftFindings: assignment.findings,
+        model: candidate.model ?? resolveModel(candidate.config),
+        maxSteps: candidate.config.maxSteps,
+        blueprint,
+        runtimeMemory,
+        abortSignal: verifierSignal,
+      })).then((result) => {
+        onActivity?.({ ...activity, status: 'completed' });
+        return result;
+      }).catch((error) => {
+        if (verifierSignal.aborted) throw error;
+        const errorText = publicReviewError(error);
+        onActivity?.({
+          ...activity,
+          task: `模型调用失败：${errorText}`,
+          status: 'failed',
+        });
+        if (candidateIndex + 1 < candidates.length) return runCandidate(candidateIndex + 1);
+        const terminalError = new Error(`Verify 分片 ${assignment.id} 的所有候选模型均不可用：${errorText}`);
+        verifierController.abort(terminalError);
+        throw terminalError;
+      });
     };
-    onActivity?.({ ...activity, status: 'running' });
-    return verifyReviewAgent({
-      ctx,
-      draft,
-      draftFindings: assignment.findings,
-      model: assignment.verifier.model,
-      maxSteps: assignment.verifier.config.maxSteps,
-      blueprint,
-      runtimeMemory,
-      abortSignal: verifierSignal,
-    }).then((result) => {
-      onActivity?.({ ...activity, status: 'completed' });
-      return result;
-    }).catch((error) => {
-      if (!verifierController.signal.aborted) verifierController.abort(error);
-      onActivity?.({ ...activity, status: 'failed' });
-      throw error;
-    });
-  })).then((results) => mergeVerifyAgentResults(results, draftFindings));
+
+    return runCandidate(0);
+  };
+
+  return Promise.allSettled(assignments.map(runAssignment)).then((settled) => {
+    if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('审查已中止');
+    if (verifierController.signal.aborted) throw verifierController.signal.reason;
+    const failed = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failed) throw failed.reason;
+    const results = settled.map((result) => (result as PromiseFulfilledResult<VerifyAgentResult>).value);
+    return mergeVerifyAgentResults(results, draftFindings);
+  });
 }

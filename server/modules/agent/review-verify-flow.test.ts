@@ -263,6 +263,106 @@ describe('多模型 Verify 编排', () => {
     const secondSession = createVerifyAssignments(findings.slice(0, 1), verifiers, 'b');
     expect(firstSession[0].verifier.config.modelId).not.toBe(secondSession[0].verifier.config.modelId);
   });
+
+  it('单个 verifier 接口失败时由其它模型接管同一分片', async () => {
+    const draft = [
+      '## 审查总评',
+      '发现一个阻塞问题。',
+      '## 严重',
+      '1. package.json:1：包配置会导致启动失败',
+      'Symptom：入口配置错误。',
+      'Consequence：服务无法启动。',
+      'Remedy：修正入口配置。',
+      '## 一般',
+      '未发现一般问题。',
+      '## 建议',
+      '暂无建议。',
+    ].join('\n');
+    const messages: UIMessage[] = [{
+      id: 'assistant-review',
+      role: 'assistant',
+      parts: [{ type: 'text', text: draft }],
+    }];
+    const brokenModel = { id: 'broken-model' } as unknown as LanguageModel;
+    const healthyModel = { id: 'healthy-model' } as unknown as LanguageModel;
+    const verifiers: ReviewVerifier[] = [
+      {
+        model: brokenModel,
+        config: { provider: 'openai-compatible', modelId: 'broken-model', apiKey: 'a', apiBaseUrl: 'https://broken.test/v1', maxSteps: 16 },
+      },
+      {
+        config: { provider: 'invalid-provider', modelId: 'invalid-config', apiKey: 'b', maxSteps: 16 },
+      },
+      {
+        model: healthyModel,
+        config: { provider: 'openai-compatible', modelId: 'healthy-model', apiKey: 'c', apiBaseUrl: 'https://healthy.test/v1', maxSteps: 16 },
+      },
+    ];
+    const activities: Array<{ id: string; task: string; status: string; modelId: string }> = [];
+
+    generateTextMock.mockImplementation((options: {
+      model: LanguageModel;
+      messages: Array<{ content: string }>;
+      tools: {
+        record_verify_evidence: { execute: (input: unknown) => Promise<{ id: string }> };
+        submit_verified_review: { execute: (input: unknown) => unknown };
+      };
+    }) => {
+      if (options.model === brokenModel) return Promise.reject(new Error('Invalid JSON response'));
+      const prompt = options.messages[0].content;
+      if (!prompt.includes('严重-0')) {
+        return Promise.resolve(options.tools.submit_verified_review.execute({
+          decisions: [],
+          additionalFindings: [],
+        })).then(() => unfinishedResult());
+      }
+      return options.tools.record_verify_evidence.execute({
+        path: 'package.json',
+        line: 1,
+        claim: '配置文件首行属于被审查文件',
+      }).then((evidence) => options.tools.submit_verified_review.execute({
+        decisions: [{
+          findingId: '严重-0',
+          verdict: 'confirmed',
+          finalFinding: {
+            title: '包配置会导致启动失败',
+            problem: '入口配置错误',
+            impact: '服务无法启动',
+            remedy: '修正入口配置',
+            evidenceIds: [evidence.id],
+          },
+        }],
+        additionalFindings: [],
+      })).then(() => unfinishedResult());
+    });
+
+    const result = await verifyReviewResult({
+      ctx,
+      messages,
+      verifiers,
+      assignmentSeed: 'a',
+      onActivity: (activity) => activities.push(activity),
+    });
+
+    expect(result).toContain('**包配置会导致启动失败**');
+    expect(activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        modelId: 'broken-model',
+        status: 'failed',
+        task: expect.stringContaining('Invalid JSON response'),
+      }),
+      expect.objectContaining({
+        modelId: 'invalid-config',
+        status: 'failed',
+        task: expect.stringContaining('provider 配置不受支持'),
+      }),
+      expect.objectContaining({
+        id: expect.stringContaining('fallback'),
+        modelId: 'healthy-model',
+        status: 'completed',
+      }),
+    ]));
+  });
 });
 
 describe('verifyContinuationSteps', () => {

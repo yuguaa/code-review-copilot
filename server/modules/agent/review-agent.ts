@@ -100,8 +100,8 @@ export async function createReviewStream(opts: {
   const [globalDefaultModel, activeModelConfigs] = await Promise.all([loadGlobalDefaultModel(), loadActiveModelConfigs()]);
   const modelConfigs = resolveReviewModelConfigs(repo, globalDefaultModel, activeModelConfigs);
   const model = resolveModel(modelConfigs.primary);
-  const delegateModels = modelConfigs.delegates.map((config) => ({ config, model: resolveModel(config) }));
-  const verifierModels = modelConfigs.verifiers.map((config) => ({ config, model: resolveModel(config) }));
+  const delegateModels = modelConfigs.delegates.map((config) => ({ config }));
+  const verifierModels = modelConfigs.verifiers.map((config) => ({ config }));
   const primaryActivity = {
     id: 'primary',
     label: '主审查 Agent',

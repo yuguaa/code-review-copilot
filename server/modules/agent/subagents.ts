@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { buildReadTools, type ReviewContext } from './tools';
 import type { ToolKey } from '../tools/tools.service';
 import { recordRuntimeEvidence } from './review-runtime-memory';
-import type { ModelConfig } from '../ai-models/ai-models.service';
+import { resolveModel, type ModelConfig } from '../ai-models/ai-models.service';
 import type { ReviewActivityReporter } from './review-activity';
 
 const RECON = '你工作在一个已 checkout 好的本地仓库（cwd 即仓库根），用 bash（grep/rg/find/cat/git log 等只读命令）、read_file、git_diff 在工作区自行取证。';
@@ -24,12 +24,12 @@ type SubagentSpec = {
   id: string;
   label: string;
   instructions: string;
-  model: LanguageModel;
+  model?: LanguageModel;
   config: ModelConfig;
 };
 
 type DelegateModel = {
-  model: LanguageModel;
+  model?: LanguageModel;
   config: ModelConfig;
 };
 
@@ -63,14 +63,15 @@ export function buildDelegateTools(
           task,
         };
         onActivity?.({ ...activity, status: 'running' });
-        return generateText({
-          model: spec.model,
-          system: spec.instructions,
-          prompt: task,
-          tools: buildReadTools(ctx), // subagent 只读，不发评论、不写记忆
-          stopWhen: stepCountIs(Math.max(1, spec.config.maxSteps)),
-          abortSignal,
-        })
+        return Promise.resolve()
+          .then(() => generateText({
+            model: spec.model ?? resolveModel(spec.config),
+            system: spec.instructions,
+            prompt: task,
+            tools: buildReadTools(ctx), // subagent 只读，不发评论、不写记忆
+            stopWhen: stepCountIs(Math.max(1, spec.config.maxSteps)),
+            abortSignal,
+          }))
           .then((result) => {
             if (ctx.runtimeMemory) {
               recordRuntimeEvidence(ctx.runtimeMemory, {
@@ -81,6 +82,7 @@ export function buildDelegateTools(
             return result.text;
           })
           .catch((error) => {
+            if (abortSignal?.aborted) throw error;
             onActivity?.({ ...activity, status: 'failed' });
             throw error;
           });

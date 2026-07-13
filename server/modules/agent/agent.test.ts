@@ -368,6 +368,36 @@ describe('输出工具的开关控制', () => {
     expect(Object.keys(tools)).toEqual([]);
     expect(hasDelegateToolsAvailable(undefined, 0)).toBe(false);
   });
+
+  it('专项模型配置错误只让当前委派失败，不阻断工具构造', async () => {
+    const activities: Array<{ modelId: string; status: string }> = [];
+    const tools = buildDelegateTools(fakeContext(), [{
+      config: { provider: 'invalid-provider', modelId: 'broken-delegate', apiKey: 'key', maxSteps: 16 },
+    }], (activity) => activities.push(activity));
+
+    expect(Object.keys(tools)).toContain('delegate_security');
+    await expect(tools.delegate_security!.execute!({ task: '检查鉴权' }, toolOpts)).rejects.toThrow(
+      '不支持的模型 provider',
+    );
+    expect(activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ modelId: 'broken-delegate', status: 'failed' }),
+    ]));
+  });
+
+  it('用户停止时不把专项 Agent 记录成模型失败', async () => {
+    const activities: Array<{ modelId: string; status: string }> = [];
+    const tools = buildDelegateTools(fakeContext(), [{
+      config: { provider: 'invalid-provider', modelId: 'stopped-delegate', apiKey: 'key', maxSteps: 16 },
+    }], (activity) => activities.push(activity));
+    const controller = new AbortController();
+    controller.abort(new Error('用户停止'));
+
+    await expect(tools.delegate_security!.execute!(
+      { task: '检查鉴权' },
+      { toolCallId: 't2', messages: [], abortSignal: controller.signal } as never,
+    )).rejects.toThrow('不支持的模型 provider');
+    expect(activities.some((activity) => activity.status === 'failed')).toBe(false);
+  });
 });
 
 describe('buildInstructions（输出渠道按配置生成）', () => {

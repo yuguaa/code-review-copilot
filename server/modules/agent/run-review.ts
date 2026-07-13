@@ -26,9 +26,25 @@ import {
   type ReviewActivityState,
   type ReviewActivityReporter,
 } from './review-activity';
+import { publicReviewError } from './review-error';
 
 const log = createLogger('run-review');
 const activeReviewControllers = new Map<string, AbortController>();
+
+export function markReviewActivityFailed(
+  state: ReviewActivityState,
+  error: string,
+  stopped = false,
+): ReviewActivityState {
+  return updateReviewAgentActivity(failRunningReviewAgents(state), {
+    id: 'review-error',
+    label: stopped ? '审查已停止' : '审查流程',
+    provider: 'system',
+    modelId: 'runtime',
+    task: error,
+    status: 'failed',
+  });
+}
 
 function abortError(): Error {
   const error = new Error(STOPPED_REVIEW_ERROR);
@@ -98,9 +114,13 @@ export async function runReviewSession(sessionId: string): Promise<void> {
 
     const uiStream = reviewRun.stream.toUIMessageStream({
       originalMessages: initial,
+      onError: publicReviewError,
     });
 
-    for await (const message of readUIMessageStream<UIMessage>({ stream: uiStream })) {
+    for await (const message of readUIMessageStream<UIMessage>({
+      stream: uiStream,
+      terminateOnError: true,
+    })) {
       throwIfStopped(controller.signal);
       finalMessages = upsertReviewActivityMessage(mergeStreamingMessage(initial, message), activity);
       publishSessionMessages(sessionId, finalMessages);
@@ -149,18 +169,20 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     log.info(`审查完成 session=${sessionId}`);
   } catch (err) {
     const stopped = isAbortError(err);
-    if (activity && finalMessages) {
-      activity = failRunningReviewAgents(activity);
-      finalMessages = upsertReviewActivityMessage(finalMessages, activity);
-      publishSessionMessages(sessionId, finalMessages);
-    }
-    if (finalMessages) await saveMessages(sessionId, finalMessages).catch(() => undefined);
     if (stopped) {
       log.info(`审查已手动停止 session=${sessionId}`);
     } else {
       log.error(`审查失败 session=${sessionId}`, err);
     }
-    const message = stopped ? STOPPED_REVIEW_ERROR : err instanceof Error ? err.message : String(err);
+    const message = stopped ? STOPPED_REVIEW_ERROR : publicReviewError(err);
+    if (activity && finalMessages) {
+      activity = markReviewActivityFailed(activity, message, stopped);
+      const failureMessages = upsertReviewActivityMessage(finalMessages, activity);
+      finalMessages = failureMessages;
+      await saveMessages(sessionId, failureMessages)
+        .then(() => publishSessionMessages(sessionId, failureMessages))
+        .catch((saveError) => log.error(`审查失败消息落库失败 session=${sessionId}`, saveError));
+    }
     await markReviewSessionFailed(sessionId, message);
   } finally {
     activeReviewControllers.delete(sessionId);

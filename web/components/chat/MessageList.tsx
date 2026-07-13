@@ -1,6 +1,5 @@
 import type { UIMessage } from 'ai';
 import Activity from 'lucide-react/dist/esm/icons/activity';
-import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { Message } from '../Message';
 import type { MessageFeedbackValue, MessageTreeNode, SessionDetail } from '../../lib/types';
@@ -34,19 +33,6 @@ export function MessageList({
 
   return (
     <div className="review-paper mx-auto min-h-full w-full max-w-[1120px] px-6 py-8 max-md:px-4 max-md:py-5">
-      {/* 审查失败原因必须直接可见，让用户能自助修复配置 */}
-      {session.status === 'failed' && session.error && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-[var(--r-md)] border border-[var(--error)]/28 bg-[var(--state-error-bg)] px-4 py-3 text-sm text-[var(--body-strong)] shadow-[var(--shadow-sm)]">
-          <AlertCircle size={16} className="mt-0.5 shrink-0 text-[var(--error)]" />
-          <div className="min-w-0 space-y-0.5">
-            <p className="font-semibold text-[var(--error)]">本次审查失败</p>
-            <p className="break-words text-sm leading-6">{session.error}</p>
-            {/模型|apiKey|api key/i.test(session.error) && (
-              <p className="text-sm leading-6 text-[var(--muted)]">请到「设置 → 全局模型配置」或仓库的模型配置中补全后重试。</p>
-            )}
-          </div>
-        </div>
-      )}
       {messages.length === 0 && (
         <div className="technical-panel mx-auto mt-16 max-w-md rounded-[var(--r-lg)] bg-[var(--surface-card)] px-7 py-9 text-center text-[var(--ink)]">
           <p className="font-display text-xl">从一个具体问题开始</p>
