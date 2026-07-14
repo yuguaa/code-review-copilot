@@ -48,10 +48,10 @@ export function buildInstructions(
   ].filter(Boolean).join('\n');
 
   const publish = enableMrComment
-    ? '- 不要自行发布评论；verify 增强成功后系统会发布最终总评，增强不可用不影响主审查在会话页面完成。\n'
+    ? '- 不要自行发布评论；系统会发布最终可用总评：verify 增强成功时采用增强结论，否则采用主审查总评。\n'
     : '';
   const destination = enableDingtalk
-    ? '会话页面始终展示这段文本；verify 增强成功后系统会自动推送钉钉，你无需也无法自行发送通知。'
+    ? '会话页面始终展示这段文本；系统会把最终可用总评自动推送钉钉，你无需也无法自行发送通知。'
     : '审查结论会展示在会话页面，供团队查看与追问。';
 
   const base = `你是一名资深代码审查 Agent，工作在一个已 checkout 好的本地仓库工作区里——你的当前目录就是仓库根，可以像在本机一样自由探索整个代码库。

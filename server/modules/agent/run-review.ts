@@ -5,10 +5,9 @@ import {
   saveMessages,
 } from '../sessions/session-message-store.service';
 import { createReviewStream } from './review-agent';
-import { ensureVisibleAssistantReply } from './review-message';
+import { ensureVisibleAssistantReply, hasAssistantTextAfterLatestUser } from './review-message';
 import { runReviewCompletionIntegrations } from './review-notification';
 import {
-  validatedReviewDraft,
   verifyReviewResult,
   withVerifiedReviewText,
 } from './review-verify';
@@ -30,7 +29,7 @@ import {
   type ReviewActivityState,
   type ReviewActivityReporter,
 } from './review-activity';
-import { publicReviewError } from './review-error';
+import { MISSING_REVIEW_TEXT_ERROR, publicReviewError } from './review-error';
 
 const log = createLogger('run-review');
 const activeReviewControllers = new Map<string, AbortController>();
@@ -131,8 +130,9 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     }
 
     throwIfStopped(controller.signal);
+    const hasPrimaryReviewText = hasAssistantTextAfterLatestUser(finalMessages);
     finalMessages = ensureVisibleAssistantReply(finalMessages);
-    validatedReviewDraft(finalMessages);
+    if (!hasPrimaryReviewText) throw new Error(MISSING_REVIEW_TEXT_ERROR);
     publishActivity({
       id: 'primary',
       label: '主审查 Agent',
@@ -181,14 +181,12 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     await saveMessages(sessionId, finalMessages);
     throwIfStopped(controller.signal);
     await markReviewSessionCompleted(sessionId);
-    const integrationFailures = verifiedReviewText
-      ? await runReviewCompletionIntegrations(
-          reviewRun.ctx,
-          session,
-          finalMessages,
-          verifiedReviewText,
-        )
-      : [];
+    const integrationFailures = await runReviewCompletionIntegrations(
+      reviewRun.ctx,
+      session,
+      finalMessages,
+      verifiedReviewText,
+    );
     if (integrationFailures.length) {
       log.warn(`审查已完成，但部分外部集成失败 session=${sessionId}`, {
         failures: integrationFailures.map(({ integration, error }) => ({

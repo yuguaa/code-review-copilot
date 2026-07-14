@@ -123,7 +123,7 @@ export function notifyReviewCompleted(session: SessionWithRepository, messages: 
   return sendRepositoryDingtalkNotification(repo, title, text);
 }
 
-export function publishVerifiedReview(ctx: ReviewContext, markdown: string): Promise<'posted' | 'skipped'> {
+export function publishReviewComment(ctx: ReviewContext, markdown: string): Promise<'posted' | 'skipped'> {
   if (!ctx.enableMrComment) return Promise.resolve('skipped');
   if (ctx.mrIid == null) {
     if (!ctx.commitSha) return Promise.resolve('skipped');
@@ -144,19 +144,25 @@ export type ReviewCompletionIntegrationFailure = {
   error: unknown;
 };
 
-/** 审查结论持久化完成后并行执行外部集成；单个渠道失败不能反向污染审查状态。 */
+/** 发布最终可用总评；仅 verified 结论写入记忆，单个渠道失败不能反向污染审查状态。 */
 export function runReviewCompletionIntegrations(
   ctx: ReviewContext,
   session: SessionWithRepository,
   messages: UIMessage[],
-  markdown: string,
+  verifiedMarkdown: string | null,
 ): Promise<ReviewCompletionIntegrationFailure[]> {
-  const integrations = [
-    { integration: 'memory' as const, run: () => rememberVerifiedReview(ctx, markdown) },
-    { integration: 'gitlab' as const, run: () => publishVerifiedReview(ctx, markdown) },
-    { integration: 'dingtalk' as const, run: () => notifyReviewCompleted(session, messages) },
-  ];
-  return Promise.allSettled(integrations.map(({ run }) => run())).then((results) =>
+  const verifiedText = verifiedMarkdown?.trim() ?? '';
+  const publicationText = verifiedText || finalReviewTextOf(messages);
+  const integrations: Array<{
+    integration: ReviewCompletionIntegrationFailure['integration'];
+    run: () => Promise<unknown>;
+  }> = [];
+  if (verifiedText) integrations.push({ integration: 'memory', run: () => rememberVerifiedReview(ctx, verifiedText) });
+  integrations.push(
+    { integration: 'gitlab', run: () => publishReviewComment(ctx, publicationText) },
+    { integration: 'dingtalk', run: () => notifyReviewCompleted(session, messages) },
+  );
+  return Promise.allSettled(integrations.map(({ run }) => Promise.resolve().then(run))).then((results) =>
     results.flatMap((result, index) =>
       result.status === 'rejected'
         ? [{ integration: integrations[index]!.integration, error: result.reason }]

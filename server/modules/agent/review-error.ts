@@ -1,3 +1,5 @@
+export const MISSING_REVIEW_TEXT_ERROR = '主审查 Agent 未返回可展示的审查意见';
+
 function statusCodeOf(error: unknown): number | null {
   if (!error || typeof error !== 'object') return null;
   const record = error as { status?: unknown; statusCode?: unknown };
@@ -16,6 +18,7 @@ export function publicReviewError(error: unknown): string {
   if (raw.startsWith('多模型 Verify')) return '多模型 Verify 配置不满足要求';
   if (raw.startsWith('Verify 分片')) return 'Verify 分片没有可用模型，请检查复核模型配置与服务状态';
   if (raw.startsWith('Verify Agent')) return 'Verify Agent 未能生成有效的最终结论';
+  if (raw === MISSING_REVIEW_TEXT_ERROR) return MISSING_REVIEW_TEXT_ERROR;
   if (raw.startsWith('主审查结果')) return '主审查结果格式无效，请检查主审查模型输出';
   if (raw.startsWith('会话缺少 diff 基准')) return '会话缺少 diff 基准，无法执行审查';
   if (raw.startsWith('未配置全局默认模型')) return '未配置全局默认模型，无法执行审查';

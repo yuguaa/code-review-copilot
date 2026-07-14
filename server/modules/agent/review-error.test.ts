@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { publicReviewError } from './review-error';
+import { MISSING_REVIEW_TEXT_ERROR, publicReviewError } from './review-error';
 
 describe('publicReviewError', () => {
   it('把已知协议错误映射为固定诊断，不公开第三方原文', () => {
@@ -26,5 +26,9 @@ describe('publicReviewError', () => {
     expect(publicReviewError(new Error('主审查结果未明确声明无问题'))).toBe(
       '主审查结果格式无效，请检查主审查模型输出',
     );
+  });
+
+  it('主审查没有返回文本时保留明确错误', () => {
+    expect(publicReviewError(new Error(MISSING_REVIEW_TEXT_ERROR))).toBe(MISSING_REVIEW_TEXT_ERROR);
   });
 });

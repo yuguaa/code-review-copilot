@@ -205,7 +205,7 @@ export function buildReadTools(ctx: WorkspaceContext) {
 
 /**
  * Agent 工具集 = 只读探索 + 可选记忆沉淀 + 发布工具。
- * Webhook 主审查关闭 publish，由系统在 verify 增强成功后确定性发布；追问对话按仓库配置暴露发布工具。
+ * Webhook 主审查关闭 publish，由系统发布最终可用总评；追问对话按仓库配置暴露发布工具。
  */
 export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memoryWrite?: boolean } = {}) {
   const publish = opts.publish ?? false;

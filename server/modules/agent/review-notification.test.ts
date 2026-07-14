@@ -5,7 +5,7 @@ import {
   buildVerifiedMemoryEntry,
   mergeVerifiedReviewMemory,
   notifyReviewCompleted,
-  publishVerifiedReview,
+  publishReviewComment,
   rememberVerifiedReview,
   runReviewCompletionIntegrations,
 } from './review-notification';
@@ -372,14 +372,14 @@ describe('notifyReviewCompleted', () => {
   });
 });
 
-describe('publishVerifiedReview', () => {
+describe('publishReviewComment', () => {
   it('MR 会话发布 verified 总评', async () => {
     const gitlab = {
       createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'discussion-1' }),
     };
 
     await expect(
-      publishVerifiedReview(
+      publishReviewComment(
         {
           gitlab: gitlab as never,
           projectId: 1,
@@ -405,7 +405,7 @@ describe('publishVerifiedReview', () => {
     };
 
     await expect(
-      publishVerifiedReview(
+      publishReviewComment(
         {
           gitlab: gitlab as never,
           projectId: 1,
@@ -461,6 +461,10 @@ describe('verified review memory', () => {
 });
 
 describe('runReviewCompletionIntegrations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('单个外部渠道失败时仍完成其它集成并返回失败明细', async () => {
     const gitlab = {
       createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'discussion-1' }),
@@ -488,5 +492,67 @@ describe('runReviewCompletionIntegrations', () => {
     expect(failures).toEqual([{ integration: 'dingtalk', error: expect.any(Error) }]);
     expect(gitlab.createMergeRequestComment).toHaveBeenCalledWith(1, 2, 'verified 总评');
     expect(writeRepositoryMemory).toHaveBeenCalled();
+  });
+
+  it('Verify 未产出结论时发布主审查结果且不写入 verified 记忆', async () => {
+    const gitlab = {
+      createMergeRequestComment: vi.fn().mockResolvedValue({ id: 'discussion-1' }),
+    };
+
+    const failures = await runReviewCompletionIntegrations(
+      {
+        gitlab: gitlab as never,
+        projectId: 1,
+        mrIid: 2,
+        repoId: 'r1',
+        workdir: '/tmp/repo',
+        diffRef: 'origin/main',
+        commitSha: 'head',
+        diffRefs: null,
+        enableMrComment: true,
+        dingtalkRepository: { enableDingtalk: true, dingtalkWebhook: null, dingtalkSecret: null },
+      },
+      session({ mrIid: 2 }),
+      messages,
+      null,
+    );
+
+    expect(failures).toEqual([]);
+    expect(gitlab.createMergeRequestComment).toHaveBeenCalledWith(1, 2, '审查通过。');
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining('审查通过。'),
+    );
+    expect(writeRepositoryMemory).not.toHaveBeenCalled();
+  });
+
+  it('单个发布渠道同步抛错时仍完成其它渠道', async () => {
+    const gitlab = {
+      createMergeRequestComment: vi.fn(() => {
+        throw new Error('GitLab 不可用');
+      }),
+    };
+
+    const failures = await runReviewCompletionIntegrations(
+      {
+        gitlab: gitlab as never,
+        projectId: 1,
+        mrIid: 2,
+        repoId: 'r1',
+        workdir: '/tmp/repo',
+        diffRef: 'origin/main',
+        commitSha: 'head',
+        diffRefs: null,
+        enableMrComment: true,
+        dingtalkRepository: { enableDingtalk: true, dingtalkWebhook: null, dingtalkSecret: null },
+      },
+      session({ mrIid: 2 }),
+      messages,
+      null,
+    );
+
+    expect(failures).toEqual([{ integration: 'gitlab', error: expect.any(Error) }]);
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalled();
   });
 });

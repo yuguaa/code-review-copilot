@@ -402,8 +402,8 @@ describe('buildInstructions（输出渠道按配置生成）', () => {
   it('开启平台评论与钉钉时，指令说明由系统发布最终采用的结果', () => {
     const text = buildInstructions(repo({ enableMrComment: true, enableDingtalk: true }));
     expect(text).toContain('不要自行发布评论');
-    expect(text).toContain('增强不可用不影响主审查在会话页面完成');
-    expect(text).toContain('自动推送钉钉');
+    expect(text).toContain('否则采用主审查总评');
+    expect(text).toContain('最终可用总评自动推送钉钉');
     expect(text).toContain('verify 增强复核');
   });
 

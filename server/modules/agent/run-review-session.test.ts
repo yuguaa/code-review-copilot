@@ -145,7 +145,12 @@ describe('runReviewSession success contract', () => {
 
     expect(mocks.markReviewSessionCompleted).toHaveBeenCalledWith('session-1');
     expect(mocks.markReviewSessionFailed).not.toHaveBeenCalled();
-    expect(mocks.runReviewCompletionIntegrations).not.toHaveBeenCalled();
+    expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.any(Array),
+      null,
+    );
 
     const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];
     expect(activityStateOf(savedMessages)).toMatchObject({
@@ -162,12 +167,55 @@ describe('runReviewSession success contract', () => {
     );
   });
 
-  it('主审查正文不可判定时仍标记整体失败', async () => {
+  it('主审查已给出意见时不因 Verify 无法解析格式而失败', async () => {
     mocks.streamedMessage = {
       id: 'assistant-1',
       role: 'assistant',
       parts: [{ type: 'text', text: '本次改动整体看起来不错。' }],
     };
+    mocks.verifyReviewResult.mockRejectedValue(
+      new Error('主审查结果未明确声明无问题，且无法提取待裁决问题'),
+    );
+
+    await runReviewSession('session-1');
+
+    expect(mocks.verifyReviewResult).toHaveBeenCalled();
+    expect(mocks.markReviewSessionCompleted).toHaveBeenCalledWith('session-1');
+    expect(mocks.markReviewSessionFailed).not.toHaveBeenCalled();
+    expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.any(Array),
+      null,
+    );
+
+    const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];
+    expect(savedMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'assistant-1',
+        parts: expect.arrayContaining([
+          expect.objectContaining({ type: 'text', text: '本次改动整体看起来不错。' }),
+        ]),
+      }),
+    ]));
+    expect(activityStateOf(savedMessages)).toMatchObject({
+      phase: 'completed',
+      agents: expect.arrayContaining([
+        expect.objectContaining({ id: 'primary', status: 'completed' }),
+        expect.objectContaining({ id: 'verification-result', status: 'failed' }),
+      ]),
+    });
+    expect(activityStateOf(savedMessages)?.agents).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'review-error' })]),
+    );
+  });
+
+  it('主审查只有事件没有文本时失败且不发布', async () => {
+    mocks.streamedMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [{ type: 'step-start' }],
+    } as UIMessage;
 
     await runReviewSession('session-1');
 
@@ -175,8 +223,28 @@ describe('runReviewSession success contract', () => {
     expect(mocks.markReviewSessionCompleted).not.toHaveBeenCalled();
     expect(mocks.markReviewSessionFailed).toHaveBeenCalledWith(
       'session-1',
-      '主审查结果格式无效，请检查主审查模型输出',
+      '主审查 Agent 未返回可展示的审查意见',
     );
+    expect(mocks.runReviewCompletionIntegrations).not.toHaveBeenCalled();
+
+    const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];
+    expect(savedMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: 'assistant',
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'text',
+            text: expect.stringContaining('本轮模型没有返回可展示的文本结果'),
+          }),
+        ]),
+      }),
+    ]));
+    expect(activityStateOf(savedMessages)).toMatchObject({
+      phase: 'failed',
+      agents: expect.arrayContaining([
+        expect.objectContaining({ id: 'review-error', status: 'failed' }),
+      ]),
+    });
   });
 
   it('没有足够的 Verify 模型时显式跳过增强', async () => {
@@ -193,7 +261,13 @@ describe('runReviewSession success contract', () => {
 
     expect(mocks.verifyReviewResult).not.toHaveBeenCalled();
     expect(mocks.markReviewSessionCompleted).toHaveBeenCalledWith('session-1');
-    expect(mocks.runReviewCompletionIntegrations).not.toHaveBeenCalled();
+    expect(mocks.markReviewSessionFailed).not.toHaveBeenCalled();
+    expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.any(Array),
+      null,
+    );
   });
 
   it('Verify 汇总失败时在活动流记录增强终态错误', async () => {
@@ -244,6 +318,7 @@ describe('runReviewSession success contract', () => {
     await runReviewSession('session-1');
 
     expect(mocks.markReviewSessionCompleted).toHaveBeenCalledWith('session-1');
+    expect(mocks.markReviewSessionFailed).not.toHaveBeenCalled();
     expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
