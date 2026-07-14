@@ -21,4 +21,10 @@ describe('publicReviewError', () => {
     expect(result).toBe('Verify 分片没有可用模型，请检查复核模型配置与服务状态');
     expect(result).not.toContain('raw-secret');
   });
+
+  it('主审查正文不可判定时返回主结果错误，而不是 Verify 配置错误', () => {
+    expect(publicReviewError(new Error('主审查结果未明确声明无问题'))).toBe(
+      '主审查结果格式无效，请检查主审查模型输出',
+    );
+  });
 });

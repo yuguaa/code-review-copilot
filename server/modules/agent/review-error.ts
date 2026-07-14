@@ -16,7 +16,7 @@ export function publicReviewError(error: unknown): string {
   if (raw.startsWith('多模型 Verify')) return '多模型 Verify 配置不满足要求';
   if (raw.startsWith('Verify 分片')) return 'Verify 分片没有可用模型，请检查复核模型配置与服务状态';
   if (raw.startsWith('Verify Agent')) return 'Verify Agent 未能生成有效的最终结论';
-  if (raw.startsWith('主审查草稿')) return '主审查草稿无法进入 Verify，请检查主审查模型输出';
+  if (raw.startsWith('主审查结果')) return '主审查结果格式无效，请检查主审查模型输出';
   if (raw.startsWith('会话缺少 diff 基准')) return '会话缺少 diff 基准，无法执行审查';
   if (raw.startsWith('未配置全局默认模型')) return '未配置全局默认模型，无法执行审查';
   if (raw.startsWith('全局默认模型已停用')) return '全局默认模型已停用，无法执行审查';

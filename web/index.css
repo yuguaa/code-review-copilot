@@ -15,6 +15,7 @@
   --surface-selected: #eaf1ff;
   --surface-strong: #e8eef8;
   --surface-dark: #020814;
+  --code-foreground: #e1e4e8;
   --header-surface: rgba(255, 255, 255, 0.96);
   --line-subtle: rgba(2, 8, 20, 0.06);
   --line-default: #e5e7eb;
@@ -596,6 +597,7 @@ a:focus-visible {
   border: 0;
   border-radius: 0;
   background: transparent;
+  color: var(--code-foreground);
   font-size: 0.8125rem;
   line-height: 1.66;
   padding: 1rem;
@@ -705,7 +707,6 @@ a:focus-visible {
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: inherit;
 }
 .streamdown-body [data-streamdown='code-block-body'] span[style*='--sdm-c'] {
   color: var(--sdm-c, inherit);

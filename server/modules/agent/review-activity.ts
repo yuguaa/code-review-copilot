@@ -48,7 +48,6 @@ export function failRunningReviewAgents(state: ReviewActivityState): ReviewActiv
   const now = new Date().toISOString();
   return {
     ...state,
-    phase: 'failed',
     agents: state.agents.map((agent) =>
       agent.status === 'running' || agent.status === 'pending'
         ? { ...agent, status: 'failed', finishedAt: now }

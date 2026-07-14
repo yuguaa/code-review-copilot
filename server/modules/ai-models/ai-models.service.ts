@@ -108,10 +108,9 @@ export function resolveReviewModelConfigs(
   const alternativeVerifiers = distinctModels.filter((config) => !sameModelEndpoint(config, primary));
   const verifiers = alternativeVerifiers.length >= 2
     ? alternativeVerifiers
-    : [...alternativeVerifiers, primary];
-  if (verifiers.length < 2) {
-    throw new Error('多模型 Verify 至少需要配置两个不同的启用模型');
-  }
+    : alternativeVerifiers.length === 1
+      ? [...alternativeVerifiers, primary]
+      : [];
   return {
     primary,
     delegates: activeModelConfigs,

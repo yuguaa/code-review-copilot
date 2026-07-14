@@ -179,10 +179,8 @@ describe('resolveReviewModelConfigs', () => {
     }));
   });
 
-  it('只有一个可用模型时快速失败，不伪装成多模型 Verify', () => {
-    expect(() => resolveReviewModelConfigs(repo(), model(), [])).toThrow(
-      '多模型 Verify 至少需要配置两个不同的启用模型',
-    );
+  it('只有主模型时仍允许启动审查，并跳过多模型 Verify', () => {
+    expect(resolveReviewModelConfigs(repo(), model(), []).verifiers).toEqual([]);
   });
 
   it('存在两个非主模型时 Verify 不再复用主审查模型', () => {
@@ -401,12 +399,12 @@ describe('输出工具的开关控制', () => {
 });
 
 describe('buildInstructions（输出渠道按配置生成）', () => {
-  it('开启平台评论与钉钉时，指令说明验证后由系统发布', () => {
+  it('开启平台评论与钉钉时，指令说明由系统发布最终采用的结果', () => {
     const text = buildInstructions(repo({ enableMrComment: true, enableDingtalk: true }));
     expect(text).toContain('不要自行发布评论');
-    expect(text).toContain('系统会在 verify loop 通过后');
+    expect(text).toContain('增强不可用不影响主审查在会话页面完成');
     expect(text).toContain('自动推送钉钉');
-    expect(text).toContain('verify loop');
+    expect(text).toContain('verify 增强复核');
   });
 
   it('关闭平台评论与钉钉时，指令不出现任何发布渠道', () => {

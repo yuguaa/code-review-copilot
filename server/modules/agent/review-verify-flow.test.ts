@@ -349,7 +349,7 @@ describe('多模型 Verify 编排', () => {
       expect.objectContaining({
         modelId: 'broken-model',
         status: 'failed',
-        task: expect.stringContaining('Invalid JSON response'),
+        task: expect.stringContaining('复核增强失败'),
       }),
       expect.objectContaining({
         modelId: 'invalid-config',

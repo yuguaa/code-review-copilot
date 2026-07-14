@@ -205,7 +205,7 @@ export function buildReadTools(ctx: WorkspaceContext) {
 
 /**
  * Agent 工具集 = 只读探索 + 可选记忆沉淀 + 发布工具。
- * Webhook 主审查关闭 publish，由 verify 后的系统流程确定性发布；追问对话按仓库配置暴露发布工具。
+ * Webhook 主审查关闭 publish，由系统在 verify 增强成功后确定性发布；追问对话按仓库配置暴露发布工具。
  */
 export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memoryWrite?: boolean } = {}) {
   const publish = opts.publish ?? false;
@@ -228,7 +228,7 @@ export function buildTools(ctx: ReviewContext, opts: { publish?: boolean; memory
       ? {
           record_evidence: tool({
             description:
-              '记录本轮审查已经亲自核验过的 CodeMem 证据。只记录能被代码、diff、调用方或项目记忆支撑的材料，供 verify loop 复核。',
+              '记录本轮审查已经亲自核验过的 CodeMem 证据。只记录能被代码、diff、调用方或项目记忆支撑的材料，供可选的 verify 增强复核。',
             inputSchema: z.object({
               fileSummary: z.string().optional().describe('关键文件或模块摘要'),
               evidence: z.string().optional().describe('已确认的问题证据，需包含文件/行号或取证来源'),

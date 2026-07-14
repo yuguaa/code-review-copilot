@@ -176,7 +176,7 @@ export function buildVerifiedReview(
 
 export function assertReviewDraftIsDecidable(draft: string, findings: ParsedReviewFinding[]): void {
   if (findings.length > 0 || isExplicitNoFindingReview(draft)) return;
-  throw new Error('主审查草稿未明确声明无问题，且无法提取待裁决问题，Verify 已中止');
+  throw new Error('主审查结果未明确声明无问题，且无法提取待裁决问题');
 }
 
 function latestAssistantText(messages: UIMessage[]): string {
@@ -191,6 +191,13 @@ function latestAssistantText(messages: UIMessage[]): string {
     )
     .filter(Boolean)
     .at(-1) ?? '';
+}
+
+/** 主审查成功的唯一内容判据：必须产出可被审查协议判定的正文。 */
+export function validatedReviewDraft(messages: UIMessage[]): string {
+  const draft = latestAssistantText(messages).trim();
+  assertReviewDraftIsDecidable(draft, parseReviewFindings(draft));
+  return draft;
 }
 
 function assignmentOffset(seed: string, count: number): number {
@@ -571,9 +578,8 @@ export function verifyReviewResult({
   abortSignal?: AbortSignal;
   onActivity?: ReviewActivityReporter;
 }): Promise<string> {
-  const draft = latestAssistantText(messages).trim();
+  const draft = validatedReviewDraft(messages);
   const draftFindings = parseReviewFindings(draft);
-  assertReviewDraftIsDecidable(draft, draftFindings);
   const assignments = createVerifyAssignments(draftFindings, verifiers, assignmentSeed);
   const distinctVerifiers = distinctReviewVerifiers(verifiers);
   const verifierController = new AbortController();
@@ -632,7 +638,7 @@ export function verifyReviewResult({
         const errorText = publicReviewError(error);
         onActivity?.({
           ...activity,
-          task: `模型调用失败：${errorText}`,
+          task: `复核增强失败：${errorText}`,
           status: 'failed',
         });
         if (candidateIndex + 1 < candidates.length) return runCandidate(candidateIndex + 1);

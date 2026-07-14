@@ -7,7 +7,11 @@ import {
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply } from './review-message';
 import { runReviewCompletionIntegrations } from './review-notification';
-import { verifyReviewResult, withVerifiedReviewText } from './review-verify';
+import {
+  validatedReviewDraft,
+  verifyReviewResult,
+  withVerifiedReviewText,
+} from './review-verify';
 import { createLogger } from '../../shared/logger/logger.service';
 import { publishSessionMessages } from '../sessions/session-events.service';
 import { readUIMessageStream, type UIMessage } from 'ai';
@@ -36,7 +40,7 @@ export function markReviewActivityFailed(
   error: string,
   stopped = false,
 ): ReviewActivityState {
-  return updateReviewAgentActivity(failRunningReviewAgents(state), {
+  return updateReviewAgentActivity(setReviewActivityPhase(failRunningReviewAgents(state), 'failed'), {
     id: 'review-error',
     label: stopped ? '审查已停止' : '审查流程',
     provider: 'system',
@@ -127,37 +131,64 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     }
 
     throwIfStopped(controller.signal);
+    finalMessages = ensureVisibleAssistantReply(finalMessages);
+    validatedReviewDraft(finalMessages);
     publishActivity({
       id: 'primary',
       label: '主审查 Agent',
       provider: reviewRun.primaryConfig.provider,
       modelId: reviewRun.primaryConfig.modelId,
-      task: '主审查草稿与证据收集完成',
+      task: '主审查结果与证据收集完成',
       status: 'completed',
     });
-    finalMessages = ensureVisibleAssistantReply(finalMessages);
-    const verifiedText = await verifyReviewResult({
-      ctx: reviewRun.ctx,
-      messages: finalMessages,
-      verifiers: reviewRun.verifiers,
-      assignmentSeed: session.id,
-      blueprint: reviewRun.blueprint,
-      runtimeMemory: reviewRun.runtimeMemory,
-      abortSignal: controller.signal,
-      onActivity: publishActivity,
-    });
+    const reviewMessages = finalMessages;
+    let verifiedReviewText: string | null = null;
+    if (reviewRun.verifiers.length >= 2) {
+      await Promise.resolve().then(() => verifyReviewResult({
+        ctx: reviewRun.ctx,
+        messages: reviewMessages,
+        verifiers: reviewRun.verifiers,
+        assignmentSeed: session.id,
+        blueprint: reviewRun.blueprint,
+        runtimeMemory: reviewRun.runtimeMemory,
+        abortSignal: controller.signal,
+        onActivity: publishActivity,
+      })).then((verifiedText) => {
+        if (!finalMessages) throw new Error('审查消息状态丢失');
+        finalMessages = withVerifiedReviewText(finalMessages, verifiedText);
+        verifiedReviewText = verifiedText;
+      }).catch((error) => {
+        throwIfStopped(controller.signal);
+        const errorText = publicReviewError(error);
+        log.warn(`复核增强失败，保留主审查结论 session=${sessionId}`, { error: errorText });
+        publishActivity({
+          id: 'verification-result',
+          label: '复核增强',
+          provider: 'system',
+          modelId: 'runtime',
+          task: `复核增强未采用：${errorText}`,
+          status: 'failed',
+        }, 'verifying');
+        if (activity && finalMessages) {
+          activity = failRunningReviewAgents(activity);
+          finalMessages = upsertReviewActivityMessage(finalMessages, activity);
+          publishSessionMessages(sessionId, finalMessages);
+        }
+      });
+    }
     throwIfStopped(controller.signal);
-    finalMessages = withVerifiedReviewText(finalMessages, verifiedText);
     publishPhase('completed');
     await saveMessages(sessionId, finalMessages);
     throwIfStopped(controller.signal);
     await markReviewSessionCompleted(sessionId);
-    const integrationFailures = await runReviewCompletionIntegrations(
-      reviewRun.ctx,
-      session,
-      finalMessages,
-      verifiedText,
-    );
+    const integrationFailures = verifiedReviewText
+      ? await runReviewCompletionIntegrations(
+          reviewRun.ctx,
+          session,
+          finalMessages,
+          verifiedReviewText,
+        )
+      : [];
     if (integrationFailures.length) {
       log.warn(`审查已完成，但部分外部集成失败 session=${sessionId}`, {
         failures: integrationFailures.map(({ integration, error }) => ({

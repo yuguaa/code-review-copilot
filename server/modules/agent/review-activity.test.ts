@@ -47,10 +47,13 @@ describe('review activity', () => {
     });
   });
 
-  it('失败时终止仍在运行的 Agent', () => {
-    const running = updateReviewAgentActivity(createReviewActivityState('run-1'), primary);
+  it('终止仍在运行的 Agent 时不改变整体阶段', () => {
+    const running = updateReviewAgentActivity(
+      { ...createReviewActivityState('run-1'), phase: 'verifying' },
+      primary,
+    );
     expect(failRunningReviewAgents(running)).toMatchObject({
-      phase: 'failed',
+      phase: 'verifying',
       agents: [{ id: 'primary', status: 'failed' }],
     });
   });
