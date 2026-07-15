@@ -10,7 +10,7 @@ describe('shikiCodeHighlighter', () => {
 
     const request = {
       code: 'const id = courseId.value\nif (id !== courseId.value) return',
-      language: 'javascript',
+      language: 'javascript' as const,
       themes: ['github-dark', 'github-dark'] as [ThemeInput, ThemeInput],
     };
     const results: HighlightResult[] = [];
@@ -32,7 +32,9 @@ describe('shikiCodeHighlighter', () => {
       ));
 
       expect(results).toHaveLength(2);
-      expect([...colors]).toEqual(expect.arrayContaining(['#F97583', '#E1E4E8', '#79B8FF']));
+      expect(results[0]).toBe(results[1]);
+      expect([...colors]).toEqual(expect.arrayContaining(['#F97583', '#E1E4E8']));
+      expect(results[0]?.tokens.map((line) => line.map((token) => token.content).join('')).join('\n')).toBe(request.code);
     });
   });
 });

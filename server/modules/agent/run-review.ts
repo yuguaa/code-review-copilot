@@ -3,6 +3,7 @@ import {
   loadMessages,
   mergeStreamingMessage,
   saveMessages,
+  updatePersistedMessageParts,
 } from '../sessions/session-message-store.service';
 import { createReviewStream } from './review-agent';
 import { ensureVisibleAssistantReply, hasAssistantTextAfterLatestUser } from './review-message';
@@ -33,6 +34,62 @@ import { MISSING_REVIEW_TEXT_ERROR, publicReviewError } from './review-error';
 
 const log = createLogger('run-review');
 const activeReviewControllers = new Map<string, AbortController>();
+
+type PendingReviewSnapshot = { messages: UIMessage[]; full: boolean };
+
+function createReviewSnapshotPersister(sessionId: string, activityMessageId: string) {
+  let pending: PendingReviewSnapshot | null = null;
+  let running: Promise<void> | null = null;
+  let failure: unknown = null;
+
+  const persist = ({ messages, full }: PendingReviewSnapshot): Promise<void> => {
+    if (full) return saveMessages(sessionId, messages);
+    const activityMessage = messages.find((message) => message.id === activityMessageId);
+    return activityMessage
+      ? updatePersistedMessageParts(sessionId, activityMessage)
+      : Promise.reject(new Error(`审查活动消息不存在：${activityMessageId}`));
+  };
+
+  const drain = (): Promise<void> => {
+    if (running) return running;
+    const writeNext = (): Promise<void> => {
+      const snapshot = pending;
+      pending = null;
+      return snapshot ? persist(snapshot).then(writeNext) : Promise.resolve();
+    };
+    running = Promise.resolve()
+      .then(writeNext)
+      .catch((error) => {
+        failure = error;
+      })
+      .finally(() => {
+        running = null;
+        if (pending && !failure) void drain();
+      });
+    return running;
+  };
+
+  const waitForIdle = (): Promise<void> => {
+    if (failure) return Promise.reject(failure);
+    if (running) return running.then(waitForIdle);
+    if (pending) return drain().then(waitForIdle);
+    return Promise.resolve();
+  };
+
+  return {
+    schedule(snapshot: UIMessage[]) {
+      if (failure) return;
+      pending = { messages: snapshot, full: pending?.full === true };
+      void drain();
+    },
+    flush(snapshot?: UIMessage[]) {
+      if (snapshot) pending = { messages: snapshot, full: true };
+      else if (pending) pending = { ...pending, full: true };
+      if (!failure) void drain();
+      return waitForIdle();
+    },
+  };
+}
 
 export function markReviewActivityFailed(
   state: ReviewActivityState,
@@ -76,6 +133,8 @@ export function stopRunningReviewSession(sessionId: string): boolean {
  */
 export async function runReviewSession(sessionId: string): Promise<void> {
   const controller = new AbortController();
+  const reviewRunId = randomUUID();
+  const snapshotPersister = createReviewSnapshotPersister(sessionId, `review-activity-${reviewRunId}`);
   activeReviewControllers.set(sessionId, controller);
   let finalMessages: UIMessage[] | null = null;
   let activity: ReviewActivityState | null = null;
@@ -86,12 +145,14 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     if (phase) activity = setReviewActivityPhase(activity, phase);
     finalMessages = upsertReviewActivityMessage(finalMessages, activity);
     publishSessionMessages(sessionId, finalMessages);
+    snapshotPersister.schedule(finalMessages);
   };
   const publishPhase = (phase: ReviewActivityState['phase']) => {
     if (!activity || !finalMessages) return;
     activity = setReviewActivityPhase(activity, phase);
     finalMessages = upsertReviewActivityMessage(finalMessages, activity);
     publishSessionMessages(sessionId, finalMessages);
+    snapshotPersister.schedule(finalMessages);
   };
 
   try {
@@ -103,9 +164,9 @@ export async function runReviewSession(sessionId: string): Promise<void> {
 
     throwIfStopped(controller.signal);
     const initial = await loadMessages(sessionId);
-    activity = createReviewActivityState(randomUUID());
+    activity = createReviewActivityState(reviewRunId);
     finalMessages = upsertReviewActivityMessage(initial, activity);
-    await saveMessages(sessionId, finalMessages);
+    await snapshotPersister.flush(finalMessages);
     publishSessionMessages(sessionId, finalMessages);
     const reviewRun = await createReviewStream({
       session,
@@ -178,7 +239,7 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     }
     throwIfStopped(controller.signal);
     publishPhase('completed');
-    await saveMessages(sessionId, finalMessages);
+    await snapshotPersister.flush(finalMessages);
     throwIfStopped(controller.signal);
     await markReviewSessionCompleted(sessionId);
     const integrationFailures = await runReviewCompletionIntegrations(
@@ -208,7 +269,7 @@ export async function runReviewSession(sessionId: string): Promise<void> {
       activity = markReviewActivityFailed(activity, message, stopped);
       const failureMessages = upsertReviewActivityMessage(finalMessages, activity);
       finalMessages = failureMessages;
-      await saveMessages(sessionId, failureMessages)
+      await snapshotPersister.flush(failureMessages)
         .then(() => publishSessionMessages(sessionId, failureMessages))
         .catch((saveError) => log.error(`审查失败消息落库失败 session=${sessionId}`, saveError));
     }

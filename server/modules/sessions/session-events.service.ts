@@ -13,8 +13,11 @@ type SessionEvent =
 
 type Client = {
   controller: ReadableStreamDefaultController<Uint8Array>;
+  pending: Array<{ type: string; chunk: Uint8Array }>;
+  close: () => void;
 };
 
+const MAX_PENDING_EVENTS = 32;
 const encoder = new TextEncoder();
 const clients = new Map<string, Set<Client>>();
 const listClients = new Set<Client>();
@@ -69,23 +72,34 @@ function createClientStream(
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      client = { controller };
-      clientSet.add(client);
-      controller.enqueue(encoder.encode(': connected\n\n'));
-
-      close = () => {
+      const closeClient = () => {
         if (!client) return;
-        clientSet.delete(client);
-        if (clientSet.size === 0) onEmpty?.();
+        const closingClient = client;
         client = null;
+        clientSet.delete(closingClient);
+        if (clientSet.size === 0) onEmpty?.();
+        signal?.removeEventListener('abort', closeClient);
         try {
           controller.close();
         } catch {
           // 连接可能已由浏览器关闭。
         }
       };
+      client = { controller, pending: [], close: closeClient };
+      close = closeClient;
+      clientSet.add(client);
+      controller.enqueue(encoder.encode(': connected\n\n'));
 
-      signal?.addEventListener('abort', close, { once: true });
+      signal?.addEventListener('abort', closeClient, { once: true });
+    },
+    pull(controller) {
+      const pending = client?.pending.shift();
+      if (!pending) return;
+      try {
+        controller.enqueue(pending.chunk);
+      } catch {
+        close?.();
+      }
     },
     cancel() {
       close?.();
@@ -98,10 +112,21 @@ function publishClients(clientSet: Set<Client>, event: { type: string }): void {
 
   const chunk = encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
   for (const client of clientSet) {
+    if (client.pending.length > 0 || (client.controller.desiredSize ?? 0) <= 0) {
+      if (event.type === 'messages') {
+        client.pending = client.pending.filter((pending) => pending.type !== 'messages');
+      }
+      if (client.pending.length >= MAX_PENDING_EVENTS) {
+        client.close();
+        continue;
+      }
+      client.pending.push({ type: event.type, chunk });
+      continue;
+    }
     try {
       client.controller.enqueue(chunk);
     } catch {
-      clientSet.delete(client);
+      client.close();
     }
   }
 }

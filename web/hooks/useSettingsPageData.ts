@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import type { AgentSkillItem, AgentToolItem } from '../lib/types';
+import type { AIModelSummary, AgentSkillItem, AgentToolItem } from '../lib/types';
 
 export type Account = {
   id: string;
@@ -11,14 +11,8 @@ export type Account = {
   hasWebhookSecret: boolean;
 };
 
-export type AIModel = {
-  id: string;
-  provider: string;
-  modelId: string;
-  apiBaseUrl: string | null;
+export type AIModel = AIModelSummary & {
   maxSteps: number;
-  isDefault: boolean;
-  isActive: boolean;
   hasApiKey: boolean;
 };
 

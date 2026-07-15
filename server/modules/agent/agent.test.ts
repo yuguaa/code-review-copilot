@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { generateText } from 'ai';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import {
   modelEndpointKey,
   resolveModel,
@@ -10,10 +11,16 @@ import { buildInstructions, hasDelegateToolsAvailable } from './review-agent';
 import { buildDelegateTools } from './subagents';
 import type { ReviewBlueprint } from './review-blueprint';
 import { createReviewRuntimeMemory } from './review-runtime-memory';
+import type { ReviewAgentTraceStepSource } from './review-activity';
 import { signedUrl } from '../../shared/dingtalk/dingtalk.service';
 import type { GitLabService } from '../../shared/gitlab/gitlab.service';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
 import { sendRepositoryDingtalkNotification } from '../notifications/notifications.service';
+
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  return { ...actual, generateText: vi.fn() };
+});
 
 vi.mock('../notifications/notifications.service', () => ({
   sendRepositoryDingtalkNotification: vi.fn().mockResolvedValue('sent'),
@@ -21,6 +28,7 @@ vi.mock('../notifications/notifications.service', () => ({
 
 // 工具执行时 AI SDK 传入的 options（这里只需占位）。
 const toolOpts = { toolCallId: 't1', messages: [] } as never;
+const generateTextMock = generateText as unknown as Mock;
 
 describe('resolveModel', () => {
   it('缺配置/缺 key/未知 provider 时快速失败', () => {
@@ -367,8 +375,48 @@ describe('输出工具的开关控制', () => {
     expect(hasDelegateToolsAvailable(undefined, 0)).toBe(false);
   });
 
+  it('逐步上报专项 Agent 工具轨迹，并隔离同类多次委派', () => {
+    const activities: Array<{ id: string; status: string; trace?: { steps: unknown[]; output?: string } }> = [];
+    const step = {
+      callId: 'delegate-call',
+      stepNumber: 0,
+      text: '正在核对鉴权入口。',
+      finishReason: 'tool-calls',
+      toolCalls: [{ toolCallId: 'read-1', toolName: 'read_file', input: { path: 'src/auth.ts' } }],
+      toolResults: [{ toolCallId: 'read-1', output: 'RAW_TOOL_OUTPUT_SHOULD_NOT_PERSIST' }],
+      content: [],
+    } satisfies ReviewAgentTraceStepSource;
+    generateTextMock.mockImplementation((options: { onStepEnd?: (value: ReviewAgentTraceStepSource) => void }) => {
+      options.onStepEnd?.(step);
+      return Promise.resolve({ text: '未发现安全问题\nAuthorization: Basic dXNlcjpwYXNzd29yZA==' });
+    });
+    const tools = buildDelegateTools(fakeContext(), [{
+      model: {} as never,
+      config: { provider: 'openai', modelId: 'gpt-5', apiKey: 'key', maxSteps: 16 },
+    }], (activity) => activities.push(activity));
+
+    return Promise.all([
+      tools.delegate_security!.execute!({ task: '检查鉴权' }, { toolCallId: 'delegate-a', messages: [] } as never),
+      tools.delegate_security!.execute!({ task: '检查上传' }, { toolCallId: 'delegate-b', messages: [] } as never),
+    ]).then((results) => {
+      expect(results).toHaveLength(2);
+      expect(results.every((result) => typeof result === 'string' && result.includes('未发现安全问题'))).toBe(true);
+      expect(results.every((result) => typeof result === 'string' && result.includes('已脱敏'))).toBe(true);
+      expect(results.every((result) => typeof result === 'string' && !result.includes('dXNlcjpwYXNzd29yZA=='))).toBe(true);
+      const completed = activities.filter((activity) => activity.status === 'completed');
+      expect(completed.map((activity) => activity.id)).toEqual([
+        'delegate-security-delegate-a',
+        'delegate-security-delegate-b',
+      ]);
+      expect(completed.every((activity) => activity.trace?.steps.length === 1)).toBe(true);
+      expect(completed.every((activity) => activity.trace?.output?.includes('未发现安全问题'))).toBe(true);
+      expect(completed.every((activity) => activity.trace?.output?.includes('已脱敏'))).toBe(true);
+      expect(JSON.stringify(completed)).not.toContain('RAW_TOOL_OUTPUT_SHOULD_NOT_PERSIST');
+    });
+  });
+
   it('专项模型配置错误只让当前委派失败，不阻断工具构造', async () => {
-    const activities: Array<{ modelId: string; status: string }> = [];
+    const activities: Array<{ modelId: string; status: string; trace?: { errorText?: string } }> = [];
     const tools = buildDelegateTools(fakeContext(), [{
       config: { provider: 'invalid-provider', modelId: 'broken-delegate', apiKey: 'key', maxSteps: 16 },
     }], (activity) => activities.push(activity));
@@ -378,7 +426,11 @@ describe('输出工具的开关控制', () => {
       '不支持的模型 provider',
     );
     expect(activities).toEqual(expect.arrayContaining([
-      expect.objectContaining({ modelId: 'broken-delegate', status: 'failed' }),
+      expect.objectContaining({
+        modelId: 'broken-delegate',
+        status: 'failed',
+        trace: expect.objectContaining({ errorText: expect.stringContaining('provider') }),
+      }),
     ]));
   });
 

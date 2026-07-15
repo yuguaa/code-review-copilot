@@ -213,6 +213,24 @@ export async function saveMessages(sessionId: string, messages: UIMessage[]): Pr
   ]);
 }
 
+/** 运行中只更新已落库消息的 parts，避免每个流事件重复 upsert 整条 active path。 */
+export function updatePersistedMessageParts(sessionId: string, message: UIMessage): Promise<void> {
+  return prisma.$transaction((transaction) =>
+    transaction.message
+      .updateMany({
+        where: { id: message.id, sessionId },
+        data: { parts: message.parts as object },
+      })
+      .then(({ count }) => {
+        if (count !== 1) throw new Error(`待更新消息不存在：${message.id}`);
+        return transaction.session.update({
+          where: { id: sessionId },
+          data: { updatedAt: new Date() },
+        });
+      }),
+  ).then(() => undefined);
+}
+
 export async function setActiveMessage(sessionId: string, messageId: string): Promise<SessionMessageTree | null> {
   const rows = await prisma.message.findMany({
     where: { sessionId },

@@ -2,9 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import type { UIMessage } from 'ai';
 import Brain from 'lucide-react/dist/esm/icons/brain';
 import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right';
-import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
 import CircleDashed from 'lucide-react/dist/esm/icons/circle-dashed';
-import CircleX from 'lucide-react/dist/esm/icons/circle-x';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import ThumbsDown from 'lucide-react/dist/esm/icons/thumbs-down';
 import ThumbsUp from 'lucide-react/dist/esm/icons/thumbs-up';
@@ -14,29 +12,9 @@ import { isBoundaryPart, isReviewActivityPart, type MessagePart } from './messag
 import { extractReviewFindings } from './review-findings';
 import type { MessageFeedbackValue, MessageFindingFeedback } from '../../lib/types';
 import { ReviewAgentActivity } from './ReviewAgentActivity';
+import { JsonPanel, ToolEvidenceBlock } from './ToolEvidenceBlock';
 
 const MarkdownBlock = lazy(() => import('./MarkdownBlock').then((module) => ({ default: module.MarkdownBlock })));
-
-const TOOL_LABEL: Record<string, string> = {
-  bash: '执行命令',
-  read_file: '读取文件',
-  git_diff: '查看变更 diff',
-  read_memory: '读取项目记忆',
-  write_memory: '更新项目记忆',
-  record_evidence: '记录审查证据',
-  post_review_comment: '发布审查评论',
-  post_inline_comment: '发布行级评论',
-  send_dingtalk_notification: '发送钉钉通知',
-  delegate_security: '委派安全审查',
-  delegate_architecture: '委派架构审查',
-  delegate_performance: '委派性能审查',
-};
-
-function toolName(part: Record<string, unknown>): string {
-  const type = String(part.type ?? '');
-  const raw = type === 'dynamic-tool' ? String(part.toolName ?? '') : type.replace(/^tool-/, '');
-  return TOOL_LABEL[raw] ?? raw;
-}
 
 function isTool(part: MessagePart): boolean {
   return part.type === 'dynamic-tool' || part.type.startsWith('tool-');
@@ -79,56 +57,6 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
   );
 }
 
-function JsonPanel({ label, value, strong }: { label: string; value: unknown; strong?: boolean }) {
-  return (
-    <div className="space-y-1">
-      <span className="caption text-[var(--muted-soft)]">{label}</span>
-      <pre
-        className={cn(
-          'max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--r-sm)] border border-[var(--line-subtle)] bg-[var(--surface-soft)] px-3 py-2.5 font-mono text-[11px] leading-relaxed',
-          strong ? 'text-[var(--body-strong)]' : 'text-[var(--body)]',
-        )}
-      >
-        {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-      </pre>
-    </div>
-  );
-}
-
-function ToolBlock({ part }: { part: MessagePart }) {
-  const [open, setOpen] = useState(false);
-  const record = part as unknown as Record<string, unknown>;
-  const state = String(record.state ?? '');
-  const done = state === 'output-available';
-  const errored = state === 'output-error';
-  const running = !done && !errored;
-  const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
-  return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)]">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]"
-      >
-        <StatusIcon
-          size={13}
-          className={cn('shrink-0', errored ? 'text-[var(--error)]' : done ? 'text-[var(--success)]' : 'animate-spin text-[var(--warning)]')}
-        />
-        <span className={cn('caption truncate', errored ? 'text-[var(--error)]' : 'text-[var(--body-strong)]')}>{toolName(record)}</span>
-        {running && <span className="shrink-0 text-[var(--muted-soft)]">执行中</span>}
-        <ChevronRight size={12} className={cn('ml-auto shrink-0 text-[var(--muted-soft)] transition-transform', open && 'rotate-90')} />
-      </button>
-      {open && (
-        <div className="space-y-2 border-t border-[var(--line-subtle)] bg-[var(--surface-soft)]/78 px-3 py-2.5">
-          {record.input != null && <JsonPanel label="输入" value={record.input} />}
-          {record.output != null && <JsonPanel label="输出" value={record.output} strong />}
-          {errored && record.errorText != null && <pre className="whitespace-pre-wrap break-words text-[11px] text-[var(--error)]">{String(record.errorText)}</pre>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function UnknownBlock({ part }: { part: MessagePart }) {
   const [open, setOpen] = useState(false);
   return (
@@ -157,7 +85,7 @@ export function MessageBlockRenderer({
   onFindingFeedback?: (messageId: string, feedback: MessageFeedbackValue, findingText: string) => void;
 }) {
   if (isBoundaryPart(part)) return null;
-  if (isReviewActivityPart(part)) return <ReviewAgentActivity data={part.data} />;
+  if (role === 'assistant' && isReviewActivityPart(part)) return <ReviewAgentActivity data={part.data} />;
   if (part.type === 'text') {
     if (role !== 'assistant') return <PlainTextBlock text={part.text} />;
     const isStreaming = streaming || (part as { state?: string }).state === 'streaming';
@@ -188,7 +116,7 @@ export function MessageBlockRenderer({
     );
   }
   if (part.type === 'reasoning') return <ReasoningBlock part={part} />;
-  if (isTool(part)) return <ToolBlock part={part} />;
+  if (isTool(part)) return <ToolEvidenceBlock part={part as unknown as Record<string, unknown>} />;
   return <UnknownBlock part={part} />;
 }
 

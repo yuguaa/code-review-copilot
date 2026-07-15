@@ -3,6 +3,8 @@ import Command from 'lucide-react/dist/esm/icons/command';
 import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import SendHorizontal from 'lucide-react/dist/esm/icons/send-horizontal';
 import Square from 'lucide-react/dist/esm/icons/square';
+import type { ChatModelOption } from '../../lib/types';
+import { Select } from '../ui/forms';
 import { CommandPalette } from './CommandPalette';
 import type { ComposerCommand } from './composer-types';
 import { RichComposerEditor, type RichComposerEditorHandle } from './RichComposerEditor';
@@ -14,9 +16,13 @@ type ComposerProps = {
   busy?: boolean;
   commands: ComposerCommand[];
   disabled?: boolean;
+  modelOptions: ChatModelOption[];
+  modelsLoading?: boolean;
+  onModelChange: (modelId: string) => void;
   onStop: () => void;
   onSubmit: (text: string) => void;
   placeholder: string;
+  selectedModelId: string;
   stoppable?: boolean;
   stopping?: boolean;
   stopLabel?: string;
@@ -27,10 +33,14 @@ export function Composer({
   disabled,
   busy,
   commands,
+  modelOptions,
+  modelsLoading,
+  onModelChange,
   onSubmit,
   onStop,
   stoppable,
   stopping,
+  selectedModelId,
   stopLabel = '停止生成',
 }: ComposerProps) {
   const [empty, setEmpty] = useState(true);
@@ -140,6 +150,23 @@ export function Composer({
           onTextChange={handleTextChange}
           placeholder={placeholder}
         />
+        <div className="flex min-w-0 items-center px-2 pb-1">
+          <Select
+            aria-label="选择追问模型"
+            title="选择追问模型"
+            value={selectedModelId}
+            disabled={editorDisabled || modelsLoading || modelOptions.length === 0}
+            onChange={(event) => onModelChange(event.target.value)}
+            className="h-10 min-w-0 w-full max-w-[260px] truncate py-0 text-sm"
+          >
+            <option value="">{modelsLoading ? '加载可用模型…' : '默认（按会话配置）'}</option>
+            {modelOptions.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label}
+              </option>
+            ))}
+          </Select>
+        </div>
       </div>
       {open && <CommandPalette activeCommand={activeCommand} commands={availableCommands} onSelect={selectCommand} />}
       <button

@@ -1,6 +1,40 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UIMessage } from 'ai';
-import { CHAT_INSTRUCTIONS, resolveChatPublishAuthorization, toChatHistory } from './chat-agent';
+
+const mocks = vi.hoisted(() => ({
+  convertToModelMessages: vi.fn(),
+  loadGlobalDefaultModel: vi.fn(),
+  resolveGlobalModelConfig: vi.fn(),
+  resolveModel: vi.fn(),
+  streamText: vi.fn(),
+}));
+
+vi.mock('ai', async (importOriginal) => ({
+  ...await importOriginal<typeof import('ai')>(),
+  convertToModelMessages: mocks.convertToModelMessages,
+  streamText: mocks.streamText,
+}));
+
+vi.mock('../ai-models/ai-models.service', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../ai-models/ai-models.service')>(),
+  loadGlobalDefaultModel: mocks.loadGlobalDefaultModel,
+  resolveGlobalModelConfig: mocks.resolveGlobalModelConfig,
+  resolveModel: mocks.resolveModel,
+}));
+
+import {
+  CHAT_INSTRUCTIONS,
+  createChatStream,
+  resolveChatPublishAuthorization,
+  toChatHistory,
+} from './chat-agent';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.convertToModelMessages.mockResolvedValue([]);
+  mocks.resolveModel.mockReturnValue({ id: 'language-model' });
+  mocks.streamText.mockReturnValue({ id: 'chat-stream' });
+});
 
 describe('CHAT_INSTRUCTIONS', () => {
   it('只允许在最新用户消息明确授权时调用发布工具', () => {
@@ -57,6 +91,43 @@ describe('toChatHistory（对话上下文整理）', () => {
     ];
 
     expect(toChatHistory(messages)).toEqual([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '你好' }] }]);
+  });
+});
+
+describe('createChatStream 模型覆盖', () => {
+  const session = { id: 'session-1', repository: null } as never;
+  const selectedModelConfig = {
+    provider: 'openai-compatible',
+    modelId: 'selected-model',
+    apiKey: 'selected-key',
+    apiBaseUrl: 'https://selected.test/v1',
+    maxSteps: 12,
+  };
+
+  it('显式选择模型时跳过全局默认解析并直接创建流', async () => {
+    const result = await createChatStream({ session, messages: [], selectedModelConfig });
+
+    expect(result).toEqual({ id: 'chat-stream' });
+    expect(mocks.loadGlobalDefaultModel).not.toHaveBeenCalled();
+    expect(mocks.resolveGlobalModelConfig).not.toHaveBeenCalled();
+    expect(mocks.resolveModel).toHaveBeenCalledWith(selectedModelConfig);
+    expect(mocks.streamText).toHaveBeenCalledWith(expect.objectContaining({
+      model: { id: 'language-model' },
+      messages: [],
+    }));
+  });
+
+  it('未选择模型时继续使用全局默认路径', async () => {
+    const globalModel = { id: 'global-model' };
+    const globalConfig = { ...selectedModelConfig, modelId: 'global-model' };
+    mocks.loadGlobalDefaultModel.mockResolvedValue(globalModel);
+    mocks.resolveGlobalModelConfig.mockReturnValue(globalConfig);
+
+    await createChatStream({ session, messages: [] });
+
+    expect(mocks.loadGlobalDefaultModel).toHaveBeenCalledOnce();
+    expect(mocks.resolveGlobalModelConfig).toHaveBeenCalledWith(globalModel);
+    expect(mocks.resolveModel).toHaveBeenCalledWith(globalConfig);
   });
 });
 

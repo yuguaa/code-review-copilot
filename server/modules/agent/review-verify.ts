@@ -1,11 +1,25 @@
-import { generateText, stepCountIs, tool, type LanguageModel, type ModelMessage, type UIMessage } from 'ai';
+import {
+  generateText,
+  stepCountIs,
+  tool,
+  type LanguageModel,
+  type ModelMessage,
+  type UIMessage,
+} from 'ai';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { buildReadTools, readWorkspaceLine, type ReviewContext } from './tools';
 import { renderReviewBlueprint, type ReviewBlueprint } from './review-blueprint';
 import { renderReviewRuntimeMemory, type ReviewRuntimeMemory } from './review-runtime-memory';
 import { modelEndpointKey, resolveModel, type ModelConfig } from '../ai-models/ai-models.service';
-import type { ReviewActivityReporter } from './review-activity';
+import {
+  appendReviewAgentTraceStep,
+  completeReviewAgentTrace,
+  createReviewAgentTrace,
+  failReviewAgentTrace,
+  type ReviewActivityReporter,
+  type ReviewAgentTraceStepSource,
+} from './review-activity';
 import { publicReviewError } from './review-error';
 import {
   extractReviewFileReferences,
@@ -368,6 +382,7 @@ export function verifyReviewAgent({
   blueprint,
   runtimeMemory,
   abortSignal,
+  onStepEnd,
 }: {
   ctx: ReviewContext;
   draft: string;
@@ -377,6 +392,7 @@ export function verifyReviewAgent({
   blueprint?: ReviewBlueprint;
   runtimeMemory?: ReviewRuntimeMemory;
   abortSignal?: AbortSignal;
+  onStepEnd?: (step: ReviewAgentTraceStepSource) => void;
 }): Promise<VerifyAgentResult> {
   const evidenceById = new Map<string, VerifyEvidence>();
   let verifiedSubmission: VerifiedReviewSubmission | null = null;
@@ -452,6 +468,7 @@ export function verifyReviewAgent({
     tools,
     stopWhen: [completed, stepCountIs(Math.max(1, maxSteps))],
     abortSignal,
+    onStepEnd,
   }).then((investigation) => {
     const investigationResult = result();
     if (investigationResult) return investigationResult;
@@ -467,6 +484,7 @@ export function verifyReviewAgent({
       tools,
       stopWhen: [completed, stepCountIs(verifyContinuationSteps(maxSteps))],
       abortSignal,
+      onStepEnd,
     }).then((continuation) => {
       const continuationResult = result();
       if (continuationResult) return continuationResult;
@@ -483,6 +501,7 @@ export function verifyReviewAgent({
         toolChoice: { type: 'tool', toolName: 'submit_verified_review' },
         stopWhen: [completed, stepCountIs(VERIFY_FINALIZATION_ATTEMPTS)],
         abortSignal,
+        onStepEnd,
       }).then(() => {
         const finalResult = result();
         if (finalResult) return finalResult;
@@ -595,6 +614,7 @@ export function verifyReviewResult({
       modelId: assignment.verifier.config.modelId,
       task: assignment.task,
       status: 'pending',
+      trace: createReviewAgentTrace(assignment.task),
     }, index === 0 ? 'verifying' : undefined);
   });
 
@@ -613,6 +633,7 @@ export function verifyReviewResult({
       const candidate = candidates[candidateIndex];
       if (!candidate) return Promise.reject(new Error(`Verify 分片 ${assignment.id} 的所有候选模型均不可用`));
       const fallback = candidateIndex > 0;
+      let trace = createReviewAgentTrace(assignment.task);
       const activity = {
         id: fallback ? `${assignment.id}-fallback-${candidateIndex}` : assignment.id,
         label: fallback ? `${assignment.label} 故障转移 ${candidateIndex}` : assignment.label,
@@ -620,7 +641,7 @@ export function verifyReviewResult({
         modelId: candidate.config.modelId,
         task: assignment.task,
       };
-      onActivity?.({ ...activity, status: 'running' });
+      onActivity?.({ ...activity, status: 'running', trace });
       return Promise.resolve().then(() => verifyReviewAgent({
         ctx,
         draft,
@@ -630,16 +651,23 @@ export function verifyReviewResult({
         blueprint,
         runtimeMemory,
         abortSignal: verifierSignal,
+        onStepEnd: (step) => {
+          trace = appendReviewAgentTraceStep(trace, step);
+          onActivity?.({ ...activity, status: 'running', trace });
+        },
       })).then((result) => {
-        onActivity?.({ ...activity, status: 'completed' });
+        trace = completeReviewAgentTrace(trace, result.submission);
+        onActivity?.({ ...activity, status: 'completed', trace });
         return result;
       }).catch((error) => {
         if (verifierSignal.aborted) throw error;
         const errorText = publicReviewError(error);
+        trace = failReviewAgentTrace(trace, errorText);
         onActivity?.({
           ...activity,
           task: `复核增强失败：${errorText}`,
           status: 'failed',
+          trace,
         });
         if (candidateIndex + 1 < candidates.length) return runCandidate(candidateIndex + 1);
         const terminalError = new Error(`Verify 分片 ${assignment.id} 的所有候选模型均不可用：${errorText}`);

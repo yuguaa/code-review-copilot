@@ -4,7 +4,16 @@ import { buildReadTools, type ReviewContext } from './tools';
 import type { ToolKey } from '../tools/tools.service';
 import { recordRuntimeEvidence } from './review-runtime-memory';
 import { resolveModel, type ModelConfig } from '../ai-models/ai-models.service';
-import type { ReviewActivityReporter } from './review-activity';
+import {
+  appendReviewAgentTraceStep,
+  completeReviewAgentTrace,
+  createReviewAgentTrace,
+  failReviewAgentTrace,
+  sanitizeReviewAgentResult,
+  sanitizeReviewAgentText,
+  type ReviewActivityReporter,
+} from './review-activity';
+import { publicReviewError } from './review-error';
 
 const RECON = '你工作在一个已 checkout 好的本地仓库（cwd 即仓库根），用 bash（grep/rg/find/cat/git log 等只读命令）、read_file、git_diff 在工作区自行取证。';
 
@@ -52,17 +61,20 @@ export function buildDelegateTools(
     tool({
       description: `委派${spec.label}专项 agent 独立复核本次变更，返回它的发现。当你判断变更涉及${spec.label}相关风险时调用。`,
       inputSchema: z.object({
-        task: z.string().describe(`要${spec.label} agent 重点复核的内容（可附上你已知的变更范围）`),
+        task: z.string()
+          .transform(sanitizeReviewAgentText)
+          .describe(`要${spec.label} agent 重点复核的内容（可附上你已知的变更范围）`),
       }),
-      execute: ({ task }, { abortSignal }) => {
+      execute: ({ task }, { abortSignal, toolCallId }) => {
+        let trace = createReviewAgentTrace(task);
         const activity = {
-          id: spec.id,
+          id: `${spec.id}-${toolCallId}`,
           label: `${spec.label}专项 Agent`,
           provider: spec.config.provider,
           modelId: spec.config.modelId,
           task,
         };
-        onActivity?.({ ...activity, status: 'running' });
+        onActivity?.({ ...activity, status: 'running', trace });
         return Promise.resolve()
           .then(() => generateText({
             model: spec.model ?? resolveModel(spec.config),
@@ -71,19 +83,26 @@ export function buildDelegateTools(
             tools: buildReadTools(ctx), // subagent 只读，不发评论、不写记忆
             stopWhen: stepCountIs(Math.max(1, spec.config.maxSteps)),
             abortSignal,
+            onStepEnd: (step) => {
+              trace = appendReviewAgentTraceStep(trace, step);
+              onActivity?.({ ...activity, status: 'running', trace });
+            },
           }))
           .then((result) => {
+            const safeResult = sanitizeReviewAgentResult(result.text);
+            trace = completeReviewAgentTrace(trace, result.text.trim() || '未返回结果');
             if (ctx.runtimeMemory) {
               recordRuntimeEvidence(ctx.runtimeMemory, {
-                delegateFinding: `${spec.label}专项：${result.text.trim() || '未返回发现'}`,
+                delegateFinding: `${spec.label}专项：${safeResult.trim() || '未返回发现'}`,
               });
             }
-            onActivity?.({ ...activity, status: 'completed' });
-            return result.text;
+            onActivity?.({ ...activity, status: 'completed', trace });
+            return safeResult;
           })
           .catch((error) => {
             if (abortSignal?.aborted) throw error;
-            onActivity?.({ ...activity, status: 'failed' });
+            trace = failReviewAgentTrace(trace, publicReviewError(error));
+            onActivity?.({ ...activity, status: 'failed', trace });
             throw error;
           });
       },

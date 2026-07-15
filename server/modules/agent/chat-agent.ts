@@ -1,5 +1,11 @@
 import { streamText, stepCountIs, convertToModelMessages, type ToolSet, type UIMessage } from 'ai';
-import { loadGlobalDefaultModel, resolveGlobalModelConfig, resolveModel, resolveRepositoryModelConfig } from '../ai-models/ai-models.service';
+import {
+  loadGlobalDefaultModel,
+  resolveGlobalModelConfig,
+  resolveModel,
+  resolveRepositoryModelConfig,
+  type ModelConfig,
+} from '../ai-models/ai-models.service';
 import {
   buildPublishContext,
   buildPublishTools,
@@ -91,13 +97,20 @@ export function resolveChatPublishAuthorization(messages: UIMessage[]): Readonly
  * 创建一次追问对话的流式运行：直接和模型对话，必要时由模型自主调用只读或发布工具。
  * 发布工具不依赖工作区；工作区准备失败时，只读能力不可用但明确授权的发送请求仍可执行。
  */
-export async function createChatStream(opts: { session: SessionWithRepository; messages: UIMessage[] }) {
+export async function createChatStream(opts: {
+  session: SessionWithRepository;
+  messages: UIMessage[];
+  selectedModelConfig?: ModelConfig;
+}) {
   const repo = opts.session.repository;
-  const globalDefaultModel = await loadGlobalDefaultModel();
-  // 未绑定仓库的会话（sessions API 允许）用全局默认模型，不要求仓库模型配置
-  const modelConfig = repo
-    ? resolveRepositoryModelConfig(repo, globalDefaultModel)
-    : resolveGlobalModelConfig(globalDefaultModel);
+  const modelConfig: ModelConfig = opts.selectedModelConfig
+    ? opts.selectedModelConfig
+    : await loadGlobalDefaultModel().then((globalDefaultModel) =>
+        // 未绑定仓库的会话（sessions API 允许）用全局默认模型，不要求仓库模型配置
+        repo
+          ? resolveRepositoryModelConfig(repo, globalDefaultModel)
+          : resolveGlobalModelConfig(globalDefaultModel),
+      );
   const model = resolveModel(modelConfig);
 
   let tools: ToolSet | undefined;

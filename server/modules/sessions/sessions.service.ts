@@ -78,6 +78,7 @@ export function sessionExists(id: string) {
 export function switchActiveMessage(sessionId: string, messageId: string) {
   return setActiveMessage(sessionId, messageId).then((tree) => {
     if (!tree) return null;
+    publishSessionMessages(sessionId, tree);
     publishSessionListChanged();
     return tree;
   });

@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
-import type { UIMessage } from 'ai';
 import { randomUUID } from 'node:crypto';
-import { prepareChatStream } from './chat.service';
+import { prepareChatStream, type ChatRequestBody } from './chat.service';
 
 export const chatRoutes = new Hono();
 
@@ -10,7 +9,7 @@ export const chatRoutes = new Hono();
  * webhook 首轮审查不经过这里，见 run-review.ts。
  */
 chatRoutes.post('/', async (c) => {
-  let body: { sessionId?: string; messages?: UIMessage[]; parentMessageId?: string | null };
+  let body: ChatRequestBody;
   try {
     body = await c.req.json();
   } catch {
@@ -23,6 +22,7 @@ chatRoutes.post('/', async (c) => {
   if (result.kind === 'running') {
     return c.json({ error: '本次审查正在进行中，请等待审查完成后再追问。' }, 409);
   }
+  if (result.kind === 'invalid-model') return c.json({ error: result.message }, 400);
   if (result.kind === 'failed') return c.json({ error: result.message }, 500);
 
   return result.stream.toUIMessageStreamResponse({

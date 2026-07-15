@@ -2,7 +2,8 @@ import { ToolSkillList } from '../ToolSkillList';
 import { Button } from '../ui/button';
 import { Checkbox, Field, Input, Select, Textarea } from '../ui/forms';
 import { Modal } from '../ui/modal';
-import type { Account, AIModel, Project, RepositoryForm } from '../../hooks/useRepositoriesPageData';
+import type { Account, Project, RepositoryForm } from '../../hooks/useRepositoriesPageData';
+import type { AIModelSummary } from '../../lib/types';
 import type { AgentSkillItem, AgentToolItem } from '../../lib/types';
 
 type RepositoryModalProps = {
@@ -10,7 +11,7 @@ type RepositoryModalProps = {
   editingId: string | null;
   form: RepositoryForm;
   modalOpen: boolean;
-  models: AIModel[];
+  models: AIModelSummary[];
   projects: Project[];
   saving: boolean;
   search: string;

@@ -41,6 +41,13 @@ export function loadActiveModelConfigs(): Promise<ModelConfig[]> {
     .then((models) => models.map(modelConfigOf));
 }
 
+/** 按存储记录 ID 解析一次显式模型选择；停用模型不能用于新请求。 */
+export function loadActiveModelConfig(id: string): Promise<ModelConfig | null> {
+  return prisma.aIModel
+    .findFirst({ where: { id, isActive: true } })
+    .then((model) => (model ? modelConfigOf(model) : null));
+}
+
 function modelConfigOf(model: StoredAIModel): ModelConfig {
   return {
     provider: model.provider,

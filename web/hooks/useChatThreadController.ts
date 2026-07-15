@@ -1,13 +1,50 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import type { MessageFeedbackValue, SessionDetail } from '../lib/types';
+import type { AIModelSummary, ChatModelOption, MessageFeedbackValue, SessionDetail } from '../lib/types';
 import { useChatAutoScroll } from './useChatAutoScroll';
 import { useChatSessionEvents } from './useChatSessionEvents';
 
 type MessageTreePayload = Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>;
+
+type ChatRequestBody = {
+  parentMessageId: string | null;
+  aiModelId?: string;
+};
+
+function modelEndpointLabel(apiBaseUrl: string | null): string {
+  if (!apiBaseUrl) return '官方端点';
+  try {
+    return new URL(apiBaseUrl).host || '自定义端点';
+  } catch {
+    return '自定义端点';
+  }
+}
+
+export function toEnabledChatModelOptions(models: AIModelSummary[]): ChatModelOption[] {
+  const activeModels = models.filter((model) => model.isActive);
+  const labelCounts = new Map<string, number>();
+  for (const model of activeModels) {
+    const label = `${model.provider}/${model.modelId}`;
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  }
+  return activeModels.map((model) => {
+    const baseLabel = `${model.provider}/${model.modelId}`;
+    const duplicateSuffix = labelCounts.get(baseLabel)! > 1
+      ? ` · ${modelEndpointLabel(model.apiBaseUrl)} · #${model.id.slice(-6)}`
+      : '';
+    return {
+      id: model.id,
+      label: `${baseLabel}${model.isDefault ? '（默认）' : ''}${duplicateSuffix}`,
+    };
+  });
+}
+
+export function buildChatRequestBody(parentMessageId: string | null, selectedAIModelId: string): ChatRequestBody {
+  return selectedAIModelId ? { parentMessageId, aiModelId: selectedAIModelId } : { parentMessageId };
+}
 
 function mergeMessageTree(current: SessionDetail | null, next: MessageTreePayload): SessionDetail | null {
   return current
@@ -38,6 +75,9 @@ export function useChatThreadController({
   const [parentMessageId, setParentMessageId] = useState<string | null>(null);
   const [commandRunning, setCommandRunning] = useState(false);
   const [stoppingReview, setStoppingReview] = useState(false);
+  const [modelOptions, setModelOptions] = useState<ChatModelOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [selectedAIModelId, setSelectedAIModelId] = useState('');
   const transport = useMemo(
     () => new DefaultChatTransport({ api: '/api/chat', body: { sessionId } }),
     [sessionId],
@@ -73,6 +113,26 @@ export function useChatThreadController({
   const { markNearBottom } = scroll;
   useChatSessionEvents({ busy, sessionId, setMessages, updateDetail, onActivity });
 
+  useEffect(() => {
+    let disposed = false;
+    setModelsLoading(true);
+    setModelOptions([]);
+    setSelectedAIModelId('');
+    api<{ models: AIModelSummary[] }>('/api/settings/models')
+      .then(({ models }) => {
+        if (!disposed) setModelOptions(toEnabledChatModelOptions(models));
+      })
+      .catch((error) => {
+        if (!disposed) toast.error(errorMessage(error, '模型列表加载失败'));
+      })
+      .finally(() => {
+        if (!disposed) setModelsLoading(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [sessionId]);
+
   const session = detail.session;
   const reviewing = session.status === 'running';
   const composerDisabled = busy || reviewing;
@@ -82,8 +142,8 @@ export function useChatThreadController({
   const submit = useCallback((text: string) => {
     if (!text || composerDisabled) return;
     markNearBottom();
-    void sendMessage({ text }, { body: { parentMessageId } });
-  }, [composerDisabled, markNearBottom, parentMessageId, sendMessage]);
+    void sendMessage({ text }, { body: buildChatRequestBody(parentMessageId, selectedAIModelId) });
+  }, [composerDisabled, markNearBottom, parentMessageId, selectedAIModelId, sendMessage]);
 
   const runReviewCommand = useCallback(() => {
     if (!canRunReviewCommand || commandRunning) return;
@@ -153,13 +213,13 @@ export function useChatThreadController({
     if (message?.role === 'user') {
       markNearBottom();
       setParentMessageId(null);
-      regenerate({ messageId, body: { parentMessageId: messageId } }).catch((e) =>
+      regenerate({ messageId, body: buildChatRequestBody(messageId, selectedAIModelId) }).catch((e) =>
         toast.error(errorMessage(e, '重新回答失败')),
       );
       return;
     }
     setParentMessageId(messageId);
-  }, [busy, markNearBottom, messages, regenerate]);
+  }, [busy, markNearBottom, messages, regenerate, selectedAIModelId]);
 
   const submitFeedback = useCallback((messageId: string, feedback: MessageFeedbackValue, findingText: string) => {
     if (busy) return;
@@ -183,10 +243,14 @@ export function useChatThreadController({
     canRunReviewCommand,
     commandRunning,
     messages,
+    modelOptions,
+    modelsLoading,
     parentMessageId,
     reviewing,
     runReviewCommand,
     scroll,
+    selectedAIModelId,
+    setSelectedAIModelId,
     status,
     stop,
     stopReview,

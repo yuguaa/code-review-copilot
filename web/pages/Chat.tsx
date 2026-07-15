@@ -157,10 +157,14 @@ function ChatThread({
     canRunReviewCommand,
     commandRunning,
     messages,
+    modelOptions,
+    modelsLoading,
     parentMessageId,
     reviewing,
     runReviewCommand,
     scroll,
+    selectedAIModelId,
+    setSelectedAIModelId,
     status,
     stop,
     stopReview,
@@ -223,11 +227,15 @@ function ChatThread({
             }
             disabled={reviewing}
             busy={busy}
+            modelOptions={modelOptions}
+            modelsLoading={modelsLoading}
+            selectedModelId={selectedAIModelId}
             stoppable={reviewing}
             stopping={stoppingReview}
             stopLabel={reviewing ? '停止审查' : '停止生成'}
             onStop={reviewing ? stopReview : stop}
             onSubmit={submit}
+            onModelChange={setSelectedAIModelId}
             commands={composerCommands}
           />
         </div>

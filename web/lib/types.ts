@@ -57,6 +57,20 @@ export type MessageFindingFeedback = {
   feedbackAt?: string;
 };
 
+export type ChatModelOption = {
+  id: string;
+  label: string;
+};
+
+export type AIModelSummary = {
+  id: string;
+  provider: string;
+  modelId: string;
+  apiBaseUrl: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+};
+
 export type RepositoryItem = {
   id: string;
   name: string;

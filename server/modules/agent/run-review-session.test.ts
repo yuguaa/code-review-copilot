@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getSessionWithRepository: vi.fn(),
   loadMessages: vi.fn(),
   saveMessages: vi.fn(),
+  updatePersistedMessageParts: vi.fn(),
   createReviewStream: vi.fn(),
   verifyReviewResult: vi.fn(),
   runReviewCompletionIntegrations: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('../sessions/session-message-store.service', () => ({
   getSessionWithRepository: mocks.getSessionWithRepository,
   loadMessages: mocks.loadMessages,
   saveMessages: mocks.saveMessages,
+  updatePersistedMessageParts: mocks.updatePersistedMessageParts,
   mergeStreamingMessage: (messages: UIMessage[], message: UIMessage) => [...messages, message],
 }));
 
@@ -104,6 +106,7 @@ describe('runReviewSession success contract', () => {
     mocks.getSessionWithRepository.mockResolvedValue({ id: 'session-1' });
     mocks.loadMessages.mockResolvedValue(initialMessages);
     mocks.saveMessages.mockResolvedValue(undefined);
+    mocks.updatePersistedMessageParts.mockResolvedValue(undefined);
     mocks.markReviewSessionCompleted.mockResolvedValue(undefined);
     mocks.markReviewSessionFailed.mockResolvedValue(undefined);
     mocks.runReviewCompletionIntegrations.mockResolvedValue([]);
@@ -153,6 +156,10 @@ describe('runReviewSession success contract', () => {
     );
 
     const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];
+    const persistedStates = mocks.updatePersistedMessageParts.mock.calls
+      .map((call) => activityStateOf([call[1] as UIMessage]))
+      .filter((state): state is ReviewActivityState => Boolean(state));
+    expect(persistedStates.some((state) => state.phase === 'verifying')).toBe(true);
     expect(activityStateOf(savedMessages)).toMatchObject({
       phase: 'completed',
       agents: expect.arrayContaining([

@@ -2,6 +2,7 @@ import { generateText, type LanguageModel, type UIMessage } from 'ai';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { parseReviewFindings } from '../../../shared/review-findings';
 import type { ReviewContext } from './tools';
+import type { ReviewAgentTraceStepSource } from './review-activity';
 import {
   createVerifyAssignments,
   VERIFY_CONTINUATION_INSTRUCTIONS,
@@ -52,6 +53,18 @@ function unfinishedResult() {
     responseMessages: [],
     steps: Array.from({ length: 16 }, () => ({})),
     finishReason: 'tool-calls',
+  };
+}
+
+function verifyTraceStep(modelId: string): ReviewAgentTraceStepSource {
+  return {
+    callId: `verify-${modelId}`,
+    stepNumber: 0,
+    text: '正在核验证据。',
+    finishReason: 'tool-calls',
+    toolCalls: [{ toolCallId: `read-${modelId}`, toolName: 'read_file', input: { path: 'package.json' } }],
+    toolResults: [{ toolCallId: `read-${modelId}`, output: 'VERIFY_TOOL_RAW_OUTPUT' }],
+    content: [],
   };
 }
 
@@ -178,7 +191,13 @@ describe('多模型 Verify 编排', () => {
         config: { provider: 'openai-compatible', modelId: 'model-b', apiKey: 'b', apiBaseUrl: 'https://b.test/v1', maxSteps: 12 },
       },
     ];
-    const activities: Array<{ id: string; task: string; status: string; modelId: string }> = [];
+    const activities: Array<{
+      id: string;
+      task: string;
+      status: string;
+      modelId: string;
+      trace?: { steps: unknown[]; output?: string };
+    }> = [];
 
     generateTextMock.mockImplementation(async (options: {
       model: LanguageModel;
@@ -187,7 +206,10 @@ describe('多模型 Verify 编排', () => {
         record_verify_evidence: { execute: (input: unknown) => Promise<{ id: string }> };
         submit_verified_review: { execute: (input: unknown) => unknown };
       };
+      onStepEnd?: (step: ReviewAgentTraceStepSource) => void;
     }) => {
+      const modelId = String((options.model as { id?: string }).id ?? 'unknown');
+      options.onStepEnd?.(verifyTraceStep(modelId));
       const prompt = options.messages[0].content;
       if (prompt.includes('严重-0')) {
         const evidence = await options.tools.record_verify_evidence.execute({
@@ -231,9 +253,16 @@ describe('多模型 Verify 编排', () => {
     expect(result).toContain('**包配置会导致启动失败**');
     expect(new Set(generateTextMock.mock.calls.map((call) => call[0].model))).toEqual(new Set([modelA, modelB]));
     expect(activities.filter((activity) => activity.status === 'completed')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'verifier-1' }),
-      expect.objectContaining({ id: 'verifier-2' }),
+      expect.objectContaining({
+        id: 'verifier-1',
+        trace: expect.objectContaining({ steps: [expect.anything()], output: expect.stringContaining('"decisions"') }),
+      }),
+      expect.objectContaining({
+        id: 'verifier-2',
+        trace: expect.objectContaining({ steps: [expect.anything()], output: expect.stringContaining('"decisions"') }),
+      }),
     ]));
+    expect(JSON.stringify(activities)).not.toContain('VERIFY_TOOL_RAW_OUTPUT');
     expect(activities.some((activity) => activity.task.includes('严重-0'))).toBe(true);
     expect(activities.some((activity) => activity.task.includes('独立补漏'))).toBe(true);
   });

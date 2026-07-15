@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
-import type { AgentSkillItem, AgentToolItem } from '../lib/types';
+import type { AIModelSummary, AgentSkillItem, AgentToolItem } from '../lib/types';
 
 export type Account = { id: string; url: string };
-export type AIModel = { id: string; provider: string; modelId: string; isDefault: boolean; isActive: boolean };
 export type Project = { id: number; name: string; path: string; defaultBranch: string };
 export type Repo = {
   id: string;
@@ -23,7 +22,7 @@ export type Repo = {
   enableMrComment: boolean;
   enableDingtalk: boolean;
   dingtalkWebhook: string | null;
-  defaultAIModel: AIModel | null;
+  defaultAIModel: AIModelSummary | null;
   hasCustomApiKey: boolean;
   enabledTools: string[];
   enabledSkills: string[];
@@ -57,7 +56,7 @@ export type RepositoryForm = typeof emptyRepositoryForm;
 export function useRepositoriesPageData() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [models, setModels] = useState<AIModel[]>([]);
+  const [models, setModels] = useState<AIModelSummary[]>([]);
   const [tools, setTools] = useState<AgentToolItem[]>([]);
   const [skills, setSkills] = useState<AgentSkillItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -75,7 +74,7 @@ export function useRepositoriesPageData() {
     return Promise.all([
       api<{ repositories: Repo[] }>('/api/repositories'),
       api<{ accounts: Account[] }>('/api/settings/gitlab'),
-      api<{ models: AIModel[] }>('/api/settings/models'),
+      api<{ models: AIModelSummary[] }>('/api/settings/models'),
       api<{ tools: AgentToolItem[]; skills: AgentSkillItem[] }>('/api/settings/tool-skills'),
     ])
       .then(([repositoryResult, accountResult, modelResult, toolSkillResult]) => {
