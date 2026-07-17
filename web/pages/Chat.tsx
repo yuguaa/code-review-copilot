@@ -10,7 +10,9 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { LazyComposer } from '../components/chat/LazyComposer';
 import { MessageList } from '../components/chat/MessageList';
+import { ReviewAgentActivity } from '../components/message/ReviewAgentActivity';
 import { ReviewAgentInspectorProvider } from '../components/message/ReviewAgentDrawer';
+import { isReviewActivityPart } from '../components/message/message-types';
 import { useSessionDetail } from '../hooks/useSessionDetail';
 import { useChatThreadController } from '../hooks/useChatThreadController';
 
@@ -178,6 +180,10 @@ function ChatThread({
     treeById,
   } = useChatThreadController({ detail, onActivity, updateDetail });
   const s = detail.session;
+  const latestReviewActivity = messages
+    .flatMap((message) => message.parts)
+    .filter(isReviewActivityPart)
+    .at(-1)?.data;
   const composerCommands = useMemo(
     () => [
       {
@@ -216,6 +222,7 @@ function ChatThread({
             onFeedback={submitFeedback}
           />
         </div>
+        {latestReviewActivity && <ReviewAgentActivity key={latestReviewActivity.runId} data={latestReviewActivity} />}
       </div>
 
       <div className="composer-dock z-10 px-4 pb-5 pt-2 max-md:px-3 max-md:pb-3">

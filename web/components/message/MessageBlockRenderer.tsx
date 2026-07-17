@@ -8,10 +8,9 @@ import ThumbsDown from 'lucide-react/dist/esm/icons/thumbs-down';
 import ThumbsUp from 'lucide-react/dist/esm/icons/thumbs-up';
 import { cn } from '../../lib/cn';
 import { StreamingCursor } from './StreamingCursor';
-import { isBoundaryPart, isReviewActivityPart, type MessagePart } from './message-types';
+import { isBoundaryPart, type MessagePart } from './message-types';
 import { extractReviewFindings } from './review-findings';
 import type { MessageFeedbackValue, MessageFindingFeedback } from '../../lib/types';
-import { ReviewAgentActivity } from './ReviewAgentActivity';
 import { JsonPanel, ToolEvidenceBlock } from './ToolEvidenceBlock';
 
 const MarkdownBlock = lazy(() => import('./MarkdownBlock').then((module) => ({ default: module.MarkdownBlock })));
@@ -85,7 +84,6 @@ export function MessageBlockRenderer({
   onFindingFeedback?: (messageId: string, feedback: MessageFeedbackValue, findingText: string) => void;
 }) {
   if (isBoundaryPart(part)) return null;
-  if (role === 'assistant' && isReviewActivityPart(part)) return <ReviewAgentActivity data={part.data} />;
   if (part.type === 'text') {
     if (role !== 'assistant') return <PlainTextBlock text={part.text} />;
     const isStreaming = streaming || (part as { state?: string }).state === 'streaming';

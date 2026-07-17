@@ -30,21 +30,19 @@ export function MessageBubble({
   if (isTrigger) return <TriggerCard message={message} />;
 
   const isUser = message.role === 'user';
-  const visibleParts = message.parts.filter((part) => !isBoundaryPart(part));
-  const isReviewActivity = !isUser && visibleParts.some(isReviewActivityPart);
-  const canBranch = !isReviewActivity && !isStreaming && Boolean(onBranchFrom);
+  const visibleParts = message.parts.filter((part) => !isBoundaryPart(part) && !isReviewActivityPart(part));
+  if (visibleParts.length === 0 && !isStreaming) return null;
+  const canBranch = !isStreaming && Boolean(onBranchFrom);
   const feedbackPartIndex = !isUser && !isStreaming ? findingFeedbackPartIndex(visibleParts) : -1;
   return (
-    <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12 max-md:pl-6' : 'justify-start', !isReviewActivity && !isUser && 'pr-8 max-md:pr-0')}>
-      <div className={cn('flex max-w-full flex-col gap-1.5', isUser ? 'items-end' : 'items-start', isReviewActivity && 'w-full')}>
+    <div className={cn('group flex py-3.5', isUser ? 'justify-end pl-12 max-md:pl-6' : 'justify-start px-4 max-md:px-0')}>
+      <div className={cn('flex max-w-full flex-col gap-1.5', isUser ? 'items-end' : 'items-start')}>
         <div
           className={cn(
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
             isUser
               ? 'max-w-[min(640px,100%)] bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
-              : isReviewActivity
-                ? 'w-full text-[var(--body-strong)]'
-                : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-sm)]',
+              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-sm)]',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
@@ -59,21 +57,19 @@ export function MessageBubble({
             />
           ))}
         </div>
-        {!isReviewActivity && (
-          <div className="flex items-center gap-1 px-1 opacity-75 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100">
-            <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
-            {canBranch && (
-              <button
-                type="button"
-                onClick={() => onBranchFrom?.(message.id)}
-                className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-95"
-                title={isUser ? '重新回答' : '从这里继续'}
-              >
-                {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}
-              </button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-1 px-1 opacity-75 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100">
+          <BranchSwitcher branch={branch} onSelectSibling={onSelectSibling} />
+          {canBranch && (
+            <button
+              type="button"
+              onClick={() => onBranchFrom?.(message.id)}
+              className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-95"
+              title={isUser ? '重新回答' : '从这里继续'}
+            >
+              {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

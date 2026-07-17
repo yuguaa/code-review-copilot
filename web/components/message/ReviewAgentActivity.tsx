@@ -125,38 +125,40 @@ export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
 
   return (
     <>
-      <section
-        aria-busy={data.phase !== 'completed' && data.phase !== 'failed'}
-        className="review-agent-pipeline overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]"
-      >
-        <span role="status" aria-live="polite" className="sr-only">
-          当前阶段：{PHASE_LABEL[data.phase]}。{agentStatusSummary}
-        </span>
-        <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3">
-          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--ink)]">
-            <Network size={15} className="text-[var(--accent)]" />
-            {orchestrationLabel(data)}
+      {!selection && (
+        <section
+          aria-busy={data.phase !== 'completed' && data.phase !== 'failed'}
+          className="review-agent-floating review-agent-pipeline overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]"
+        >
+          <span role="status" aria-live="polite" className="sr-only">
+            当前阶段：{PHASE_LABEL[data.phase]}。{agentStatusSummary}
           </span>
-          <span className="caption text-[var(--muted)]">当前阶段：{PHASE_LABEL[data.phase]}</span>
-        </header>
-        {data.agents.length > 0 ? (
-          <div className="divide-y divide-[var(--line-subtle)]">
-            {data.agents.map((agent) => (
-              <AgentRow
-                key={agent.id}
-                agent={agent}
-                selected={ownsSelection && agent.id === selection.agentId}
-                onSelect={(agentId) => selectAgent({ runId: data.runId, agentId })}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 px-4 py-4 text-sm text-[var(--muted)]">
-            <Loader2 size={13} className="animate-spin text-[var(--accent)]" />
-            正在解析本次审查使用的模型与 Agent 编排
-          </div>
-        )}
-      </section>
+          <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3">
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--ink)]">
+              <Network size={15} className="text-[var(--accent)]" />
+              {orchestrationLabel(data)}
+            </span>
+            <span className="caption text-[var(--muted)]">当前阶段：{PHASE_LABEL[data.phase]}</span>
+          </header>
+          {data.agents.length > 0 ? (
+            <div className="divide-y divide-[var(--line-subtle)]">
+              {data.agents.map((agent) => (
+                <AgentRow
+                  key={agent.id}
+                  agent={agent}
+                  selected={false}
+                  onSelect={(agentId) => selectAgent({ runId: data.runId, agentId })}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-4 py-4 text-sm text-[var(--muted)]">
+              <Loader2 size={13} className="animate-spin text-[var(--accent)]" />
+              正在解析本次审查使用的模型与 Agent 编排
+            </div>
+          )}
+        </section>
+      )}
       {selectedAgent && <ReviewAgentDrawer agent={selectedAgent} onClose={closeInspector} />}
     </>
   );

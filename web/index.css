@@ -524,7 +524,7 @@ a:focus-visible {
 }
 .conversation-scroll {
   scroll-behavior: smooth;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable both-edges;
 }
 
 .composer-dock {
@@ -945,6 +945,37 @@ a:focus-visible {
 
 .review-agent-pipeline > header {
   background: var(--surface-soft);
+}
+
+.review-agent-floating {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  width: clamp(360px, 30vw, 440px);
+  max-height: calc(100% - 32px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: var(--shadow-popover);
+}
+
+.chat-main:has(.review-agent-floating) .conversation-scroll,
+.chat-main:has(.review-agent-floating) .composer-dock {
+  margin-right: calc(clamp(360px, 30vw, 440px) + 32px);
+}
+
+@media (max-width: 767px) {
+  .chat-main:has(.review-agent-floating) .conversation-scroll,
+  .chat-main:has(.review-agent-floating) .composer-dock {
+    margin-right: 0;
+  }
+
+  .review-agent-floating {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: 42%;
+  }
 }
 
 .review-agent-row {
