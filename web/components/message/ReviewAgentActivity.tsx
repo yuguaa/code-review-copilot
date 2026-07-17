@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import BadgeCheck from 'lucide-react/dist/esm/icons/badge-check';
 import Bot from 'lucide-react/dist/esm/icons/bot';
 import ChevronRight from 'lucide-react/dist/esm/icons/chevron-right';
@@ -11,9 +11,11 @@ import { cn } from '../../lib/cn';
 import type { ReviewActivityState, ReviewAgentActivity } from '@shared/review-activity';
 import {
   ReviewAgentDrawer,
+  REVIEW_AGENT_INSPECTOR_PANEL_ID,
   reviewAgentStatusClass,
   reviewAgentStatusIcon,
   reviewAgentStatusLabel,
+  useReviewAgentInspector,
 } from './ReviewAgentDrawer';
 
 const PHASE_LABEL: Record<ReviewActivityState['phase'], string> = {
@@ -86,7 +88,7 @@ function AgentRow({
   const className = cn(
     'review-agent-row grid w-full grid-cols-[32px_minmax(0,1fr)_auto] items-start gap-3 px-4 py-3.5 text-left',
     agent.trace && 'group/agent min-h-14 touch-manipulation cursor-pointer transition-[background-color,transform] [@media(hover:hover)]:hover:bg-[var(--surface-hover)] active:scale-[0.995]',
-    selected && 'bg-[var(--surface-selected)]',
+    selected && 'bg-[var(--surface-selected)] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--accent)]',
   );
 
   if (!agent.trace) return <div className={className}>{content}</div>;
@@ -95,8 +97,8 @@ function AgentRow({
       type="button"
       className={className}
       onClick={() => onSelect(agent.id)}
-      aria-haspopup="dialog"
       aria-expanded={selected}
+      aria-controls={REVIEW_AGENT_INSPECTOR_PANEL_ID}
       aria-labelledby={`${labelId} ${statusId}`}
       aria-describedby={`${modelId} ${taskId}`}
     >
@@ -106,9 +108,17 @@ function AgentRow({
 }
 
 export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const selectedAgent = data.agents.find((agent) => agent.id === selectedAgentId);
-  const closeDrawer = useCallback(() => setSelectedAgentId(null), []);
+  const { selection, selectAgent, closeInspector } = useReviewAgentInspector();
+  const ownsSelection = selection?.runId === data.runId;
+  const ownsSelectionRef = useRef(ownsSelection);
+  ownsSelectionRef.current = ownsSelection;
+  const selectedAgent = ownsSelection
+    ? data.agents.find((agent) => agent.id === selection.agentId)
+    : undefined;
+
+  useEffect(() => () => {
+    if (ownsSelectionRef.current) closeInspector();
+  }, [closeInspector]);
   const agentStatusSummary = data.agents
     .map((agent) => `${agent.label}${reviewAgentStatusLabel(agent.status)}`)
     .join('；');
@@ -135,8 +145,8 @@ export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
               <AgentRow
                 key={agent.id}
                 agent={agent}
-                selected={agent.id === selectedAgentId}
-                onSelect={setSelectedAgentId}
+                selected={ownsSelection && agent.id === selection.agentId}
+                onSelect={(agentId) => selectAgent({ runId: data.runId, agentId })}
               />
             ))}
           </div>
@@ -147,7 +157,7 @@ export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
           </div>
         )}
       </section>
-      {selectedAgent && <ReviewAgentDrawer agent={selectedAgent} onClose={closeDrawer} />}
+      {selectedAgent && <ReviewAgentDrawer agent={selectedAgent} onClose={closeInspector} />}
     </>
   );
 }

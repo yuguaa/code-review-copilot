@@ -3,83 +3,83 @@
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
-/* 火山引擎式企业工作台：浅色高对比、蓝色主操作和清晰内容层级。 */
+/* 工程纸工作台：暖白网格、黑色主操作与橙色信号线。 */
 :root {
   color-scheme: light;
 
-  --canvas: #f4f7fc;
-  --canvas-quiet: #eef3fb;
-  --surface-soft: #f7f9fc;
-  --surface-card: #ffffff;
-  --surface-hover: #edf3ff;
-  --surface-selected: #eaf1ff;
-  --surface-strong: #e8eef8;
-  --surface-dark: #020814;
+  --canvas: #f5f3ed;
+  --canvas-quiet: #ece9df;
+  --surface-soft: #faf8f3;
+  --surface-card: #fffefa;
+  --surface-hover: #f2ede3;
+  --surface-selected: #fff0dd;
+  --surface-strong: #e8e3d8;
+  --surface-dark: #11110f;
   --code-foreground: #e1e4e8;
-  --header-surface: rgba(255, 255, 255, 0.96);
-  --line-subtle: rgba(2, 8, 20, 0.06);
-  --line-default: #e5e7eb;
-  --line-strong: #cbd5e1;
-  --line-accent: rgba(22, 100, 255, 0.42);
-  --grid-line: rgba(22, 100, 255, 0.035);
+  --header-surface: rgba(255, 254, 250, 0.98);
+  --line-subtle: rgba(42, 37, 29, 0.09);
+  --line-default: #d8d3c8;
+  --line-strong: #aaa398;
+  --line-accent: rgba(230, 93, 19, 0.7);
+  --grid-line: rgba(42, 37, 29, 0.05);
   --line-invert: rgba(255, 255, 255, 0.16);
   --hairline: var(--line-default);
 
-  --brand-magenta: #1664ff;
-  --brand-cyan: #0f91a8;
-  --brand-iris: #5b6b85;
+  --brand-magenta: #e65d13;
+  --brand-cyan: #138b75;
+  --brand-iris: #69665e;
   --brand-lime: #79a520;
-  --brand-lilac: #eaf1ff;
-  --brand-cream: #f7f9fc;
+  --brand-lilac: #fff0dd;
+  --brand-cream: #faf8f3;
   --brand-mint: #dff7ef;
-  --brand-pink: #1664ff;
+  --brand-pink: #e65d13;
   --brand-coral: #d92d20;
-  --brand-navy: #020814;
-  --brand-teal: #0f91a8;
+  --brand-navy: #11110f;
+  --brand-teal: #138b75;
 
-  --primary: #1664ff;
-  --primary-hover: #0d55e8;
-  --ink: #020814;
-  --body-strong: #1d2939;
-  --body: #344054;
-  --muted: #667085;
-  --muted-soft: #667085;
+  --primary: #11110f;
+  --primary-hover: #2b2925;
+  --ink: #11110f;
+  --body-strong: #2e2d29;
+  --body: #50514f;
+  --muted: #72736d;
+  --muted-soft: #85857e;
   --on-primary: #ffffff;
-  --on-light: #020814;
-  --light-control-hover: #f4f7fc;
+  --on-light: #11110f;
+  --light-control-hover: #f2ede3;
 
   --success: #067647;
   --warning: #b54708;
   --error: #d92d20;
 
-  --accent: #1664ff;
-  --focus-ring: #1664ff;
-  --ring: rgba(22, 100, 255, 0.16);
-  --state-info-bg: rgba(22, 100, 255, 0.08);
+  --accent: #e65d13;
+  --focus-ring: #e65d13;
+  --ring: rgba(230, 93, 19, 0.16);
+  --state-info-bg: rgba(230, 93, 19, 0.09);
   --state-success-bg: rgba(6, 118, 71, 0.08);
   --state-warning-bg: rgba(181, 71, 8, 0.08);
   --state-error-bg: rgba(217, 45, 32, 0.08);
-  --state-selected-bg: rgba(22, 100, 255, 0.1);
-  --metric-neutral: #ffffff;
-  --metric-lime: #f3f8e8;
-  --metric-lilac: #f2f5ff;
-  --metric-mint: #ecfdf7;
-  --metric-pink: #eef4ff;
+  --state-selected-bg: rgba(230, 93, 19, 0.11);
+  --metric-neutral: #fffefa;
+  --metric-lime: #f3f4df;
+  --metric-lilac: #fff0dd;
+  --metric-mint: #e7f5ee;
+  --metric-pink: #fff5e8;
   --metric-coral: #fff1f0;
-  --metric-navy: #eaf1ff;
-  --metric-teal: #eefbfc;
+  --metric-navy: #eeeae0;
+  --metric-teal: #e8f5f1;
 
-  --r-xs: 2px;
-  --r-sm: 4px;
-  --r-md: 8px;
-  --r-lg: 12px;
-  --r-xl: 16px;
+  --r-xs: 0px;
+  --r-sm: 2px;
+  --r-md: 3px;
+  --r-lg: 4px;
+  --r-xl: 6px;
   --r-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(2, 8, 20, 0.06);
-  --shadow-md: 0 6px 18px rgba(2, 8, 20, 0.08);
-  --shadow-lg: 0 14px 36px rgba(2, 8, 20, 0.1);
-  --shadow-popover: 0 18px 48px rgba(2, 8, 20, 0.16);
+  --shadow-sm: 0 0 0 transparent;
+  --shadow-md: 0 0 0 transparent;
+  --shadow-lg: 0 0 0 transparent;
+  --shadow-popover: 0 16px 42px rgba(17, 17, 15, 0.14);
 
   --font-display: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-body: 'PingFang SC', 'Inter', 'Microsoft YaHei', sans-serif;
@@ -121,7 +121,11 @@ body {
 }
 
 #root::before {
-  background: var(--canvas);
+  background-color: var(--canvas);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
 }
 
 #root::after {
@@ -170,7 +174,7 @@ a:focus-visible {
 }
 
 ::selection {
-  background: rgba(22, 100, 255, 0.2);
+  background: rgba(230, 93, 19, 0.2);
   color: var(--ink);
 }
 
@@ -206,16 +210,7 @@ a:focus-visible {
   animation: fade-in 0.28s var(--ease-out);
 }
 
-@keyframes agent-drawer-backdrop-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes agent-drawer-panel-in {
+@keyframes agent-inspector-in {
   from {
     opacity: 0;
     transform: translateX(14px);
@@ -226,12 +221,8 @@ a:focus-visible {
   }
 }
 
-.agent-drawer-backdrop {
-  animation: agent-drawer-backdrop-in 0.16s ease-out;
-}
-
-.agent-drawer-panel {
-  animation: agent-drawer-panel-in 0.22s var(--ease-out);
+.agent-inspector-panel {
+  animation: agent-inspector-in 0.22s var(--ease-out);
 }
 
 @keyframes breathe {
@@ -276,20 +267,19 @@ a:focus-visible {
 }
 
 .chat-main {
-  background: var(--canvas);
+  background: transparent;
 }
 
 .chat-header {
   border-bottom: 1px solid var(--line-default);
   background: var(--header-surface);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 1px 4px rgba(2, 8, 20, 0.05);
+  box-shadow: none;
 }
 
 .sidebar-shell {
   position: relative;
   background: var(--surface-card);
-  box-shadow: 1px 0 0 var(--line-default);
+  box-shadow: none;
   transition:
     width 0.24s var(--ease-out),
     background-color 0.24s var(--ease-out);
@@ -314,12 +304,12 @@ a:focus-visible {
 .sidebar-logo,
 .sidebar-action-button {
   background: var(--primary);
-  box-shadow: 0 4px 10px rgba(22, 100, 255, 0.2);
+  box-shadow: none;
 }
 
 .sidebar-action-button:hover {
   background: var(--primary-hover);
-  box-shadow: 0 6px 14px rgba(22, 100, 255, 0.24);
+  box-shadow: none;
 }
 
 .sidebar-session-list {
@@ -337,9 +327,10 @@ a:focus-visible {
 }
 
 .sidebar-session-row.is-active {
-  border-color: var(--line-accent);
+  border-color: var(--line-default);
+  border-left: 3px solid var(--accent);
   background: var(--surface-selected);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .sidebar-session-icon {
@@ -478,12 +469,11 @@ a:focus-visible {
 
 .ops-page-shell {
   position: relative;
-  background: var(--canvas);
+  background: transparent;
 }
 
 .ops-page-header {
-  backdrop-filter: blur(12px);
-  box-shadow: 0 1px 4px rgba(2, 8, 20, 0.05);
+  box-shadow: none;
 }
 
 .tech-panel.is-dark::before {
@@ -522,11 +512,11 @@ a:focus-visible {
 }
 .conversation-frame::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(244, 247, 252, 0.98), transparent);
+  background: linear-gradient(180deg, rgba(245, 243, 237, 0.98), transparent);
 }
 .conversation-frame::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(244, 247, 252, 0.96), transparent);
+  background: linear-gradient(0deg, rgba(245, 243, 237, 0.96), transparent);
 }
 .conversation-frame.is-scrolled::before,
 .conversation-frame.can-scroll-more::after {
@@ -539,7 +529,7 @@ a:focus-visible {
 
 .composer-dock {
   position: relative;
-  background: linear-gradient(180deg, transparent, rgba(244, 247, 252, 0.8) 48%, var(--canvas));
+  background: linear-gradient(180deg, transparent, rgba(245, 243, 237, 0.88) 48%, var(--canvas));
 }
 
 .composer-dock::before {
@@ -610,7 +600,7 @@ a:focus-visible {
   height: 34px;
   border-bottom: 1px solid var(--line-invert);
   background:
-    linear-gradient(90deg, rgba(22, 100, 255, 0.2), transparent 54%),
+    linear-gradient(90deg, rgba(230, 93, 19, 0.22), transparent 54%),
     rgba(255, 255, 255, 0.035);
   color: rgba(246, 241, 247, 0.74);
 }
@@ -802,9 +792,9 @@ a:focus-visible {
   border: 1px solid var(--line-default);
 }
 
-/* 登录页使用浅色企业视觉，将 MR -> Review -> Verify 管线作为产品能力说明。 */
+/* 登录页沿用工程纸与信号橙，将 MR -> Review -> Verify 管线作为产品能力说明。 */
 .login-shell {
-  background: var(--canvas);
+  background: transparent;
 }
 
 .login-layout {
@@ -814,20 +804,16 @@ a:focus-visible {
 
 .login-mark {
   position: relative;
-  box-shadow: 0 8px 20px rgba(22, 100, 255, 0.22);
+  box-shadow: none;
 }
 
 .login-mark::after {
-  content: '';
-  position: absolute;
-  inset: -7px;
-  border: 1px dotted rgba(22, 100, 255, 0.28);
-  border-radius: inherit;
+  display: none;
 }
 
 .login-heading-accent {
   margin-top: 5px;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .login-visual {
@@ -870,17 +856,13 @@ a:focus-visible {
   justify-content: center;
   border: 1px solid var(--line-default);
   border-radius: 50%;
-  color: var(--primary);
+  color: var(--accent);
   background: var(--surface-card);
-  box-shadow: 0 6px 18px rgba(2, 8, 20, 0.1);
+  box-shadow: none;
 }
 
 .pipeline-node::after {
-  content: '';
-  position: absolute;
-  inset: -7px;
-  border: 1px dotted rgba(22, 100, 255, 0.28);
-  border-radius: inherit;
+  display: none;
 }
 
 .pipeline-node.is-center {
@@ -889,17 +871,11 @@ a:focus-visible {
   flex-basis: 66px;
   color: white;
   background: var(--primary);
-  box-shadow: 0 10px 24px rgba(22, 100, 255, 0.28);
+  box-shadow: none;
 }
 
 .pipeline-node.is-center::before {
-  content: '';
-  position: absolute;
-  inset: -22px;
-  z-index: -1;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(22, 100, 255, 0.2), transparent 68%);
-  animation: pipeline-splash 3.4s ease-out infinite;
+  display: none;
 }
 
 .pipeline-node > span {
@@ -921,15 +897,14 @@ a:focus-visible {
   width: min(126px, 18vw);
   height: 1px;
   overflow: hidden;
-  background: #d7e4ff;
+  background: var(--line-default);
 }
 
 .pipeline-beam > span {
   position: absolute;
   inset: -2px auto -2px 0;
   width: 34%;
-  background: linear-gradient(90deg, transparent, #1664ff, #79a7ff, transparent);
-  filter: drop-shadow(0 0 3px rgba(22, 100, 255, 0.5));
+  background: linear-gradient(90deg, transparent, var(--accent), #f5a261, transparent);
   animation: pipeline-beam 1.6s ease-in-out infinite;
 }
 
@@ -969,7 +944,7 @@ a:focus-visible {
 }
 
 .review-agent-pipeline > header {
-  background: #f5f8ff;
+  background: var(--surface-soft);
 }
 
 .review-agent-row {
@@ -984,27 +959,43 @@ a:focus-visible {
   left: 31.5px;
   z-index: 0;
   width: 1px;
-  background: linear-gradient(var(--line-default), rgba(22, 100, 255, 0.22), var(--line-default));
+  background: var(--line-default);
 }
 
 .review-agent-node {
   position: relative;
   z-index: 1;
-  box-shadow: 0 3px 8px rgba(2, 8, 20, 0.08);
+  box-shadow: none;
 }
 
 .review-agent-node::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border: 1px dotted rgba(22, 100, 255, 0.22);
-  border-radius: inherit;
+  display: none;
 }
 
 .review-agent-node.is-running {
-  border-color: rgba(22, 100, 255, 0.42);
-  color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(22, 100, 255, 0.1);
+  border-color: var(--line-accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.agent-inspector-outlet {
+  width: clamp(440px, 36vw, 620px);
+  height: 100%;
+  border-left: 1px solid var(--line-default);
+  background: var(--surface-card);
+}
+
+@media (max-width: 1199px) {
+  .review-workbench:has(.agent-inspector-outlet:not(:empty)) .chat-main {
+    display: none;
+  }
+
+  .agent-inspector-outlet:not(:empty) {
+    width: auto;
+    height: auto;
+    min-width: 0;
+    flex: 1;
+  }
 }
 
 .review-agent-node.is-completed {

@@ -10,6 +10,7 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { LazyComposer } from '../components/chat/LazyComposer';
 import { MessageList } from '../components/chat/MessageList';
+import { ReviewAgentInspectorProvider } from '../components/message/ReviewAgentDrawer';
 import { useSessionDetail } from '../hooks/useSessionDetail';
 import { useChatThreadController } from '../hooks/useChatThreadController';
 
@@ -20,13 +21,15 @@ export function Chat() {
   return (
     <div className="review-workbench line-canvas flex h-full min-h-0 overflow-x-hidden max-md:flex-col">
       <Sidebar refreshKey={refreshKey} />
-      <main className="chat-main relative flex min-h-0 min-w-0 flex-1 flex-col">
-        {sessionId ? (
-          <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
-        ) : (
-          <ChatEmptyState />
-        )}
-      </main>
+      <ReviewAgentInspectorProvider key={sessionId ?? 'empty'}>
+        <main className="chat-main relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {sessionId ? (
+            <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
+          ) : (
+            <ChatEmptyState />
+          )}
+        </main>
+      </ReviewAgentInspectorProvider>
     </div>
   );
 }

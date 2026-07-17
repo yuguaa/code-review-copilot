@@ -6,14 +6,14 @@ import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 export const chartColors = {
-  ink: '#1664ff',
-  muted: '#667085',
-  hairline: '#e5e7eb',
+  ink: '#e65d13',
+  muted: '#72736d',
+  hairline: '#d8d3c8',
   lime: '#79a520',
   mint: '#0f9f6e',
   coral: '#d92d20',
   teal: '#0f91a8',
-  lilac: '#6b7cff',
+  lilac: '#c2792c',
 };
 
 export const trendChartConfig = {

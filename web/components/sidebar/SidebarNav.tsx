@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import BarChart3 from 'lucide-react/dist/esm/icons/chart-column';
 import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
+import CircleHelp from 'lucide-react/dist/esm/icons/circle-help';
 import LogOut from 'lucide-react/dist/esm/icons/log-out';
 import SettingsIcon from 'lucide-react/dist/esm/icons/settings';
 
@@ -33,10 +34,17 @@ export function SidebarNav({ collapsed, onLogout }: { collapsed?: boolean; onLog
       >
         <SettingsIcon size={15} /> {!collapsed && '设置'}
       </Link>
+      <Link
+        to="/help"
+        title="帮助中心"
+        className={itemClass}
+      >
+        <CircleHelp size={15} /> {!collapsed && '帮助中心'}
+      </Link>
       <button
         onClick={onLogout}
         title="退出登录"
-        className={collapsed ? 'flex min-h-10 w-full cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-transparent text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--brand-coral)]/25 hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:scale-95' : 'flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-[var(--r-sm)] border border-transparent px-3 py-2 text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--brand-coral)]/25 hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:scale-95'}
+        className={collapsed ? 'flex min-h-10 w-full cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-transparent text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--brand-coral)]/25 hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:scale-95 max-md:col-span-2' : 'flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-[var(--r-sm)] border border-transparent px-3 py-2 text-[var(--body)] transition-[background-color,border-color,color,transform] hover:border-[var(--brand-coral)]/25 hover:bg-[var(--brand-coral)]/10 hover:text-[var(--brand-coral)] active:scale-95 max-md:col-span-2'}
       >
         <LogOut size={15} /> {!collapsed && '退出登录'}
       </button>

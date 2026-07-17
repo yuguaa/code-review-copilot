@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Circle from 'lucide-react/dist/esm/icons/circle';
 import CircleCheck from 'lucide-react/dist/esm/icons/circle-check';
@@ -12,6 +12,38 @@ import type {
 } from '@shared/review-activity';
 import { cn } from '../../lib/cn';
 import { ToolEvidenceBlock } from './ToolEvidenceBlock';
+
+export const REVIEW_AGENT_INSPECTOR_OUTLET_ID = 'review-agent-inspector-outlet';
+export const REVIEW_AGENT_INSPECTOR_PANEL_ID = 'review-agent-inspector-panel';
+
+type InspectorSelection = { runId: string; agentId: string } | null;
+
+const ReviewAgentInspectorContext = createContext<{
+  selection: InspectorSelection;
+  selectAgent: (selection: Exclude<InspectorSelection, null>) => void;
+  closeInspector: () => void;
+} | null>(null);
+
+export function ReviewAgentInspectorProvider({ children }: { children: ReactNode }) {
+  const [selection, setSelection] = useState<InspectorSelection>(null);
+  const selectAgent = useCallback((next: Exclude<InspectorSelection, null>) => setSelection(next), []);
+  const closeInspector = useCallback(() => setSelection(null), []);
+
+  return (
+    <ReviewAgentInspectorContext.Provider
+      value={{ selection, selectAgent, closeInspector }}
+    >
+      {children}
+      <div id={REVIEW_AGENT_INSPECTOR_OUTLET_ID} className="agent-inspector-outlet min-h-0 shrink-0 empty:hidden" />
+    </ReviewAgentInspectorContext.Provider>
+  );
+}
+
+export function useReviewAgentInspector() {
+  const context = useContext(ReviewAgentInspectorContext);
+  if (!context) throw new Error('ReviewAgentInspectorProvider is missing');
+  return context;
+}
 
 export function reviewAgentStatusLabel(status: ReviewAgentStatus): string {
   if (status === 'running') return '进行中';
@@ -47,61 +79,34 @@ function toolPart(tool: ReviewAgentToolTrace): Record<string, unknown> {
 export function ReviewAgentDrawer({ agent, onClose }: { agent: ReviewAgentActivity; onClose: () => void }) {
   const titleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
   const trace = agent.trace;
   const StatusIcon = reviewAgentStatusIcon(agent.status);
   const toolCount = trace?.steps.reduce((total, step) => total + step.tools.length, 0) ?? 0;
 
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     closeButtonRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
-      if (event.key !== 'Tab' || !panelRef.current) return;
-      const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ));
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (!first || !last) return;
-      if (!panelRef.current.contains(document.activeElement)) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-        return;
-      }
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', onKeyDown);
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [onClose]);
 
+  const outlet = document.getElementById(REVIEW_AGENT_INSPECTOR_OUTLET_ID);
+  if (!outlet) return null;
+
   return createPortal(
-    <div
-      className="agent-drawer-backdrop fixed inset-0 z-[70] bg-[var(--surface-dark)]/28"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <aside
+      id={REVIEW_AGENT_INSPECTOR_PANEL_ID}
+      role="complementary"
+      aria-labelledby={titleId}
+      className="agent-inspector-panel flex h-full w-full flex-col overflow-hidden bg-[var(--surface-card)]"
     >
-      <aside
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="agent-drawer-panel ml-auto flex h-full w-full max-w-[620px] flex-col overflow-hidden bg-[var(--surface-card)] shadow-[var(--shadow-popover)] sm:rounded-l-[var(--r-md)]"
-      >
-        <header className="shrink-0 border-b border-[var(--line-default)] bg-[var(--surface-card)] px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6">
+      <header className="shrink-0 border-b border-[var(--line-default)] bg-[var(--surface-card)] px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6">
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <p className="caption text-[var(--muted)]">子 Agent 审查过程</p>
@@ -130,9 +135,9 @@ export function ReviewAgentDrawer({ agent, onClose }: { agent: ReviewAgentActivi
             <span className="caption tabular-nums text-[var(--muted)]">{trace?.steps.length ?? 0} 个步骤</span>
             <span className="caption tabular-nums text-[var(--muted)]">{toolCount} 次工具调用</span>
           </div>
-        </header>
+      </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:px-6">
           {trace ? (
             <div className="space-y-7">
               <section aria-labelledby={`${titleId}-input`}>
@@ -211,9 +216,8 @@ export function ReviewAgentDrawer({ agent, onClose }: { agent: ReviewAgentActivi
               )}
             </div>
           ) : null}
-        </div>
-      </aside>
-    </div>,
-    document.body,
+      </div>
+    </aside>,
+    outlet,
   );
 }

@@ -5,6 +5,7 @@ import { Login } from './pages/Login';
 
 const Chat = lazy(() => import('./pages/Chat').then((module) => ({ default: module.Chat })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const Help = lazy(() => import('./pages/Help').then((module) => ({ default: module.Help })));
 const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
 const Repositories = lazy(() => import('./pages/Repositories').then((module) => ({ default: module.Repositories })));
 
@@ -43,6 +44,7 @@ export function App() {
         <Route path="/" element={<RequireAuth><Chat /></RequireAuth>} />
         <Route path="/c/:sessionId" element={<RequireAuth><Chat /></RequireAuth>} />
         <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+        <Route path="/help" element={<RequireAuth><Help /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
         <Route path="/repositories" element={<RequireAuth><Repositories /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
