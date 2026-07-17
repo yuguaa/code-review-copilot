@@ -1,3 +1,4 @@
+import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import { Button } from '../ui/button';
 import { Checkbox, Field, Input, Select } from '../ui/forms';
 import { Card, ColorBlock } from '../ui/surface';
@@ -64,12 +65,16 @@ export function ModelSettingsForm({
 
 export function ModelList({
   models,
+  testingModelId,
+  onTest,
   onSetDefault,
   onActiveChange,
   onEdit,
   onRemove,
 }: {
   models: AIModel[];
+  testingModelId: string | null;
+  onTest: (model: AIModel) => void;
   onSetDefault: (id: string) => void;
   onActiveChange: (model: AIModel, isActive: boolean) => void;
   onEdit: (model: AIModel) => void;
@@ -90,6 +95,10 @@ export function ModelList({
               </p>
             </div>
             <div className="flex shrink-0 gap-2 max-md:w-full max-md:flex-col">
+              <Button variant="secondary" className="max-md:w-full" onClick={() => onTest(model)} disabled={testingModelId !== null}>
+                {testingModelId === model.id ? <Loader2 size={14} className="animate-spin" /> : null}
+                {testingModelId === model.id ? '测试中…' : '测试'}
+              </Button>
               <Button variant="secondary" className="max-md:w-full" onClick={() => onEdit(model)}>
                 编辑
               </Button>
@@ -112,6 +121,10 @@ export function ModelList({
               </p>
             </div>
             <div className="flex shrink-0 gap-2 border-l border-[var(--line-subtle)] pl-4 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:border-l-0 max-md:border-t max-md:pt-3 max-md:pl-0">
+              <Button variant="secondary" className="max-md:w-full" onClick={() => onTest(model)} disabled={testingModelId !== null}>
+                {testingModelId === model.id ? <Loader2 size={14} className="animate-spin" /> : null}
+                {testingModelId === model.id ? '测试中…' : '测试'}
+              </Button>
               {model.isActive ? (
                 <Button variant="secondary" className="max-md:w-full" onClick={() => onSetDefault(model.id)}>
                   设默认

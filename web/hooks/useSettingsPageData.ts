@@ -69,6 +69,7 @@ export function useSettingsPageData() {
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
+  const [testingModelId, setTestingModelId] = useState<string | null>(null);
   const [savingNotification, setSavingNotification] = useState(false);
   const [savingToolSkills, setSavingToolSkills] = useState(false);
 
@@ -188,6 +189,18 @@ export function useSettingsPageData() {
       .then(() => toast.success('已设为默认模型'));
   };
 
+  const testModel = (model: AIModel) => {
+    setTestingModelId(model.id);
+    api<{ ok: boolean }>(`/api/settings/models/${model.id}/test`, { method: 'POST' })
+      .then(({ ok }) => {
+        ok
+          ? toast.success(`${model.provider}/${model.modelId} 连接正常`)
+          : toast.error('连接失败，请检查 Provider、模型 ID、API Key 与接口地址');
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : '模型连接测试失败'))
+      .finally(() => setTestingModelId(null));
+  };
+
   const updateModelActive = (model: AIModel, isActive: boolean) => {
     setSavingModel(true);
     api(`/api/settings/models/${model.id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) })
@@ -250,6 +263,7 @@ export function useSettingsPageData() {
     editingModelId,
     saving,
     savingModel,
+    testingModelId,
     savingNotification,
     savingToolSkills,
     setEnabledTools,
@@ -266,6 +280,7 @@ export function useSettingsPageData() {
     saveModel,
     resetModelForm,
     setDefaultModel,
+    testModel,
     updateModelActive,
     removeModel,
     saveNotification,

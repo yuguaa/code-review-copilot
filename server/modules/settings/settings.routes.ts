@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createAIModel, deleteAIModel, getAIModel, listAIModels, updateAIModel } from './ai-model-settings.service';
+import { createAIModel, deleteAIModel, getAIModel, listAIModels, testAIModel, updateAIModel } from './ai-model-settings.service';
 import { listToolSkillSettings, updateToolSkillSettings } from './tool-skill-settings.service';
 import {
   createGitLabAccount,
@@ -68,6 +68,13 @@ settingsRoutes.post('/models', async (c) => {
 settingsRoutes.patch('/models/:id', async (c) => {
   const body = await c.req.json();
   return c.json({ model: await updateAIModel(c.req.param('id'), body) });
+});
+
+settingsRoutes.post('/models/:id/test', (c) => {
+  return testAIModel(c.req.param('id')).then((ok) => {
+    if (ok === null) return c.json({ error: '模型不存在' }, 404);
+    return c.json({ ok });
+  });
 });
 
 settingsRoutes.delete('/models/:id', async (c) => {

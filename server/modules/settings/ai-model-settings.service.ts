@@ -1,5 +1,9 @@
+import { generateText } from 'ai';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
+import { resolveModel } from '../ai-models/ai-models.service';
 import type { AIModelPayload } from './settings.types';
+
+const MODEL_TEST_TIMEOUT_MS = 15_000;
 
 function maskModel(model: { apiKey?: string; [key: string]: unknown }) {
   const { apiKey, ...rest } = model;
@@ -24,6 +28,23 @@ export async function listAIModels() {
 
 export function getAIModel(id: string) {
   return prisma.aIModel.findUnique({ where: { id } });
+}
+
+export function testAIModel(id: string): Promise<boolean | null> {
+  return getAIModel(id).then((storedModel) => {
+    if (!storedModel) return null;
+    return Promise.resolve()
+      .then(() => resolveModel(storedModel))
+      .then((model) => generateText({
+        model,
+        prompt: '请只回复 OK。',
+        maxOutputTokens: 8,
+        maxRetries: 0,
+        timeout: MODEL_TEST_TIMEOUT_MS,
+      }))
+      .then(() => true)
+      .catch(() => false);
+  });
 }
 
 export async function createAIModel(body: AIModelPayload) {
