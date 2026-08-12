@@ -1,4 +1,14 @@
-import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai';
+import {
+  generateText,
+  streamText,
+  stepCountIs,
+  tool,
+  convertToModelMessages,
+  type LanguageModel,
+  type ModelMessage,
+  type UIMessage,
+} from 'ai';
+import { z } from 'zod';
 import {
   loadActiveModelConfigs,
   loadGlobalDefaultModel,
@@ -15,9 +25,81 @@ import { createLogger } from '../../shared/logger/logger.service';
 import { createReviewBlueprint, renderReviewBlueprint, type ReviewBlueprint } from './review-blueprint';
 import { createReviewRuntimeMemory, renderReviewRuntimeMemory, type ReviewRuntimeMemory } from './review-runtime-memory';
 import type { ReviewActivityReporter } from './review-activity';
+import { parseReviewFindings } from '../../../shared/review-findings';
+import { assertReviewDraftIsDecidable } from './review-verify';
 
 const log = createLogger('review-agent');
 const delegateToolKeys = ['delegate_security', 'delegate_architecture', 'delegate_performance'] as const;
+const PRIMARY_FINALIZATION_ATTEMPTS = 3;
+
+export const PRIMARY_FINALIZATION_INSTRUCTIONS = `主审查取证已经结束。现在禁止继续探索代码或输出过程说明：
+- 立即调用 submit_primary_review 提交完整审查总评。
+- 总评必须按「严重/一般/建议」分组；每条问题包含文件:行、问题、影响、修复建议。
+- 没有实质问题时，三个分组必须分别明确写“未发现严重问题”“未发现一般问题”“暂无建议”。
+- 只能根据既有对话、工具结果、审查蓝图和运行期 CodeMem 收敛，不能编造未取证问题。
+- 若工具返回 accepted=false，严格按照 error 修正后重新提交。
+- 不要输出普通文本。`;
+
+export function createPrimaryReviewFinalizer({
+  model,
+  initialMessages,
+  responseMessages,
+  blueprint,
+  runtimeMemory,
+  abortSignal,
+}: {
+  model: LanguageModel;
+  initialMessages: ModelMessage[];
+  responseMessages: PromiseLike<ReadonlyArray<ModelMessage>>;
+  blueprint?: ReviewBlueprint;
+  runtimeMemory: ReviewRuntimeMemory;
+  abortSignal?: AbortSignal;
+}): () => Promise<string> {
+  return () => {
+    let acceptedMarkdown: string | null = null;
+    const submitPrimaryReview = tool({
+      description: '提交完整的主审查总评。只有服务端返回 accepted=true，本次主审查才算完成。',
+      inputSchema: z.object({ markdown: z.string().trim().min(1) }),
+      execute: ({ markdown }) => {
+        try {
+          assertReviewDraftIsDecidable(markdown, parseReviewFindings(markdown));
+          acceptedMarkdown = markdown.trim();
+          return { accepted: true };
+        } catch (error) {
+          return {
+            accepted: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    });
+    const completed = () => acceptedMarkdown !== null;
+
+    return Promise.resolve(responseMessages).then((generatedMessages) => generateText({
+      model,
+      system: PRIMARY_FINALIZATION_INSTRUCTIONS,
+      messages: [
+        ...initialMessages,
+        ...generatedMessages,
+        {
+          role: 'user',
+          content: [
+            PRIMARY_FINALIZATION_INSTRUCTIONS,
+            blueprint ? renderReviewBlueprint(blueprint) : '',
+            renderReviewRuntimeMemory(runtimeMemory),
+          ].filter(Boolean).join('\n\n'),
+        },
+      ],
+      tools: { submit_primary_review: submitPrimaryReview },
+      toolChoice: { type: 'tool', toolName: 'submit_primary_review' },
+      stopWhen: [completed, stepCountIs(PRIMARY_FINALIZATION_ATTEMPTS)],
+      abortSignal,
+    })).then(() => {
+      if (acceptedMarkdown !== null) return acceptedMarkdown;
+      throw new Error(`主审查在取证结束后仍未通过最终总评校验（已纠正 ${PRIMARY_FINALIZATION_ATTEMPTS} 次）`);
+    });
+  };
+}
 
 export function hasDelegateToolsAvailable(enabledTools: Set<string> | undefined, delegateModelCount: number): boolean {
   return delegateModelCount > 0 && (!enabledTools || delegateToolKeys.some((key) => enabledTools.has(key)));
@@ -132,10 +214,11 @@ export async function createReviewStream(opts: {
     ...buildDelegateTools(ctx, delegateModels, opts.onActivity),
   };
 
+  const modelMessages = await convertToModelMessages(opts.messages);
   const stream = streamText({
     model,
     system: buildInstructions(repo, skills, blueprint, runtimeMemory, { delegateToolsAvailable }),
-    messages: await convertToModelMessages(opts.messages),
+    messages: modelMessages,
     tools,
     stopWhen: stepCountIs(modelConfigs.primary.maxSteps),
     abortSignal: opts.abortSignal,
@@ -161,8 +244,17 @@ export async function createReviewStream(opts: {
       });
     },
   });
+  const finalizePrimaryReview = createPrimaryReviewFinalizer({
+    model,
+    initialMessages: modelMessages,
+    responseMessages: stream.responseMessages,
+    blueprint,
+    runtimeMemory,
+    abortSignal: opts.abortSignal,
+  });
   return {
     stream,
+    finalizePrimaryReview,
     ctx,
     blueprint,
     runtimeMemory,

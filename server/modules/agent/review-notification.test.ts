@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UIMessage } from 'ai';
-import { verifiedReviewPartKind } from '../../../shared/review-findings';
 import {
   buildVerifiedMemoryEntry,
   mergeVerifiedReviewMemory,
@@ -71,14 +69,6 @@ function session(overrides: Partial<SessionWithRepository> = {}): SessionWithRep
   } as SessionWithRepository;
 }
 
-const messages: UIMessage[] = [
-  { id: 'm1', role: 'assistant', parts: [{ type: 'text', text: '审查通过。' }] },
-];
-
-function messagePart(value: unknown): UIMessage['parts'][number] {
-  return value as UIMessage['parts'][number];
-}
-
 describe('notifyReviewCompleted', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,7 +76,7 @@ describe('notifyReviewCompleted', () => {
 
   it('仓库开启钉钉且全局配置存在时发送完成通知', async () => {
     const s = session();
-    await expect(notifyReviewCompleted(s, messages)).resolves.toBe('sent');
+    await expect(notifyReviewCompleted(s, '审查通过。')).resolves.toBe('sent');
     expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       s.repository,
       expect.stringContaining('polit-agent'),
@@ -94,271 +84,12 @@ describe('notifyReviewCompleted', () => {
     );
   });
 
-  it('没有 assistant 文本时仍发送完成通知', async () => {
-    await notifyReviewCompleted(session(), [{ id: 'm1', role: 'assistant', parts: [{ type: 'step-start' }] } as UIMessage]);
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('模型没有返回可展示的文本结果'),
-    );
-  });
-
-  it('只把最后一条 assistant 文本作为完成通知正文', async () => {
-    await notifyReviewCompleted(session(), [
-      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: '旧回复' }] },
-      { id: 'u1', role: 'user', parts: [{ type: 'text', text: '追问' }] },
-      { id: 'a2', role: 'assistant', parts: [{ type: 'text', text: '最新首答' }] },
-    ]);
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.not.stringContaining('旧回复'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('最新首答'),
-    );
-  });
-
-  it('有 Verify 结论时钉钉正文只发送最终核验结果', async () => {
-    await notifyReviewCompleted(session(), [
-      {
-        id: 'a1',
-        role: 'assistant',
-        parts: [
-          { type: 'text', text: '未验证草稿' },
-          messagePart({
-            type: 'tool-bash',
-            state: 'output-available',
-            toolCallId: 'tool-1',
-            input: { command: 'git diff' },
-            output: 'diff output',
-          }),
-          messagePart({
-            type: 'text',
-            text: '## Verify 结论\nverified 总评',
-            reviewPartKind: verifiedReviewPartKind,
-          }),
-        ],
-      },
-    ]);
-
+  it('只发送调用方显式选择的最终总评', async () => {
+    await notifyReviewCompleted(session(), '## Verify 结论\nverified 总评');
     expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(String),
       expect.stringContaining('## Verify 结论\nverified 总评'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.not.stringContaining('未验证草稿'),
-    );
-  });
-
-  it('有 Verify 结论时不再发送可能已被推翻的平台总评', async () => {
-    await notifyReviewCompleted(session(), [
-      {
-        id: 'a1',
-        role: 'assistant',
-        parts: [
-          { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
-          messagePart({
-            type: 'tool-post_review_comment',
-            state: 'output-available',
-            toolCallId: 'tool-1',
-            input: { markdown: '## 严重\n- Dockerfile:12 构建产物路径错误，会导致镜像构建失败。' },
-            output: { posted: true },
-          }),
-          messagePart({
-            type: 'text',
-            text: '## Verify 结论\nverified 总评',
-            reviewPartKind: verifiedReviewPartKind,
-          }),
-        ],
-      },
-    ]);
-
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.not.stringContaining('Dockerfile:12 构建产物路径错误'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('## Verify 结论\nverified 总评'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.not.stringContaining('我会先读取项目记忆'),
-    );
-  });
-
-  it('优先把 post_review_comment 的 markdown 作为钉钉正文', async () => {
-    await notifyReviewCompleted(session(), [
-      {
-        id: 'a1',
-        role: 'assistant',
-        parts: [
-          { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
-          messagePart({
-            type: 'tool-post_review_comment',
-            state: 'output-available',
-            toolCallId: 'tool-1',
-            input: { markdown: '## 严重\n- Dockerfile:12 构建产物路径错误，会导致镜像构建失败。' },
-            output: { posted: true },
-          }),
-          { type: 'text', text: '总评已发布。我会把这次得到的部署审查要点沉淀到项目记忆。' },
-        ],
-      },
-    ]);
-
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('Dockerfile:12 构建产物路径错误'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.not.stringContaining('我会先读取项目记忆'),
-    );
-  });
-
-  it('没有总评评论时把行级问题汇总到钉钉正文', async () => {
-    await notifyReviewCompleted(session(), [
-      {
-        id: 'a1',
-        role: 'assistant',
-        parts: [
-          { type: 'text', text: '我会先读取项目记忆和本次 diff。' },
-          messagePart({
-            type: 'tool-post_inline_comment',
-            state: 'output-available',
-            toolCallId: 'tool-1',
-            input: {
-              path: 'Dockerfile',
-              line: 12,
-              body: '构建产物路径与根 build:all 契约不一致，会导致镜像构建失败。',
-            },
-            output: { posted: true },
-          }),
-          messagePart({
-            type: 'tool-post_inline_comment',
-            state: 'output-available',
-            toolCallId: 'tool-2',
-            input: {
-              path: 'Dockerfile',
-              line: 1,
-              body: '基础镜像使用 latest，发布不可复现且难以审计。',
-            },
-            output: { posted: true },
-          }),
-          { type: 'text', text: '行级评论已发布。现在整理总评。' },
-        ],
-      },
-    ]);
-
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('Dockerfile:12'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('构建产物路径与根 build:all 契约不一致'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('Dockerfile:1'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.not.stringContaining('我会先读取项目记忆'),
-    );
-  });
-
-  it('有总评评论时仍把行级问题附加到钉钉正文', async () => {
-    await notifyReviewCompleted(session(), [
-      {
-        id: 'a1',
-        role: 'assistant',
-        parts: [
-          messagePart({
-            type: 'tool-post_inline_comment',
-            state: 'output-available',
-            toolCallId: 'tool-1',
-            input: {
-              path: 'Dockerfile',
-              line: 12,
-              body: '构建产物路径与根 build:all 契约不一致，会导致镜像构建失败。',
-            },
-            output: { posted: true },
-          }),
-          messagePart({
-            type: 'tool-post_review_comment',
-            state: 'output-available',
-            toolCallId: 'tool-2',
-            input: { markdown: '## 总评\n本次变更存在部署风险。' },
-            output: { posted: true },
-          }),
-        ],
-      },
-    ]);
-
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('## 总评'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('## 行级问题'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('Dockerfile:12'),
-    );
-  });
-
-  it('兼容 args 形态的行级工具调用参数', async () => {
-    await notifyReviewCompleted(session(), [
-      {
-        id: 'a1',
-        role: 'assistant',
-        parts: [
-          messagePart({
-            type: 'tool-post_inline_comment',
-            state: 'output-available',
-            toolCallId: 'tool-1',
-            args: {
-              path: 'nginx.conf',
-              line: 8,
-              body: '子路径部署缺少静态资源路径校验，可能导致白屏。',
-            },
-            output: { posted: true },
-          }),
-          { type: 'text', text: '行级评论已发布。现在整理总评。' },
-        ],
-      },
-    ]);
-
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.stringContaining('nginx.conf:8'),
-    );
-    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.any(String),
-      expect.not.stringContaining('行级评论已发布'),
     );
   });
 
@@ -367,7 +98,7 @@ describe('notifyReviewCompleted', () => {
       repository: { ...session().repository!, enableDingtalk: false },
     });
 
-    await expect(notifyReviewCompleted(s, messages)).resolves.toBe('skipped');
+    await expect(notifyReviewCompleted(s, '审查通过。')).resolves.toBe('skipped');
     expect(sendRepositoryDingtalkNotification).not.toHaveBeenCalled();
   });
 });
@@ -485,7 +216,7 @@ describe('runReviewCompletionIntegrations', () => {
         dingtalkRepository: { enableDingtalk: true, dingtalkWebhook: null, dingtalkSecret: null },
       },
       session({ mrIid: 2 }),
-      messages,
+      'verified 总评',
       'verified 总评',
     );
 
@@ -513,7 +244,7 @@ describe('runReviewCompletionIntegrations', () => {
         dingtalkRepository: { enableDingtalk: true, dingtalkWebhook: null, dingtalkSecret: null },
       },
       session({ mrIid: 2 }),
-      messages,
+      '审查通过。',
       null,
     );
 
@@ -525,6 +256,43 @@ describe('runReviewCompletionIntegrations', () => {
       expect.stringContaining('审查通过。'),
     );
     expect(writeRepositoryMemory).not.toHaveBeenCalled();
+  });
+
+  it('GitLab 与钉钉消费同一个显式最终总评，不混入过程文本', async () => {
+    const gitlab = {
+      createCommitComment: vi.fn().mockResolvedValue({ id: 'note-1' }),
+    };
+    const publicationText = '## 严重\n未发现严重问题。\n\n## 一般\n未发现一般问题。\n\n## 建议\n暂无建议。';
+
+    await runReviewCompletionIntegrations(
+      {
+        gitlab: gitlab as never,
+        projectId: 1,
+        mrIid: null,
+        repoId: 'r1',
+        workdir: '/tmp/repo',
+        diffRef: 'base',
+        commitSha: 'head',
+        diffRefs: null,
+        enableMrComment: true,
+        dingtalkRepository: { enableDingtalk: true, dingtalkWebhook: null, dingtalkSecret: null },
+      },
+      session(),
+      publicationText,
+      null,
+    );
+
+    expect(gitlab.createCommitComment).toHaveBeenCalledWith(1, 'head', publicationText);
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.stringContaining(publicationText),
+    );
+    expect(sendRepositoryDingtalkNotification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.not.stringContaining('现在深入查看相关源码文件'),
+    );
   });
 
   it('单个发布渠道同步抛错时仍完成其它渠道', async () => {
@@ -548,7 +316,7 @@ describe('runReviewCompletionIntegrations', () => {
         dingtalkRepository: { enableDingtalk: true, dingtalkWebhook: null, dingtalkSecret: null },
       },
       session({ mrIid: 2 }),
-      messages,
+      '审查通过。',
       null,
     );
 

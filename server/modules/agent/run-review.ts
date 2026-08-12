@@ -6,9 +6,9 @@ import {
   updatePersistedMessageParts,
 } from '../sessions/session-message-store.service';
 import { createReviewStream } from './review-agent';
-import { ensureVisibleAssistantReply, hasAssistantTextAfterLatestUser } from './review-message';
 import { runReviewCompletionIntegrations } from './review-notification';
 import {
+  validatedReviewDraft,
   verifyReviewResult,
   withVerifiedReviewText,
 } from './review-verify';
@@ -30,7 +30,7 @@ import {
   type ReviewActivityState,
   type ReviewActivityReporter,
 } from './review-activity';
-import { MISSING_REVIEW_TEXT_ERROR, publicReviewError } from './review-error';
+import { publicReviewError } from './review-error';
 
 const log = createLogger('run-review');
 const activeReviewControllers = new Map<string, AbortController>();
@@ -191,9 +191,29 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     }
 
     throwIfStopped(controller.signal);
-    const hasPrimaryReviewText = hasAssistantTextAfterLatestUser(finalMessages);
-    finalMessages = ensureVisibleAssistantReply(finalMessages);
-    if (!hasPrimaryReviewText) throw new Error(MISSING_REVIEW_TEXT_ERROR);
+    let primaryReviewText: string;
+    try {
+      primaryReviewText = validatedReviewDraft(finalMessages);
+    } catch {
+      publishActivity({
+        id: 'primary',
+        label: '主审查 Agent',
+        provider: reviewRun.primaryConfig.provider,
+        modelId: reviewRun.primaryConfig.modelId,
+        task: '整理并提交最终审查总评',
+        status: 'running',
+      });
+      primaryReviewText = await reviewRun.finalizePrimaryReview();
+      finalMessages = [
+        ...finalMessages,
+        {
+          id: `primary-review-${randomUUID()}`,
+          role: 'assistant',
+          parts: [{ type: 'text', text: primaryReviewText }],
+        },
+      ];
+      primaryReviewText = validatedReviewDraft(finalMessages);
+    }
     publishActivity({
       id: 'primary',
       label: '主审查 Agent',
@@ -245,7 +265,7 @@ export async function runReviewSession(sessionId: string): Promise<void> {
     const integrationFailures = await runReviewCompletionIntegrations(
       reviewRun.ctx,
       session,
-      finalMessages,
+      verifiedReviewText || primaryReviewText,
       verifiedReviewText,
     );
     if (integrationFailures.length) {

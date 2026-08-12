@@ -31,4 +31,10 @@ describe('publicReviewError', () => {
   it('主审查没有返回文本时保留明确错误', () => {
     expect(publicReviewError(new Error(MISSING_REVIEW_TEXT_ERROR))).toBe(MISSING_REVIEW_TEXT_ERROR);
   });
+
+  it('主审查最终化失败时返回明确错误', () => {
+    expect(publicReviewError(new Error('主审查在取证结束后仍未通过最终总评校验（已纠正 3 次）'))).toBe(
+      '主审查未能生成有效的最终总评',
+    );
+  });
 });

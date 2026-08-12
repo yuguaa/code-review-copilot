@@ -90,6 +90,7 @@ const validPrimaryMessage: UIMessage = {
     ].join('\n'),
   }],
 };
+const validPrimaryText = (validPrimaryMessage.parts[0] as { type: 'text'; text: string }).text;
 
 function activityStateOf(messages: UIMessage[]): ReviewActivityState | undefined {
   for (const part of messages.flatMap((message) => message.parts)) {
@@ -112,6 +113,7 @@ describe('runReviewSession success contract', () => {
     mocks.runReviewCompletionIntegrations.mockResolvedValue([]);
     mocks.createReviewStream.mockResolvedValue({
       stream: { toUIMessageStream: vi.fn(() => new ReadableStream()) },
+      finalizePrimaryReview: vi.fn().mockResolvedValue(validPrimaryText),
       ctx: {},
       blueprint: undefined,
       runtimeMemory: undefined,
@@ -151,7 +153,7 @@ describe('runReviewSession success contract', () => {
     expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.any(Array),
+      validPrimaryText,
       null,
     );
 
@@ -174,7 +176,8 @@ describe('runReviewSession success contract', () => {
     );
   });
 
-  it('主审查已给出意见时不因 Verify 无法解析格式而失败', async () => {
+  it('主审查模糊意见先收敛为合法总评，Verify 失败时仍发布已校验主总评', async () => {
+    const finalizedReview = validPrimaryText;
     mocks.streamedMessage = {
       id: 'assistant-1',
       role: 'assistant',
@@ -192,17 +195,15 @@ describe('runReviewSession success contract', () => {
     expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.any(Array),
+      finalizedReview,
       null,
     );
 
     const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];
     expect(savedMessages).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'assistant-1',
-        parts: expect.arrayContaining([
-          expect.objectContaining({ type: 'text', text: '本次改动整体看起来不错。' }),
-        ]),
+        role: 'assistant',
+        parts: [{ type: 'text', text: finalizedReview }],
       }),
     ]));
     expect(activityStateOf(savedMessages)).toMatchObject({
@@ -217,12 +218,83 @@ describe('runReviewSession success contract', () => {
     );
   });
 
-  it('主审查只有事件没有文本时失败且不发布', async () => {
+  it('主审查只有过程文本时强制收敛后再进入 Verify 和发布', async () => {
+    const finalizedReview = validPrimaryText;
+    const finalizePrimaryReview = vi.fn().mockResolvedValue(finalizedReview);
+    mocks.streamedMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: '现在深入查看相关源码文件，确认细节。' }],
+    };
+    mocks.createReviewStream.mockResolvedValue({
+      stream: { toUIMessageStream: vi.fn(() => new ReadableStream()) },
+      finalizePrimaryReview,
+      ctx: {},
+      blueprint: undefined,
+      runtimeMemory: undefined,
+      primaryConfig: { provider: 'openai', modelId: 'gpt-5' },
+      verifiers: [],
+    });
+
+    await runReviewSession('session-1');
+
+    expect(finalizePrimaryReview).toHaveBeenCalledOnce();
+    expect(mocks.markReviewSessionCompleted).toHaveBeenCalledWith('session-1');
+    expect(mocks.markReviewSessionFailed).not.toHaveBeenCalled();
+    expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      finalizedReview,
+      null,
+    );
+    const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];
+    expect(savedMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: 'assistant',
+        parts: [{ type: 'text', text: finalizedReview }],
+      }),
+    ]));
+  });
+
+  it('主审查过程文本收敛失败时快速失败且不发布', async () => {
+    mocks.streamedMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: '现在深入查看相关源码文件，确认细节。' }],
+    };
+    mocks.createReviewStream.mockResolvedValue({
+      stream: { toUIMessageStream: vi.fn(() => new ReadableStream()) },
+      finalizePrimaryReview: vi.fn().mockRejectedValue(new Error('主审查在取证结束后仍未通过最终总评校验（已纠正 3 次）')),
+      ctx: {},
+      blueprint: undefined,
+      runtimeMemory: undefined,
+      primaryConfig: { provider: 'openai', modelId: 'gpt-5' },
+      verifiers: [],
+    });
+
+    await runReviewSession('session-1');
+
+    expect(mocks.verifyReviewResult).not.toHaveBeenCalled();
+    expect(mocks.markReviewSessionCompleted).not.toHaveBeenCalled();
+    expect(mocks.markReviewSessionFailed).toHaveBeenCalledWith('session-1', '主审查未能生成有效的最终总评');
+    expect(mocks.runReviewCompletionIntegrations).not.toHaveBeenCalled();
+  });
+
+  it('主审查只有事件且最终化失败时失败且不发布', async () => {
     mocks.streamedMessage = {
       id: 'assistant-1',
       role: 'assistant',
       parts: [{ type: 'step-start' }],
     } as UIMessage;
+    mocks.createReviewStream.mockResolvedValue({
+      stream: { toUIMessageStream: vi.fn(() => new ReadableStream()) },
+      finalizePrimaryReview: vi.fn().mockRejectedValue(new Error('主审查在取证结束后仍未通过最终总评校验（已纠正 3 次）')),
+      ctx: {},
+      blueprint: undefined,
+      runtimeMemory: undefined,
+      primaryConfig: { provider: 'openai', modelId: 'gpt-5' },
+      verifiers: [],
+    });
 
     await runReviewSession('session-1');
 
@@ -230,22 +302,11 @@ describe('runReviewSession success contract', () => {
     expect(mocks.markReviewSessionCompleted).not.toHaveBeenCalled();
     expect(mocks.markReviewSessionFailed).toHaveBeenCalledWith(
       'session-1',
-      '主审查 Agent 未返回可展示的审查意见',
+      '主审查未能生成有效的最终总评',
     );
     expect(mocks.runReviewCompletionIntegrations).not.toHaveBeenCalled();
 
     const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];
-    expect(savedMessages).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        role: 'assistant',
-        parts: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'text',
-            text: expect.stringContaining('本轮模型没有返回可展示的文本结果'),
-          }),
-        ]),
-      }),
-    ]));
     expect(activityStateOf(savedMessages)).toMatchObject({
       phase: 'failed',
       agents: expect.arrayContaining([
@@ -257,6 +318,7 @@ describe('runReviewSession success contract', () => {
   it('没有足够的 Verify 模型时显式跳过增强', async () => {
     mocks.createReviewStream.mockResolvedValue({
       stream: { toUIMessageStream: vi.fn(() => new ReadableStream()) },
+      finalizePrimaryReview: vi.fn().mockResolvedValue(validPrimaryText),
       ctx: {},
       blueprint: undefined,
       runtimeMemory: undefined,
@@ -272,7 +334,7 @@ describe('runReviewSession success contract', () => {
     expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.any(Array),
+      validPrimaryText,
       null,
     );
   });
@@ -329,7 +391,7 @@ describe('runReviewSession success contract', () => {
     expect(mocks.runReviewCompletionIntegrations).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.any(Array),
+      '复核后的最终结论',
       '复核后的最终结论',
     );
     const savedMessages = mocks.saveMessages.mock.calls.at(-1)?.[1] as UIMessage[];

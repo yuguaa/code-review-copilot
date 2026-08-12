@@ -1,92 +1,9 @@
-import type { UIMessage } from 'ai';
-import { isVerifiedReviewPart } from '../../../shared/review-findings';
 import type { SessionWithRepository } from '../sessions/session-message-store.service';
 import { sendRepositoryDingtalkNotification } from '../notifications/notifications.service';
 import type { ReviewContext } from './tools';
 import { readRepositoryMemory, writeRepositoryMemory } from '../repositories/repositories.service';
 
 type RepositoryForDingtalk = NonNullable<SessionWithRepository['repository']>;
-type MessagePartRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is MessagePartRecord {
-  return value !== null && typeof value === 'object';
-}
-
-function textPartValue(part: unknown): string {
-  if (!isRecord(part)) return '';
-  return part.type === 'text' && typeof part.text === 'string' ? part.text.trim() : '';
-}
-
-function reviewCommentMarkdown(part: unknown): string {
-  if (!isRecord(part)) return '';
-  const type = typeof part.type === 'string' ? part.type : '';
-  const toolName = typeof part.toolName === 'string' ? part.toolName : '';
-  if (type !== 'tool-post_review_comment' && toolName !== 'post_review_comment') return '';
-  const input = toolInputOf(part);
-  return typeof input?.markdown === 'string' ? input.markdown.trim() : '';
-}
-
-function inlineReviewComment(part: unknown): string {
-  if (!isRecord(part)) return '';
-  const type = typeof part.type === 'string' ? part.type : '';
-  const toolName = typeof part.toolName === 'string' ? part.toolName : '';
-  if (type !== 'tool-post_inline_comment' && toolName !== 'post_inline_comment') return '';
-  const input = toolInputOf(part);
-  const path = typeof input?.path === 'string' ? input.path.trim() : '';
-  const line = typeof input?.line === 'number' ? input.line : null;
-  const body = typeof input?.body === 'string' ? input.body.trim() : '';
-  if (!body) return '';
-  return path && line ? `- ${path}:${line}\n  ${body}` : `- ${body}`;
-}
-
-function toolInputOf(part: MessagePartRecord): MessagePartRecord | null {
-  if (isRecord(part.input)) return part.input;
-  if (isRecord(part.rawInput)) return part.rawInput;
-  if (isRecord(part.args)) return part.args;
-  if (isRecord(part.toolCall) && isRecord(part.toolCall.args)) return part.toolCall.args;
-  return null;
-}
-
-function toolReviewTextOf(messages: UIMessage[]): string {
-  const assistantMessages = messages.filter((message) => message.role === 'assistant');
-  const reviewComment = [...assistantMessages]
-    .reverse()
-    .flatMap((message) => message.parts.map((part) => reviewCommentMarkdown(part)))
-    .find(Boolean);
-  const inlineComments = assistantMessages.flatMap((message) => message.parts.map((part) => inlineReviewComment(part))).filter(Boolean);
-  if (reviewComment && inlineComments.length) return [reviewComment, '', '## 行级问题', ...inlineComments].join('\n');
-  if (reviewComment) return reviewComment;
-  return inlineComments.length ? ['## 行级问题', ...inlineComments].join('\n') : '';
-}
-
-function assistantTextBlocksOf(messages: UIMessage[]): string[] {
-  const assistantMessages = messages.filter((message) => message.role === 'assistant');
-  return assistantMessages
-    .flatMap((message) => message.parts.map((part) => textPartValue(part)))
-    .filter(Boolean);
-}
-
-function finalAssistantTextOf(messages: UIMessage[]): string {
-  const textBlocks = assistantTextBlocksOf(messages);
-  return textBlocks.at(-1) ?? '';
-}
-
-function verifiedReviewTextOf(messages: UIMessage[]): string {
-  return messages
-    .filter((message) => message.role === 'assistant')
-    .flatMap((message) => message.parts)
-    .filter(isVerifiedReviewPart)
-    .map((part) => part.text.trim())
-    .filter(Boolean)
-    .at(-1) ?? '';
-}
-
-function finalReviewTextOf(messages: UIMessage[]): string {
-  const verifiedText = verifiedReviewTextOf(messages);
-  if (verifiedText) return verifiedText;
-  return toolReviewTextOf(messages) || finalAssistantTextOf(messages);
-}
-
 function titleOf(session: SessionWithRepository): string {
   const repo = session.repository?.path ?? '未绑定仓库';
   const title = session.mrIid ? `!${session.mrIid} ${session.mrTitle ?? session.title ?? ''}` : session.title ?? '审查完成';
@@ -113,13 +30,12 @@ function contextOf(session: SessionWithRepository): string {
  * 后台审查完成后的确定性通知。
  * 钉钉开关仍由仓库控制；机器人配置优先仓库级，缺省走全局配置。
  */
-export function notifyReviewCompleted(session: SessionWithRepository, messages: UIMessage[]): Promise<'sent' | 'skipped'> {
+export function notifyReviewCompleted(session: SessionWithRepository, publicationText: string): Promise<'sent' | 'skipped'> {
   const repo = session.repository;
   if (!repo?.enableDingtalk) return Promise.resolve('skipped');
 
-  const resultText = finalReviewTextOf(messages) || '审查已完成，但模型没有返回可展示的文本结果。请进入会话查看工具调用记录。';
   const title = titleOf(session);
-  const text = [`## ${title}`, '', contextOf(session), '', '---', '', resultText].join('\n');
+  const text = [`## ${title}`, '', contextOf(session), '', '---', '', publicationText].join('\n');
   return sendRepositoryDingtalkNotification(repo, title, text);
 }
 
@@ -148,11 +64,10 @@ export type ReviewCompletionIntegrationFailure = {
 export function runReviewCompletionIntegrations(
   ctx: ReviewContext,
   session: SessionWithRepository,
-  messages: UIMessage[],
+  publicationText: string,
   verifiedMarkdown: string | null,
 ): Promise<ReviewCompletionIntegrationFailure[]> {
   const verifiedText = verifiedMarkdown?.trim() ?? '';
-  const publicationText = verifiedText || finalReviewTextOf(messages);
   const integrations: Array<{
     integration: ReviewCompletionIntegrationFailure['integration'];
     run: () => Promise<unknown>;
@@ -160,7 +75,7 @@ export function runReviewCompletionIntegrations(
   if (verifiedText) integrations.push({ integration: 'memory', run: () => rememberVerifiedReview(ctx, verifiedText) });
   integrations.push(
     { integration: 'gitlab', run: () => publishReviewComment(ctx, publicationText) },
-    { integration: 'dingtalk', run: () => notifyReviewCompleted(session, messages) },
+    { integration: 'dingtalk', run: () => notifyReviewCompleted(session, publicationText) },
   );
   return Promise.allSettled(integrations.map(({ run }) => Promise.resolve().then(run))).then((results) =>
     results.flatMap((result, index) =>
