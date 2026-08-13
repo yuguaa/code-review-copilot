@@ -493,20 +493,29 @@ export function verifyReviewAgent({
         ...continuation.responseMessages,
         { role: 'user', content: VERIFY_FINALIZATION_INSTRUCTIONS },
       ];
-      return generateText({
-        model,
-        system: VERIFY_FINALIZATION_INSTRUCTIONS,
-        messages: finalizationMessages,
-        tools: { submit_verified_review: submitVerifiedReview },
-        toolChoice: { type: 'tool', toolName: 'submit_verified_review' },
-        stopWhen: [completed, stepCountIs(VERIFY_FINALIZATION_ATTEMPTS)],
-        abortSignal,
-        onStepEnd,
-      }).then(() => {
-        const finalResult = result();
-        if (finalResult) return finalResult;
-        throw new Error(`Verify Agent 在收敛取证后仍未通过最终结论校验（已纠正 ${VERIFY_FINALIZATION_ATTEMPTS} 次）`);
-      });
+      const runFinalizationAttempt = (
+        messages: ModelMessage[],
+        attempt: number,
+      ): Promise<VerifyAgentResult> => generateText({
+          model,
+          system: VERIFY_FINALIZATION_INSTRUCTIONS,
+          messages,
+          tools: { submit_verified_review: submitVerifiedReview },
+          abortSignal,
+          onStepEnd,
+        }).then((finalization) => {
+          const finalResult = result();
+          if (finalResult) return finalResult;
+          if (attempt >= VERIFY_FINALIZATION_ATTEMPTS) {
+            throw new Error(`Verify Agent 在收敛取证后仍未通过最终结论校验（已纠正 ${VERIFY_FINALIZATION_ATTEMPTS} 次）`);
+          }
+          return runFinalizationAttempt([
+            ...messages,
+            ...finalization.responseMessages,
+            { role: 'user', content: VERIFY_FINALIZATION_INSTRUCTIONS },
+          ], attempt + 1);
+        });
+      return runFinalizationAttempt(finalizationMessages, 1);
     });
   });
 }

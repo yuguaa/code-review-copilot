@@ -31,26 +31,32 @@ describe('主审查强制收敛', () => {
     generateTextMock.mockReset();
   });
 
-  it('只开放提交工具，并允许模型按校验错误纠正总评', async () => {
-    generateTextMock.mockImplementationOnce(async (options: {
-      messages: ModelMessage[];
-      tools: { submit_primary_review: { execute: (input: { markdown: string }) => unknown } };
-      toolChoice: unknown;
-      system: string;
-    }) => {
-      expect(options.messages).toEqual(expect.arrayContaining(initialMessages));
-      expect(options.messages).toEqual(expect.arrayContaining(responseMessages));
-      expect(Object.keys(options.tools)).toEqual(['submit_primary_review']);
-      expect(options.toolChoice).toEqual({ type: 'tool', toolName: 'submit_primary_review' });
-      expect(options.system).toBe(PRIMARY_FINALIZATION_INSTRUCTIONS);
-
-      expect(options.tools.submit_primary_review.execute({ markdown: '现在继续查看源码。' })).toMatchObject({
-        accepted: false,
-        error: expect.stringContaining('无法提取待裁决问题'),
+  it('不强制 toolChoice，并显式重试非法总评', async () => {
+    generateTextMock
+      .mockImplementationOnce((options: {
+        messages: ModelMessage[];
+        tools: { submit_primary_review: { execute: (input: { markdown: string }) => unknown } };
+        system: string;
+      }) => {
+        expect(options.messages).toEqual(expect.arrayContaining(initialMessages));
+        expect(options.messages).toEqual(expect.arrayContaining(responseMessages));
+        expect(Object.keys(options.tools)).toEqual(['submit_primary_review']);
+        expect(options).not.toHaveProperty('toolChoice');
+        expect(options.system).toBe(PRIMARY_FINALIZATION_INSTRUCTIONS);
+        expect(options.tools.submit_primary_review.execute({ markdown: '现在继续查看源码。' })).toMatchObject({
+          accepted: false,
+          error: expect.stringContaining('无法提取待裁决问题'),
+        });
+        return Promise.resolve({ responseMessages: [] });
+      })
+      .mockImplementationOnce((options: {
+        messages: ModelMessage[];
+        tools: { submit_primary_review: { execute: (input: { markdown: string }) => unknown } };
+      }) => {
+        expect(options.messages.at(-1)).toEqual({ role: 'user', content: PRIMARY_FINALIZATION_INSTRUCTIONS });
+        expect(options.tools.submit_primary_review.execute({ markdown: validReview })).toEqual({ accepted: true });
+        return Promise.resolve({ responseMessages: [] });
       });
-      expect(options.tools.submit_primary_review.execute({ markdown: validReview })).toEqual({ accepted: true });
-      return {};
-    });
 
     const finalizePrimaryReview = createPrimaryReviewFinalizer({
       model,
@@ -60,11 +66,11 @@ describe('主审查强制收敛', () => {
     });
 
     await expect(finalizePrimaryReview()).resolves.toBe(validReview);
-    expect(generateTextMock).toHaveBeenCalledOnce();
+    expect(generateTextMock).toHaveBeenCalledTimes(2);
   });
 
-  it('三步内没有提交合法总评时快速失败', async () => {
-    generateTextMock.mockResolvedValueOnce({});
+  it('三次请求内没有提交合法总评时快速失败', async () => {
+    generateTextMock.mockResolvedValue({ responseMessages: [] });
     const finalizePrimaryReview = createPrimaryReviewFinalizer({
       model,
       initialMessages,
@@ -73,5 +79,6 @@ describe('主审查强制收敛', () => {
     });
 
     await expect(finalizePrimaryReview()).rejects.toThrow('仍未通过最终总评校验（已纠正 3 次）');
+    expect(generateTextMock).toHaveBeenCalledTimes(3);
   });
 });

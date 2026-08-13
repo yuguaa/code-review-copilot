@@ -112,11 +112,10 @@ describe('verifyReviewAgent 收敛流程', () => {
       .mockResolvedValueOnce(unfinishedResult())
       .mockImplementationOnce(async (options: {
         tools: { submit_verified_review: { execute: (input: unknown) => unknown } };
-        toolChoice: unknown;
         system: string;
       }) => {
         expect(Object.keys(options.tools)).toEqual(['submit_verified_review']);
-        expect(options.toolChoice).toEqual({ type: 'tool', toolName: 'submit_verified_review' });
+        expect(options).not.toHaveProperty('toolChoice');
         expect(options.system).toBe(VERIFY_FINALIZATION_INSTRUCTIONS);
 
         const rejected = await options.tools.submit_verified_review.execute({
@@ -132,7 +131,13 @@ describe('verifyReviewAgent 收敛流程', () => {
           accepted: false,
           error: expect.stringContaining('未知问题'),
         });
-
+        return unfinishedResult();
+      })
+      .mockImplementationOnce(async (options: {
+        messages: Array<{ role: string; content: string }>;
+        tools: { submit_verified_review: { execute: (input: unknown) => unknown } };
+      }) => {
+        expect(options.messages.at(-1)).toEqual({ role: 'user', content: VERIFY_FINALIZATION_INSTRUCTIONS });
         const accepted = await options.tools.submit_verified_review.execute({
           decisions: [],
           additionalFindings: [],
@@ -151,7 +156,7 @@ describe('verifyReviewAgent 收敛流程', () => {
       submission: { decisions: [], additionalFindings: [] },
     });
 
-    expect(generateTextMock).toHaveBeenCalledTimes(3);
+    expect(generateTextMock).toHaveBeenCalledTimes(4);
   });
 });
 

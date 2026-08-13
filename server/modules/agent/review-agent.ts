@@ -73,12 +73,26 @@ export function createPrimaryReviewFinalizer({
         }
       },
     });
-    const completed = () => acceptedMarkdown !== null;
+    return Promise.resolve(responseMessages).then((generatedMessages) => {
+      const runAttempt = (messages: ModelMessage[], attempt: number): Promise<string> => generateText({
+        model,
+        system: PRIMARY_FINALIZATION_INSTRUCTIONS,
+        messages,
+        tools: { submit_primary_review: submitPrimaryReview },
+        abortSignal,
+      }).then((result) => {
+        if (acceptedMarkdown !== null) return acceptedMarkdown;
+        if (attempt >= PRIMARY_FINALIZATION_ATTEMPTS) {
+          throw new Error(`主审查在取证结束后仍未通过最终总评校验（已纠正 ${PRIMARY_FINALIZATION_ATTEMPTS} 次）`);
+        }
+        return runAttempt([
+          ...messages,
+          ...result.responseMessages,
+          { role: 'user', content: PRIMARY_FINALIZATION_INSTRUCTIONS },
+        ], attempt + 1);
+      });
 
-    return Promise.resolve(responseMessages).then((generatedMessages) => generateText({
-      model,
-      system: PRIMARY_FINALIZATION_INSTRUCTIONS,
-      messages: [
+      return runAttempt([
         ...initialMessages,
         ...generatedMessages,
         {
@@ -89,14 +103,7 @@ export function createPrimaryReviewFinalizer({
             renderReviewRuntimeMemory(runtimeMemory),
           ].filter(Boolean).join('\n\n'),
         },
-      ],
-      tools: { submit_primary_review: submitPrimaryReview },
-      toolChoice: { type: 'tool', toolName: 'submit_primary_review' },
-      stopWhen: [completed, stepCountIs(PRIMARY_FINALIZATION_ATTEMPTS)],
-      abortSignal,
-    })).then(() => {
-      if (acceptedMarkdown !== null) return acceptedMarkdown;
-      throw new Error(`主审查在取证结束后仍未通过最终总评校验（已纠正 ${PRIMARY_FINALIZATION_ATTEMPTS} 次）`);
+      ], 1);
     });
   };
 }
