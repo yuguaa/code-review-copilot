@@ -204,7 +204,7 @@ export function ReviewAgentDrawer({ agent, onClose }: { agent: ReviewAgentActivi
               )}
 
               {trace.errorText && (
-                <section aria-labelledby={`${titleId}-error`} className="rounded-[var(--r-md)] bg-[var(--state-error-bg)] px-4 py-3 shadow-[inset_0_0_0_1px_rgba(217,45,32,0.16)]">
+                <section aria-labelledby={`${titleId}-error`} className="rounded-[var(--r-md)] bg-[var(--state-error-bg)] px-4 py-3 shadow-[inset_0_0_0_1px_rgba(198,83,74,0.16)]">
                   <h3 id={`${titleId}-error`} className="text-sm font-semibold text-[var(--error)]">执行失败</h3>
                   <pre className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--error)]">{trace.errorText}</pre>
                 </section>

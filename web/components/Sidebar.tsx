@@ -46,7 +46,7 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
 
   const sidebarClass = collapsed
     ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[var(--line-default)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
-    : 'sidebar-shell z-20 flex h-full w-[336px] shrink-0 flex-col border-r border-[var(--line-default)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
+    : 'sidebar-shell z-20 flex h-full w-60 shrink-0 flex-col border-r border-[var(--line-default)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
   const collapseTitle = collapsed ? '展开侧边栏' : '折叠侧边栏';
   const collapseIcon = collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />;
 

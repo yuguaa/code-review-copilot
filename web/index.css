@@ -1,89 +1,88 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/cjk/dist/*.js";
 
-/* 工程纸工作台：暖白网格、黑色主操作与橙色信号线。 */
+/* Founder OS 紫灰运营台主题。 */
 :root {
   color-scheme: light;
 
-  --canvas: #f5f3ed;
-  --canvas-quiet: #ece9df;
-  --surface-soft: #faf8f3;
-  --surface-card: #fffefa;
-  --surface-hover: #f2ede3;
-  --surface-selected: #fff0dd;
-  --surface-strong: #e8e3d8;
-  --surface-dark: #11110f;
+  --canvas: #f7f5fc;
+  --canvas-quiet: #eee9f8;
+  --surface-soft: #f4f1f9;
+  --surface-card: #fffefe;
+  --surface-hover: #f0ebf8;
+  --surface-selected: #f0ebff;
+  --surface-strong: #e9e4f1;
+  --surface-dark: #28243a;
   --code-foreground: #e1e4e8;
-  --header-surface: rgba(255, 254, 250, 0.98);
-  --line-subtle: rgba(42, 37, 29, 0.09);
-  --line-default: #d8d3c8;
-  --line-strong: #aaa398;
-  --line-accent: rgba(230, 93, 19, 0.7);
-  --grid-line: rgba(42, 37, 29, 0.05);
+  --header-surface: rgba(255, 254, 254, 0.94);
+  --line-subtle: rgba(76, 61, 101, 0.09);
+  --line-default: #ded8e9;
+  --line-strong: #b9afca;
+  --line-accent: rgba(118, 86, 200, 0.72);
+  --grid-line: rgba(255, 255, 255, 0.055);
   --line-invert: rgba(255, 255, 255, 0.16);
   --hairline: var(--line-default);
 
-  --brand-magenta: #e65d13;
-  --brand-cyan: #138b75;
-  --brand-iris: #69665e;
-  --brand-lime: #79a520;
-  --brand-lilac: #fff0dd;
-  --brand-cream: #faf8f3;
-  --brand-mint: #dff7ef;
-  --brand-pink: #e65d13;
-  --brand-coral: #d92d20;
-  --brand-navy: #11110f;
-  --brand-teal: #138b75;
+  --brand-magenta: #7656c8;
+  --brand-cyan: #2f9b8f;
+  --brand-iris: #4d83c7;
+  --brand-lime: #4f956a;
+  --brand-lilac: #f0ebff;
+  --brand-cream: #f7f5fc;
+  --brand-mint: #e8f5f1;
+  --brand-pink: #d85f86;
+  --brand-coral: #c6534a;
+  --brand-navy: #28243a;
+  --brand-teal: #2f9b8f;
 
-  --primary: #11110f;
-  --primary-hover: #2b2925;
-  --ink: #11110f;
-  --body-strong: #2e2d29;
-  --body: #50514f;
-  --muted: #72736d;
-  --muted-soft: #85857e;
+  --primary: #7656c8;
+  --primary-hover: #6242b5;
+  --ink: #28243a;
+  --body-strong: #41394f;
+  --body: #554c66;
+  --muted: #756d85;
+  --muted-soft: #92899f;
   --on-primary: #ffffff;
-  --on-light: #11110f;
-  --light-control-hover: #f2ede3;
+  --on-light: #28243a;
+  --light-control-hover: #f0ebf8;
 
-  --success: #067647;
-  --warning: #b54708;
-  --error: #d92d20;
+  --success: #28895c;
+  --warning: #b76f25;
+  --error: #c6534a;
 
-  --accent: #e65d13;
-  --focus-ring: #e65d13;
-  --ring: rgba(230, 93, 19, 0.16);
-  --state-info-bg: rgba(230, 93, 19, 0.09);
-  --state-success-bg: rgba(6, 118, 71, 0.08);
-  --state-warning-bg: rgba(181, 71, 8, 0.08);
-  --state-error-bg: rgba(217, 45, 32, 0.08);
-  --state-selected-bg: rgba(230, 93, 19, 0.11);
-  --metric-neutral: #fffefa;
-  --metric-lime: #f3f4df;
-  --metric-lilac: #fff0dd;
-  --metric-mint: #e7f5ee;
-  --metric-pink: #fff5e8;
-  --metric-coral: #fff1f0;
-  --metric-navy: #eeeae0;
-  --metric-teal: #e8f5f1;
+  --accent: #7656c8;
+  --focus-ring: #7656c8;
+  --ring: rgba(118, 86, 200, 0.16);
+  --state-info-bg: rgba(118, 86, 200, 0.09);
+  --state-success-bg: rgba(40, 137, 92, 0.09);
+  --state-warning-bg: rgba(183, 111, 37, 0.09);
+  --state-error-bg: rgba(198, 83, 74, 0.09);
+  --state-selected-bg: rgba(118, 86, 200, 0.12);
+  --metric-neutral: #fffefe;
+  --metric-lime: #edf4e9;
+  --metric-lilac: #f0ebff;
+  --metric-mint: #e8f5f1;
+  --metric-pink: #f9eaf0;
+  --metric-coral: #faecea;
+  --metric-navy: #ebeaf2;
+  --metric-teal: #e5f2f1;
 
-  --r-xs: 0px;
-  --r-sm: 2px;
-  --r-md: 3px;
-  --r-lg: 4px;
-  --r-xl: 6px;
+  --r-xs: 4px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-xl: 12px;
   --r-pill: 999px;
 
-  --shadow-sm: 0 0 0 transparent;
-  --shadow-md: 0 0 0 transparent;
-  --shadow-lg: 0 0 0 transparent;
-  --shadow-popover: 0 16px 42px rgba(17, 17, 15, 0.14);
+  --shadow-sm: 0 1px 2px rgba(63, 45, 91, 0.04), 0 8px 24px rgba(79, 58, 116, 0.06);
+  --shadow-md: 0 2px 4px rgba(63, 45, 91, 0.05), 0 12px 30px rgba(79, 58, 116, 0.08);
+  --shadow-lg: 0 8px 40px rgba(79, 58, 116, 0.12);
+  --shadow-popover: 0 16px 42px rgba(63, 45, 91, 0.16);
 
-  --font-display: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-body: 'PingFang SC', 'Inter', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-display: 'Avenir Next', Avenir, 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', sans-serif;
+  --font-body: 'Avenir Next', Avenir, 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', sans-serif;
+  --font-mono: 'SFMono-Regular', 'Roboto Mono', Consolas, 'Liberation Mono', monospace;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -122,17 +121,13 @@ body {
 
 #root::before {
   background-color: var(--canvas);
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 48px 48px;
 }
 
 #root::after {
   display: none;
 }
 
-/* 标题与正文统一使用 Inter，靠字重和明度建立密集工具界面的层级。 */
+/* 统一使用 Founder OS 的系统字体链，靠字重和明度建立密集工具界面的层级。 */
 .font-display {
   font-family: var(--font-display);
   font-weight: 600;
@@ -174,7 +169,7 @@ a:focus-visible {
 }
 
 ::selection {
-  background: rgba(230, 93, 19, 0.2);
+  background: rgba(118, 86, 200, 0.2);
   color: var(--ink);
 }
 
@@ -273,13 +268,13 @@ a:focus-visible {
 .chat-header {
   border-bottom: 1px solid var(--line-default);
   background: var(--header-surface);
-  box-shadow: none;
+  box-shadow: 0 1px 8px rgba(79, 58, 116, 0.04);
 }
 
 .sidebar-shell {
   position: relative;
-  background: var(--surface-card);
-  box-shadow: none;
+  background: var(--canvas-quiet);
+  box-shadow: 4px 0 18px rgba(74, 54, 111, 0.05);
   transition:
     width 0.24s var(--ease-out),
     background-color 0.24s var(--ease-out);
@@ -304,7 +299,7 @@ a:focus-visible {
 .sidebar-logo,
 .sidebar-action-button {
   background: var(--primary);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .sidebar-action-button:hover {
@@ -327,10 +322,19 @@ a:focus-visible {
 }
 
 .sidebar-session-row.is-active {
-  border-color: var(--line-default);
-  border-left: 3px solid var(--accent);
-  background: var(--surface-selected);
-  box-shadow: none;
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-session-row.is-active .sidebar-session-icon,
+.sidebar-session-row.is-active button,
+.sidebar-session-row.is-active span {
+  color: white;
+}
+
+.sidebar-session-row.is-active .sidebar-session-icon {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .sidebar-session-icon {
@@ -512,11 +516,11 @@ a:focus-visible {
 }
 .conversation-frame::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(245, 243, 237, 0.98), transparent);
+  background: linear-gradient(180deg, rgba(247, 245, 252, 0.98), transparent);
 }
 .conversation-frame::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(245, 243, 237, 0.96), transparent);
+  background: linear-gradient(0deg, rgba(247, 245, 252, 0.96), transparent);
 }
 .conversation-frame.is-scrolled::before,
 .conversation-frame.can-scroll-more::after {
@@ -529,7 +533,7 @@ a:focus-visible {
 
 .composer-dock {
   position: relative;
-  background: linear-gradient(180deg, transparent, rgba(245, 243, 237, 0.88) 48%, var(--canvas));
+  background: linear-gradient(180deg, transparent, rgba(247, 245, 252, 0.88) 48%, var(--canvas));
 }
 
 .composer-dock::before {
@@ -600,7 +604,7 @@ a:focus-visible {
   height: 34px;
   border-bottom: 1px solid var(--line-invert);
   background:
-    linear-gradient(90deg, rgba(230, 93, 19, 0.22), transparent 54%),
+    linear-gradient(90deg, rgba(118, 86, 200, 0.24), transparent 54%),
     rgba(255, 255, 255, 0.035);
   color: rgba(246, 241, 247, 0.74);
 }
@@ -792,7 +796,7 @@ a:focus-visible {
   border: 1px solid var(--line-default);
 }
 
-/* 登录页沿用工程纸与信号橙，将 MR -> Review -> Verify 管线作为产品能力说明。 */
+/* 登录页承担品牌表达，业务页面保持安静。 */
 .login-shell {
   background: transparent;
 }
@@ -818,7 +822,19 @@ a:focus-visible {
 
 .login-visual {
   isolation: isolate;
-  background: var(--surface-card);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(145deg, #6b4eb2 0%, #8164c9 52%, #b09be3 100%);
+  color: white;
+}
+
+.login-visual .text-\[var\(--ink\)\],
+.login-visual .text-\[var\(--body-strong\)\] {
+  color: white;
+}
+
+.login-visual .text-\[var\(--muted\)\],
+.login-visual .text-\[var\(--muted-soft\)\] {
+  color: rgba(255, 255, 255, 0.68);
 }
 
 .login-visual::before {
@@ -854,11 +870,11 @@ a:focus-visible {
   flex: 0 0 52px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line-default);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 50%;
-  color: var(--accent);
-  background: var(--surface-card);
-  box-shadow: none;
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(56, 37, 95, 0.14);
 }
 
 .pipeline-node::after {
@@ -870,8 +886,8 @@ a:focus-visible {
   height: 66px;
   flex-basis: 66px;
   color: white;
-  background: var(--primary);
-  box-shadow: none;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(56, 37, 95, 0.18);
 }
 
 .pipeline-node.is-center::before {
@@ -882,7 +898,7 @@ a:focus-visible {
   position: absolute;
   top: calc(100% + 14px);
   left: 50%;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.72);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -897,14 +913,14 @@ a:focus-visible {
   width: min(126px, 18vw);
   height: 1px;
   overflow: hidden;
-  background: var(--line-default);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .pipeline-beam > span {
   position: absolute;
   inset: -2px auto -2px 0;
   width: 34%;
-  background: linear-gradient(90deg, transparent, var(--accent), #f5a261, transparent);
+  background: linear-gradient(90deg, transparent, white, rgba(255, 255, 255, 0.5), transparent);
   animation: pipeline-beam 1.6s ease-in-out infinite;
 }
 

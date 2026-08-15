@@ -3,7 +3,7 @@ import { cn } from '../../lib/cn';
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('tech-panel rounded-[var(--r-lg)] p-6', className)}>
+    <div className={cn('tech-panel rounded-[var(--r-lg)] p-5', className)}>
       {children}
     </div>
   );
@@ -32,7 +32,7 @@ export function ColorBlock({
   const surface = COLOR_BLOCK_SURFACE[tone];
   return (
     <div
-      className={cn('tech-panel rounded-[var(--r-lg)] p-8', surface.dark ? 'is-dark text-white' : 'text-[var(--ink)]', className)}
+      className={cn('tech-panel rounded-[var(--r-lg)] p-5', surface.dark ? 'is-dark text-white' : 'text-[var(--ink)]', className)}
       style={{
         backgroundColor: surface.bg,
         borderColor: surface.dark ? 'var(--line-strong)' : 'var(--line-default)',

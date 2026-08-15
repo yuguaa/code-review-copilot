@@ -6,14 +6,14 @@ import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 export const chartColors = {
-  ink: '#e65d13',
-  muted: '#72736d',
-  hairline: '#d8d3c8',
-  lime: '#79a520',
-  mint: '#0f9f6e',
-  coral: '#d92d20',
-  teal: '#0f91a8',
-  lilac: '#c2792c',
+  ink: '#7656c8',
+  muted: '#756d85',
+  hairline: '#ded8e9',
+  lime: '#4f956a',
+  mint: '#28895c',
+  coral: '#c6534a',
+  teal: '#2f9b8f',
+  lilac: '#d85f86',
 };
 
 export const trendChartConfig = {
@@ -25,7 +25,7 @@ export const trendChartConfig = {
 export const statusChartConfig = {
   completed: { label: '完成', color: chartColors.mint },
   failed: { label: '失败', color: chartColors.coral },
-  running: { label: '运行中', color: '#b54708' },
+  running: { label: '运行中', color: '#dc8a35' },
 } satisfies ChartConfig;
 
 export const authorChartConfig = {
