@@ -55,7 +55,7 @@ export function ToolEvidenceBlock({ part }: { part: Record<string, unknown> }) {
   const StatusIcon = errored ? CircleX : done ? CircleCheck : Loader2;
 
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-xs">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

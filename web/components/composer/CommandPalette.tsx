@@ -31,7 +31,7 @@ export function CommandPalette({ activeCommand, commands, onSelect }: CommandPal
               selected && 'bg-[var(--surface-selected)] before:absolute before:bottom-2 before:left-0 before:top-2 before:w-px before:bg-[var(--accent)]',
             )}
           >
-            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] text-white">
               {command.loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
             </span>
             <span className="min-w-0">

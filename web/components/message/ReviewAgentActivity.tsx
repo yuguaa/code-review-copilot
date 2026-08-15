@@ -73,7 +73,7 @@ function AgentRow({
             {agent.provider}/{agent.modelId}
           </span>
         </div>
-        <p id={taskId} className="mt-1 line-clamp-2 text-[13px] leading-5 text-[var(--body)]">{agent.task}</p>
+        <p id={taskId} className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--body)]">{agent.task}</p>
       </div>
       <span className="mt-0.5 inline-flex items-center gap-2 whitespace-nowrap">
         <span id={statusId} className={cn('caption inline-flex items-center gap-1', reviewAgentStatusClass(agent.status))}>
@@ -128,7 +128,7 @@ export function ReviewAgentActivity({ data }: { data: ReviewActivityState }) {
       {!selection && (
         <section
           aria-busy={data.phase !== 'completed' && data.phase !== 'failed'}
-          className="review-agent-floating review-agent-pipeline overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]"
+          className="review-agent-floating review-agent-pipeline overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]"
         >
           <span role="status" aria-live="polite" className="sr-only">
             当前阶段：{PHASE_LABEL[data.phase]}。{agentStatusSummary}

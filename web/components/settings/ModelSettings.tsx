@@ -90,7 +90,7 @@ export function ModelList({
                 <span className="min-w-0 truncate">{model.provider}/{model.modelId}</span>
                 <span className="rounded-[var(--r-pill)] border border-[var(--primary)]/24 bg-[var(--state-info-bg)] px-2 py-0.5 text-xs font-medium text-[var(--primary)]">默认</span>
               </p>
-              <p className="mt-1 text-[13px] text-[var(--muted)]">
+              <p className="mt-1 text-xs text-[var(--muted)]">
                 Key {model.hasApiKey ? '已配置' : '缺失'} · 最大步数 {model.maxSteps} · {model.isActive ? '启用' : '停用'}
               </p>
             </div>
@@ -116,7 +116,7 @@ export function ModelList({
               <p className="truncate text-sm text-[var(--ink)]">
                 {model.provider}/{model.modelId}
               </p>
-              <p className="mt-1 text-[13px] text-[var(--muted)]">
+              <p className="mt-1 text-xs text-[var(--muted)]">
                 Key {model.hasApiKey ? '已配置' : '缺失'} · 最大步数 {model.maxSteps} · {model.isActive ? '启用' : '停用'}
               </p>
             </div>

@@ -49,7 +49,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="关闭弹窗"
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[var(--r-lg)] text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.96]"
           >
             <X size={16} />
           </button>

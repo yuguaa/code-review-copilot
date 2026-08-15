@@ -80,10 +80,10 @@ export function MetricCard({
     <div className="flex min-h-24 items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="caption text-[var(--muted)]">{label}</p>
-        <p className="mt-2 font-display text-3xl tabular-nums">{value}</p>
-        <p className="mt-1 truncate text-[13px] text-[var(--muted)]">{hint}</p>
+        <p className="mt-2 font-display text-2xl tabular-nums">{value}</p>
+        <p className="mt-1 truncate text-xs text-[var(--muted)]">{hint}</p>
       </div>
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--primary)]">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--primary)]">
         <Icon size={18} />
       </span>
     </div>
@@ -118,7 +118,7 @@ export function SignalCard({
   icon: IconComponent;
 }) {
   return (
-    <div className="rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] p-4 shadow-[var(--shadow-sm)]">
+    <div className="rounded-[var(--r-lg)] bg-[var(--surface-soft)] p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="caption text-[var(--muted)]">{label}</span>
         <Icon size={16} className="text-[var(--muted)]" />

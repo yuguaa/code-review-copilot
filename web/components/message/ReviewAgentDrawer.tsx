@@ -122,7 +122,7 @@ export function ReviewAgentDrawer({ agent, onClose }: { agent: ReviewAgentActivi
               type="button"
               onClick={onClose}
               aria-label="关闭子 Agent 审查过程"
-              className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-[var(--r-sm)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] [@media(hover:hover)]:hover:border-[var(--line-default)] [@media(hover:hover)]:hover:bg-[var(--surface-hover)] [@media(hover:hover)]:hover:text-[var(--ink)] active:scale-95"
+              className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-[var(--r-lg)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] [@media(hover:hover)]:hover:bg-[var(--surface-hover)] [@media(hover:hover)]:hover:text-[var(--ink)] active:scale-[0.96]"
             >
               <X size={17} />
             </button>

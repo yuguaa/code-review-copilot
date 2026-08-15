@@ -51,7 +51,7 @@ export function BadgePill({ children, className }: { children: ReactNode; classN
   return (
     <span
       className={cn(
-        'line-tag inline-flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-soft)] px-2.5 py-1 text-[13px] font-medium text-[var(--body-strong)]',
+        'line-tag inline-flex h-5 items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-soft)] px-2 text-xs font-medium text-[var(--body-strong)]',
         className,
       )}
     >

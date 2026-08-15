@@ -15,7 +15,7 @@ export function SettingsStatsGrid({ stats }: { stats: Stats | null }) {
         <ColorBlock key={label} tone={tone} className="space-y-1 p-5">
           <p className="caption text-[var(--muted)]">{label}</p>
           <p className="font-display text-3xl tabular-nums">{value}</p>
-          <p className="mt-1 truncate text-[13px] text-[var(--muted)]">{hint}</p>
+          <p className="mt-1 truncate text-xs text-[var(--muted)]">{hint}</p>
         </ColorBlock>
       ))}
     </div>

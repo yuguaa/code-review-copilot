@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, createContext, useContext, type Re
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { checkAuth } from './lib/api';
 import { Login } from './pages/Login';
+import { WorkbenchShell } from './components/layout/WorkbenchShell';
 
 const Chat = lazy(() => import('./pages/Chat').then((module) => ({ default: module.Chat })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
@@ -10,7 +11,7 @@ const Settings = lazy(() => import('./pages/Settings').then((module) => ({ defau
 const Repositories = lazy(() => import('./pages/Repositories').then((module) => ({ default: module.Repositories })));
 
 type AuthState = { authed: boolean; ready: boolean; refresh: () => Promise<void> };
-const AuthContext = createContext<AuthState>({ authed: false, ready: false, refresh: async () => {} });
+const AuthContext = createContext<AuthState>({ authed: false, ready: false, refresh: () => Promise.resolve() });
 export const useAuth = () => useContext(AuthContext);
 
 function PageFallback() {
@@ -29,10 +30,7 @@ export function App() {
   const [authed, setAuthed] = useState(false);
   const [ready, setReady] = useState(false);
 
-  const refresh = async () => {
-    setAuthed(await checkAuth());
-    setReady(true);
-  };
+  const refresh = () => checkAuth().then(setAuthed).finally(() => setReady(true));
   useEffect(() => {
     void refresh();
   }, []);
@@ -41,12 +39,14 @@ export function App() {
     <AuthContext.Provider value={{ authed, ready, refresh }}>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<RequireAuth><Chat /></RequireAuth>} />
-        <Route path="/c/:sessionId" element={<RequireAuth><Chat /></RequireAuth>} />
-        <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-        <Route path="/help" element={<RequireAuth><Help /></RequireAuth>} />
-        <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
-        <Route path="/repositories" element={<RequireAuth><Repositories /></RequireAuth>} />
+        <Route element={<RequireAuth><WorkbenchShell /></RequireAuth>}>
+          <Route path="/" element={<Chat />} />
+          <Route path="/c/:sessionId" element={<Chat />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/help" element={<Help />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/repositories" element={<Repositories />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthContext.Provider>

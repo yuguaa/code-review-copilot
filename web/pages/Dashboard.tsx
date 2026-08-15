@@ -18,7 +18,7 @@ export function Dashboard() {
 
   return (
     <PageShell title="数据看板" maxWidth="max-w-7xl">
-      <div className="space-y-8">
+      <div className="space-y-5">
         <SummaryMetrics summary={summary} windowDays={data.window.days} />
         <DashboardVisualSections data={data} statusChart={statusChart} authorChart={authorChart} repositoryChart={repositoryChart} />
       </div>

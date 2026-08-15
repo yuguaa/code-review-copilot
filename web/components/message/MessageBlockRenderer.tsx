@@ -41,7 +41,7 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
   const streaming = record.state === 'streaming';
   if (!text.trim() && !streaming) return null;
   return (
-    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-xs shadow-[var(--shadow-sm)]">
+    <div className="tool-evidence-card overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-xs">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -59,7 +59,7 @@ function ReasoningBlock({ part }: { part: MessagePart }) {
 function UnknownBlock({ part }: { part: MessagePart }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] text-xs shadow-[var(--shadow-sm)]">
+    <div className="overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] text-xs">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--muted)] transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]">
         <CircleDashed size={13} className="shrink-0" />
         <span className="caption truncate">{String(part.type)}</span>

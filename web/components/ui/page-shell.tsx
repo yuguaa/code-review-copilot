@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
 import { cn } from '../../lib/cn';
+import { WorkbenchMenuButton } from '../layout/WorkbenchShell';
 
 export function PageShell({
   title,
@@ -13,21 +12,19 @@ export function PageShell({
   maxWidth?: string;
 }) {
   return (
-    <div className="ops-page-shell h-full overflow-y-auto">
-      <header className="ops-page-header sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-[var(--line-default)] bg-[var(--header-surface)] px-6">
-        <Link
-          to="/"
-          aria-label="返回"
-          className="flex h-10 w-10 items-center justify-center rounded-[var(--r-sm)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
-        >
-          <ArrowLeft size={16} />
-        </Link>
-        <div className="min-w-0">
-          <p className="caption text-[var(--muted-soft)]">代码审查工作台</p>
-          <h1 className="font-display truncate text-2xl leading-none text-[var(--ink)]">{title}</h1>
+    <div className="ops-page-shell flex h-full min-h-0 flex-col">
+      <header className="ops-page-header h-16 shrink-0 border-b border-[var(--line-default)] bg-[var(--header-surface)]">
+        <div className={cn('mx-auto flex h-full items-center gap-3 px-4 sm:px-6 lg:px-7', maxWidth)}>
+          <WorkbenchMenuButton />
+          <p className="min-w-0 truncate text-base font-semibold text-[var(--ink)]">{title}</p>
         </div>
       </header>
-      <main className={cn('relative mx-auto space-y-6 px-7 py-7 max-md:px-4 max-md:py-5', maxWidth)}>{children}</main>
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        <div className={cn('relative mx-auto space-y-5 p-4 sm:p-6 lg:p-7', maxWidth)}>
+          <h1 className="font-display text-2xl leading-tight text-[var(--ink)]">{title}</h1>
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

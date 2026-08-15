@@ -53,12 +53,12 @@ export function MessageList({
       ))}
       {/* 仅在还没有 assistant 消息时显示极简等待；流开始后由最后一条消息承载光标与正文。 */}
       {status === 'submitted' && messages.at(-1)?.role !== 'assistant' && (
-        <div className="inline-flex items-center gap-2 rounded-[var(--r-sm)] bg-[var(--surface-card)] px-2 py-1.5 text-xs text-[var(--muted)] shadow-[var(--shadow-sm)]">
+        <div className="inline-flex items-center gap-2 rounded-[var(--r-lg)] bg-[var(--surface-soft)] px-2 py-1.5 text-xs text-[var(--muted)]">
           <Loader2 size={13} className="animate-spin text-[var(--accent)]" />
         </div>
       )}
       {!busy && reviewing && !hasReviewActivity && (
-        <div className="caption inline-flex items-center gap-2 rounded-[var(--r-sm)] border border-[var(--warning)]/24 bg-[var(--state-warning-bg)] px-3 py-1.5 text-[var(--ink)] shadow-[var(--shadow-sm)]">
+        <div className="inline-flex items-center gap-2 rounded-[var(--r-pill)] bg-[var(--brand-lilac)] px-3 py-1.5 text-xs font-medium text-[var(--primary-hover)]">
           <Activity size={13} /> 后台审查进行中，回复会实时同步到这里
         </div>
       )}

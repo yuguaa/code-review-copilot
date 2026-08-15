@@ -23,7 +23,7 @@ export function RepositoryList({
   return (
     <div className="line-list">
       {repos.map((repo) => (
-        <Card key={repo.id} className="flex items-center gap-4 rounded-none border-0 p-4 shadow-none max-md:flex-col max-md:items-stretch">
+        <Card key={repo.id} className="flex items-center gap-4 rounded-none border-0 p-5 shadow-none max-md:flex-col max-md:items-stretch">
           <span className={cn('h-12 w-px shrink-0 max-md:hidden', repo.autoReview ? 'bg-[var(--brand-cyan)]' : 'bg-[var(--line-strong)]')} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -39,7 +39,7 @@ export function RepositoryList({
               {repo.enableMrComment && <span className="line-tag rounded-[var(--r-pill)] bg-[var(--brand-lilac)]/65 px-2 py-0.5 text-xs text-[var(--body-strong)]">平台评论</span>}
               {repo.enableDingtalk && <span className="line-tag rounded-[var(--r-pill)] bg-[var(--brand-cream)] px-2 py-0.5 text-xs text-[var(--body-strong)]">钉钉</span>}
             </div>
-            <p className="mt-1 text-[13px] leading-5 text-[var(--muted)]">
+            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
               模型 {modelLabel(repo)} · 监听 {repo.watchBranches || '全部'} · Skills {repo.enabledSkills.length} · Tools {repo.enabledTools.length}
             </p>
           </div>

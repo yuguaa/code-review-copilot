@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import PanelLeftClose from 'lucide-react/dist/esm/icons/panel-left-close';
-import PanelLeftOpen from 'lucide-react/dist/esm/icons/panel-left-open';
 import MessageSquarePlus from 'lucide-react/dist/esm/icons/message-square-plus';
 import ScanSearch from 'lucide-react/dist/esm/icons/scan-search';
+import X from 'lucide-react/dist/esm/icons/x';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import type { SessionListItem } from '../lib/types';
@@ -13,10 +12,18 @@ import { NewChatModal } from './sidebar/NewChatModal';
 import { SessionList } from './sidebar/SessionList';
 import { SidebarNav } from './sidebar/SidebarNav';
 import { sessionLabel } from './sidebar/session-format';
+import { cn } from '../lib/cn';
 
-export function Sidebar({ refreshKey }: { refreshKey?: number }) {
+export function Sidebar({
+  refreshKey,
+  mobileOpen,
+  onMobileClose,
+}: {
+  refreshKey?: number;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}) {
   const [newChatOpen, setNewChatOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const { confirm, element: confirmElement } = useConfirm();
@@ -44,86 +51,76 @@ export function Sidebar({ refreshKey }: { refreshKey?: number }) {
     });
   };
 
-  const sidebarClass = collapsed
-    ? 'sidebar-shell is-collapsed z-20 flex h-full w-[72px] shrink-0 flex-col border-r border-[var(--line-default)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0'
-    : 'sidebar-shell z-20 flex h-full w-60 shrink-0 flex-col border-r border-[var(--line-default)] max-md:h-auto max-md:w-full max-md:border-b max-md:border-r-0';
-  const collapseTitle = collapsed ? '展开侧边栏' : '折叠侧边栏';
-  const collapseIcon = collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />;
-
   return (
-    <aside className={sidebarClass}>
-      <div className="sidebar-brand px-3 pb-2.5 pt-3">
-        <div className="flex items-center justify-between gap-2">
+    <Fragment>
+      {mobileOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-[var(--surface-dark)]/45 backdrop-blur-[1px] lg:hidden"
+          onClick={onMobileClose}
+          aria-label="关闭导航"
+        />
+      )}
+      <aside
+        aria-label="工作台导航"
+        className={cn(
+          'sidebar-shell fixed inset-y-0 left-0 z-40 flex h-dvh w-60 shrink-0 flex-col border-r border-[var(--line-default)] transition-transform duration-200 lg:relative lg:inset-auto lg:z-20 lg:h-full lg:translate-x-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
+      <div className="sidebar-brand flex h-16 shrink-0 items-center px-4">
+        <div className="flex w-full items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="sidebar-logo flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-md)] text-white">
+            <span className="sidebar-logo flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-lg)] text-white">
               <ScanSearch size={16} />
             </span>
-            {!collapsed && (
-              <div className="min-w-0">
-                <span className="font-display block truncate text-[15px] text-[var(--ink)]">代码审查工作台</span>
-                <span className="caption block truncate text-[var(--muted)]">Review Console</span>
-              </div>
-            )}
-          </div>
-          {!collapsed && (
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setCollapsed(true)}
-                title={collapseTitle}
-                aria-label={collapseTitle}
-                className="flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
-              >
-                {collapseIcon}
-              </button>
-              <button
-                onClick={() => setNewChatOpen(true)}
-                title="新对话"
-                aria-label="新对话"
-                className="sidebar-action-button flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:translate-y-px active:scale-95"
-              >
-                <MessageSquarePlus size={16} />
-              </button>
+            <div className="min-w-0">
+              <span className="font-display block truncate text-[15px] text-[var(--ink)]">代码审查工作台</span>
+              <span className="caption block truncate text-[var(--muted)]">Review Console</span>
             </div>
-          )}
-        </div>
-        {collapsed && (
-          <div className="mt-3 grid place-items-center gap-2">
-            <button
-              onClick={() => setNewChatOpen(true)}
-              title="新对话"
-              aria-label="新对话"
-              className="sidebar-action-button flex h-10 w-10 items-center justify-center rounded-[var(--r-md)] text-white transition-[opacity,transform,background-color] active:scale-95"
-            >
-              <MessageSquarePlus size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              title={collapseTitle}
-              aria-label={collapseTitle}
-              className="flex h-10 w-10 items-center justify-center rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
-            >
-              {collapseIcon}
-            </button>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={onMobileClose}
+            title="关闭导航"
+            aria-label="关闭导航"
+            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-lg)] text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.96] max-lg:flex"
+          >
+            <X size={17} />
+          </button>
+        </div>
+      </div>
+
+      <div className="px-3 pb-2 pt-3">
+        <button
+          onClick={() => {
+            onMobileClose();
+            setNewChatOpen(true);
+          }}
+          className="sidebar-action-button flex h-8 w-full items-center justify-center gap-2 rounded-[var(--r-lg)] px-3 text-sm font-medium text-white transition-[background-color,transform] active:scale-[0.96]"
+        >
+          <MessageSquarePlus size={15} />
+          新对话
+        </button>
       </div>
 
       <SessionList
         sessions={sessions}
         activeSessionId={sessionId}
-        collapsed={collapsed}
         loadError={loadError}
         loaded={loaded}
         onRetry={() => void load()}
-        onSelect={(id) => navigate(`/c/${id}`)}
+        onSelect={(id) => {
+          onMobileClose();
+          navigate(`/c/${id}`);
+        }}
         onDelete={removeSession}
       />
 
-      <SidebarNav collapsed={collapsed} onLogout={logout} />
+      <SidebarNav onNavigate={onMobileClose} onLogout={logout} />
       <NewChatModal open={newChatOpen} onClose={() => setNewChatOpen(false)} />
       {confirmElement}
-    </aside>
+      </aside>
+    </Fragment>
   );
 }

@@ -15,7 +15,7 @@ export function TriggerCard({ message }: { message: UIMessage }) {
   const [open, setOpen] = useState(false);
   const text = textOf(message);
   return (
-    <div className="my-4 overflow-hidden rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] text-sm text-[var(--ink)] shadow-[var(--shadow-sm)]">
+    <div className="my-4 overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] text-sm text-[var(--ink)] shadow-[var(--shadow-sm)]">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-3 text-left transition-[background-color,transform] hover:bg-[var(--surface-hover)] active:scale-[0.99]">
         <Webhook size={15} className="shrink-0 text-[var(--primary)]" />
         <span className="eyebrow text-[var(--ink)]">Webhook 触发审查</span>

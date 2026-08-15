@@ -8,22 +8,23 @@ import ExternalLink from 'lucide-react/dist/esm/icons/external-link';
 import UserRound from 'lucide-react/dist/esm/icons/user-round';
 import { cn } from '../../lib/cn';
 import type { SessionDetail } from '../../lib/types';
+import { WorkbenchMenuButton } from '../layout/WorkbenchShell';
 
 const statusViewByStatus = {
   running: {
     label: '审查中',
     icon: CircleDashed,
-    className: 'border-[var(--warning)]/24 bg-[var(--state-warning-bg)] text-[var(--ink)]',
+    className: 'bg-[var(--brand-lilac)] text-[var(--primary-hover)]',
   },
   completed: {
     label: '已完成',
     icon: CheckCircle2,
-    className: 'border-[var(--success)]/24 bg-[var(--state-success-bg)] text-[var(--success)]',
+    className: 'bg-[var(--state-success-bg)] text-[var(--success)]',
   },
   failed: {
     label: '失败',
     icon: AlertCircle,
-    className: 'border-[var(--error)]/28 bg-[var(--state-error-bg)] text-[var(--error)]',
+    className: 'bg-[var(--state-error-bg)] text-[var(--error)]',
   },
 };
 
@@ -43,40 +44,40 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
   const statusView = statusViewByStatus[session.status as keyof typeof statusViewByStatus] ?? {
     label: session.status,
     icon: CircleDashed,
-    className: 'border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--muted)]',
+    className: 'bg-[var(--surface-soft)] text-[var(--muted)]',
   };
   const StatusIcon = statusView.icon;
-  const pill =
-    'caption inline-flex max-w-60 items-center gap-1 rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]';
+  const metadata = 'inline-flex max-w-60 shrink-0 items-center gap-1 text-xs text-[var(--muted)]';
 
   return (
-    <header className="chat-header sticky top-0 z-10 px-6 py-4 max-md:px-4 max-md:py-3">
-      <div className="mx-auto grid max-w-7xl min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="min-w-0 flex-1 basis-64">
-          <h1 className="font-display truncate text-xl leading-tight text-[var(--ink)]">{sessionTitle(session)}</h1>
+    <header className="chat-header z-10 h-16 shrink-0 px-4 sm:px-6 lg:px-7">
+      <div className="mx-auto flex h-full max-w-[1120px] min-w-0 items-center gap-3">
+        <WorkbenchMenuButton />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-semibold leading-5 text-[var(--ink)]">{sessionTitle(session)}</h1>
           {session.repository && (
-            <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] text-[var(--muted)]">
-              <FolderGit2 size={13} className="shrink-0 text-[var(--muted)]" /> {session.repository.path}
+            <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-[var(--muted)]">
+              <FolderGit2 size={12} className="shrink-0" /> {session.repository.path}
             </p>
           )}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-medium lg:justify-end">
-          <span className={cn('caption inline-flex items-center gap-1 rounded-[var(--r-sm)] border px-2 py-1 shadow-[var(--shadow-sm)]', statusView.className)}>
+        <div className="flex min-w-0 shrink items-center gap-3 overflow-x-auto whitespace-nowrap text-xs font-medium">
+          <span className={cn('inline-flex h-5 shrink-0 items-center gap-1 rounded-[var(--r-pill)] px-2 text-xs font-medium', statusView.className)}>
             <StatusIcon size={12} className={session.status === 'running' ? 'animate-spin' : undefined} /> {statusView.label}
           </span>
           {branchText && (
-            <span className={pill}>
-              <GitBranch size={12} className="shrink-0 text-[var(--muted-soft)]" /> <span className="truncate">{branchText}</span>
+            <span className={cn(metadata, 'font-mono')}>
+              <GitBranch size={12} className="shrink-0" /> <span className="truncate">{branchText}</span>
             </span>
           )}
           {shortHash && (
-            <span className={cn(pill, 'font-mono')}>
-              <Hash size={12} className="shrink-0 text-[var(--muted-soft)]" /> {shortHash}
+            <span className={cn(metadata, 'font-mono')}>
+              <Hash size={12} className="shrink-0" /> {shortHash}
             </span>
           )}
           {session.author && (
-            <span className={pill}>
-              <UserRound size={12} className="shrink-0 text-[var(--muted-soft)]" /> <span className="truncate">{session.author}</span>
+            <span className={metadata}>
+              <UserRound size={12} className="shrink-0" /> <span className="truncate">{session.author}</span>
             </span>
           )}
           {session.webUrl && (
@@ -84,7 +85,7 @@ export function ChatHeader({ session }: { session: SessionDetail['session'] }) {
               href={session.webUrl}
               target="_blank"
               rel="noreferrer"
-              className="caption inline-flex items-center gap-1 rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1.5 text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.98]"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-[var(--r-lg)] bg-[var(--primary)] px-2.5 text-xs font-medium text-white transition-[background-color,transform] hover:bg-[var(--primary-hover)] active:scale-[0.96]"
             >
               <ExternalLink size={12} /> GitLab
             </a>

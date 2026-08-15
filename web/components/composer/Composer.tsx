@@ -157,7 +157,7 @@ export function Composer({
             value={selectedModelId}
             disabled={editorDisabled || modelsLoading || modelOptions.length === 0}
             onChange={(event) => onModelChange(event.target.value)}
-            className="h-10 min-w-0 w-full max-w-[260px] truncate py-0 text-sm"
+            className="h-9 min-w-0 w-full max-w-[260px] truncate py-0 text-sm"
           >
             <option value="">{modelsLoading ? '加载可用模型…' : '默认（按会话配置）'}</option>
             {modelOptions.map((model) => (
@@ -175,7 +175,7 @@ export function Composer({
         disabled={!hasCommand || editorDisabled}
         aria-label="打开指令"
         title="打开指令"
-        className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35"
+        className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-lg)] border border-transparent text-[var(--muted)] transition-[background-color,border-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35"
       >
         <Command size={16} />
       </button>
@@ -185,7 +185,7 @@ export function Composer({
           disabled={Boolean(stopping)}
           aria-label={stopLabel}
           title={stopLabel}
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform,opacity] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-65"
+          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-lg)] border border-[var(--primary)] bg-[var(--primary)] text-white transition-[background-color,border-color,transform,opacity] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.96] disabled:cursor-wait disabled:opacity-65"
         >
           {stopping ? <Loader2 size={16} className="animate-spin" /> : <Square size={14} className="fill-current" />}
         </button>
@@ -194,7 +194,7 @@ export function Composer({
           onClick={submit}
           disabled={editorDisabled || empty}
           aria-label="发送"
-          className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-sm)] border border-[var(--primary)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform,opacity] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-[var(--r-lg)] border border-[var(--primary)] bg-[var(--primary)] text-white transition-[background-color,border-color,transform,opacity] hover:border-[var(--primary-hover)] hover:bg-[var(--primary-hover)] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <SendHorizontal size={16} />
         </button>

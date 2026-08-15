@@ -8,7 +8,7 @@ export function BranchSwitcher({ branch, onSelectSibling }: { branch?: BranchInf
   const previous = branch.siblingIds[branch.siblingIndex - 1];
   const next = branch.siblingIds[branch.siblingIndex + 1];
   return (
-    <div className="caption flex shrink-0 items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1.5 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)]">
+    <div className="flex h-7 shrink-0 items-center gap-1 rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] px-1.5 text-xs font-medium text-[var(--body-strong)]">
       <button type="button" disabled={!previous} onClick={() => previous && onSelectSibling(previous)} className="cursor-pointer rounded-[var(--r-pill)] border border-transparent p-0.5 transition-[background-color,border-color,transform] hover:border-[var(--line-default)] hover:bg-[var(--surface-hover)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-30" aria-label="上一条分支">
         <ChevronLeft size={12} />
       </button>

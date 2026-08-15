@@ -41,8 +41,8 @@ export function MessageBubble({
           className={cn(
             'min-w-0 space-y-3 rounded-[var(--r-md)]',
             isUser
-              ? 'max-w-[min(640px,100%)] bg-[var(--primary)] px-4 py-2.5 text-white shadow-[var(--shadow-sm)]'
-              : 'assistant-message border border-[var(--line-subtle)] px-5 py-4 text-[var(--body-strong)] shadow-[var(--shadow-sm)]',
+              ? 'max-w-[min(640px,100%)] bg-[var(--primary)] px-4 py-2.5 text-white'
+              : 'assistant-message px-5 py-4 text-[var(--body-strong)]',
           )}
         >
           {visibleParts.length === 0 && isStreaming ? <StreamingCursor className={isUser ? 'bg-white' : undefined} /> : null}
@@ -63,7 +63,7 @@ export function MessageBubble({
             <button
               type="button"
               onClick={() => onBranchFrom?.(message.id)}
-              className="caption inline-flex cursor-pointer items-center gap-1 rounded-[var(--r-pill)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 py-1 text-[var(--body-strong)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-95"
+              className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2 text-xs font-medium text-[var(--body-strong)] transition-[background-color,border-color,transform] hover:border-[var(--line-strong)] hover:bg-[var(--surface-hover)] active:scale-[0.96]"
               title={isUser ? '重新回答' : '从这里继续'}
             >
               {isUser ? <RotateCcw size={12} /> : <GitBranchPlus size={12} />}

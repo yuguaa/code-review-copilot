@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -6,7 +6,6 @@ import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
 import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
 import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
 import type { SessionDetail } from '../lib/types';
-import { Sidebar } from '../components/Sidebar';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { LazyComposer } from '../components/chat/LazyComposer';
 import { MessageList } from '../components/chat/MessageList';
@@ -15,24 +14,22 @@ import { ReviewAgentInspectorProvider } from '../components/message/ReviewAgentD
 import { isReviewActivityPart } from '../components/message/message-types';
 import { useSessionDetail } from '../hooks/useSessionDetail';
 import { useChatThreadController } from '../hooks/useChatThreadController';
+import { useWorkbenchShell, WorkbenchMenuButton } from '../components/layout/WorkbenchShell';
 
 export function Chat() {
   const { sessionId } = useParams();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { refreshSidebar } = useWorkbenchShell();
 
   return (
-    <div className="review-workbench line-canvas flex h-full min-h-0 overflow-x-hidden max-md:flex-col">
-      <Sidebar refreshKey={refreshKey} />
-      <ReviewAgentInspectorProvider key={sessionId ?? 'empty'}>
-        <main className="chat-main relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {sessionId ? (
-            <ChatView key={sessionId} sessionId={sessionId} onActivity={() => setRefreshKey((k) => k + 1)} />
-          ) : (
-            <ChatEmptyState />
-          )}
-        </main>
-      </ReviewAgentInspectorProvider>
-    </div>
+    <ReviewAgentInspectorProvider key={sessionId ?? 'empty'}>
+      <main className="chat-main relative flex h-full min-h-0 min-w-0 flex-col">
+        {sessionId ? (
+          <ChatView key={sessionId} sessionId={sessionId} onActivity={refreshSidebar} />
+        ) : (
+          <ChatEmptyState />
+        )}
+      </main>
+    </ReviewAgentInspectorProvider>
   );
 }
 
@@ -93,13 +90,20 @@ function ChatEmptyState() {
   );
 
   return (
-    <div ref={rootRef} className="measure-rails grid h-full place-items-center px-6 py-10">
-      <div data-empty-shell className="technical-panel grid w-full max-w-3xl gap-8 rounded-[var(--r-lg)] bg-[var(--surface-card)] p-8 max-md:p-6 md:grid-cols-[1fr_0.72fr]">
+    <>
+      <header className="chat-header flex h-16 shrink-0 items-center px-4 sm:px-6 lg:px-7">
+        <div className="mx-auto flex w-full max-w-[1120px] items-center gap-3">
+          <WorkbenchMenuButton />
+          <h1 className="font-display truncate text-base text-[var(--ink)]">代码审查</h1>
+        </div>
+      </header>
+      <div ref={rootRef} className="measure-rails grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-6 sm:px-6 lg:px-7">
+      <div data-empty-shell className="technical-panel grid w-full max-w-3xl gap-6 rounded-[var(--r-lg)] bg-[var(--surface-card)] p-5 sm:p-7 md:grid-cols-[1fr_0.72fr]">
         <div className="min-w-0">
-          <div data-empty-copy className="flex h-14 w-14 items-center justify-center rounded-[var(--r-sm)] bg-[var(--primary)] text-white shadow-[var(--shadow-sm)]">
-            <MessageSquare size={23} />
+          <div data-empty-copy className="flex h-10 w-10 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] text-white">
+            <MessageSquare size={19} />
           </div>
-          <p data-empty-copy className="font-display mt-8 max-w-lg text-[42px] leading-[0.98] text-[var(--ink)] max-sm:text-[32px]">
+          <p data-empty-copy className="font-display mt-6 max-w-lg text-2xl leading-tight text-[var(--ink)]">
             选择一次审查，
             <br />
             <span className="italic text-[var(--muted)]">继续追问</span>
@@ -113,7 +117,7 @@ function ChatEmptyState() {
             <div
               key={item}
               data-empty-step
-              className="flex items-center justify-between rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)] shadow-[var(--shadow-sm)]"
+              className="flex items-center justify-between rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)]"
             >
               <span>{item}</span>
               <span data-empty-dot className="h-2 w-2 rounded-full bg-[var(--brand-cyan)]" />
@@ -121,7 +125,8 @@ function ChatEmptyState() {
           ))}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -225,8 +230,8 @@ function ChatThread({
         {latestReviewActivity && <ReviewAgentActivity key={latestReviewActivity.runId} data={latestReviewActivity} />}
       </div>
 
-      <div className="composer-dock z-10 px-4 pb-5 pt-2 max-md:px-3 max-md:pb-3">
-        <div className="mx-auto max-w-[1040px]">
+      <div className="composer-dock z-10 px-4 pb-5 pt-2 sm:px-6 lg:px-7">
+        <div className="mx-auto max-w-[1072px]">
           <LazyComposer
             placeholder={
               reviewing

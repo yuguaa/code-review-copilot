@@ -45,7 +45,7 @@ export function ToolSkillList({
             <label
               key={item.key}
               className={[
-                'flex cursor-pointer items-start gap-2 rounded-[var(--r-sm)] border px-3 py-2.5 shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-[0.98]',
+                'flex cursor-pointer items-start gap-2 rounded-[var(--r-lg)] border px-3 py-2.5 transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-[0.98]',
                 active ? 'border-[var(--line-accent)] bg-[var(--surface-selected)]' : 'border-[var(--line-default)] bg-[var(--surface-card)]',
               ].join(' ')}
             >

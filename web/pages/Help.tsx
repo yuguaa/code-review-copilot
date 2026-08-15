@@ -12,10 +12,10 @@ import Webhook from 'lucide-react/dist/esm/icons/webhook';
 import { PageShell } from '../components/ui/page-shell';
 
 const sectionLinkClass =
-  'flex min-h-10 items-center rounded-[var(--r-sm)] px-3 text-sm text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.98]';
+  'flex h-10 items-center rounded-[var(--r-lg)] px-3 text-sm text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.98]';
 
 const actionLinkClass =
-  'inline-flex min-h-10 items-center justify-center gap-2 rounded-[var(--r-sm)] border border-[var(--line-default)] bg-[var(--surface-card)] px-4 py-2 text-sm font-semibold text-[var(--ink)] shadow-[var(--shadow-sm)] transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-[0.98]';
+  'inline-flex h-8 items-center justify-center gap-2 rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2.5 text-sm font-medium text-[var(--ink)] transition-[background-color,border-color,transform] hover:border-[var(--line-strong)] hover:bg-[var(--surface-hover)] active:scale-[0.96]';
 
 const faqClass =
   'group border-b border-[var(--line-subtle)] last:border-b-0 [&_summary::-webkit-details-marker]:hidden';
@@ -23,7 +23,7 @@ const faqClass =
 export function Help() {
   return (
     <PageShell title="帮助中心" maxWidth="max-w-6xl">
-      <div className="grid items-start gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="sticky top-24 rounded-[var(--r-md)] bg-[var(--surface-soft)] p-2 max-lg:static">
           <p className="caption px-3 pb-2 pt-1 text-[var(--muted)]">使用指南</p>
           <nav aria-label="帮助中心目录" className="grid max-lg:grid-cols-2 max-sm:grid-cols-1">
@@ -35,12 +35,12 @@ export function Help() {
           </nav>
         </aside>
 
-        <div className="min-w-0 space-y-12">
-          <section className="overflow-hidden rounded-[var(--r-lg)] bg-[var(--surface-card)] shadow-[var(--shadow-md)]">
-            <div className="grid gap-6 p-7 md:grid-cols-[minmax(0,1fr)_180px] md:p-8">
+        <div className="min-w-0 space-y-5">
+          <section className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+            <div className="grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_160px]">
               <div>
                 <span className="caption text-[var(--primary)]">CODE REVIEW COPILOT</span>
-                <h2 className="font-display mt-2 text-2xl leading-tight text-[var(--ink)]">从接入仓库到完成一次代码审查</h2>
+                <h2 className="font-display mt-2 text-xl leading-tight text-[var(--ink)]">从接入仓库到完成一次代码审查</h2>
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--muted)]">
                   先配置 GitLab 账号和模型，再添加仓库与 Webhook。之后 Merge Request 或 Push 事件会自动生成审查会话，结论保留在工作台，并按仓库设置回写 GitLab 或推送钉钉。
                 </p>
@@ -53,7 +53,7 @@ export function Help() {
                   </Link>
                 </div>
               </div>
-              <div className="flex min-h-36 items-center justify-center rounded-[var(--r-md)] bg-[var(--state-info-bg)] text-[var(--primary)]">
+              <div className="flex min-h-32 items-center justify-center rounded-[var(--r-lg)] bg-[var(--state-info-bg)] text-[var(--primary)]">
                 <BookOpenCheck size={54} strokeWidth={1.5} aria-hidden="true" />
               </div>
             </div>
@@ -73,8 +73,8 @@ export function Help() {
                 ['4', '添加仓库', '进入「仓库配置」，选择 GitLab 账号并拉取项目。确认项目、监听分支、审查提示词、模型和通知选项后保存。'],
                 ['5', '创建 GitLab Webhook', '在项目 Webhook 中填写页面展示的 URL，Secret Token 与账号的 Webhook 密钥保持一致，并勾选 Merge Request events 和 Push events。'],
               ].map(([number, title, description]) => (
-                <li key={number} className="grid gap-3 p-5 sm:grid-cols-[40px_minmax(0,1fr)] sm:p-6">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-[var(--r-md)] bg-[var(--primary)] font-mono text-sm font-semibold text-white">{number}</span>
+                <li key={number} className="grid gap-3 p-5 sm:grid-cols-[40px_minmax(0,1fr)]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] font-mono text-sm font-semibold text-white">{number}</span>
                   <div>
                     <h3 className="font-display text-base text-[var(--ink)]">{title}</h3>
                     <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{description}</p>
@@ -89,22 +89,22 @@ export function Help() {
               <span className="caption text-[var(--primary)]">02 / WORKFLOW</span>
               <h2 className="font-display mt-1 text-xl text-[var(--ink)]">日常使用</h2>
             </div>
-            <div className="divide-y divide-[var(--line-subtle)] rounded-[var(--r-lg)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
-              <article className="grid gap-4 p-6 md:grid-cols-[44px_minmax(0,1fr)]">
+            <div className="divide-y divide-[var(--line-subtle)] rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+              <article className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)]">
                 <span className="flex h-11 w-11 items-center justify-center rounded-[var(--r-md)] bg-[var(--state-info-bg)] text-[var(--primary)]"><Webhook size={20} /></span>
                 <div>
                   <h3 className="font-display text-base text-[var(--ink)]">自动审查</h3>
                   <p className="mt-1 text-sm leading-6 text-[var(--muted)]">监听范围内的 MR 或 Push 事件到达后，系统创建会话并运行 Agent。你可以从左侧会话列表进入，查看状态、分支、提交、作者、工具调用和最终结论。</p>
                 </div>
               </article>
-              <article className="grid gap-4 p-6 md:grid-cols-[44px_minmax(0,1fr)]">
+              <article className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)]">
                 <span className="flex h-11 w-11 items-center justify-center rounded-[var(--r-md)] bg-[var(--state-success-bg)] text-[var(--success)]"><MessageSquareText size={20} /></span>
                 <div>
                   <h3 className="font-display text-base text-[var(--ink)]">新建对话与继续追问</h3>
                   <p className="mt-1 text-sm leading-6 text-[var(--muted)]">点击侧栏顶部「新对话」，选择关联仓库后输入问题。审查会话完成后也可以继续追问，Agent 会沿用该仓库工作区和当前会话上下文。</p>
                 </div>
               </article>
-              <article className="grid gap-4 p-6 md:grid-cols-[44px_minmax(0,1fr)]">
+              <article className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)]">
                 <span className="flex h-11 w-11 items-center justify-center rounded-[var(--r-md)] bg-[var(--metric-lilac)] text-[var(--primary)]"><ChartColumn size={20} /></span>
                 <div>
                   <h3 className="font-display text-base text-[var(--ink)]">查看数据看板</h3>
@@ -119,7 +119,7 @@ export function Help() {
               <span className="caption text-[var(--primary)]">03 / CONFIGURATION</span>
               <h2 className="font-display mt-1 text-xl text-[var(--ink)]">关键配置说明</h2>
             </div>
-            <dl className="grid gap-px overflow-hidden rounded-[var(--r-lg)] bg-[var(--line-default)] shadow-[var(--shadow-sm)] sm:grid-cols-2">
+            <dl className="grid gap-px overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--line-default)] shadow-[var(--shadow-sm)] sm:grid-cols-2">
               {[
                 ['监听分支', '逗号分隔，支持 main、release-* 等通配符；留空表示全部分支。未匹配的事件不会触发审查。'],
                 ['自动审查', '控制 Webhook 事件到达后是否自动运行 Agent。关闭后，仓库仍可用于手动新建对话。'],
@@ -141,7 +141,7 @@ export function Help() {
               <span className="caption text-[var(--primary)]">04 / STATUS</span>
               <h2 className="font-display mt-1 text-xl text-[var(--ink)]">状态与排查顺序</h2>
             </div>
-            <div className="rounded-[var(--r-lg)] bg-[var(--surface-card)] p-6 shadow-[var(--shadow-sm)]">
+            <div className="rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-sm)]">
               <div className="grid gap-5 md:grid-cols-3">
                 <div>
                   <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--warning)]"><Bot size={16} /> 审查中</span>
@@ -164,7 +164,7 @@ export function Help() {
               <span className="caption text-[var(--primary)]">05 / FAQ</span>
               <h2 className="font-display mt-1 text-xl text-[var(--ink)]">常见问题</h2>
             </div>
-            <div className="overflow-hidden rounded-[var(--r-lg)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+            <div className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
               {[
                 ['Webhook 触发后为什么没有创建审查会话？', '依次确认仓库已启用自动审查、事件类型已勾选、目标分支匹配监听规则、Webhook URL 可从 GitLab 访问，并且 Secret Token 与对应 GitLab 账号的 Webhook 密钥一致。'],
                 ['为什么无法拉取 GitLab 项目或读取代码？', '先在「设置」中对 GitLab 账号执行测试连接。确认实例地址正确，Personal Access Token 未过期且具有 api 权限，并且该账号可以访问目标项目。'],

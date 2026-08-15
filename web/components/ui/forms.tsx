@@ -2,14 +2,14 @@ import type { ReactNode, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTML
 import { cn } from '../../lib/cn';
 
 const fieldBase =
-  'min-h-9 w-full rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--ink)] shadow-[var(--shadow-sm)] outline-none transition-[background-color,border-color,box-shadow] placeholder:text-[var(--muted)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:shadow-[0_0_0_2px_var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-soft)] disabled:text-[var(--muted)] disabled:opacity-70';
+  'h-9 w-full rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-3 text-sm text-[var(--ink)] outline-none transition-[background-color,border-color,box-shadow] placeholder:text-[var(--muted)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:shadow-[0_0_0_2px_var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-soft)] disabled:text-[var(--muted)] disabled:opacity-70';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(fieldBase, props.className)} />;
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={cn(fieldBase, 'resize-y', props.className)} />;
+  return <textarea {...props} className={cn(fieldBase, 'min-h-24 resize-y py-2', props.className)} />;
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -22,9 +22,9 @@ export function Field({ label, children, hint, error }: { label: string; childre
       <span className="caption text-[var(--body-strong)]">{label}</span>
       {children}
       {error ? (
-        <span className="block text-[13px] leading-5 text-[var(--error)]">{error}</span>
+        <span className="block text-xs leading-5 text-[var(--error)]">{error}</span>
       ) : (
-        hint && <span className="block text-[13px] leading-5 text-[var(--muted)]">{hint}</span>
+        hint && <span className="block text-xs leading-5 text-[var(--muted)]">{hint}</span>
       )}
     </label>
   );
