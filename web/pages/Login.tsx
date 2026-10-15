@@ -2,12 +2,15 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import ScanSearch from 'lucide-react/dist/esm/icons/scan-search';
+import { ScanSearchIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuth } from '../App';
 import { Button } from '../components/ui/button';
 import { Field, Input } from '../components/ui/forms';
+
+const BRAND_GRID =
+  'bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:28px_28px]';
 
 export function Login() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -27,13 +30,7 @@ export function Login() {
         .fromTo(
           '[data-login-copy]',
           { y: 18, opacity: 0 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.72,
-            stagger: 0.07,
-            clearProps: 'transform,opacity',
-          },
+          { y: 0, opacity: 1, duration: 0.72, stagger: 0.07, clearProps: 'transform,opacity' },
         )
         .fromTo(
           '[data-login-panel]',
@@ -45,8 +42,8 @@ export function Login() {
     { scope: rootRef },
   );
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
     if (!username.trim() || !secret.trim()) {
       setFormError('请输入账号和密钥');
       return;
@@ -56,8 +53,8 @@ export function Login() {
     api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, secret }) })
       .then(() => refresh())
       .then(() => navigate('/', { replace: true }))
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : '登录失败';
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : '登录失败';
         setFormError(message);
         toast.error(message);
       })
@@ -65,43 +62,47 @@ export function Login() {
   };
 
   return (
-    <main ref={rootRef} className="grid min-h-dvh overflow-hidden bg-[var(--canvas)] lg:grid-cols-[1.05fr_0.95fr]">
-      <section className="login-brand-panel relative hidden overflow-hidden p-12 text-white lg:flex lg:flex-col">
-        <div className="login-brand-grid absolute inset-0" />
+    <main ref={rootRef} className="grid min-h-dvh overflow-hidden bg-background lg:grid-cols-[1.05fr_0.95fr]">
+      <section className="relative hidden overflow-hidden bg-primary p-12 text-primary-foreground lg:flex lg:flex-col">
+        <div className={`absolute inset-0 ${BRAND_GRID}`} />
         <div data-login-copy className="relative z-10 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-[var(--r-lg)] bg-white text-[var(--primary)] shadow-sm">
-            <ScanSearch size={18} />
+          <span className="flex size-10 items-center justify-center rounded-lg bg-background text-primary">
+            <ScanSearchIcon size={18} />
           </span>
           <div>
             <strong className="block text-sm">代码审查工作台</strong>
-            <span className="text-xs text-white/65">Review Console</span>
+            <span className="text-xs opacity-70">Review Console</span>
           </div>
         </div>
         <div className="relative z-10 my-auto max-w-xl">
-          <p data-login-copy className="mb-5 text-sm font-semibold text-white/65">Review Agent</p>
-          <h1 data-login-copy className="font-display text-5xl leading-[1.12] text-white">
+          <p data-login-copy className="mb-5 text-sm font-medium opacity-70">
+            Review Agent
+          </p>
+          <h1 data-login-copy className="text-4xl font-semibold leading-tight tracking-tight">
             让每次评审，
             <br />
             都有证据可追问。
           </h1>
-          <p data-login-copy className="mt-6 max-w-lg text-base leading-8 text-white/72">
+          <p data-login-copy className="mt-6 max-w-lg text-base leading-8 opacity-80">
             Webhook 触发审查，结论沉淀成可对话的会话。上下文、风险和结论，随时接着问。
           </p>
         </div>
-        <p data-login-copy className="relative z-10 text-xs text-white/55">多 Agent 代码审查系统</p>
+        <p data-login-copy className="relative z-10 text-xs opacity-60">
+          多 Agent 代码审查系统
+        </p>
       </section>
 
       <section className="flex min-h-dvh items-center justify-center px-6 py-12 sm:px-12">
         <div data-login-panel className="w-full max-w-md">
           <div className="mb-10 lg:hidden">
-            <span className="mb-5 flex h-11 w-11 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] text-white">
-              <ScanSearch size={19} />
+            <span className="mb-5 flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <ScanSearchIcon size={19} />
             </span>
-            <p className="text-sm font-medium text-[var(--primary-hover)]">代码审查工作台</p>
+            <p className="text-sm font-medium">代码审查工作台</p>
           </div>
           <div className="mb-8">
-            <h2 className="font-display text-3xl text-[var(--ink)]">欢迎回来</h2>
-            <p className="mt-2 text-sm text-[var(--muted)]">使用平台分配的账号与密钥登录</p>
+            <h2 className="text-3xl font-semibold tracking-tight">欢迎回来</h2>
+            <p className="mt-2 text-sm text-muted-foreground">使用平台分配的账号与密钥登录</p>
           </div>
 
           <form onSubmit={submit} className="space-y-5">
@@ -109,8 +110,8 @@ export function Login() {
               <Input
                 placeholder="请输入账号"
                 value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
+                onChange={(event) => {
+                  setUsername(event.target.value);
                   setFormError(null);
                 }}
                 className="h-12"
@@ -122,8 +123,8 @@ export function Login() {
                 placeholder="请输入密钥"
                 type="password"
                 value={secret}
-                onChange={(e) => {
-                  setSecret(e.target.value);
+                onChange={(event) => {
+                  setSecret(event.target.value);
                   setFormError(null);
                 }}
                 className="h-12"

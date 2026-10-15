@@ -2,78 +2,69 @@
 
 ## 1. Visual Theme & Atmosphere
 
-代码审查工作台采用 Founder OS 的“紫灰运营决策台”主题：以低饱和紫灰画布承载高密度审查信息，以品牌紫标记当前上下文和主要动作，以少量语义色表达真实状态。
+工作台采用 shadcn 的 `base-nova` 中性主题，叠加 ReUI 的扩展语义色。界面保持低彩度：画布为白色，分隔线仅用 1px 边框，颜色只出现在状态、图表序列和当前上下文。
 
-界面保持安静、紧凑、任务优先。会话、风险、证据和配置必须易于扫描，不使用营销式 Hero、玻璃拟态、卡片墙或无业务意义的装饰。
+整体观感接近 reui.io 的 app shell：紧凑、克制、以任务为中心。不使用装饰渐变、光晕和玻璃拟态。
 
-## 2. Color Palette & Roles
+## 2. Color Tokens
 
-- **Brand** `#7656C8`：主要动作、当前导航和图表主序列。
-- **Brand Strong** `#6242B5`：浅色背景上的品牌强调与 hover。
-- **Brand Soft** `#F0EBFF`：轻量品牌背景和选中反馈。
-- **Canvas** `#F7F5FC`：工作台主画布。
-- **Sidebar** `#EEE9F8`：侧边栏与导航区域。
-- **Card** `#FFFEFE`：卡片、输入器、弹窗和消息表面。
-- **Ink** `#28243A`：标题、主要文字和代码深色表面。
-- **Muted** `#756D85`：说明、metadata 和次级文本。
-- **Status Up** `#28895C`：成功、健康和已完成。
-- **Destructive** `#C6534A`：错误和危险动作。
+颜色全部通过 shadcn CSS 变量表达（`web/index.css` 的 `:root` 与 `@theme inline`）：
 
-需要对比序列时使用蓝 `#4D83C7`、青 `#2F9B8F`、橙 `#DC8A35` 和玫红 `#D85F86`。品牌紫只表达当前、品牌或可执行，不作为无意义装饰。
+- **background / foreground**：`oklch(1 0 0)` / `oklch(0.145 0 0)`，画布与正文。
+- **card / popover**：白色表面，配合 `border` 与阴影区分层级。
+- **primary**：`oklch(0.205 0 0)`，主要动作与当前上下文。
+- **muted / accent**：`oklch(0.97 0 0)`，次级表面、hover 与选中背景。
+- **border / input / ring**：`oklch(0.922 0 0)` 与 `oklch(0.708 0 0)`，分隔线与焦点环。
+- **sidebar 系列**：侧栏与主区共用白色，靠边框分隔。
+- **chart-1..5**：图表序列色板，顺序为橙、青、深蓝、黄、琥珀。
+- **语义色**：`success`、`warning`、`info`、`destructive` 以及对应的 `-foreground`，来自 ReUI 的扩展 token。
 
-## 3. Typography Rules
+语义色只表达真实状态。图表以外不使用彩色填充大面积区域。
 
-- **UI:** `Avenir Next, Avenir, Segoe UI Variable, Segoe UI, PingFang SC, sans-serif`。
-- **Mono:** `SFMono-Regular, Roboto Mono, Consolas, Liberation Mono, monospace`，仅用于分支、hash、工具名、JSON 和编号。
-- 页面标题 `24px / 700`；区块标题 `16-20px / 700`；正文与控件 `14px`；辅助标签 `12px`。
-- 中文使用系统字体自然回退，不额外引入 Web Font，不用超宽字距或字体混搭制造层级。
+## 3. Typography
 
-## 4. Component Styling
+- **UI**：`Inter Variable`，中文回退到 `PingFang SC` 与 `Microsoft YaHei`。
+- **Mono**：`SFMono-Regular`、`Roboto Mono`、`Consolas`，仅用于分支、提交、工具名、JSON 与编号。
+- 页面标题 `text-xl / 600`；区块标题 `text-base / 500`；正文 `text-sm`；辅助信息 `text-xs`。
+- 不引入额外的字体文件，靠字重与颜色建立层级。
 
-- **Button:** 默认高 `32px`，`8px` 圆角；主按钮品牌紫白字，次级按钮使用卡片表面。focus 使用半透明品牌 ring，active 缩放至 `0.96`。
-- **Card:** `8px` 圆角、`1px` 语义边框、`20px` 内边距和轻环境阴影。
-- **Input / Select:** 最小高 `36px`、`6px` 圆角；focus 使用品牌边框与 `2px` 弱品牌 ring。
-- **Badge:** `20px` 高、`12px` 字号、胶囊圆角；颜色只表达标签类型或真实状态。
-- **Messages:** 用户消息使用品牌紫；assistant 消息使用轻表面，保持文档阅读感。
-- **Status:** running 使用轻量呼吸或旋转反馈，只动画 transform 和 opacity。
+## 4. Components
 
-面板阴影统一为：
+- 全部基础控件来自 shadcn（`web/components/ui/`）：Button、Input、Select、Checkbox、Switch、Card、Badge、Tabs、Dialog、Sheet、Tooltip、DropdownMenu、Collapsible、Resizable、Sidebar、Item、Empty、InputGroup 等。
+- 对话界面来自 ai-elements（`web/components/ai-elements/`）：Conversation、Message、Reasoning、Tool、PromptInput、CodeBlock、Loader、Shimmer。
+- ReUI 提供扩展组件（`web/components/reui/badge.tsx`），并使用其扩展语义 token。
+- 业务封装保持在 `web/components/chat/`、`web/components/settings/`、`web/components/dashboard/`、`web/components/repositories/`、`web/components/rss/`。
+- 圆角统一为 `--radius: 0.625rem`，按钮高 32px，输入框高 32px。
+- 阴影只用于浮层：`shadow-xs` 用于卡片，`shadow-md` 用于弹层。
 
-```css
-0 1px 2px rgb(63 45 91 / 0.04),
-0 8px 24px rgb(79 58 116 / 0.06)
-```
+## 5. Layout
 
-## 5. Layout Principles
+应用外壳复刻 reui 的 app-shell-21：
 
-- 应用保持 sidebar + main workspace，不改变现有审查信息架构。
-- 桌面侧栏宽 `240px`，折叠态宽 `72px`；顶栏高 `64px`。
-- 主内容内边距为移动端 `16px`、桌面端 `28px`。
-- 业务页面使用纯色画布；只允许登录品牌区使用紫色渐变与细网格。
-- 移动端强制单列，不允许横向滚动；固定格式区域使用稳定尺寸和响应式约束。
-- 卡片只用于独立信息单元、弹窗、消息和真正需要边界的工具。
+- 侧栏默认 248px，可拖拽到最多 380px，拖到 48px 时折叠为图标栏。
+- 侧栏自上而下是品牌区、会话/仓库标签、新建对话、分组会话列表、导航与账号菜单。
+- 主区顶栏固定 56px，左侧是当前对象标题与元信息，右侧是页面操作。
+- 主区内容自适应：聊天页为消息流 + 输入器，业务页为可滚动内容区。
+- 移动端侧栏切换为抽屉，顶栏左端提供打开导航的按钮。
 
 ## 6. Motion & Interaction
 
-- 常规颜色、边框、阴影和位移过渡约 `150ms`。
-- 所有可点击元素都有 hover、active 和键盘 focus 反馈。
-- 加载状态使用当前组件尺寸内的轻量文本或状态点，避免大型 spinner。
-- `prefers-reduced-motion` 下将非必要动画压缩至近乎即时。
+- 颜色、边框与背景过渡约 150ms；侧栏宽度过渡 200ms。
+- 所有可点击元素具备 hover、active 与键盘 focus 反馈；分隔线支持方向键调整宽度。
+- 运行中的状态点使用 `animate-pulse`，加载态使用同尺寸的 Loader。
+- 遵守 `prefers-reduced-motion`。
 
 ## 7. Do's and Don'ts
 
 Do：
 
-- 使用现有语义变量和共享组件保持全站一致。
-- 每个页面明确当前对象、关键状态和一个主要动作。
-- 用品牌紫表达当前上下文、主要动作或图表主序列。
-- 为加载、空数据、错误、成功和进行中提供明确反馈。
-- 保持键盘焦点可见，图标按钮提供可识别名称。
+- 复用 shadcn token 与组件，不在页面内自定义色板。
+- 每个页面明确当前对象、关键状态与一个主要动作。
+- 审查结论按文档流阅读：标题、段落、代码块、列表，不套聊天气泡。
+- 为加载、空数据、错误与进行中提供明确反馈。
 
 Don't：
 
-- 不为单个页面创建私有色板、字体体系或组件风格。
-- 不在业务页使用全局网格、渐变、玻璃拟态、光晕或渐变字。
-- 不用成功、警告或错误色丰富画面，它们只表达真实状态。
-- 不添加无业务意义的 Hero、badge、stamp 或装饰图形。
-- 不为视觉效果新增依赖或预建未使用的组件。
+- 不在业务页使用渐变、网格背景、玻璃拟态或装饰图形（登录页左侧品牌面板除外）。
+- 不用语义色装饰非状态内容。
+- 不新增未使用的依赖或组件。

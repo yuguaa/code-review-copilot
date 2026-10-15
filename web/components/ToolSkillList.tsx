@@ -1,4 +1,5 @@
-import { Checkbox } from './ui/forms';
+import { cn } from '../lib/utils';
+import { Badge } from './ui/badge';
 
 export type ToolSkillItem = {
   key: string;
@@ -26,15 +27,16 @@ export function ToolSkillList({
   const selectedSet = new Set(selected);
   const toggle = (key: string, enabled: boolean) => {
     const next = new Set(selectedSet);
-    enabled ? next.add(key) : next.delete(key);
+    if (enabled) next.add(key);
+    else next.delete(key);
     onChange([...next]);
   };
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="font-display text-sm text-[var(--ink)]">{title}</h3>
-        <span className="caption text-[var(--muted)]">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <span className="text-xs text-muted-foreground tabular-nums">
           {selected.length}/{items.length}
         </span>
       </div>
@@ -44,30 +46,30 @@ export function ToolSkillList({
           return (
             <label
               key={item.key}
-              className={[
-                'flex cursor-pointer items-start gap-2 rounded-[var(--r-lg)] border px-3 py-2.5 transition-[background-color,border-color,transform] hover:border-[var(--line-accent)] hover:bg-[var(--surface-hover)] active:scale-[0.98]',
-                active ? 'border-[var(--line-accent)] bg-[var(--surface-selected)]' : 'border-[var(--line-default)] bg-[var(--surface-card)]',
-              ].join(' ')}
+              className={cn(
+                'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 transition-colors',
+                active ? 'border-ring bg-accent' : 'border-border hover:bg-muted/50',
+              )}
             >
               <input
                 type="checkbox"
                 checked={active}
-                onChange={(e) => toggle(item.key, e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded-[var(--r-xs)] accent-[var(--accent)]"
+                onChange={(event) => toggle(item.key, event.target.checked)}
+                className="mt-0.5 size-4 accent-primary"
               />
               <span className="min-w-0">
                 <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-sm font-semibold text-[var(--ink)]">{item.name}</span>
-                  <span className="line-tag caption rounded-[var(--r-pill)] bg-[var(--surface-card)] px-1.5 py-0.5 text-[var(--muted)]">
+                  <span className="text-sm font-medium">{item.name}</span>
+                  <Badge variant="outline" className="text-xs">
                     {item.category ?? item.mode ?? item.key}
-                  </span>
-                  {item.defaultEnabled && (
-                    <span className="line-tag caption rounded-[var(--r-pill)] bg-[var(--brand-cyan)]/18 px-1.5 py-0.5 text-[var(--ink)]">
+                  </Badge>
+                  {item.defaultEnabled ? (
+                    <Badge variant="secondary" className="text-xs">
                       {defaultLabel}
-                    </span>
-                  )}
+                    </Badge>
+                  ) : null}
                 </span>
-                <span className="mt-1 block text-xs leading-relaxed text-[var(--muted)]">{item.description}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{item.description}</span>
               </span>
             </label>
           );

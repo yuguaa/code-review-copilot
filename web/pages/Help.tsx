@@ -1,31 +1,33 @@
 import { Link } from 'react-router-dom';
-import BookOpenCheck from 'lucide-react/dist/esm/icons/book-open-check';
-import Bot from 'lucide-react/dist/esm/icons/bot';
-import ChartColumn from 'lucide-react/dist/esm/icons/chart-column';
-import CheckCircle2 from 'lucide-react/dist/esm/icons/circle-check';
-import CircleAlert from 'lucide-react/dist/esm/icons/circle-alert';
-import ChevronDown from 'lucide-react/dist/esm/icons/chevron-down';
-import FolderGit2 from 'lucide-react/dist/esm/icons/folder-git-2';
-import MessageSquareText from 'lucide-react/dist/esm/icons/message-square-text';
-import Settings2 from 'lucide-react/dist/esm/icons/settings-2';
-import Webhook from 'lucide-react/dist/esm/icons/webhook';
+import {
+  BookOpenCheckIcon,
+  BotIcon,
+  ChartColumnIcon,
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  CircleAlertIcon,
+  FolderGitIcon,
+  MessageSquareTextIcon,
+  RssIcon,
+  SettingsIcon,
+  WebhookIcon,
+} from 'lucide-react';
 import { PageShell } from '../components/ui/page-shell';
 
 const sectionLinkClass =
-  'flex h-10 items-center rounded-[var(--r-lg)] px-3 text-sm text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.98]';
+  'flex h-10 items-center rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
 
 const actionLinkClass =
-  'inline-flex h-8 items-center justify-center gap-2 rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2.5 text-sm font-medium text-[var(--ink)] transition-[background-color,border-color,transform] hover:border-[var(--line-strong)] hover:bg-[var(--surface-hover)] active:scale-[0.96]';
+  'inline-flex h-8 items-center justify-center gap-2 rounded-lg border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted';
 
-const faqClass =
-  'group border-b border-[var(--line-subtle)] last:border-b-0 [&_summary::-webkit-details-marker]:hidden';
+const faqClass = 'group border-b last:border-b-0 [&_summary::-webkit-details-marker]:hidden';
 
 export function Help() {
   return (
     <PageShell title="帮助中心" maxWidth="max-w-6xl">
       <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="sticky top-24 rounded-[var(--r-md)] bg-[var(--surface-soft)] p-2 max-lg:static">
-          <p className="caption px-3 pb-2 pt-1 text-[var(--muted)]">使用指南</p>
+        <aside className="sticky top-4 rounded-lg bg-muted/50 p-2 max-lg:static">
+          <p className="px-3 pb-2 pt-1 text-xs text-muted-foreground">使用指南</p>
           <nav aria-label="帮助中心目录" className="grid max-lg:grid-cols-2 max-sm:grid-cols-1">
             <a href="#quick-start" className={sectionLinkClass}>快速开始</a>
             <a href="#daily-use" className={sectionLinkClass}>日常使用</a>
@@ -36,90 +38,116 @@ export function Help() {
         </aside>
 
         <div className="min-w-0 space-y-5">
-          <section className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+          <section className="overflow-hidden rounded-lg border bg-card">
             <div className="grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_160px]">
               <div>
-                <span className="caption text-[var(--primary)]">CODE REVIEW COPILOT</span>
-                <h2 className="font-display mt-2 text-xl leading-tight text-[var(--ink)]">从接入仓库到完成一次代码审查</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--muted)]">
+                <span className="text-xs font-medium text-primary">CODE REVIEW COPILOT</span>
+                <h2 className="mt-2 text-xl font-semibold leading-tight">从接入仓库到完成一次代码审查</h2>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
                   先配置 GitLab 账号和模型，再添加仓库与 Webhook。之后 Merge Request 或 Push 事件会自动生成审查会话，结论保留在工作台，并按仓库设置回写 GitLab 或推送钉钉。
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Link to="/settings" className={actionLinkClass}>
-                    <Settings2 size={15} /> 前往设置
+                    <SettingsIcon size={15} /> 前往设置
                   </Link>
                   <Link to="/repositories" className={actionLinkClass}>
-                    <FolderGit2 size={15} /> 配置仓库
+                    <FolderGitIcon size={15} /> 配置仓库
                   </Link>
                 </div>
               </div>
-              <div className="flex min-h-32 items-center justify-center rounded-[var(--r-lg)] bg-[var(--state-info-bg)] text-[var(--primary)]">
-                <BookOpenCheck size={54} strokeWidth={1.5} aria-hidden="true" />
+              <div className="flex min-h-32 items-center justify-center rounded-lg bg-primary/5 text-primary">
+                <BookOpenCheckIcon size={54} strokeWidth={1.5} aria-hidden="true" />
               </div>
             </div>
           </section>
 
-          <section id="quick-start" className="scroll-mt-24">
+          <section id="quick-start" className="scroll-mt-4">
             <div className="mb-5">
-              <span className="caption text-[var(--primary)]">01 / QUICK START</span>
-              <h2 className="font-display mt-1 text-xl text-[var(--ink)]">快速开始</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">按顺序完成以下步骤，即可建立完整的自动审查链路。</p>
+              <span className="text-xs font-medium text-primary">01 / QUICK START</span>
+              <h2 className="mt-1 text-xl font-semibold">快速开始</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">按顺序完成以下步骤，即可建立完整的自动审查链路。</p>
             </div>
-            <ol className="line-list">
+            <ol className="divide-y rounded-lg border bg-card">
               {[
                 ['1', '添加 GitLab 账号', '进入「设置」，填写 GitLab 实例地址、具有 api 权限的 Personal Access Token，以及用于 Webhook 验签的密钥。保存后点击「测试连接」。'],
                 ['2', '配置可用模型', '在「全局模型配置」中选择 Provider，填写模型 ID、API Key 与最大步数。测试成功后启用模型，并设置一个默认模型。'],
                 ['3', '配置 Tools / Skills', '在「设置」中启用平台默认工具与审查方法。仓库可以显式覆盖这些默认项，关闭的能力不会暴露给 Agent。'],
                 ['4', '添加仓库', '进入「仓库配置」，选择 GitLab 账号并拉取项目。确认项目、监听分支、审查提示词、模型和通知选项后保存。'],
                 ['5', '创建 GitLab Webhook', '在项目 Webhook 中填写页面展示的 URL，Secret Token 与账号的 Webhook 密钥保持一致，并勾选 Merge Request events 和 Push events。'],
+                ['6', '配置 RSS 订阅（可选）', '进入「RSS 订阅」，填写订阅名称、Feed 地址与抓取间隔。新条目会推送到全局钉钉机器人，首次抓取只建立基线。'],
               ].map(([number, title, description]) => (
                 <li key={number} className="grid gap-3 p-5 sm:grid-cols-[40px_minmax(0,1fr)]">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] font-mono text-sm font-semibold text-white">{number}</span>
+                  <span className="flex size-10 items-center justify-center rounded-lg bg-primary font-mono text-sm font-medium text-primary-foreground">
+                    {number}
+                  </span>
                   <div>
-                    <h3 className="font-display text-base text-[var(--ink)]">{title}</h3>
-                    <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{description}</p>
+                    <h3 className="text-base font-medium">{title}</h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
                   </div>
                 </li>
               ))}
             </ol>
           </section>
 
-          <section id="daily-use" className="scroll-mt-24">
+          <section id="daily-use" className="scroll-mt-4">
             <div className="mb-5">
-              <span className="caption text-[var(--primary)]">02 / WORKFLOW</span>
-              <h2 className="font-display mt-1 text-xl text-[var(--ink)]">日常使用</h2>
+              <span className="text-xs font-medium text-primary">02 / WORKFLOW</span>
+              <h2 className="mt-1 text-xl font-semibold">日常使用</h2>
             </div>
-            <div className="divide-y divide-[var(--line-subtle)] rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+            <div className="divide-y rounded-lg border bg-card">
               <article className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)]">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[var(--r-md)] bg-[var(--state-info-bg)] text-[var(--primary)]"><Webhook size={20} /></span>
+                <span className="flex size-11 items-center justify-center rounded-lg bg-primary/5 text-primary">
+                  <WebhookIcon size={20} />
+                </span>
                 <div>
-                  <h3 className="font-display text-base text-[var(--ink)]">自动审查</h3>
-                  <p className="mt-1 text-sm leading-6 text-[var(--muted)]">监听范围内的 MR 或 Push 事件到达后，系统创建会话并运行 Agent。你可以从左侧会话列表进入，查看状态、分支、提交、作者、工具调用和最终结论。</p>
+                  <h3 className="text-base font-medium">自动审查</h3>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    监听范围内的 MR 或 Push 事件到达后，系统创建会话并运行 Agent。你可以从左侧会话列表进入，查看状态、分支、提交、作者、工具调用和最终结论。
+                  </p>
                 </div>
               </article>
               <article className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)]">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[var(--r-md)] bg-[var(--state-success-bg)] text-[var(--success)]"><MessageSquareText size={20} /></span>
+                <span className="flex size-11 items-center justify-center rounded-lg bg-success/10 text-success-foreground">
+                  <MessageSquareTextIcon size={20} />
+                </span>
                 <div>
-                  <h3 className="font-display text-base text-[var(--ink)]">新建对话与继续追问</h3>
-                  <p className="mt-1 text-sm leading-6 text-[var(--muted)]">点击侧栏顶部「新对话」，选择关联仓库后输入问题。审查会话完成后也可以继续追问，Agent 会沿用该仓库工作区和当前会话上下文。</p>
+                  <h3 className="text-base font-medium">新建对话与继续追问</h3>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    点击侧栏顶部「新建对话」，选择关联仓库后输入问题。审查会话完成后也可以继续追问，Agent 会沿用该仓库工作区和当前会话上下文。
+                  </p>
                 </div>
               </article>
               <article className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)]">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[var(--r-md)] bg-[var(--metric-lilac)] text-[var(--primary)]"><ChartColumn size={20} /></span>
+                <span className="flex size-11 items-center justify-center rounded-lg bg-primary/5 text-primary">
+                  <ChartColumnIcon size={20} />
+                </span>
                 <div>
-                  <h3 className="font-display text-base text-[var(--ink)]">查看数据看板</h3>
-                  <p className="mt-1 text-sm leading-6 text-[var(--muted)]">进入「数据看板」查看会话趋势、成功率、仓库热度、人员覆盖、失败样本和最近活动，用于定位风险集中点与审查覆盖缺口。</p>
+                  <h3 className="text-base font-medium">查看数据看板</h3>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    进入「数据看板」查看会话趋势、成功率、仓库热度、人员覆盖、失败样本和最近活动，用于定位风险集中点与审查覆盖缺口。
+                  </p>
+                </div>
+              </article>
+              <article className="grid gap-4 p-5 md:grid-cols-[44px_minmax(0,1fr)]">
+                <span className="flex size-11 items-center justify-center rounded-lg bg-primary/5 text-primary">
+                  <RssIcon size={20} />
+                </span>
+                <div>
+                  <h3 className="text-base font-medium">RSS 订阅推送</h3>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    「RSS 订阅」按设置的间隔抓取订阅源，把新条目推送到全局钉钉机器人。推送使用独立模板，与代码审查通知区分开。
+                  </p>
                 </div>
               </article>
             </div>
           </section>
 
-          <section id="configuration" className="scroll-mt-24">
+          <section id="configuration" className="scroll-mt-4">
             <div className="mb-5">
-              <span className="caption text-[var(--primary)]">03 / CONFIGURATION</span>
-              <h2 className="font-display mt-1 text-xl text-[var(--ink)]">关键配置说明</h2>
+              <span className="text-xs font-medium text-primary">03 / CONFIGURATION</span>
+              <h2 className="mt-1 text-xl font-semibold">关键配置说明</h2>
             </div>
-            <dl className="grid gap-px overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--line-default)] shadow-[var(--shadow-sm)] sm:grid-cols-2">
+            <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2">
               {[
                 ['监听分支', '逗号分隔，支持 main、release-* 等通配符；留空表示全部分支。未匹配的事件不会触发审查。'],
                 ['自动审查', '控制 Webhook 事件到达后是否自动运行 Agent。关闭后，仓库仍可用于手动新建对话。'],
@@ -127,60 +155,76 @@ export function Help() {
                 ['钉钉推送', '开启后需填写机器人 Webhook，可选填加签密钥。审查完成后向群聊推送结果。'],
                 ['默认审查提示词', '作为仓库的额外审查要求，追加在内置审查指令之后，适合声明鉴权、事务或性能等关注点。'],
                 ['仓库能力覆盖', '仓库 Tools / Skills 覆盖平台默认配置。请只启用审查实际需要的能力，配置结果同时影响审查与后续追问。'],
+                ['RSS 抓取间隔', '取值 5 到 1440 分钟，调度器每分钟检查一次是否到期；单次抓取最多推送 5 条，避免补推刷屏。'],
+                ['RSS 消息模板', '标题以「RSS 更新 · 订阅名 · 条目标题」开头，正文包含发布时间、摘要与原文链接。'],
               ].map(([term, description]) => (
-                <div key={term} className="bg-[var(--surface-card)] p-5">
-                  <dt className="font-display text-sm text-[var(--ink)]">{term}</dt>
-                  <dd className="mt-2 text-sm leading-6 text-[var(--muted)]">{description}</dd>
+                <div key={term} className="bg-card p-5">
+                  <dt className="text-sm font-medium">{term}</dt>
+                  <dd className="mt-2 text-sm leading-6 text-muted-foreground">{description}</dd>
                 </div>
               ))}
             </dl>
           </section>
 
-          <section id="status" className="scroll-mt-24">
+          <section id="status" className="scroll-mt-4">
             <div className="mb-5">
-              <span className="caption text-[var(--primary)]">04 / STATUS</span>
-              <h2 className="font-display mt-1 text-xl text-[var(--ink)]">状态与排查顺序</h2>
+              <span className="text-xs font-medium text-primary">04 / STATUS</span>
+              <h2 className="mt-1 text-xl font-semibold">状态与排查顺序</h2>
             </div>
-            <div className="rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] p-5 shadow-[var(--shadow-sm)]">
+            <div className="rounded-lg border bg-card p-5">
               <div className="grid gap-5 md:grid-cols-3">
                 <div>
-                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--warning)]"><Bot size={16} /> 审查中</span>
-                  <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Agent 正在读取改动、调用工具或组织结论。可在会话中查看实时活动。</p>
+                  <span className="inline-flex items-center gap-2 text-sm font-medium text-warning-foreground">
+                    <BotIcon size={16} /> 审查中
+                  </span>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Agent 正在读取改动、调用工具或组织结论。可在会话中查看实时活动。
+                  </p>
                 </div>
                 <div>
-                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--success)]"><CheckCircle2 size={16} /> 已完成</span>
-                  <p className="mt-2 text-sm leading-6 text-[var(--muted)]">结论已写入会话；是否回写 GitLab 或推送钉钉取决于仓库配置。</p>
+                  <span className="inline-flex items-center gap-2 text-sm font-medium text-success-foreground">
+                    <CheckCircle2Icon size={16} /> 已完成
+                  </span>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    结论已写入会话；是否回写 GitLab 或推送钉钉取决于仓库配置。
+                  </p>
                 </div>
                 <div>
-                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--error)]"><CircleAlert size={16} /> 失败</span>
-                  <p className="mt-2 text-sm leading-6 text-[var(--muted)]">优先检查模型、GitLab 连接和仓库配置，再从数据看板的失败样本进入对应会话查看原因。</p>
+                  <span className="inline-flex items-center gap-2 text-sm font-medium text-destructive">
+                    <CircleAlertIcon size={16} /> 失败
+                  </span>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    优先检查模型、GitLab 连接和仓库配置，再从数据看板的失败样本进入对应会话查看原因。
+                  </p>
                 </div>
               </div>
             </div>
           </section>
 
-          <section id="faq" className="scroll-mt-24">
+          <section id="faq" className="scroll-mt-4">
             <div className="mb-5">
-              <span className="caption text-[var(--primary)]">05 / FAQ</span>
-              <h2 className="font-display mt-1 text-xl text-[var(--ink)]">常见问题</h2>
+              <span className="text-xs font-medium text-primary">05 / FAQ</span>
+              <h2 className="mt-1 text-xl font-semibold">常见问题</h2>
             </div>
-            <div className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] shadow-[var(--shadow-sm)]">
+            <div className="overflow-hidden rounded-lg border bg-card">
               {[
                 ['Webhook 触发后为什么没有创建审查会话？', '依次确认仓库已启用自动审查、事件类型已勾选、目标分支匹配监听规则、Webhook URL 可从 GitLab 访问，并且 Secret Token 与对应 GitLab 账号的 Webhook 密钥一致。'],
                 ['为什么无法拉取 GitLab 项目或读取代码？', '先在「设置」中对 GitLab 账号执行测试连接。确认实例地址正确，Personal Access Token 未过期且具有 api 权限，并且该账号可以访问目标项目。'],
                 ['模型测试失败或审查立即失败怎么办？', '检查模型 Provider、模型 ID、API Key 和 Base URL。openai-compatible 必须填写正确的兼容接口地址；模型还需处于启用状态，仓库自定义模型也要单独检查。'],
                 ['为什么审查完成后 GitLab 没有评论？', '确认仓库开启了「回写平台评论」，GitLab Token 具有评论权限。关闭该选项不会丢失结果，完整结论仍可在对应会话中查看。'],
                 ['为什么没有收到钉钉通知？', '确认仓库开启了「推送钉钉」，机器人 Webhook 可用；若机器人启用了加签，还需填写匹配的 SEC 密钥。'],
+                ['RSS 订阅为什么没有推送第一条内容？', '首次抓取只建立基线，不会推送历史条目。之后出现的新内容才会推送；如果抓取失败，订阅卡片上会显示具体错误。'],
+                ['RSS 推送与审查通知会互相影响吗？', '两者共用全局钉钉机器人，但消息模板与触发条件独立。关闭全局钉钉推送会让两者同时停止。'],
                 ['平台默认 Tools / Skills 与仓库配置是什么关系？', '设置页维护平台默认能力，仓库页进行显式覆盖。仓库保存的覆盖结果优先生效；被关闭的工具不会提供给 Agent，也不会在追问阶段自动恢复。'],
                 ['如何针对某个仓库提出额外审查要求？', '编辑仓库的「默认审查提示词」，写入需要长期关注的规则；临时问题可以在审查会话完成后直接追问。'],
                 ['删除会话或仓库会发生什么？', '删除会话会移除该会话及全部消息，无法恢复。删除仓库会移除仓库配置与关联会话记录，并使该仓库的 Webhook 触发失效。'],
               ].map(([question, answer]) => (
                 <details key={question} className={faqClass}>
-                  <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-semibold text-[var(--ink)] transition-[background-color] hover:bg-[var(--surface-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus-ring)]">
+                  <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-medium transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring">
                     <span>{question}</span>
-                    <ChevronDown size={16} className="shrink-0 text-[var(--muted)] transition-transform group-open:rotate-180" />
+                    <ChevronDownIcon size={16} className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                   </summary>
-                  <p className="px-5 pb-5 pr-12 text-sm leading-6 text-[var(--muted)]">{answer}</p>
+                  <p className="px-5 pb-5 pr-12 text-sm leading-6 text-muted-foreground">{answer}</p>
                 </details>
               ))}
             </div>

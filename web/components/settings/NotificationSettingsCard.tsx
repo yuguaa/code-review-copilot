@@ -1,6 +1,6 @@
 import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 import { Checkbox, Field, Input } from '../ui/forms';
-import { Card } from '../ui/surface';
 
 type NotificationForm = {
   dingtalkEnabled: boolean;
@@ -20,8 +20,13 @@ export function NotificationSettingsCard({
   onSave: () => void;
 }) {
   return (
-    <Card className="space-y-4">
-      <h2 className="font-display text-lg text-[var(--ink)]">全局钉钉配置</h2>
+    <Card className="gap-4 px-5 py-4">
+      <div>
+        <h2 className="text-base font-medium">全局钉钉配置</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          代码审查通知与 RSS 订阅推送共用这个机器人，两者使用不同的消息模板。
+        </p>
+      </div>
       <Checkbox
         label="开启全局钉钉推送"
         checked={notification.dingtalkEnabled}
@@ -42,9 +47,11 @@ export function NotificationSettingsCard({
           placeholder="SEC..."
         />
       </Field>
-      <Button onClick={onSave} disabled={saving}>
-        {saving ? '保存中…' : '保存钉钉配置'}
-      </Button>
+      <div>
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? '保存中…' : '保存钉钉配置'}
+        </Button>
+      </div>
     </Card>
   );
 }

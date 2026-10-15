@@ -5,15 +5,16 @@ import type { DashboardBucket, RecentItem } from '../../hooks/useDashboardData';
 
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
+/** 图表序列取自主题色板，避免为看板单独维护一套颜色。 */
 export const chartColors = {
-  ink: '#7656c8',
-  muted: '#756d85',
-  hairline: '#ded8e9',
-  lime: '#4f956a',
-  mint: '#28895c',
-  coral: '#c6534a',
-  teal: '#2f9b8f',
-  lilac: '#d85f86',
+  ink: 'var(--chart-1)',
+  muted: 'var(--muted-foreground)',
+  hairline: 'var(--border)',
+  lime: 'var(--chart-3)',
+  mint: 'var(--chart-2)',
+  coral: 'var(--destructive)',
+  teal: 'var(--chart-2)',
+  lilac: 'var(--chart-5)',
 };
 
 export const trendChartConfig = {
@@ -25,7 +26,7 @@ export const trendChartConfig = {
 export const statusChartConfig = {
   completed: { label: '完成', color: chartColors.mint },
   failed: { label: '失败', color: chartColors.coral },
-  running: { label: '运行中', color: '#dc8a35' },
+  running: { label: '运行中', color: 'var(--chart-4)' },
 } satisfies ChartConfig;
 
 export const authorChartConfig = {
@@ -39,9 +40,9 @@ export const repositoryChartConfig = {
 } satisfies ChartConfig;
 
 export const statusColor: Record<string, string> = {
-  completed: 'bg-[var(--state-success-bg)] text-[var(--success)]',
-  failed: 'bg-[var(--state-error-bg)] text-[var(--error)]',
-  running: 'bg-[var(--state-warning-bg)] text-[var(--warning)]',
+  completed: 'bg-success/10 text-success-foreground',
+  failed: 'bg-destructive/10 text-destructive',
+  running: 'bg-warning/10 text-warning-foreground',
 };
 
 export function fmtTime(value: string | null): string {
@@ -79,11 +80,11 @@ export function MetricCard({
   const content = (
     <div className="flex min-h-24 items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="caption text-[var(--muted)]">{label}</p>
-        <p className="mt-2 font-display text-2xl tabular-nums">{value}</p>
-        <p className="mt-1 truncate text-xs text-[var(--muted)]">{hint}</p>
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
+        <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p>
       </div>
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-card)] text-[var(--primary)]">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-background text-primary">
         <Icon size={18} />
       </span>
     </div>
@@ -99,9 +100,9 @@ export function MetricCard({
 
 export function SectionTitle({ title, meta }: { title: string; meta?: string }) {
   return (
-    <div className="flex items-end justify-between gap-3 border-b border-[var(--line-subtle)] pb-3">
-      <h2 className="font-display text-xl leading-none text-[var(--ink)]">{title}</h2>
-      {meta && <span className="caption text-[var(--muted)]">{meta}</span>}
+    <div className="flex items-end justify-between gap-3 border-b pb-3">
+      <h2 className="text-lg font-semibold leading-none">{title}</h2>
+      {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
     </div>
   );
 }
@@ -118,17 +119,17 @@ export function SignalCard({
   icon: IconComponent;
 }) {
   return (
-    <div className="rounded-[var(--r-lg)] bg-[var(--surface-soft)] p-4">
+    <div className="rounded-lg bg-muted/50 p-4">
       <div className="flex items-center justify-between gap-3">
-        <span className="caption text-[var(--muted)]">{label}</span>
-        <Icon size={16} className="text-[var(--muted)]" />
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <Icon size={16} className="text-muted-foreground" />
       </div>
-      <p className="mt-3 truncate text-sm font-semibold text-[var(--ink)]">{bucket?.label ?? '暂无'}</p>
-      <p className="caption mt-1 text-[var(--muted)]">{bucket ? value(bucket) : '暂无数据'}</p>
+      <p className="mt-3 truncate text-sm font-medium">{bucket?.label ?? '暂无'}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{bucket ? value(bucket) : '暂无数据'}</p>
     </div>
   );
 }
 
 export function EmptyState({ label }: { label: string }) {
-  return <div className="flex h-56 items-center justify-center text-sm text-[var(--muted)]">{label}</div>;
+  return <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">{label}</div>;
 }

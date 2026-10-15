@@ -1,7 +1,7 @@
 import * as React from 'react';
 import * as RechartsPrimitive from 'recharts';
 import type { TooltipValueType } from 'recharts';
-import { cn } from '../lib/cn';
+import { cn } from '../lib/utils';
 
 const THEMES = { light: '', dark: '.dark' } as const;
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const;
@@ -49,7 +49,7 @@ export function ChartContainer({
         data-slot="chart"
         data-chart={chartId}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-[var(--muted)] [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-[var(--line-subtle)] [&_.recharts-curve.recharts-tooltip-cursor]:stroke-[var(--line-accent)] [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-[var(--line-subtle)] [&_.recharts-radial-bar-background-sector]:fill-[var(--surface-card)] [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-[var(--surface-soft)] [&_.recharts-reference-line_[stroke='#ccc']]:stroke-[var(--line-default)] [&_.recharts-sector]:outline-none [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-none",
+          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-card [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-none [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-none",
           className,
         )}
         {...props}
@@ -134,7 +134,7 @@ export function ChartTooltipContent({
   return (
     <div
       className={cn(
-        'grid min-w-32 items-start gap-1.5 rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-2.5 py-1.5 text-xs text-[var(--ink)] shadow-[var(--shadow-md)]',
+        'grid min-w-32 items-start gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md',
         className,
       )}
     >
@@ -150,7 +150,7 @@ export function ChartTooltipContent({
             return (
               <div
                 key={`${item.name}-${index}`}
-                className={cn('flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-[var(--muted)]', indicator === 'dot' && 'items-center')}
+                className={cn('flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground', indicator === 'dot' && 'items-center')}
               >
                 {formatter && item?.value !== undefined && item.name ? (
                   formatter(item.value, item.name, item, index, item.payload)
@@ -179,10 +179,10 @@ export function ChartTooltipContent({
                     <div className={cn('flex flex-1 justify-between leading-none', nestLabel ? 'items-end' : 'items-center')}>
                       <div className="grid gap-1.5">
                         {nestLabel ? tooltipLabel : null}
-                        <span className="text-[var(--muted)]">{itemConfig?.label ?? item.name}</span>
+                        <span className="text-muted-foreground">{itemConfig?.label ?? item.name}</span>
                       </div>
                       {item.value != null && (
-                        <span className="font-mono font-medium tabular-nums text-[var(--ink)]">
+                        <span className="font-mono font-medium tabular-nums text-popover-foreground">
                           {typeof item.value === 'number' ? item.value.toLocaleString() : String(item.value)}
                         </span>
                       )}
@@ -214,7 +214,7 @@ export function ChartLegendContent({
   if (!payload?.length) return null;
 
   return (
-    <div className={cn('flex flex-wrap items-center justify-center gap-4 text-xs text-[var(--body)]', verticalAlign === 'top' ? 'pb-3' : 'pt-3', className)}>
+    <div className={cn('flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground', verticalAlign === 'top' ? 'pb-3' : 'pt-3', className)}>
       {payload
         .filter((item) => item.type !== 'none')
         .map((item, index) => {
@@ -222,7 +222,7 @@ export function ChartLegendContent({
           const itemConfig = getPayloadConfigFromPayload(config, item, key);
 
           return (
-            <div key={`${item.value}-${index}`} className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-[var(--muted)]">
+            <div key={`${item.value}-${index}`} className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground">
               {itemConfig?.icon && !hideIcon ? (
                 <itemConfig.icon />
               ) : (

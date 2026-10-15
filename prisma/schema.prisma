@@ -26,16 +26,16 @@ model GitLabAccount {
 
 /// 全局 AI 模型配置
 model AIModel {
-  id          String       @id @default(cuid())
-  provider    String // openai | anthropic | openai-compatible
-  modelId     String // 如 gpt-4o / claude-3-5-sonnet
-  apiKey      String
-  apiBaseUrl  String?
-  maxSteps    Int          @default(16)
-  isDefault   Boolean      @default(false)
-  isActive    Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id           String       @id @default(cuid())
+  provider     String // openai | anthropic | openai-compatible
+  modelId      String // 如 gpt-4o / claude-3-5-sonnet
+  apiKey       String
+  apiBaseUrl   String?
+  maxSteps     Int          @default(16)
+  isDefault    Boolean      @default(false)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   repositories Repository[]
 
   @@map("ai_models")
@@ -43,38 +43,38 @@ model AIModel {
 
 /// 仓库配置：多仓库列表 + 可选模型覆盖
 model Repository {
-  id              String        @id @default(cuid())
-  gitLabAccountId String
-  gitLabAccount   GitLabAccount @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
-  gitLabProjectId Int
-  name            String
-  path            String // namespace/project
-  description     String?
-  watchBranches   String? // "main,develop,feature/*"，空=全部
-  autoReview      Boolean       @default(true)
-  defaultAIModelId String?
-  defaultAIModel   AIModel?     @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
+  id                  String                   @id @default(cuid())
+  gitLabAccountId     String
+  gitLabAccount       GitLabAccount            @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
+  gitLabProjectId     Int
+  name                String
+  path                String // namespace/project
+  description         String?
+  watchBranches       String? // "main,develop,feature/*"，空=全部
+  autoReview          Boolean                  @default(true)
+  defaultAIModelId    String?
+  defaultAIModel      AIModel?                 @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
   // 仓库级自定义模型配置：全部为空时使用 defaultAIModel
-  customProvider   String?
-  customModelId    String?
-  customApiKey     String?
-  customApiBaseUrl String?
-  customMaxSteps   Int?
+  customProvider      String?
+  customModelId       String?
+  customApiKey        String?
+  customApiBaseUrl    String?
+  customMaxSteps      Int?
   // 默认审查提示词（webhook 首轮），空则用内置
   defaultReviewPrompt String?
   // 输出渠道开关与钉钉配置
-  enableMrComment Boolean       @default(false) // 是否回写代码平台评论（MR / Push）
-  enableDingtalk  Boolean       @default(true) // 是否推送钉钉
-  dingtalkWebhook String? // 钉钉机器人 webhook 地址
-  dingtalkSecret  String? // 钉钉加签密钥
+  enableMrComment     Boolean                  @default(false) // 是否回写代码平台评论（MR / Push）
+  enableDingtalk      Boolean                  @default(true) // 是否推送钉钉
+  dingtalkWebhook     String? // 钉钉机器人 webhook 地址
+  dingtalkSecret      String? // 钉钉加签密钥
   // 项目记忆：跨次审查沉淀的约定/架构/历史问题（agent 读写）
-  memory          String?
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  sessions        Session[]
-  toolSettings    RepositoryToolSetting[]
-  skillSettings   RepositorySkillSetting[]
+  memory              String?
+  isActive            Boolean                  @default(true)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  sessions            Session[]
+  toolSettings        RepositoryToolSetting[]
+  skillSettings       RepositorySkillSetting[]
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@index([defaultAIModelId])
@@ -150,26 +150,26 @@ model RepositorySkillSetting {
 
 /// 一次会话：审查会话（webhook 触发）或普通会话
 model Session {
-  id           String      @id @default(cuid())
-  kind         String      @default("review") // review | chat
-  title        String?
-  repositoryId String?
-  repository   Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  id                  String      @id @default(cuid())
+  kind                String      @default("review") // review | chat
+  title               String?
+  repositoryId        String?
+  repository          Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
   // 审查会话的 MR 元信息（普通会话为空）
-  mrIid        Int?
-  mrTitle      String?
-  sourceBranch String?
-  targetBranch String?
-  baseCommitSha String?
-  commitSha    String?
-  author       String?
-  status       String      @default("running") // running | completed | failed
-  error        String?
+  mrIid               Int?
+  mrTitle             String?
+  sourceBranch        String?
+  targetBranch        String?
+  baseCommitSha       String?
+  commitSha           String?
+  author              String?
+  status              String      @default("running") // running | completed | failed
+  error               String?
   activeLeafMessageId String?
-  activeLeafMessage   Message?  @relation("SessionActiveLeaf", fields: [activeLeafMessageId], references: [id], onDelete: SetNull)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  messages     Message[]   @relation("SessionMessages")
+  activeLeafMessage   Message?    @relation("SessionActiveLeaf", fields: [activeLeafMessageId], references: [id], onDelete: SetNull)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  messages            Message[]   @relation("SessionMessages")
 
   @@index([kind, updatedAt])
   @@index([repositoryId])
@@ -178,16 +178,16 @@ model Session {
 
 /// Message tree 持久化：每个 message 是一个气泡，parts 是气泡内 block 列表。
 model Message {
-  id        String   @id @default(cuid())
-  sessionId String
-  session   Session  @relation("SessionMessages", fields: [sessionId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  sessionId         String
+  session           Session   @relation("SessionMessages", fields: [sessionId], references: [id], onDelete: Cascade)
   activeForSessions Session[] @relation("SessionActiveLeaf")
-  parentId  String?
-  parent    Message? @relation("MessageTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children  Message[] @relation("MessageTree")
-  role      String // user | assistant | system
-  parts     Json // UIMessage.parts（text / tool-call / tool-result / reasoning）
-  createdAt DateTime @default(now())
+  parentId          String?
+  parent            Message?  @relation("MessageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children          Message[] @relation("MessageTree")
+  role              String // user | assistant | system
+  parts             Json // UIMessage.parts（text / tool-call / tool-result / reasoning）
+  createdAt         DateTime  @default(now())
 
   @@index([sessionId, createdAt])
   @@index([parentId, createdAt])
@@ -205,4 +205,36 @@ model NotificationSetting {
   updatedAt          DateTime @updatedAt
 
   @@map("notification_settings")
+}
+
+/// RSS 订阅源：按间隔抓取，新条目推送到钉钉
+model RssSubscription {
+  id              String          @id @default(cuid())
+  name            String
+  url             String          @unique
+  enabled         Boolean         @default(true)
+  intervalMinutes Int             @default(30)
+  lastFetchedAt   DateTime?
+  lastError       String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  items           RssPushedItem[]
+
+  @@map("rss_subscriptions")
+}
+
+/// 已推送条目：按条目标识去重，保证同一条内容只推送一次
+model RssPushedItem {
+  id             String          @id @default(cuid())
+  subscriptionId String
+  subscription   RssSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  guid           String
+  title          String
+  link           String?
+  publishedAt    DateTime?
+  pushedAt       DateTime        @default(now())
+
+  @@unique([subscriptionId, guid])
+  @@index([subscriptionId, pushedAt])
+  @@map("rss_pushed_items")
 }

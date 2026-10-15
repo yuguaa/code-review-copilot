@@ -48,7 +48,7 @@ export function RepositoryModal({
   return (
     <Modal open={modalOpen} title={editingId ? '编辑仓库' : '添加仓库'} onClose={closeModal}>
       {accounts.length === 0 ? (
-        <p className="text-xs text-[var(--warning)]">请先到「设置」添加 GitLab 账号</p>
+        <p className="text-xs text-warning-foreground">请先到「设置」添加 GitLab 账号</p>
       ) : (
         <div className="space-y-4">
           <Field label="GitLab 账号">
@@ -70,14 +70,14 @@ export function RepositoryModal({
             </div>
           </Field>
           {projects.length > 0 && (
-            <div className="max-h-48 space-y-1 overflow-y-auto rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] p-1">
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border bg-card p-1">
               {projects.map((project) => (
                 <button
                   key={project.id}
                   onClick={() => pickProject(project)}
-                  className="block w-full cursor-pointer rounded-[var(--r-sm)] border border-transparent px-2 py-1.5 text-left text-xs text-[var(--body)] transition-[background-color,border-color,transform] hover:border-[var(--line-subtle)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-95"
+                  className="block w-full cursor-pointer rounded-md border border-transparent px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
                 >
-                  {project.path} <span className="text-[var(--muted-soft)]">#{project.id}</span>
+                  {project.path} <span className="text-muted-foreground">#{project.id}</span>
                 </button>
               ))}
             </div>
@@ -160,15 +160,15 @@ export function RepositoryModal({
                 <Checkbox key={key} label={label} checked={form[key]} onChange={(value) => setField(key, value)} />
               ))}
             </div>
-            <p className="text-xs leading-relaxed text-[var(--muted)]">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               审查结论始终保留在会话页面；「回写平台评论」控制是否发布到 GitLab（MR / Commit 评论），「推送钉钉」控制审查完成后是否推送群通知。
             </p>
           </div>
 
-          <div className="space-y-4 rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-soft)] p-4">
+          <div className="space-y-4 rounded-lg border bg-muted/50 p-4">
             <div>
-              <h3 className="font-display text-sm text-[var(--ink)]">仓库 Tools / Skills</h3>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+              <h3 className="text-sm font-medium">仓库 Tools / Skills</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 这里覆盖平台默认能力。关闭工具后，审查与追问都不会再向模型暴露对应 tool。
               </p>
             </div>
@@ -208,7 +208,7 @@ export function RepositoryModal({
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-[var(--line-default)] pt-4">
+          <div className="flex items-center justify-end gap-2 border-t pt-4">
             <Button variant="secondary" onClick={closeModal} type="button" disabled={saving}>
               取消
             </Button>

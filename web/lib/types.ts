@@ -100,3 +100,14 @@ export type AgentSkillItem = {
   isActive?: boolean;
   enabled?: boolean;
 };
+
+export type RssSubscriptionItem = {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  intervalMinutes: number;
+  lastFetchedAt: string | null;
+  lastError: string | null;
+  pushedCount: number;
+};

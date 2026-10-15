@@ -10,10 +10,9 @@ type UseChatSessionEventsOptions = {
   sessionId: string;
   setMessages: (messages: UIMessage[]) => void;
   updateDetail: React.Dispatch<React.SetStateAction<SessionDetail | null>>;
-  onActivity: () => void;
 };
 
-export function useChatSessionEvents({ busy, sessionId, setMessages, updateDetail, onActivity }: UseChatSessionEventsOptions) {
+export function useChatSessionEvents({ busy, sessionId, setMessages, updateDetail }: UseChatSessionEventsOptions) {
   const busyRef = useRef(false);
 
   useEffect(() => {
@@ -70,7 +69,6 @@ export function useChatSessionEvents({ busy, sessionId, setMessages, updateDetai
         current ? { ...current, session: { ...current.session, status: payload.status } } : current,
       );
       if (payload.status !== 'running') {
-        onActivity();
         syncSession();
       }
     });
@@ -88,5 +86,5 @@ export function useChatSessionEvents({ busy, sessionId, setMessages, updateDetai
       disposed = true;
       events.close();
     };
-  }, [onActivity, sessionId, setMessages, updateDetail]);
+  }, [sessionId, setMessages, updateDetail]);
 }

@@ -1,14 +1,14 @@
-import { useEffect, useId, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import X from 'lucide-react/dist/esm/icons/x';
-import { cn } from '../../lib/cn';
+import type { ReactNode } from 'react';
+import { cn } from '@web/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog';
 
+/** 业务弹窗：统一的标题、关闭行为与滚动区域。 */
 export function Modal({
   open,
   title,
   children,
   onClose,
-  maxWidth = 'max-w-3xl',
+  maxWidth = 'sm:max-w-3xl',
 }: {
   open: boolean;
   title: string;
@@ -16,47 +16,19 @@ export function Modal({
   onClose: () => void;
   maxWidth?: string;
 }) {
-  const titleId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, open]);
-
-  if (!open) return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-[var(--surface-dark)]/42 px-4 py-6 sm:py-10"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={cn('tech-panel animate-fade-in w-full overflow-hidden rounded-[var(--r-lg)]', maxWidth)}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[var(--r-lg)] border-b border-[var(--line-default)] bg-[var(--surface-card)] px-6 py-4">
-          <h2 id={titleId} className="font-display text-lg text-[var(--ink)]">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="关闭弹窗"
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[var(--r-lg)] text-[var(--muted)] transition-[background-color,color,transform] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] active:scale-[0.96]"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="max-h-[calc(100vh-11rem)] overflow-y-auto px-6 py-6">{children}</div>
-      </div>
-    </div>,
-    document.body,
+      <DialogContent className={cn('max-h-[85vh] overflow-y-auto', maxWidth)}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        {children}
+      </DialogContent>
+    </Dialog>
   );
 }

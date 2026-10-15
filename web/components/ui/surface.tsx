@@ -1,23 +1,22 @@
 import type { ReactNode } from 'react';
-import { cn } from '../../lib/cn';
+import { cn } from '@web/lib/utils';
+import { Badge } from './badge';
+import { Card as CardPrimitive } from './card';
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={cn('tech-panel rounded-[var(--r-lg)] p-5', className)}>
-      {children}
-    </div>
-  );
+  return <CardPrimitive className={cn('px-5', className)}>{children}</CardPrimitive>;
 }
 
-const COLOR_BLOCK_SURFACE: Record<string, { bg: string; dark: boolean }> = {
-  lime: { bg: 'var(--metric-lime)', dark: false },
-  lilac: { bg: 'var(--metric-lilac)', dark: false },
-  cream: { bg: 'var(--metric-neutral)', dark: false },
-  mint: { bg: 'var(--metric-mint)', dark: false },
-  pink: { bg: 'var(--metric-pink)', dark: false },
-  coral: { bg: 'var(--metric-coral)', dark: false },
-  navy: { bg: 'var(--metric-navy)', dark: false },
-  teal: { bg: 'var(--metric-teal)', dark: false },
+/** 指标色条：用图表序列表达不同指标，避免整卡换色破坏信息层级。 */
+const TONE_BAR: Record<string, string> = {
+  lime: 'bg-chart-4',
+  lilac: 'bg-chart-5',
+  cream: 'bg-foreground/30',
+  mint: 'bg-chart-2',
+  pink: 'bg-chart-1',
+  coral: 'bg-destructive',
+  navy: 'bg-chart-3',
+  teal: 'bg-chart-2',
 };
 
 export function ColorBlock({
@@ -29,33 +28,22 @@ export function ColorBlock({
   className?: string;
   children: ReactNode;
 }) {
-  const surface = COLOR_BLOCK_SURFACE[tone];
   return (
-    <div
-      className={cn('tech-panel rounded-[var(--r-lg)] p-5', surface.dark ? 'is-dark text-white' : 'text-[var(--ink)]', className)}
-      style={{
-        backgroundColor: surface.bg,
-        borderColor: surface.dark ? 'var(--line-strong)' : 'var(--line-default)',
-      }}
-    >
+    <CardPrimitive className={cn('px-5', className)}>
+      <span className={cn('h-0.5 w-8 rounded-full', TONE_BAR[tone])} />
       {children}
-    </div>
+    </CardPrimitive>
   );
 }
 
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn('caption text-[var(--muted)]', className)}>{children}</span>;
+  return <span className={cn('text-xs font-medium text-muted-foreground', className)}>{children}</span>;
 }
 
 export function BadgePill({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span
-      className={cn(
-        'line-tag inline-flex h-5 items-center gap-1 rounded-[var(--r-pill)] bg-[var(--surface-soft)] px-2 text-xs font-medium text-[var(--body-strong)]',
-        className,
-      )}
-    >
+    <Badge variant="secondary" className={cn('h-5 px-2 text-xs', className)}>
       {children}
-    </span>
+    </Badge>
   );
 }

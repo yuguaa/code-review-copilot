@@ -6,16 +6,23 @@ export function SettingsStatsGrid({ stats }: { stats: Stats | null }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {([
-        ['仓库', `${stats.activeRepositoryCount}/${stats.repositoryCount}`, '启用 / 总数', 'pink'],
-        ['模型', String(stats.modelCount), '可用全局模型', 'teal'],
-        ['会话', String(stats.sessionCount), `审查 ${stats.reviewSessionCount} · 对话 ${stats.chatSessionCount}`, 'cream'],
-        ['消息', String(stats.messageCount), stats.latestSessionAt ? `最近 ${new Date(stats.latestSessionAt).toLocaleString()}` : '暂无会话', 'cream'],
-      ] as const).map(([label, value, hint, tone]) => (
-        <ColorBlock key={label} tone={tone} className="space-y-1 p-5">
-          <p className="caption text-[var(--muted)]">{label}</p>
-          <p className="font-display text-3xl tabular-nums">{value}</p>
-          <p className="mt-1 truncate text-xs text-[var(--muted)]">{hint}</p>
+      {(
+        [
+          ['仓库', `${stats.activeRepositoryCount}/${stats.repositoryCount}`, '启用 / 总数', 'pink'],
+          ['模型', String(stats.modelCount), '可用全局模型', 'teal'],
+          ['会话', String(stats.sessionCount), `审查 ${stats.reviewSessionCount} · 对话 ${stats.chatSessionCount}`, 'cream'],
+          [
+            '消息',
+            String(stats.messageCount),
+            stats.latestSessionAt ? `最近 ${new Date(stats.latestSessionAt).toLocaleString()}` : '暂无会话',
+            'cream',
+          ],
+        ] as const
+      ).map(([label, value, hint, tone]) => (
+        <ColorBlock key={label} tone={tone} className="space-y-1 px-5 py-4">
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <p className="text-3xl font-semibold tabular-nums">{value}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p>
         </ColorBlock>
       ))}
     </div>

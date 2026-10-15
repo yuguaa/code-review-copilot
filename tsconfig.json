@@ -1,4 +1,11 @@
 {
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@web/*": ["./web/*"],
+      "@shared/*": ["./shared/*"]
+    }
+  },
   "files": [],
   "include": []
 }

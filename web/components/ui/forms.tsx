@@ -1,31 +1,45 @@
-import type { ReactNode, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from 'react';
-import { cn } from '../../lib/cn';
-
-const fieldBase =
-  'h-9 w-full rounded-[var(--r-md)] border border-[var(--line-default)] bg-[var(--surface-card)] px-3 text-sm text-[var(--ink)] outline-none transition-[background-color,border-color,box-shadow] placeholder:text-[var(--muted)] hover:border-[var(--line-strong)] focus:border-[var(--accent)] focus:shadow-[0_0_0_2px_var(--ring)] disabled:cursor-not-allowed disabled:bg-[var(--surface-soft)] disabled:text-[var(--muted)] disabled:opacity-70';
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { cn } from '@web/lib/utils';
+import { Checkbox as CheckboxPrimitive } from './checkbox';
+import { Input as InputPrimitive } from './input';
+import { Textarea as TextareaPrimitive } from './textarea';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cn(fieldBase, props.className)} />;
+  return <InputPrimitive {...props} />;
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={cn(fieldBase, 'min-h-24 resize-y py-2', props.className)} />;
+  return <TextareaPrimitive {...props} className={cn('min-h-24', props.className)} />;
 }
 
+const SELECT_CLASS =
+  'h-8 w-full min-w-0 cursor-pointer rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+
+/** 原生下拉：配置项数量有限，直接用 select 保持表单语义与键盘行为。 */
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={cn(fieldBase, 'cursor-pointer', props.className)} />;
+  return <select {...props} className={cn(SELECT_CLASS, props.className)} />;
 }
 
-export function Field({ label, children, hint, error }: { label: string; children: ReactNode; hint?: string; error?: string | null }) {
+export function Field({
+  label,
+  children,
+  hint,
+  error,
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: string;
+  error?: string | null;
+}) {
   return (
     <label className="block space-y-1.5">
-      <span className="caption text-[var(--body-strong)]">{label}</span>
+      <span className="block text-xs font-medium">{label}</span>
       {children}
       {error ? (
-        <span className="block text-xs leading-5 text-[var(--error)]">{error}</span>
-      ) : (
-        hint && <span className="block text-xs leading-5 text-[var(--muted)]">{hint}</span>
-      )}
+        <span className="block text-xs text-destructive">{error}</span>
+      ) : hint ? (
+        <span className="block text-xs text-muted-foreground">{hint}</span>
+      ) : null}
     </label>
   );
 }
@@ -40,13 +54,8 @@ export function Checkbox({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--body-strong)]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded-[var(--r-xs)] border border-[var(--line-default)] accent-[var(--brand-magenta)]"
-      />
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <CheckboxPrimitive checked={checked} onCheckedChange={(value) => onChange(Boolean(value))} />
       {label}
     </label>
   );

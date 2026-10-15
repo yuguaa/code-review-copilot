@@ -8,6 +8,7 @@ import { authRoutes } from './modules/auth/auth.routes';
 import { chatRoutes } from './modules/chat/chat.routes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { repositoryRoutes } from './modules/repositories/repositories.routes';
+import { rssRoutes } from './modules/rss/rss.routes';
 import { sessionRoutes } from './modules/sessions/sessions.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { webhookRoutes } from './modules/webhook/webhook.routes';
@@ -29,6 +30,7 @@ export function createApp() {
   app.route('/api/chat', chatRoutes);
   app.route('/api/webhook', webhookRoutes);
   app.route('/api/dashboard', dashboardRoutes);
+  app.route('/api/rss', rssRoutes);
 
   if (appConfig.isProduction) {
     app.use('/*', serveStatic({ root: './dist/web' }));

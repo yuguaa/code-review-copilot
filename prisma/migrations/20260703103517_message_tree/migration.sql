@@ -2,23 +2,26 @@ ALTER TABLE "sessions" ADD COLUMN "activeLeafMessageId" TEXT;
 
 ALTER TABLE "messages" ADD COLUMN "parentId" TEXT;
 
-WITH ordered AS (
+UPDATE "messages" AS m
+SET "parentId" = lagged."parentId"
+FROM (
+  SELECT
+    "id",
+    LAG("id") OVER (PARTITION BY "sessionId" ORDER BY "createdAt" ASC, "id" ASC) AS "parentId"
+  FROM "messages"
+) AS lagged
+WHERE m."id" = lagged."id";
+
+UPDATE "sessions" AS s
+SET "activeLeafMessageId" = ranked."id"
+FROM (
   SELECT
     "id",
     "sessionId",
-    LAG("id") OVER (PARTITION BY "sessionId" ORDER BY "createdAt" ASC, "id" ASC) AS "parentId",
     ROW_NUMBER() OVER (PARTITION BY "sessionId" ORDER BY "createdAt" DESC, "id" DESC) AS "reverseRank"
   FROM "messages"
-)
-UPDATE "messages" AS m
-SET "parentId" = ordered."parentId"
-FROM ordered
-WHERE m."id" = ordered."id";
-
-UPDATE "sessions" AS s
-SET "activeLeafMessageId" = ordered."id"
-FROM ordered
-WHERE s."id" = ordered."sessionId" AND ordered."reverseRank" = 1;
+) AS ranked
+WHERE s."id" = ranked."sessionId" AND ranked."reverseRank" = 1;
 
 CREATE INDEX "messages_parentId_createdAt_idx" ON "messages"("parentId", "createdAt");
 

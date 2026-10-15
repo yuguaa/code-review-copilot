@@ -45,6 +45,9 @@ next-env.d.ts
 /dev.db
 /prisma/dev.db
 
+# embedded-postgres 本地数据目录
+/.dev-postgres
+
 # 审查工作区（运行时 clone）
 /.workspaces
 

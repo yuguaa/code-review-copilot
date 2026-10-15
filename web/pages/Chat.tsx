@@ -1,259 +1,169 @@
-import { useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import Loader2 from 'lucide-react/dist/esm/icons/loader-circle';
-import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
-import AlertCircle from 'lucide-react/dist/esm/icons/circle-alert';
-import type { SessionDetail } from '../lib/types';
-import { ChatHeader } from '../components/chat/ChatHeader';
-import { LazyComposer } from '../components/chat/LazyComposer';
-import { MessageList } from '../components/chat/MessageList';
-import { ReviewAgentActivity } from '../components/message/ReviewAgentActivity';
-import { ReviewAgentInspectorProvider } from '../components/message/ReviewAgentDrawer';
-import { isReviewActivityPart } from '../components/message/message-types';
-import { useSessionDetail } from '../hooks/useSessionDetail';
-import { useChatThreadController } from '../hooks/useChatThreadController';
-import { useWorkbenchShell, WorkbenchMenuButton } from '../components/layout/WorkbenchShell';
+import { CircleAlertIcon } from 'lucide-react';
+import { useSessionDetail } from '@web/hooks/useSessionDetail';
+import { useChatThreadController } from '@web/hooks/useChatThreadController';
+import { ShellHeader } from '@web/components/layout/shell-header';
+import { Badge } from '@web/components/ui/badge';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@web/components/ai-elements/conversation';
+import { Loader } from '@web/components/ai-elements/loader';
+import { ChatComposer } from '@web/components/chat/chat-composer';
+import { ChatMessage } from '@web/components/chat/chat-message';
+import { ReviewActivityCard, ReviewPendingNotice } from '@web/components/chat/review-activity-card';
+import { isReviewActivityPart } from '@web/components/message/message-types';
+import { sessionStatusLabel } from '@web/lib/session-format';
+import type { SessionDetail } from '@web/lib/types';
 
 export function Chat() {
   const { sessionId } = useParams();
-  const { refreshSidebar } = useWorkbenchShell();
-
-  return (
-    <ReviewAgentInspectorProvider key={sessionId ?? 'empty'}>
-      <main className="chat-main relative flex h-full min-h-0 min-w-0 flex-col">
-        {sessionId ? (
-          <ChatView key={sessionId} sessionId={sessionId} onActivity={refreshSidebar} />
-        ) : (
-          <ChatEmptyState />
-        )}
-      </main>
-    </ReviewAgentInspectorProvider>
-  );
+  return sessionId ? <ChatSession key={sessionId} sessionId={sessionId} /> : <ChatPlaceholder />;
 }
 
-function ChatEmptyState() {
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useGSAP(
-    () => {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-      const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
-      timeline
-        .fromTo(
-          '[data-empty-shell]',
-          { y: 18, scale: 0.985 },
-          {
-            y: 0,
-            scale: 1,
-            duration: 0.62,
-            clearProps: 'transform',
-          },
-        )
-        .fromTo(
-          '[data-empty-copy]',
-          { y: 14, opacity: 0 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.56,
-            stagger: 0.06,
-            clearProps: 'transform,opacity',
-          },
-          '-=0.34',
-        )
-        .fromTo(
-          '[data-empty-step]',
-          { x: 18 },
-          {
-            x: 0,
-            duration: 0.46,
-            stagger: 0.08,
-            clearProps: 'transform',
-          },
-          '-=0.34',
-        );
-
-      gsap.to('[data-empty-dot]', {
-        scale: 1.65,
-        opacity: 0.36,
-        duration: 1.2,
-        repeat: -1,
-        yoyo: true,
-        stagger: 0.18,
-        ease: 'sine.inOut',
-      });
-    },
-    { scope: rootRef },
-  );
-
+function ChatPlaceholder() {
   return (
     <>
-      <header className="chat-header flex h-16 shrink-0 items-center px-4 sm:px-6 lg:px-7">
-        <div className="mx-auto flex w-full max-w-[1120px] items-center gap-3">
-          <WorkbenchMenuButton />
-          <h1 className="font-display truncate text-base text-[var(--ink)]">代码审查</h1>
-        </div>
-      </header>
-      <div ref={rootRef} className="measure-rails grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-6 sm:px-6 lg:px-7">
-      <div data-empty-shell className="technical-panel grid w-full max-w-3xl gap-6 rounded-[var(--r-lg)] bg-[var(--surface-card)] p-5 sm:p-7 md:grid-cols-[1fr_0.72fr]">
-        <div className="min-w-0">
-          <div data-empty-copy className="flex h-10 w-10 items-center justify-center rounded-[var(--r-lg)] bg-[var(--primary)] text-white">
-            <MessageSquare size={19} />
-          </div>
-          <p data-empty-copy className="font-display mt-6 max-w-lg text-2xl leading-tight text-[var(--ink)]">
-            选择一次审查，
-            <br />
-            <span className="italic text-[var(--muted)]">继续追问</span>
-          </p>
-          <p data-empty-copy className="mt-4 max-w-md text-sm leading-relaxed text-[var(--muted)]">
-            Webhook 触发的审查会沉淀成会话。你可以追问风险原因、改动范围、分支差异，也可以从任意消息分叉继续。
+      <ShellHeader title="代码审查" meta="等待选择会话" />
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <h2 className="text-base font-medium">从一个具体问题开始</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Webhook 触发的审查会沉淀成会话；也可以新建对话，追问某个仓库的实现细节。
           </p>
         </div>
-        <div className="grid content-end gap-3">
-          {['MR 触发', 'Agent 审查', '结论沉淀'].map((item) => (
-            <div
-              key={item}
-              data-empty-step
-              className="flex items-center justify-between rounded-[var(--r-lg)] border border-[var(--line-default)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-[var(--body-strong)]"
-            >
-              <span>{item}</span>
-              <span data-empty-dot className="h-2 w-2 rounded-full bg-[var(--brand-cyan)]" />
-            </div>
-          ))}
-        </div>
-      </div>
       </div>
     </>
   );
 }
 
-function ChatView({ sessionId, onActivity }: { sessionId: string; onActivity: () => void }) {
+function ChatSession({ sessionId }: { sessionId: string }) {
   const { detail, error, setDetail } = useSessionDetail(sessionId);
 
   if (error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-        <AlertCircle size={22} className="text-[var(--brand-coral)]" />
-        <p className="font-display text-lg text-[var(--ink)]">会话加载失败</p>
-        <p className="text-sm text-[var(--muted)]">{error}</p>
-      </div>
+      <>
+        <ShellHeader title="会话加载失败" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+          <CircleAlertIcon className="size-5 text-destructive" />
+          <p className="text-sm text-muted-foreground">{error}</p>
+        </div>
+      </>
     );
   }
+
   if (!detail) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-[var(--muted)]">
-        <Loader2 size={15} className="animate-spin" /> 加载中…
-      </div>
+      <>
+        <ShellHeader title="加载中…" />
+        <div className="flex flex-1 items-center justify-center">
+          <Loader size={18} />
+        </div>
+      </>
     );
   }
-  return <ChatThread detail={detail} onActivity={onActivity} updateDetail={setDetail} />;
+
+  return <ChatThread detail={detail} updateDetail={setDetail} />;
 }
 
 function ChatThread({
   detail,
-  onActivity,
   updateDetail,
 }: {
   detail: SessionDetail;
-  onActivity: () => void;
   updateDetail: React.Dispatch<React.SetStateAction<SessionDetail | null>>;
 }) {
-  const {
-    branchFromMessage,
-    busy,
-    canRunReviewCommand,
-    commandRunning,
-    messages,
-    modelOptions,
-    modelsLoading,
-    parentMessageId,
-    reviewing,
-    runReviewCommand,
-    scroll,
-    selectedAIModelId,
-    setSelectedAIModelId,
-    status,
-    stop,
-    stopReview,
-    stoppingReview,
-    submit,
-    submitFeedback,
-    switchToMessage,
-    treeById,
-  } = useChatThreadController({ detail, onActivity, updateDetail });
-  const s = detail.session;
-  const latestReviewActivity = messages
+  const controller = useChatThreadController({ detail, updateDetail });
+  const session = detail.session;
+  const reviewing = controller.reviewing;
+
+  const latestActivity = controller.messages
     .flatMap((message) => message.parts)
     .filter(isReviewActivityPart)
     .at(-1)?.data;
-  const composerCommands = useMemo(
-    () => [
-      {
-        id: 'review-command',
-        title: '代码审查指令',
-        description: '重新执行当前 review，完成后按仓库配置发送钉钉或 GitLab 评论。',
-        disabled: !canRunReviewCommand || commandRunning,
-        loading: commandRunning,
-        onSelect: runReviewCommand,
-      },
-    ],
-    [canRunReviewCommand, commandRunning, runReviewCommand],
-  );
+
+  const isTriggerFirst = session.kind === 'review' && controller.messages[0]?.role === 'user';
+  const title = session.mrTitle || session.title || '代码审查';
+  const meta = [
+    session.repository?.name || session.repository?.path?.split('/').pop() || null,
+    session.sourceBranch && session.targetBranch
+      ? `${session.sourceBranch} → ${session.targetBranch}`
+      : session.sourceBranch ?? session.targetBranch,
+    session.author,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const placeholder = reviewing
+    ? '审查进行中，完成后即可追问…'
+    : controller.parentMessageId
+      ? '从选中的消息继续追问…（Enter 发送，Shift+Enter 换行）'
+      : '继续追问这次审查…（Enter 发送，Shift+Enter 换行）';
 
   return (
     <>
-      <ChatHeader session={s} />
+      <ShellHeader title={title} meta={meta}>
+        <Badge variant={session.status === 'failed' ? 'destructive' : 'secondary'}>
+          {sessionStatusLabel[session.status] ?? session.status}
+        </Badge>
+      </ShellHeader>
 
-      <div
-        className={[
-          'conversation-frame min-h-0 flex-1',
-          scroll.scrollState.scrollable && !scroll.scrollState.top ? 'is-scrolled' : '',
-          scroll.scrollState.scrollable && !scroll.scrollState.bottom ? 'can-scroll-more' : '',
-        ].join(' ')}
-      >
-        <div ref={scroll.scrollRef} onScroll={scroll.syncScrollState} className="conversation-scroll h-full min-w-0 overflow-y-auto">
-          <MessageList
-            session={s}
-            messages={messages}
-            status={status}
-            busy={busy}
-            reviewing={reviewing}
-            treeById={treeById}
-            onSelectSibling={switchToMessage}
-            onBranchFrom={branchFromMessage}
-            onFeedback={submitFeedback}
-          />
-        </div>
-        {latestReviewActivity && <ReviewAgentActivity key={latestReviewActivity.runId} data={latestReviewActivity} />}
-      </div>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {latestActivity ? (
+          <div className="shrink-0 px-3 pt-3 sm:px-4">
+            <div className="mx-auto w-full max-w-3xl">
+              <ReviewActivityCard key={latestActivity.runId} data={latestActivity} />
+            </div>
+          </div>
+        ) : null}
+        {!latestActivity && reviewing ? (
+          <div className="shrink-0 px-3 pt-3 sm:px-4">
+            <div className="mx-auto w-full max-w-3xl">
+              <ReviewPendingNotice onStop={controller.stopReview} stopping={controller.stoppingReview} />
+            </div>
+          </div>
+        ) : null}
 
-      <div className="composer-dock z-10 px-4 pb-5 pt-2 sm:px-6 lg:px-7">
-        <div className="mx-auto max-w-[1072px]">
-          <LazyComposer
-            placeholder={
-              reviewing
-                ? '审查进行中，完成后即可追问…'
-                : parentMessageId
-                  ? '从选中的消息分叉继续…（Enter 发送，Shift+Enter 换行）'
-                  : '输入 / 选择指令，或继续追问…'
-            }
-            disabled={reviewing}
-            busy={busy}
-            modelOptions={modelOptions}
-            modelsLoading={modelsLoading}
-            selectedModelId={selectedAIModelId}
-            stoppable={reviewing}
-            stopping={stoppingReview}
-            stopLabel={reviewing ? '停止审查' : '停止生成'}
-            onStop={reviewing ? stopReview : stop}
-            onSubmit={submit}
-            onModelChange={setSelectedAIModelId}
-            commands={composerCommands}
-          />
-        </div>
+        <Conversation className="min-h-0 flex-1">
+          <ConversationContent className="mx-auto w-full max-w-3xl gap-5 px-3 py-4 sm:px-4">
+            {controller.messages.map((message, index) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                isTrigger={isTriggerFirst && index === 0}
+                streaming={
+                  controller.status === 'streaming' &&
+                  index === controller.messages.length - 1 &&
+                  message.role === 'assistant'
+                }
+                branch={controller.treeById.get(message.id)}
+                onSelectSibling={controller.switchToMessage}
+                onBranchFrom={reviewing ? undefined : controller.branchFromMessage}
+                onFeedback={reviewing ? undefined : controller.submitFeedback}
+              />
+            ))}
+            {controller.status === 'submitted' && controller.messages.at(-1)?.role !== 'assistant' ? (
+              <Loader size={16} />
+            ) : null}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+
+        <ChatComposer
+          status={controller.status}
+          disabled={controller.busy || reviewing}
+          placeholder={placeholder}
+          modelOptions={controller.modelOptions}
+          modelsLoading={controller.modelsLoading}
+          selectedModelId={controller.selectedAIModelId}
+          onModelChange={controller.setSelectedAIModelId}
+          onSubmit={controller.submit}
+          onStop={controller.stop}
+          canRunReview={controller.canRunReviewCommand}
+          runningReview={controller.commandRunning}
+          onRunReview={controller.runReviewCommand}
+        />
       </div>
     </>
   );

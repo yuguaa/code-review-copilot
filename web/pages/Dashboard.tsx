@@ -9,7 +9,7 @@ export function Dashboard() {
   if (!data) {
     return (
       <PageShell title="数据看板" maxWidth="max-w-7xl">
-        <div className="flex h-64 items-center justify-center text-sm text-[var(--muted)]">加载数据中…</div>
+        <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">加载数据中…</div>
       </PageShell>
     );
   }

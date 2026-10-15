@@ -4,7 +4,6 @@ import { DefaultChatTransport } from 'ai';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import type { AIModelSummary, ChatModelOption, MessageFeedbackValue, SessionDetail } from '../lib/types';
-import { useChatAutoScroll } from './useChatAutoScroll';
 import { useChatSessionEvents } from './useChatSessionEvents';
 
 type MessageTreePayload = Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>;
@@ -64,11 +63,9 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export function useChatThreadController({
   detail,
-  onActivity,
   updateDetail,
 }: {
   detail: SessionDetail;
-  onActivity: () => void;
   updateDetail: React.Dispatch<React.SetStateAction<SessionDetail | null>>;
 }) {
   const sessionId = detail.session.id;
@@ -89,7 +86,6 @@ export function useChatThreadController({
     transport,
     onFinish: () => {
       setParentMessageId(null);
-      onActivity();
       api<SessionDetail>(`/api/sessions/${sessionId}`)
         .then((next) => {
           updateDetail(next);
@@ -109,9 +105,7 @@ export function useChatThreadController({
   });
 
   const busy = status === 'submitted' || status === 'streaming';
-  const scroll = useChatAutoScroll({ busy, messages, sessionId, status });
-  const { markNearBottom } = scroll;
-  useChatSessionEvents({ busy, sessionId, setMessages, updateDetail, onActivity });
+  useChatSessionEvents({ busy, sessionId, setMessages, updateDetail });
 
   useEffect(() => {
     let disposed = false;
@@ -141,15 +135,13 @@ export function useChatThreadController({
 
   const submit = useCallback((text: string) => {
     if (!text || composerDisabled) return;
-    markNearBottom();
     void sendMessage({ text }, { body: buildChatRequestBody(parentMessageId, selectedAIModelId) });
-  }, [composerDisabled, markNearBottom, parentMessageId, selectedAIModelId, sendMessage]);
+  }, [composerDisabled, parentMessageId, selectedAIModelId, sendMessage]);
 
   const runReviewCommand = useCallback(() => {
     if (!canRunReviewCommand || commandRunning) return;
     setCommandRunning(true);
     setParentMessageId(null);
-    markNearBottom();
     api<MessageTreePayload>(`/api/sessions/${sessionId}/review-command`, { method: 'POST' })
       .then((next) => {
         setMessages(next.messages);
@@ -157,12 +149,11 @@ export function useChatThreadController({
           const merged = mergeMessageTree(current, next);
           return merged ? { ...merged, session: { ...merged.session, status: 'running', error: null } } : merged;
         });
-        onActivity();
         toast.success('已重新执行代码审查');
       })
       .catch((e) => toast.error(errorMessage(e, '代码审查指令执行失败')))
       .finally(() => setCommandRunning(false));
-  }, [canRunReviewCommand, commandRunning, markNearBottom, onActivity, sessionId, setMessages, updateDetail]);
+  }, [canRunReviewCommand, commandRunning, sessionId, setMessages, updateDetail]);
 
   const stopReview = useCallback(() => {
     if (!reviewing || stoppingReview) return;
@@ -181,7 +172,6 @@ export function useChatThreadController({
               }
             : current,
         );
-        onActivity();
         toast.success('已停止审查');
         api<SessionDetail>(`/api/sessions/${sessionId}`)
           .then((next) => {
@@ -192,7 +182,7 @@ export function useChatThreadController({
       })
       .catch((e) => toast.error(errorMessage(e, '停止审查失败')))
       .finally(() => setStoppingReview(false));
-  }, [onActivity, reviewing, sessionId, stoppingReview, updateDetail]);
+  }, [reviewing, sessionId, stoppingReview, updateDetail]);
 
   const switchToMessage = useCallback((messageId: string) => {
     if (busy) return;
@@ -211,7 +201,6 @@ export function useChatThreadController({
     if (busy) return;
     const message = messages.find((item) => item.id === messageId);
     if (message?.role === 'user') {
-      markNearBottom();
       setParentMessageId(null);
       regenerate({ messageId, body: buildChatRequestBody(messageId, selectedAIModelId) }).catch((e) =>
         toast.error(errorMessage(e, '重新回答失败')),
@@ -219,7 +208,7 @@ export function useChatThreadController({
       return;
     }
     setParentMessageId(messageId);
-  }, [busy, markNearBottom, messages, regenerate, selectedAIModelId]);
+  }, [busy, messages, regenerate, selectedAIModelId]);
 
   const submitFeedback = useCallback((messageId: string, feedback: MessageFeedbackValue, findingText: string) => {
     if (busy) return;
@@ -248,7 +237,6 @@ export function useChatThreadController({
     parentMessageId,
     reviewing,
     runReviewCommand,
-    scroll,
     selectedAIModelId,
     setSelectedAIModelId,
     status,

@@ -1,6 +1,6 @@
 import { ToolSkillList } from '../ToolSkillList';
 import { Button } from '../ui/button';
-import { Card } from '../ui/surface';
+import { Card } from '../ui/card';
 import type { AgentSkillItem, AgentToolItem } from '../../lib/types';
 
 export function ToolSkillSettingsCard({
@@ -23,16 +23,18 @@ export function ToolSkillSettingsCard({
   onSave: () => void;
 }) {
   return (
-    <Card className="space-y-4">
-      <h2 className="font-display text-lg text-[var(--ink)]">Tools / Skills 管理</h2>
-      <p className="text-sm leading-relaxed text-[var(--muted)]">
-        这里控制平台默认启用能力；仓库配置里可以再覆盖。`brooks-sweep` 默认关闭，因为它是修复模式，本平台目前不授予写文件工具。
+    <Card className="gap-4 px-5 py-4">
+      <h2 className="text-base font-medium">Tools / Skills 管理</h2>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        这里控制平台默认启用能力；仓库配置里可以再覆盖。brooks-sweep 默认关闭，因为它是修复模式，本平台目前不授予写文件工具。
       </p>
       <ToolSkillList title="Tools 默认启用" items={tools} selected={enabledTools} onChange={onToolsChange} />
       <ToolSkillList title="Skills 默认启用" items={skills} selected={enabledSkills} onChange={onSkillsChange} />
-      <Button onClick={onSave} disabled={saving}>
-        {saving ? '保存中…' : '保存 Tools / Skills'}
-      </Button>
+      <div>
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? '保存中…' : '保存 Tools / Skills'}
+        </Button>
+      </div>
     </Card>
   );
 }

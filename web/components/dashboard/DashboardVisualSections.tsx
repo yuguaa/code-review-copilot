@@ -19,18 +19,18 @@ function ChartSectionsFallback() {
   return (
     <>
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+        <Card className="h-80 animate-pulse bg-muted">
           <div className="h-full" />
         </Card>
-        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+        <Card className="h-80 animate-pulse bg-muted">
           <div className="h-full" />
         </Card>
       </div>
       <div className="grid gap-6 xl:grid-cols-[1.28fr_0.72fr]">
-        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+        <Card className="h-80 animate-pulse bg-muted">
           <div className="h-full" />
         </Card>
-        <Card className="h-80 animate-pulse bg-[var(--surface-soft)]">
+        <Card className="h-80 animate-pulse bg-muted">
           <div className="h-full" />
         </Card>
       </div>

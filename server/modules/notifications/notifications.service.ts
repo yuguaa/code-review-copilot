@@ -31,6 +31,13 @@ export async function loadRepositoryDingtalkConfig(repo: DingtalkRepositoryConfi
   return resolveDingtalkConfig(repo, notification);
 }
 
+/** 全局钉钉配置：RSS 订阅推送与仓库无关，只用平台级机器人。 */
+export async function loadGlobalDingtalkConfig(): Promise<DingtalkConfig | null> {
+  const notification = await prisma.notificationSetting.findUnique({ where: { scope: 'global' } });
+  if (!notification?.dingtalkEnabled || !notification.dingtalkWebhookUrl) return null;
+  return { webhook: notification.dingtalkWebhookUrl, secret: notification.dingtalkSecret };
+}
+
 export async function sendRepositoryDingtalkNotification(
   repo: DingtalkRepositoryConfig,
   title: string,
