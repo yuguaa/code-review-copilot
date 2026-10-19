@@ -39,8 +39,8 @@ try {
   const targetResponse = await context.request.post(`${origin}/api/security/targets`, {
     data: {
       name: targetName,
-      baseUrl: "http://app.localhost:8787",
-      scopeDomains: ["app.localhost"],
+      baseUrl: "http://app.local:8787",
+      scopeDomains: ["app.local"],
       authorizationOwner: "平台管理员",
       authorizationReference,
       authorizedUntil: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),

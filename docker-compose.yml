@@ -44,6 +44,7 @@ services:
       default:
         aliases:
           - app.localhost
+          - app.local
       database:
       telemetry:
     healthcheck:
