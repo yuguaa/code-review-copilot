@@ -19,6 +19,7 @@ assert(username && password, "部署服务缺少登录配置");
 const runId = Date.now().toString(36);
 const targetName = `平台安全测试部署验证 ${runId}`;
 const authorizationReference = `DEPLOY-SECURITY-SELF-CHECK-${runId}`;
+const modelId = process.env.SECURITY_TEST_MODEL_ID?.trim() || null;
 
 const browser = await chromium.launch({
   headless: true,
@@ -48,6 +49,7 @@ try {
       scheduleIntervalMinutes: 1440,
       isActive: true,
       maxDurationMinutes: 10,
+      defaultAIModelId: modelId,
     },
   });
   assert.equal(targetResponse.status(), 201, await targetResponse.text());

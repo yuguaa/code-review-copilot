@@ -109,6 +109,23 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw abortReason(signal, "安全测试执行已经取消");
 }
 
+function lastAssistantReply(messages: AgentSession["messages"]): { text: string; stopReason: string } | null {
+  const message = [...messages].reverse().find((item) => item.role === "assistant");
+  if (!message || message.role !== "assistant") return null;
+  const text = message.content
+    .filter((item) => item.type === "text")
+    .map((item) => item.text)
+    .join("\n")
+    .trim();
+  return { text, stopReason: message.stopReason };
+}
+
+function redactAgentReply(text: string, secrets: readonly string[]): string {
+  return secrets.filter(Boolean)
+    .sort((left, right) => right.length - left.length)
+    .reduce((result, secret) => result.split(secret).join("[REDACTED]"), text);
+}
+
 function buildSystemPrompt(): string {
   return [
     "你是授权 Web/API 安全测试执行内核。",
@@ -373,14 +390,33 @@ export async function createSecurityAgent(
     }).then(() => eventQueue.catch((error: unknown) => {
       if (!eventError) eventError = error;
     }));
+    const recordAgentReply = (message: string) => {
+      const reply = lastAssistantReply(activeSession.messages);
+      if (!reply?.text) return Promise.resolve();
+      return Promise.resolve(options.callbacks.recordEvent({
+        ticketId: options.ticketId,
+        executionId: options.executionId,
+        type: "agent.message",
+        message,
+        data: {
+          stopReason: reply.stopReason,
+          text: redactAgentReply(
+            reply.text.slice(0, 4000),
+            [options.modelConfig.apiKey, ...options.identities.map((identity) => identity.password)],
+          ),
+        },
+      }));
+    };
 
     await runPrompt(prompt);
+    await recordAgentReply("Agent 第一轮回复");
     if (!promptError && !eventError && !finished) {
       await runPrompt([
         "协议未完成：上一轮回复没有调用 security_finish。",
         "现在必须调用 security_finish，保存摘要、风险评分和 Markdown 报告。",
         "不要在调用 security_finish 之前输出最终回答。",
       ].join("\n"));
+      await recordAgentReply("Agent 协议补全回复");
     }
 
     if (eventError) throw eventError;
