@@ -88,7 +88,7 @@ export function Activities() {
 
   return <>
     {createOpen && repositories.data && <NewReviewDialog repositories={repositories.data.repositories} close={() => setCreateOpen(false)} />}
-    <ShellHeader title="活动" meta="代码变更与审查运行的时间记录"><Button disabled={!repositories.data} onClick={() => setCreateOpen(true)}>新建审查</Button><Button variant="outline" disabled={resource.loading} onClick={() => { void resource.reload(); }}><RefreshCwIcon className={resource.loading ? 'animate-spin' : ''} />刷新</Button></ShellHeader>
+    <ShellHeader title="Review 历史记录" meta="按时间查看代码变更与审查运行"><Button disabled={!repositories.data} onClick={() => setCreateOpen(true)}>新建审查</Button><Button variant="outline" disabled={resource.loading} onClick={() => { void resource.reload(); }}><RefreshCwIcon className={resource.loading ? 'animate-spin' : ''} />刷新</Button></ShellHeader>
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="flex flex-wrap items-center gap-3 border-b px-5 py-4 sm:px-7">
         <div className="relative min-w-44 flex-1"><SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input aria-label="搜索审查运行" placeholder="搜索标题、仓库、提交…" className="pl-8" value={search} onChange={(event) => update('search', event.target.value)} /></div>

@@ -92,7 +92,7 @@ export function ReviewDetail() {
 
   return <>
     <ShellHeader title={detail.session.mrTitle || detail.session.title || '仓库对话'} meta={detail.session.repository?.path}>
-      <Link to="/" className="mr-2 text-xs text-muted-foreground hover:text-foreground">返回活动</Link>
+      <Link to="/" className="mr-2 text-xs text-muted-foreground hover:text-foreground">返回审查历史</Link>
       {run && <RunStatusBadge status={run.status} />}
       {active ? <Button variant="outline" disabled={Boolean(action.pending) || detail.runs.some((item) => item.status === 'cancelling')} onClick={() => command('stop-review')}><SquareIcon />取消审查</Button> : detail.session.kind === 'review' && <Button variant="outline" disabled={Boolean(action.pending)} onClick={() => command('review-command')}><RefreshCwIcon />重新审查</Button>}
     </ShellHeader>

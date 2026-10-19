@@ -34,19 +34,25 @@ try {
   await page.goto(`${origin}/login`);
   await page.getByLabel("账号", { exact: true }).fill(username);
   await page.getByLabel("密码", { exact: true }).fill(password);
-  const activitiesLoaded = waitForData(["/api/runs", "/api/repositories", "/api/sessions"]);
+  const activitiesLoaded = waitForData(["/api/runs", "/api/repositories"]);
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await activitiesLoaded;
   await page.waitForURL(`${origin}/`, { timeout: 15_000 });
-  await page.getByRole("heading", { name: "活动", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Review 历史记录", exact: true }).waitFor();
   await assertLoaded();
-  const chatSessionsResponse = await context.request.get(`${origin}/api/sessions?kind=chat`);
-  assert.equal(chatSessionsResponse.status(), 200);
-  const chatSessions = (await chatSessionsResponse.json()).sessions;
-  const sidebarSessionIds = await page.locator('aside[aria-label="工作空间导航"] a[href^="/c/"]').evaluateAll((links) =>
+  const primaryNavigation = page.getByRole("navigation", { name: "一级导航" });
+  for (const label of ["Code Review", "仓库", "模型", "连接器", "RSS"]) {
+    await expect(primaryNavigation.getByRole("link", { name: label, exact: true })).toBeVisible();
+  }
+  const historyNavigation = page.locator('aside[aria-label="Review 历史记录"]');
+  await expect(historyNavigation).toBeVisible();
+  const historyResponse = await context.request.get(`${origin}/api/runs?page=1`);
+  assert.equal(historyResponse.status(), 200);
+  const historyRuns = (await historyResponse.json()).runs;
+  const sidebarRunIds = await historyNavigation.locator('a[href^="/runs/"]').evaluateAll((links) =>
     links.map((link) => new URL(link.href).pathname.split("/").at(-1)));
-  assert.deepEqual(sidebarSessionIds, chatSessions.map((session) => session.id), "最近对话包含非对话会话");
-  console.info("浏览器：登录与活动页面通过");
+  assert.deepEqual(sidebarRunIds, historyRuns.map((run) => run.id), "Review 历史记录与运行数据不一致");
+  console.info("浏览器：登录、Code Review 与 Review 历史记录通过");
   const repositoriesResponse = await context.request.get(`${origin}/api/repositories`);
   assert.equal(repositoriesResponse.status(), 200);
   const { repositories } = await repositoriesResponse.json();
@@ -80,6 +86,7 @@ try {
     await Promise.all([waitForData(dataPaths), page.goto(`${origin}${path}`)]);
     await page.locator("h1").first().waitFor();
     await assertLoaded();
+    await expect(page.locator('aside[aria-label="Review 历史记录"]')).toHaveCount(0);
     assert((await page.locator("main").innerText()).includes(label));
     assert.equal(await page.getByText("请求失败", { exact: true }).count(), 0);
     console.info(`浏览器：${label} 页面通过`);
