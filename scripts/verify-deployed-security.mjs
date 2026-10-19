@@ -20,6 +20,7 @@ const runId = Date.now().toString(36);
 const targetName = `平台安全测试部署验证 ${runId}`;
 const authorizationReference = `DEPLOY-SECURITY-SELF-CHECK-${runId}`;
 const modelId = process.env.SECURITY_TEST_MODEL_ID?.trim() || null;
+const maxDurationMinutes = Number(process.env.SECURITY_TEST_MAX_MINUTES ?? 10);
 
 const browser = await chromium.launch({
   headless: true,
@@ -48,7 +49,7 @@ try {
       scheduleEnabled: false,
       scheduleIntervalMinutes: 1440,
       isActive: true,
-      maxDurationMinutes: 10,
+      maxDurationMinutes,
       defaultAIModelId: modelId,
     },
   });

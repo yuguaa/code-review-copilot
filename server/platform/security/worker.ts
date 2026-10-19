@@ -37,6 +37,17 @@ let started = false;
 let stopping = false;
 let fatalHandler: ((error: unknown) => void) | undefined;
 const failures = new Set<unknown>();
+const severityRiskScores: Record<string, number> = {
+  critical: 90,
+  high: 75,
+  medium: 50,
+  low: 25,
+  info: 0,
+};
+
+function riskScoreFromFindings(findings: Array<{ severity: string }>): number {
+  return findings.reduce((result, finding) => Math.max(result, severityRiskScores[finding.severity] ?? 0), 0);
+}
 
 function resolveTargetModel(target: {
   defaultAIModelId: string | null;
@@ -212,32 +223,37 @@ function finishSuccess(
   result: SecurityAgentResult,
   target: { dingtalkRobotId: string | null; name: string },
 ) {
-  return writeReports(ticketId, executionId, result.summary, result.riskScore, result.report, "completed", null)
-    .then((report) => finishSecurityTicket(ticketId, {
-      status: "completed",
-      summary: result.summary,
-      riskScore: result.riskScore,
-      report: report.narrative,
-      modelProvider: model.provider,
-      modelId: model.modelId,
-      skillVersion,
-    }).then(() => finishSecurityExecution(executionId, {
-      status: "completed",
-      rawResult: {
+  return prisma.securityFinding.findMany({
+    where: { ticketId },
+    select: { severity: true },
+  }).then((findings) => {
+    const riskScore = Math.max(result.riskScore, riskScoreFromFindings(findings));
+    return writeReports(ticketId, executionId, result.summary, riskScore, result.report, "completed", null)
+      .then((report) => finishSecurityTicket(ticketId, {
+        status: "completed",
         summary: result.summary,
-        riskScore: result.riskScore,
-        reportLength: report.markdown.length,
-      },
-    })).then(() => recordExecutionEvent(ticketId, executionId, "execution.completed", "安全测试执行完成")))
-    .then(() => prisma.securityFinding.count({ where: { ticketId } }))
-    .then((findingCount) => notifyTicket(ticketId, target, result.summary, result.riskScore, findingCount)
-      .catch((error: unknown) => recordExecutionEvent(
-        ticketId,
-        executionId,
-        "notification.error",
-        "钉钉通知发送失败",
-        { error: error instanceof Error ? error.message : String(error) },
-      )));
+        riskScore,
+        report: report.narrative,
+        modelProvider: model.provider,
+        modelId: model.modelId,
+        skillVersion,
+      }).then(() => finishSecurityExecution(executionId, {
+        status: "completed",
+        rawResult: {
+          summary: result.summary,
+          riskScore,
+          reportLength: report.markdown.length,
+        },
+      })).then(() => recordExecutionEvent(ticketId, executionId, "execution.completed", "安全测试执行完成")))
+      .then(() => notifyTicket(ticketId, target, result.summary, riskScore, findings.length)
+        .catch((error: unknown) => recordExecutionEvent(
+          ticketId,
+          executionId,
+          "notification.error",
+          "钉钉通知发送失败",
+          { error: error instanceof Error ? error.message : String(error) },
+        )));
+  });
 }
 
 function finishFailure(

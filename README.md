@@ -76,6 +76,8 @@ PostgreSQL 保存排队任务，单实例执行器最多并行处理两个运行
 
 每次执行保存 `SecurityExecution`、工具事件、HTTP 流量、结构化发现、截图和 Markdown/HTML 报告。证据文件写入 `security_artifacts` Docker 持久卷；PostgreSQL 保存索引、SHA-256 和文件元数据。工单失败、取消和进程中断都保留执行记录与部分报告。
 
+Agent 至少需要执行一次安全测试工具。优先调用 `security_finish` 保存最终摘要；没有调用时，Runtime 根据已经保存的流量、结构化发现和证据生成报告，并写入 `agent.protocol-warning` 事件。完全没有执行任何工具的工单直接失败。
+
 `security-skills/hack` 是基于 `yaklang/hack-skills` 的精简授权 Web/API 入口，固定上游提交，只保留授权检查、范围控制、影响优先、证据和报告流程。安装第三方 Skill 前需要通过静态审查和 Skill 安全扫描。
 
 ## Docker 与遥测

@@ -45,4 +45,4 @@ allowed-tools: security_http_request, security_browser, security_record_finding,
 - 授权范围内的高价值信号已经覆盖。
 - 每个发现具备可复核证据和明确影响。
 - 未确认的问题不写入发现列表。
-- `security_finish` 已经成功保存结果。
+- 优先调用 `security_finish` 保存结果。无法调用时，输出完整的 Markdown 文字报告，Runtime 会保存已获得的证据并生成最终报告。

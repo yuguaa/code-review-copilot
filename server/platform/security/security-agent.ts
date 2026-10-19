@@ -243,6 +243,7 @@ export async function createSecurityAgent(
   let eventError: unknown;
   let finished: SecurityFinishRecord | undefined;
   let eventQueue = Promise.resolve();
+  let toolExecutionCount = 0;
 
   try {
     throwIfAborted(controller.signal);
@@ -354,6 +355,7 @@ export async function createSecurityAgent(
           toolName: event.toolName,
         });
       } else if (event.type === "tool_execution_end") {
+        toolExecutionCount += 1;
         const data = {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
@@ -422,7 +424,29 @@ export async function createSecurityAgent(
     if (eventError) throw eventError;
     if (promptError) throw promptError;
     throwIfAborted(controller.signal);
-    if (!finished) throw new Error("Agent 连续未调用 security_finish，执行协议失败");
+    if (!finished) {
+      if (!toolExecutionCount) throw new Error("Agent 未执行任何安全测试工具");
+      const reply = lastAssistantReply(activeSession.messages);
+      const warning = "Agent 未调用 security_finish，运行时已根据已保存的流量、发现和证据生成报告";
+      await options.callbacks.recordEvent({
+        ticketId: options.ticketId,
+        executionId: options.executionId,
+        type: "agent.protocol-warning",
+        message: warning,
+        data: {
+          toolExecutionCount,
+          stopReason: reply?.stopReason ?? "unknown",
+        },
+      });
+      const replyText = reply?.text.trim();
+      finished = {
+        summary: replyText
+          ? `已完成安全测试工具执行：${replyText.split("\n")[0].slice(0, 200)}`
+          : "已完成安全测试工具执行，报告由运行时根据证据生成",
+        riskScore: 0,
+        report: `${warning}\n\n${replyText || "Agent 没有返回文字说明，详细结果见结构化发现、流量和证据记录。"}`,
+      };
+    }
 
     return {
       sessionId: activeSession.sessionId,

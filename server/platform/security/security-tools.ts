@@ -565,6 +565,8 @@ export function createSecurityFinishTool(host: SecurityToolHost): ToolDefinition
     name: "security_finish",
     label: "完成安全测试",
     description: "保存最终摘要、风险评分和 Markdown 报告，并结束本次安全测试。",
+    promptSnippet: "保存最终摘要、风险评分和 Markdown 报告，并结束本次安全测试。",
+    promptGuidelines: ["在给出最终回答之前调用 security_finish，且每次执行只调用一次。"],
     parameters: finishParameters,
     execute: (_toolCallId, params: FinishParameters) => Promise.resolve(host.finish(params))
       .then(() => ({
