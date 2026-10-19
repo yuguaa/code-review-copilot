@@ -45,7 +45,7 @@ export function Login() {
       </div>
     </section>
     <section className="flex items-center justify-center px-6 py-16">
-      <div className="w-full max-w-[380px] rounded-lg border border-border bg-card/90 p-6 shadow-sm backdrop-blur-sm sm:p-8">
+      <div className="neui-surface w-full max-w-[380px] rounded-lg p-6 sm:p-8">
         <span className="mb-6 flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground lg:hidden">
           <ScanSearchIcon className="size-4" />
         </span>
