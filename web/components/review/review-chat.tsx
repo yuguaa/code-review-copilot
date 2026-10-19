@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { ArrowUpIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, CornerDownRightIcon, SquareIcon } from 'lucide-react';
+import { ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, SquareIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ActionError, ResourceState } from '@web/components/common/resource-state';
@@ -45,7 +45,6 @@ export function ReviewChat({ detail, runId, blocked, refresh }: {
   detail: SessionDetail; runId?: string; blocked: boolean; refresh: () => Promise<SessionDetail | undefined | void>;
 }) {
   const [input, setInput] = useState('');
-  const [parentMessageId, setParentMessageId] = useState<string | null>(null);
   const [modelId, setModelId] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const submittedText = useRef('');
@@ -62,7 +61,6 @@ export function ReviewChat({ detail, runId, blocked, refresh }: {
     id: `${detail.session.id}:${runId ?? 'chat'}`, messages: detail.messages, transport,
     onError: (error) => { toast.error(error.message); setInput(submittedText.current); },
     onFinish: () => {
-      setParentMessageId(null);
       return refresh().then((next) => { if (next) chat.setMessages(next.messages); });
     },
   });
@@ -83,7 +81,7 @@ export function ReviewChat({ detail, runId, blocked, refresh }: {
     submittedText.current = text;
     setInput('');
     void chat.sendMessage({ text }, {
-      body: { runId, parentMessageId, ...(modelId ? { aiModelId: modelId } : {}) },
+      body: { runId, ...(modelId ? { aiModelId: modelId } : {}) },
     }).catch((error: unknown) => {
       setInput(text);
       if (error instanceof Error && error.name !== 'AbortError') toast.error(error.message);
@@ -91,7 +89,7 @@ export function ReviewChat({ detail, runId, blocked, refresh }: {
   };
   const changeBranch = (messageId: string) => branchAction.execute('branch', () => api(`/api/sessions/${detail.session.id}/active-message`, {
     method: 'POST', body: JSON.stringify({ messageId }),
-  }).then(() => { setParentMessageId(null); return refresh(); }));
+  }).then(() => refresh()));
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <Conversation className="flex-1">
@@ -108,16 +106,13 @@ export function ReviewChat({ detail, runId, blocked, refresh }: {
                     {message.parts.map((part, index) => renderPart(part, index, streaming))}
                     {streaming && !hasRenderablePart(message) && <MessageResponse streaming>{''}</MessageResponse>}
                   </MessageContent>
-                    <MessageActions>
-                      <MessageAction tooltip="从这里追问" disabled={disabled} onClick={() => { setParentMessageId(message.id); inputRef.current?.focus(); }}>
-                        {parentMessageId === message.id ? <CheckIcon /> : <CornerDownRightIcon />}<span>从这里追问</span>
-                      </MessageAction>
-                      {node && node.siblingCount > 1 && <div className="ml-auto flex items-center gap-2">
+                    {node && node.siblingCount > 1 && <MessageActions>
+                      <div className="ml-auto flex items-center gap-2">
                         <MessageAction tooltip="上一个消息分支" size="icon-xs" disabled={disabled || node.siblingIndex <= 0} onClick={() => changeBranch(node.siblingIds[node.siblingIndex - 1])}><ChevronLeftIcon /></MessageAction>
                         <span className="text-[11px] text-muted-foreground">{node.siblingIndex + 1}/{node.siblingCount}</span>
                         <MessageAction tooltip="下一个消息分支" size="icon-xs" disabled={disabled || node.siblingIndex >= node.siblingCount - 1} onClick={() => changeBranch(node.siblingIds[node.siblingIndex + 1])}><ChevronRightIcon /></MessageAction>
-                      </div>}
-                    </MessageActions>
+                      </div>
+                    </MessageActions>}
                 </Message>
               ;
             })}
@@ -129,19 +124,18 @@ export function ReviewChat({ detail, runId, blocked, refresh }: {
       <div className="mx-auto flex max-w-3xl flex-col gap-3">
         <ActionError error={branchAction.error} />
         {models.error && <ActionError error={models.error} />}
-        {parentMessageId && <div className="flex items-center justify-between text-xs text-muted-foreground"><span>从选中的消息建立分支</span><Button variant="ghost" size="xs" onClick={() => setParentMessageId(null)}>取消选择</Button></div>}
         <PromptInput onSubmit={(event) => { event.preventDefault(); send(); }}>
-          <PromptInputBody><PromptInputTextarea ref={inputRef} aria-label="追问内容" placeholder={blocked ? '审查结束后可以继续追问' : '询问实现、风险或审查结论…'} value={input} disabled={disabled} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
+          <PromptInputBody><PromptInputTextarea ref={inputRef} aria-label="对话内容" placeholder={blocked ? '审查结束后可以继续对话' : '询问失败原因、审查结论、代码位置或处理方式…'} value={input} disabled={disabled} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
           }} /></PromptInputBody>
           <PromptInputFooter><PromptInputTools>
-            <Select aria-label="追问模型" className="max-w-64" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={disabled || models.loading}>
+            <Select aria-label="对话模型" className="max-w-64" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={disabled || models.loading}>
               <option value="">仓库默认模型</option>
               {models.data?.models.filter((model) => model.isActive).map((model) => <option value={model.id} key={model.id}>{model.provider}/{model.modelId}{model.isDefault ? '（默认）' : ''} · {model.id.slice(-6)}</option>)}
             </Select>
           </PromptInputTools>
           {busy ? <Button type="button" variant="outline" size="sm" disabled={branchAction.pending === 'stop'} onClick={() => branchAction.execute('stop', () => api(`/api/chat/${detail.session.id}/stop`, { method: 'POST' }).then(() => stop()).then(refresh))}><SquareIcon />{branchAction.pending === 'stop' ? '正在停止…' : '停止生成'}</Button>
-            : <PromptInputSubmit disabled={disabled || !input.trim()} aria-label="发送追问"><ArrowUpIcon />发送</PromptInputSubmit>}
+            : <PromptInputSubmit disabled={disabled || !input.trim()} aria-label="发送对话"><ArrowUpIcon />发送</PromptInputSubmit>}
           </PromptInputFooter>
         </PromptInput>
       </div>

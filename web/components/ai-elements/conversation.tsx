@@ -10,7 +10,7 @@ export function Conversation({ className, children, ...props }: ComponentProps<t
 }
 
 export function ConversationContent({ className, ...props }: ComponentProps<typeof MessageScrollerContent>) {
-  return <MessageScrollerViewport aria-label="审查追问记录">
+  return <MessageScrollerViewport aria-label="审查对话记录">
     <MessageScrollerContent data-ai-element="conversation-content" className={cn('mx-auto w-full max-w-3xl gap-7 p-5 sm:p-7', className)} {...props} />
   </MessageScrollerViewport>;
 }

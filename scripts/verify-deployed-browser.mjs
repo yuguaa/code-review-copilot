@@ -105,7 +105,7 @@ try {
     return { foreground, background, ratio: (values[0] + 0.05) / (values[1] + 0.05) };
   });
   assert(codeContrast.ratio >= 4.5, `报告代码块对比度不足：${JSON.stringify(codeContrast)}`);
-  await page.getByRole('tab', { name: '追问', exact: true }).click();
+  await page.getByRole('tab', { name: '继续对话', exact: true }).click();
   await page.locator('[data-ai-element="conversation"]').waitFor();
   await page.locator('[data-ai-element="message"]').first().waitFor();
   await page.locator('[data-ai-element="prompt-input"]').waitFor();
@@ -154,7 +154,7 @@ try {
   createdSession = (await response.json()).session?.id;
   assert.equal(response.status(), 201);
   await page.goto(`${origin}/c/${createdSession}`);
-  await page.getByLabel("追问内容").waitFor();
+  await page.getByLabel("对话内容").waitFor();
   assert((await page.locator("main").innerText()).includes("部署流程验证"));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "打开导航" }).click();

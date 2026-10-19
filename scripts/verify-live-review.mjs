@@ -24,7 +24,7 @@ const secrets = [process.env.APP_AUTH_SECRET, process.env.APP_AUTH_SESSION_SECRE
 const redact = (message) => secrets.reduce((value, secret) => value.replaceAll(secret, "[REDACTED]"), message);
 try {
   if (existingRunId) {
-    /* 复用记录只继续验证追问，保留原有会话和配置。 */
+    /* 复用记录只继续验证对话，保留原有会话和配置。 */
     const existing = await prisma.run.findUniqueOrThrow({ where: { id: existingRunId }, include: { repository: { include: { gitLabAccount: true, defaultAIModel: true } } } });
     assert(existing.repository, "已有审查缺少仓库配置");
     sessionId = existing.sessionId;
@@ -101,11 +101,11 @@ try {
   let answer;
   for await (const message of readUIMessageStream({ stream, terminateOnError: true })) answer = message;
   const answerText = answer?.parts.filter((part) => part.type === "text").map((part) => part.text).join("\n") ?? "";
-  console.info(JSON.stringify({ phase: "真实追问回答", runId, answer: redact(answerText) }));
-  assert(answerText.trim(), "真实模型没有输出可见追问回答");
-  assert(answerText.toLowerCase().includes(run.baseSha.toLowerCase()) && answerText.toLowerCase().includes(run.headSha.toLowerCase()), "追问回答没有包含本次审查两端完整 SHA");
+  console.info(JSON.stringify({ phase: "真实对话回答", runId, answer: redact(answerText) }));
+  assert(answerText.trim(), "真实模型没有输出可见对话回答");
+  assert(answerText.toLowerCase().includes(run.baseSha.toLowerCase()) && answerText.toLowerCase().includes(run.headSha.toLowerCase()), "对话回答没有包含本次审查两端完整 SHA");
   const diffCalls = answer.parts.filter((part) => part.type === "tool-git_diff" || (part.type === "dynamic-tool" && part.toolName === "git_diff"));
-  assert(diffCalls.length > 0, "真实追问没有调用 git_diff");
+  assert(diffCalls.length > 0, "真实对话没有调用 git_diff");
   for (const part of diffCalls) {
     assert.equal(part.state, "output-available", "git_diff 工具调用没有完成");
     assert.equal(part.output?.baseSha, run.baseSha, "git_diff 的 baseSha 与审查记录不一致");
@@ -118,8 +118,8 @@ try {
   assert.equal(savedAnswer.sessionId, sessionId);
   assert.equal(savedAnswer.parentId, userMessageId);
   assert.equal(savedAnswer.role, "assistant");
-  assert.deepEqual(savedAnswer.parts, JSON.parse(JSON.stringify(answer.parts)), "追问回答与已保存消息不一致");
-  console.info("真实模型追问与 AI SDK 消息流验证通过");
+  assert.deepEqual(savedAnswer.parts, JSON.parse(JSON.stringify(answer.parts)), "对话回答与已保存消息不一致");
+  console.info("真实模型对话与 AI SDK 消息流验证通过");
   let trace;
   const traceDeadline = Date.now() + 30_000;
   do {

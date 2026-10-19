@@ -57,7 +57,7 @@ export function buildDingtalkReviewMessage(input: {
     `- 分支：${branch}`,
     `- 提交范围：${input.baseSha} → ${input.headSha}`,
     `- GitLab：[查看代码变更](${gitLabUrl})`,
-    `- 审查平台：[查看报告与追问](${reviewUrl})`,
+    `- 审查平台：[查看报告与继续对话](${reviewUrl})`,
   ].join('\n');
   return { title, text: `${metadata}\n\n---\n\n${input.report}` };
 }

@@ -44,7 +44,7 @@ export function Models() {
   }));
 
   return <>
-    <ShellHeader title="模型" meta="管理 OCR 审查和追问使用的模型"><Button onClick={() => { setEditing(null); setForm({ ...emptyForm, isDefault: resource.data?.models.length === 0 }); setOpen(true); }}><PlusIcon />添加模型</Button></ShellHeader>
+    <ShellHeader title="模型" meta="管理 OCR 审查和继续对话使用的模型"><Button onClick={() => { setEditing(null); setForm({ ...emptyForm, isDefault: resource.data?.models.length === 0 }); setOpen(true); }}><PlusIcon />添加模型</Button></ShellHeader>
     <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
       <ActionError error={action.error} />
       <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.models.length === 0} title="尚未配置模型" description="添加 Provider、Model ID 和 API Key 后，仓库可以选择对应模型。" retry={resource.reload} />
@@ -72,7 +72,7 @@ export function Models() {
           <Field label="Model ID"><Input required value={form.modelId} onChange={(event) => update('modelId', event.target.value)} placeholder="输入服务商提供的 Model ID" /></Field>
           <Field label="接口地址" hint="官方接口可留空；自定义接口填写完整地址。"><Input type="url" required={form.provider === 'openai-compatible'} value={form.apiBaseUrl} onChange={(event) => update('apiBaseUrl', event.target.value)} placeholder="https://…" /></Field>
           <SecretField label="API Key" value={form.apiKey} configured={editing?.hasApiKey} required={!editing?.hasApiKey} onChange={(value) => update('apiKey', value ?? '')} />
-          <Field label="追问最大步骤"><Input type="number" min={1} max={2147483647} required value={form.maxSteps} onChange={(event) => update('maxSteps', Number(event.target.value))} /></Field>
+          <Field label="对话最大步骤"><Input type="number" min={1} max={2147483647} required value={form.maxSteps} onChange={(event) => update('maxSteps', Number(event.target.value))} /></Field>
           <Checkbox label="作为默认模型" checked={form.isDefault} onChange={(value) => update('isDefault', value)} />
           <Checkbox label="启用模型" checked={form.isActive} onChange={(value) => update('isActive', value)} />
         </FieldGroup>

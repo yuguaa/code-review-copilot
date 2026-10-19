@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { createChatTools, resolveWorkspacePath } from './read-tools';
+import { createChatTools, createRunDiagnosticTools, resolveWorkspacePath } from './read-tools';
 
 const executeFile = promisify(execFile);
 const directory = resolve('.workspaces', `chat-tools-validation-${randomUUID()}`);
@@ -49,7 +49,7 @@ beforeAll(() => mkdir(root, { recursive: true })
   .then((result) => { tools = result; }), 60_000);
 
 describe('真实文件和 Git 只读工具', () => {
-  it('只开放三个工具，读取指定行号', () => {
+  it('代码工具只开放三个入口，读取指定行号', () => {
     expect(Object.keys(tools).sort()).toEqual(['git_diff', 'read_file', 'search']);
     return Promise.resolve(tools.read_file.execute!({ path: 'source.txt', startLine: 2, lineCount: 1 }, toolOptions))
       .then((output) => expect(output).toMatchObject({ startLine: 2, endLine: 2, content: '2: query; printf forbidden' }));
@@ -78,4 +78,29 @@ describe('真实文件和 Git 只读工具', () => {
     .then((output) => expect(output).toMatchObject({ baseSha: base, headSha: head, content: expect.stringContaining('-removed file') })));
 
   it('工作区提交不匹配时不创建工具', () => expect(createChatTools({ dir: root, diffRef: base }, { baseSha: base, headSha: base })).rejects.toThrow('运行提交不一致'));
+
+  it('运行诊断工具返回失败原因和固定范围', () => Promise.resolve(createRunDiagnosticTools({
+    id: 'failed-run',
+    status: 'failed',
+    error: 'OCR 审查失败：模型请求超时',
+    report: '执行状态：failed',
+    baseSha: base,
+    startSha: base,
+    headSha: head,
+    provider: 'openai-compatible',
+    modelId: 'validation-model',
+    engineKey: 'ocr-review',
+    engineVersion: '1.9.10',
+    traceId: 'trace-validation',
+    startedAt: new Date('2026-10-19T08:00:00.000Z'),
+    finishedAt: new Date('2026-10-19T08:01:00.000Z'),
+    deliveries: {},
+  }).review_run_context.execute!({}, toolOptions)).then((output) => expect(output).toMatchObject({
+    id: 'failed-run',
+    status: 'failed',
+    error: 'OCR 审查失败：模型请求超时',
+    baseSha: base,
+    headSha: head,
+    traceId: 'trace-validation',
+  })));
 });

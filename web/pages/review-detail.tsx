@@ -21,8 +21,8 @@ import type { ReviewRun, SessionDetail } from '@web/lib/types';
 
 type MessageTree = Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>;
 
-function ReportPanel({ run, detail, update }: {
-  run: ReviewRun; detail: SessionDetail; update: Dispatch<SetStateAction<SessionDetail | null>>;
+function ReportPanel({ run, detail, update, onAsk }: {
+  run: ReviewRun; detail: SessionDetail; update: Dispatch<SetStateAction<SessionDetail | null>>; onAsk: () => void;
 }) {
   const reportId = run.reportMessageId;
   const message = detail.messages.find((item) => item.id === reportId);
@@ -49,6 +49,13 @@ function ReportPanel({ run, detail, update }: {
   return <div className="mx-auto flex max-w-4xl flex-col gap-6 p-5 sm:p-8">
     {run.status === 'partial' && <Alert><AlertTitle>本次审查部分完成</AlertTitle><AlertDescription>请结合报告中的覆盖说明查看未完成范围。</AlertDescription></Alert>}
     {run.error && <Alert variant="destructive"><AlertTitle>运行信息</AlertTitle><AlertDescription>{run.error}</AlertDescription></Alert>}
+    {!activeRunStatuses.has(run.status) && <Alert>
+      <AlertTitle>分析本次运行</AlertTitle>
+      <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+        <span>可以询问失败原因、审查结论、代码位置和后续处理方式。</span>
+        <Button variant="outline" size="sm" onClick={onAsk}>询问助手</Button>
+      </AlertDescription>
+    </Alert>}
     <ResourceState error={error} retry={() => setRevision((current) => current + 1)} />
     {content ? <MarkdownBlock text={content} /> : !error && <ResourceState
       loading={Boolean(reportId && content === undefined)}
@@ -108,8 +115,8 @@ export function ReviewDetail() {
           {detail.session.webUrl && <Button variant="ghost" size="sm" className="ml-auto" render={<a href={detail.session.webUrl} target="_blank" rel="noreferrer" />}><ExternalLinkIcon />打开 GitLab</Button>}
         </div>
         <Tabs value={tab} onValueChange={(value) => setParams({ tab: String(value) }, { replace: true })} className="flex min-h-0 flex-1 flex-col gap-0">
-          <div className="border-b px-5"><TabsList variant="line" className="h-11"><TabsTrigger value="report" disabled={!run}>报告</TabsTrigger><TabsTrigger value="chat">追问</TabsTrigger><TabsTrigger value="execution" disabled={!run}>执行记录</TabsTrigger><TabsTrigger value="deliveries" disabled={!run}>发布结果</TabsTrigger></TabsList></div>
-          <TabsContent value="report" className="min-h-0 overflow-y-auto">{run && <ReportPanel key={run.id} run={run} detail={detail} update={session.setData} />}</TabsContent>
+          <div className="border-b px-5"><TabsList variant="line" className="h-11"><TabsTrigger value="report" disabled={!run}>报告</TabsTrigger><TabsTrigger value="chat">继续对话</TabsTrigger><TabsTrigger value="execution" disabled={!run}>执行记录</TabsTrigger><TabsTrigger value="deliveries" disabled={!run}>发布结果</TabsTrigger></TabsList></div>
+          <TabsContent value="report" className="min-h-0 overflow-y-auto">{run && <ReportPanel key={run.id} run={run} detail={detail} update={session.setData} onAsk={() => setParams({ tab: 'chat' }, { replace: true })} />}</TabsContent>
           <TabsContent value="chat" className="flex min-h-0 flex-1 flex-col"><ReviewChat key={`${detail.session.id}:${run?.id ?? 'chat'}`} detail={detail} runId={run?.id} blocked={active} refresh={refresh} /></TabsContent>
           <TabsContent value="execution" className="min-h-0 overflow-y-auto p-5 sm:p-8">{run && <RunMetadata run={run} />}</TabsContent>
           <TabsContent value="deliveries" className="min-h-0 overflow-y-auto p-5 sm:p-8">{run && <RunDeliveries run={run} reload={refresh} />}</TabsContent>

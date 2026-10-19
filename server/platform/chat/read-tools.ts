@@ -123,3 +123,48 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
     });
   });
 }
+
+export function createRunDiagnosticTools(run: RunDiagnostic) {
+  const report = run.error || run.report?.trim() || '本次运行没有保存错误或报告正文';
+  return {
+    review_run_context: tool({
+      description: '读取当前审查运行的状态、提交范围、模型、Trace、错误和已保存报告。',
+      inputSchema: z.object({}).strict(),
+      execute: () => ({
+        id: run.id,
+        status: run.status,
+        error: run.error,
+        report,
+        baseSha: run.baseSha,
+        startSha: run.startSha,
+        headSha: run.headSha,
+        provider: run.provider,
+        modelId: run.modelId,
+        engineKey: run.engineKey,
+        engineVersion: run.engineVersion,
+        traceId: run.traceId,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        deliveries: run.deliveries,
+      }),
+    }),
+  };
+}
+
+export type RunDiagnostic = {
+  id: string;
+  status: string;
+  error: string | null;
+  report: string | null;
+  baseSha: string | null;
+  startSha: string | null;
+  headSha: string | null;
+  provider: string | null;
+  modelId: string | null;
+  engineKey: string;
+  engineVersion: string | null;
+  traceId: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  deliveries: unknown;
+};

@@ -46,7 +46,7 @@ function main(): Promise<void> {
   const checks: Array<{ name: string; status: 'passed' | 'failed'; durationMs: number }> = [];
   const databaseLogs: string[] = [];
   const limitations = [
-    '真实模型审查、报告完成事务与模型追问需要用户指定模型和调用目标，本脚本没有调用模型。',
+    '真实模型审查、报告完成事务与继续对话需要用户指定模型和调用目标，本脚本没有调用模型。',
     'GitLab 的真实 Webhook 投递、远端 diff 与评论发布需要指定 GitLab 项目；本脚本仅通过应用接口提交本地 Git 提交范围。',
     '钉钉发布与 RSS 抓取发送需要指定通知目标；本脚本只验证配置持久化和凭证处理。',
     'Grafana、Collector、Tempo 和 Prometheus 的真实联通需要独立容器环境；本脚本只验证未认证访问被拒绝。',

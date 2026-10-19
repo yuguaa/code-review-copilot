@@ -22,7 +22,6 @@ const chatRequestSchema = z.object({
   id: z.string().min(1).max(500).optional(),
   trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
   messageId: z.string().min(1).max(200).optional(),
-  parentMessageId: z.string().min(1).max(200).nullable().optional(),
   aiModelId: z.string().trim().min(1).max(200).optional(),
   runId: z.string().min(1).max(200).optional(),
 }).strict();
@@ -61,12 +60,9 @@ export function acceptChatTurn(body: ChatRequest) {
         throw new HTTPException(409, { message: '当前审查正在执行，请等待任务结束' });
       }
       if (duplicate) throw new HTTPException(409, { message: '消息 ID 已被使用' });
-      const parentId = body.parentMessageId === undefined
-        ? buildSessionMessageTree(rows, session.activeLeafMessageId).activeLeafMessageId
-        : body.parentMessageId;
-      if (parentId && !rows.some((row) => row.id === parentId)) throw new HTTPException(404, { message: '父消息不存在于当前会话' });
+      const parentId = buildSessionMessageTree(rows, session.activeLeafMessageId).activeLeafMessageId;
       const pathIds = buildPathIds(rows, parentId);
-      const run = selectChatRun(runs, pathIds, body.runId, session.repositoryId);
+      const run = selectChatRun(runs, body.runId, session.repositoryId);
       const byId = new Map(rows.map((row) => [row.id, row]));
       const messages: UIMessage[] = pathIds.map((id) => {
         const row = byId.get(id)!;
@@ -86,14 +82,11 @@ export function acceptChatTurn(body: ChatRequest) {
     }));
 }
 
-export function selectChatRun(runs: Run[], pathIds: string[], runId: string | undefined, repositoryId: string | null): Run | null {
-  const selected = runId ? runs.find((run) => run.id === runId) : runs.find((run) => run.reportMessageId && pathIds.includes(run.reportMessageId));
+export function selectChatRun(runs: Run[], runId: string | undefined, repositoryId: string | null): Run | null {
+  const selected = runId ? runs.find((run) => run.id === runId) : runs[0];
   if (runId && !selected) throw new HTTPException(404, { message: '运行记录不存在于当前会话' });
   if (!selected) return null;
   if (selected.repositoryId !== repositoryId) throw new HTTPException(409, { message: '运行记录与会话仓库不一致' });
-  if (!selected.reportMessageId || !pathIds.includes(selected.reportMessageId)) {
-    throw new HTTPException(409, { message: '请切换到所选运行的报告分支后继续追问' });
-  }
   if (!selected.baseSha || !selected.headSha) throw new HTTPException(409, { message: '运行记录缺少固定提交范围' });
   return selected;
 }
@@ -147,7 +140,26 @@ export function prepareChatStream(value: unknown): Promise<Response> {
           .then((modelConfig) => {
             modelApiKey = modelConfig.apiKey;
             publishSessionListChanged();
-            return createChatStream({ ...turn, modelConfig, abortSignal: controller.signal, onError: reportError }).then((stream) => {
+            const report = turn.run?.reportMessageId
+              ? prisma.message.findFirst({
+                where: { id: turn.run.reportMessageId, sessionId: body.sessionId, role: 'assistant' },
+                select: { parts: true },
+              }).then((message) => {
+                if (!message) return null;
+                return Array.isArray(message.parts)
+                  ? message.parts.flatMap((part) =>
+                    part && typeof part === 'object' && 'type' in part && part.type === 'text' && 'text' in part && typeof part.text === 'string'
+                      ? [part.text] : []).join('\n\n')
+                  : null;
+              })
+              : Promise.resolve(null);
+            return report.then((reportText) => createChatStream({
+              ...turn,
+              report: reportText,
+              modelConfig,
+              abortSignal: controller.signal,
+              onError: reportError,
+            })).then((stream) => {
               const save = (message: UIMessage) => persistChatResponse(body.sessionId, turn.userMessage.id, responseId, message)
                 .catch((error: unknown) => { controller.abort(error); throw error; });
               const messageStream = createUIMessageStream({

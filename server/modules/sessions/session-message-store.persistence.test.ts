@@ -107,9 +107,8 @@ describe('真实 PostgreSQL 会话与消息树', () => {
     }).then((saved) => expect(saved.parentId).toBe(history.at(-1)?.id));
   }));
 
-  it('重复用户 ID、其他会话父节点均拒绝写入', () => Promise.all([
+  it('重复用户 ID 拒绝写入', () => Promise.all([
     expect(chat.acceptChatTurn({ sessionId: secondSession, userMessage: message(questionId, '改写') })).rejects.toMatchObject({ status: 409 }),
-    expect(chat.acceptChatTurn({ sessionId: secondSession, parentMessageId: questionId, userMessage: message(randomUUID(), '提问') })).rejects.toMatchObject({ status: 404 }),
   ]).then(() => prisma.message.count({ where: { sessionId: secondSession } })).then((count) => expect(count).toBe(0)));
 
   it('回复按服务端 ID 写入，反复保存只更新该回复', () => {
@@ -124,20 +123,21 @@ describe('真实 PostgreSQL 会话与消息树', () => {
       });
   });
 
-  it('运行必须属于当前会话和所选报告分支', () => store.loadMessages(firstSession).then((history) => {
+  it('运行必须属于当前会话，失败运行也可以继续对话', () => store.loadMessages(firstSession).then((history) => {
     const reportMessageId = history.at(-1)!.id;
     return prisma.run.create({ data: {
-      sessionId: firstSession, engineKey: 'ocr-review', triggerType: 'manual', status: 'completed',
+      sessionId: firstSession, engineKey: 'ocr-review', triggerType: 'manual', status: 'failed',
       baseSha: 'a'.repeat(40), headSha: 'b'.repeat(40), reportMessageId,
     } }).then((run) => chat.acceptChatTurn({ sessionId: firstSession, runId: run.id, userMessage: message(randomUUID(), '根据本次运行解释') })
       .then((turn) => {
         expect(turn.run?.id).toBe(run.id);
         expect(turn.run?.headSha).toBe('b'.repeat(40));
+        expect(turn.run?.status).toBe('failed');
         return expect(chat.acceptChatTurn({ sessionId: secondSession, runId: run.id, userMessage: message(randomUUID(), '其他会话') })).rejects.toMatchObject({ status: 404 });
       }));
   }));
 
-  it.each(['queued', 'running', 'cancelling'])('忙碌状态 %s 阻止删除和追问', (status) => prisma.session.update({ where: { id: secondSession }, data: { status } })
+  it.each(['queued', 'running', 'cancelling'])('忙碌状态 %s 阻止删除和对话', (status) => prisma.session.update({ where: { id: secondSession }, data: { status } })
     .then(() => Promise.all([
       expect(services.deleteSession(secondSession)).rejects.toMatchObject({ status: 409 }),
       expect(chat.acceptChatTurn({ sessionId: secondSession, userMessage: message(randomUUID(), '提问') })).rejects.toMatchObject({ status: 409 }),

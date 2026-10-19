@@ -101,7 +101,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
           </Select></Field><Field label="Model ID"><Input required value={form.customModelId} onChange={(event) => update("customModelId", event.target.value)} /></Field></div>
           <Field label="接口地址"><Input type="url" value={form.customApiBaseUrl} onChange={(event) => update("customApiBaseUrl", event.target.value)} /></Field>
           <SecretField label="API Key" configured={repository?.hasCustomApiKey} value={form.customApiKey} required={!repository?.hasCustomApiKey} onChange={(value) => update("customApiKey", value ?? "")} />
-          <Field label="追问最大步骤"><Input type="number" required min={1} max={100} value={form.customMaxSteps} onChange={(event) => update("customMaxSteps", Number(event.target.value))} /></Field>
+          <Field label="对话最大步骤"><Input type="number" required min={1} max={100} value={form.customMaxSteps} onChange={(event) => update("customMaxSteps", Number(event.target.value))} /></Field>
         </>}
       </FieldGroup></FormSection>
       <FormSection title="发布渠道"><FieldGroup>
