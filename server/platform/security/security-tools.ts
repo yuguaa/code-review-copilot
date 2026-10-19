@@ -414,7 +414,9 @@ function runAgentBrowserCommand(
   });
 }
 
-function browserCommandArgs(host: SecurityToolHost, actionArgs: string[]): string[] {
+type BrowserCommandHost = Pick<SecurityToolHost, "scopeDomains" | "agentBrowserBin" | "actionPolicyPath" | "sessionId">;
+
+function browserCommandArgs(host: BrowserCommandHost, actionArgs: string[]): string[] {
   return [
     "--session", host.sessionId,
     "--allowed-domains", host.scopeDomains.join(","),
@@ -523,6 +525,14 @@ async function executeBrowserAction(
       return textResult("浏览器会话已经关闭", { action: "close" });
     }
   }
+}
+
+export function closeSecurityBrowserSession(host: BrowserCommandHost): Promise<void> {
+  return runAgentBrowserCommand(
+    host.agentBrowserBin,
+    browserCommandArgs(host, ["close", "--json"]),
+    { action: "close" },
+  ).then(() => undefined);
 }
 
 export function createSecurityHttpRequestTool(host: SecurityToolHost): ToolDefinition {

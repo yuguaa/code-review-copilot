@@ -14,6 +14,7 @@ import type { ModelConfig } from "@server/modules/ai-models/ai-models.service";
 import { createSecurityModel } from "./security-model";
 import { assertUrlInScope } from "./security-scope";
 import {
+  closeSecurityBrowserSession,
   createSecurityTools,
   SECURITY_TOOL_NAMES,
   type SecurityArtifactRecord,
@@ -238,6 +239,7 @@ export async function createSecurityAgent(
   timeoutHandle.unref();
 
   let session: AgentSession | undefined;
+  let browserSessionId: string | undefined;
   let unsubscribe: (() => void) | undefined;
   let abortSession: (() => void) | undefined;
   let eventError: unknown;
@@ -277,7 +279,7 @@ export async function createSecurityAgent(
       throw new Error("hack Skill 未加载");
     }
 
-    const browserSessionId = `security-${options.ticketId}`;
+    browserSessionId = `security-${options.ticketId}`;
     const tools = createSecurityTools({
       ticketId: options.ticketId,
       executionId: options.executionId,
@@ -459,6 +461,14 @@ export async function createSecurityAgent(
     if (abortSession) controller.signal.removeEventListener("abort", abortSession);
     options.signal?.removeEventListener("abort", forwardExternalAbort);
     clearTimeout(timeoutHandle);
+    if (browserSessionId) {
+      await closeSecurityBrowserSession({
+        scopeDomains,
+        agentBrowserBin: securityConfig.agentBrowserBin,
+        actionPolicyPath: securityConfig.actionPolicyPath,
+        sessionId: browserSessionId,
+      });
+    }
     session?.dispose();
   }
 }
