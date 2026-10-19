@@ -1,56 +1,39 @@
 import { Hono } from 'hono';
-import { setCookie, deleteCookie } from 'hono/cookie';
-import {
-  AUTH_COOKIE_NAME,
-  AUTH_SESSION_MAX_AGE_SECONDS,
-  createAuthSession,
-  shouldUseSecureAuthCookie,
-  verifyLoginCredential,
-} from './auth.service';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { z } from 'zod';
+
 import { getMissingAuthEnv } from '../../config/auth.config';
+import {
+  AUTH_COOKIE_NAME, AUTH_SESSION_MAX_AGE_SECONDS, createAuthSession, isSameOriginRequest,
+  revokeAuthSession, shouldUseSecureAuthCookie, verifyLoginCredential,
+} from './auth.service';
 
 export const authRoutes = new Hono();
 
-/** 登录：校验单账号 env 凭证，下发 HttpOnly 签名 Cookie。 */
-authRoutes.post('/login', async (c) => {
-  const missing = getMissingAuthEnv();
-  if (missing.length > 0) {
-    return c.json({ error: `认证环境变量未完整配置：${missing.join(', ')}` }, 500);
-  }
+const loginSchema = z.object({ username: z.string().trim().min(1).max(256), secret: z.string().min(1).max(4096) });
 
-  let body: { username?: unknown; secret?: unknown };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: '登录请求无效' }, 400);
-  }
-
-  const username = typeof body.username === 'string' ? body.username : '';
-  const secret = typeof body.secret === 'string' ? body.secret : '';
-
-  if (!verifyLoginCredential(username, secret)) {
-    return c.json({ error: '账号或密钥不正确' }, 401);
-  }
-
-  const token = await createAuthSession(username.trim());
-  const protocol = new URL(c.req.url).protocol;
-  setCookie(c, AUTH_COOKIE_NAME, token, {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'Lax',
-    secure: shouldUseSecureAuthCookie(c.req.raw.headers, protocol),
-    maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
-  });
-  return c.json({ success: true, username: username.trim() });
+authRoutes.post('/login', (c) => {
+  if (getMissingAuthEnv().length) return c.json({ error: '认证环境变量未完整配置' }, 500);
+  if (!isSameOriginRequest(c.req.raw)) return c.json({ error: '请求来源无效' }, 403);
+  c.header('Cache-Control', 'no-store');
+  return c.req.json().then<Response, Response>((body: unknown) => {
+    const parsed = loginSchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: '登录请求无效' }, 400);
+    const { username, secret } = parsed.data;
+    if (!verifyLoginCredential(username, secret)) return c.json({ error: '账号或密码不正确' }, 401);
+    return revokeAuthSession(getCookie(c, AUTH_COOKIE_NAME)).then(() => createAuthSession(username)).then((token) => {
+      setCookie(c, AUTH_COOKIE_NAME, token, {
+        path: '/', httpOnly: true, sameSite: 'Lax', secure: shouldUseSecureAuthCookie(c.req.raw),
+        maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
+      });
+      return c.json({ success: true, username });
+    });
+  }, () => c.json({ error: '登录请求无效' }, 400));
 });
 
-/** 登出：清除会话 Cookie。 */
-authRoutes.post('/logout', (c) => {
-  deleteCookie(c, AUTH_COOKIE_NAME, { path: '/' });
+authRoutes.post('/logout', (c) => revokeAuthSession(getCookie(c, AUTH_COOKIE_NAME)).then(() => {
+  deleteCookie(c, AUTH_COOKIE_NAME, { path: '/', httpOnly: true, sameSite: 'Lax', secure: shouldUseSecureAuthCookie(c.req.raw) });
   return c.json({ success: true });
-});
+}));
 
-/** 探活：能走到这里说明已通过 requireAuth。 */
-authRoutes.get('/me', (c) => {
-  return c.json({ authenticated: true });
-});
+authRoutes.get('/me', (c) => c.json({ authenticated: true, username: c.get('authUsername') }));

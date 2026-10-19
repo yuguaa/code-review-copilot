@@ -1,6 +1,3 @@
-// 会话式代码审查 Agent
-// 设计原则：review = session，Message tree + UIMessage.parts block 持久化，全局模型配置 + 仓库级覆盖。
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,12 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// GitLab 接入凭证
 model GitLabAccount {
   id            String       @id @default(cuid())
-  url           String // GitLab 实例地址，如 https://gitlab.com
-  accessToken   String // 个人访问令牌
-  webhookSecret String? // Webhook 签名密钥（X-Gitlab-Token 比对）
+  url           String
+  accessToken   String
+  webhookSecret String?
   isActive      Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -24,11 +20,10 @@ model GitLabAccount {
   @@map("gitlab_accounts")
 }
 
-/// 全局 AI 模型配置
 model AIModel {
   id           String       @id @default(cuid())
-  provider     String // openai | anthropic | openai-compatible
-  modelId      String // 如 gpt-4o / claude-3-5-sonnet
+  provider     String
+  modelId      String
   apiKey       String
   apiBaseUrl   String?
   maxSteps     Int          @default(16)
@@ -41,121 +36,48 @@ model AIModel {
   @@map("ai_models")
 }
 
-/// 仓库配置：多仓库列表 + 可选模型覆盖
 model Repository {
-  id                  String                   @id @default(cuid())
+  id                  String        @id @default(cuid())
   gitLabAccountId     String
-  gitLabAccount       GitLabAccount            @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
+  gitLabAccount       GitLabAccount @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
   gitLabProjectId     Int
   name                String
-  path                String // namespace/project
+  path                String
   description         String?
-  watchBranches       String? // "main,develop,feature/*"，空=全部
-  autoReview          Boolean                  @default(true)
+  watchBranches       String?
+  autoReview          Boolean       @default(true)
   defaultAIModelId    String?
-  defaultAIModel      AIModel?                 @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
-  // 仓库级自定义模型配置：全部为空时使用 defaultAIModel
+  defaultAIModel      AIModel?      @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
   customProvider      String?
   customModelId       String?
   customApiKey        String?
   customApiBaseUrl    String?
   customMaxSteps      Int?
-  // 默认审查提示词（webhook 首轮），空则用内置
+  ocrConcurrency      Int           @default(2)
+  ocrTimeoutMinutes   Int           @default(10)
+  ocrMaxTokensBudget  Int           @default(200000)
   defaultReviewPrompt String?
-  // 输出渠道开关与钉钉配置
-  enableMrComment     Boolean                  @default(false) // 是否回写代码平台评论（MR / Push）
-  enableDingtalk      Boolean                  @default(true) // 是否推送钉钉
-  dingtalkWebhook     String? // 钉钉机器人 webhook 地址
-  dingtalkSecret      String? // 钉钉加签密钥
-  // 项目记忆：跨次审查沉淀的约定/架构/历史问题（agent 读写）
-  memory              String?
-  isActive            Boolean                  @default(true)
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  enableMrComment     Boolean       @default(false)
+  enableDingtalk      Boolean       @default(false)
+  dingtalkRobotId     String?
+  dingtalkRobot       DingtalkRobot? @relation(fields: [dingtalkRobotId], references: [id], onDelete: Restrict)
+  isActive            Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
   sessions            Session[]
-  toolSettings        RepositoryToolSetting[]
-  skillSettings       RepositorySkillSetting[]
+  runs                Run[]
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@index([defaultAIModelId])
   @@map("repositories")
 }
 
-/// Agent 可用工具注册表（平台级事实源）
-model AgentTool {
-  id             String                  @id @default(cuid())
-  key            String                  @unique
-  name           String
-  description    String
-  category       String                  @default("read")
-  defaultEnabled Boolean                 @default(true)
-  builtin        Boolean                 @default(true)
-  isActive       Boolean                 @default(true)
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
-  repoSettings   RepositoryToolSetting[]
-
-  @@map("agent_tools")
-}
-
-/// Agent Skill 注册表（平台级事实源）
-model AgentSkill {
-  id             String                   @id @default(cuid())
-  key            String                   @unique
-  name           String
-  description    String
-  mode           String                   @default("review")
-  prompt         String
-  defaultEnabled Boolean                  @default(false)
-  builtin        Boolean                  @default(true)
-  isActive       Boolean                  @default(true)
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
-  repoSettings   RepositorySkillSetting[]
-
-  @@map("agent_skills")
-}
-
-/// 仓库级工具启用覆盖；不存在记录时使用 AgentTool.defaultEnabled
-model RepositoryToolSetting {
-  id           String     @id @default(cuid())
-  repositoryId String
-  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  toolId       String
-  tool         AgentTool  @relation(fields: [toolId], references: [id], onDelete: Cascade)
-  enabled      Boolean
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  @@unique([repositoryId, toolId])
-  @@index([toolId])
-  @@map("repository_tool_settings")
-}
-
-/// 仓库级 Skill 启用覆盖；不存在记录时使用 AgentSkill.defaultEnabled
-model RepositorySkillSetting {
-  id           String     @id @default(cuid())
-  repositoryId String
-  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  skillId      String
-  skill        AgentSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  enabled      Boolean
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  @@unique([repositoryId, skillId])
-  @@index([skillId])
-  @@map("repository_skill_settings")
-}
-
-/// 一次会话：审查会话（webhook 触发）或普通会话
 model Session {
   id                  String      @id @default(cuid())
-  kind                String      @default("review") // review | chat
+  kind                String      @default("review")
   title               String?
   repositoryId        String?
   repository          Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
-  // 审查会话的 MR 元信息（普通会话为空）
   mrIid               Int?
   mrTitle             String?
   sourceBranch        String?
@@ -163,20 +85,68 @@ model Session {
   baseCommitSha       String?
   commitSha           String?
   author              String?
-  status              String      @default("running") // running | completed | failed
+  status              String      @default("completed")
   error               String?
   activeLeafMessageId String?
   activeLeafMessage   Message?    @relation("SessionActiveLeaf", fields: [activeLeafMessageId], references: [id], onDelete: SetNull)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
   messages            Message[]   @relation("SessionMessages")
+  runs                Run[]
 
   @@index([kind, updatedAt])
   @@index([repositoryId])
   @@map("sessions")
 }
 
-/// Message tree 持久化：每个 message 是一个气泡，parts 是气泡内 block 列表。
+/// 每次执行保存确定的输入、原始输出、报告位置与发布结果。
+model Run {
+  id              String      @id @default(cuid())
+  sessionId       String
+  session         Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  repositoryId    String?
+  repository      Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  engineKey       String
+  engineVersion   String?
+  engineSessionId String?
+  triggerType     String      @default("manual")
+  eventKey        String?     @unique
+  status          String      @default("queued")
+  baseSha         String?
+  startSha        String?
+  headSha         String?
+  provider        String?
+  modelId         String?
+  traceId         String?
+  input           Json?
+  inputMessageId  String?
+  reportMessageId String?     @unique
+  exitCode        Int?
+  deliveries      Json        @default("{}")
+  rawResult       Json?
+  error           String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([sessionId, createdAt])
+  @@index([repositoryId, createdAt])
+  @@index([status, createdAt])
+  @@map("runs")
+}
+
+model AuthSession {
+  id        String   @id
+  tokenHash String   @unique
+  username  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
 model Message {
   id                String    @id @default(cuid())
   sessionId         String
@@ -185,8 +155,8 @@ model Message {
   parentId          String?
   parent            Message?  @relation("MessageTree", fields: [parentId], references: [id], onDelete: SetNull)
   children          Message[] @relation("MessageTree")
-  role              String // user | assistant | system
-  parts             Json // UIMessage.parts（text / tool-call / tool-result / reasoning）
+  role              String
+  parts             Json
   createdAt         DateTime  @default(now())
 
   @@index([sessionId, createdAt])
@@ -194,36 +164,37 @@ model Message {
   @@map("messages")
 }
 
-/// 全局通知配置
-model NotificationSetting {
-  id                 String   @id @default(cuid())
-  scope              String   @unique @default("global")
-  dingtalkWebhookUrl String?
-  dingtalkSecret     String?
-  dingtalkEnabled    Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+model DingtalkRobot {
+  id               String   @id @default(cuid())
+  name             String
+  webhookUrl       String
+  secret           String?
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  repositories     Repository[]
+  rssSubscriptions RssSubscription[]
 
-  @@map("notification_settings")
+  @@map("dingtalk_robots")
 }
 
-/// RSS 订阅源：按间隔抓取，新条目推送到钉钉
 model RssSubscription {
   id              String          @id @default(cuid())
   name            String
   url             String          @unique
   enabled         Boolean         @default(true)
   intervalMinutes Int             @default(30)
+  dingtalkRobotId  String?
+  dingtalkRobot    DingtalkRobot?   @relation(fields: [dingtalkRobotId], references: [id], onDelete: Restrict)
   lastFetchedAt   DateTime?
   lastError       String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   items           RssPushedItem[]
 
   @@map("rss_subscriptions")
 }
 
-/// 已推送条目：按条目标识去重，保证同一条内容只推送一次
 model RssPushedItem {
   id             String          @id @default(cuid())
   subscriptionId String

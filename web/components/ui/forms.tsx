@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type { ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 import { cn } from '@web/lib/utils';
 import { Checkbox as CheckboxPrimitive } from './checkbox';
 import { Input as InputPrimitive } from './input';
@@ -8,7 +8,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <InputPrimitive {...props} />;
 }
 
-export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Textarea(props: ComponentProps<'textarea'>) {
   return <TextareaPrimitive {...props} className={cn('min-h-24', props.className)} />;
 }
 
@@ -32,7 +32,7 @@ export function Field({
   error?: string | null;
 }) {
   return (
-    <label className="block space-y-1.5">
+    <label className="flex flex-col gap-1.5">
       <span className="block text-xs font-medium">{label}</span>
       {children}
       {error ? (
@@ -42,6 +42,10 @@ export function Field({
       ) : null}
     </label>
   );
+}
+
+export function FieldGroup({ children }: { children: ReactNode }) {
+  return <div data-slot="field-group" className="flex flex-col gap-4">{children}</div>;
 }
 
 export function Checkbox({

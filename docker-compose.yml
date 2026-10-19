@@ -4,44 +4,144 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
-    container_name: code-review-copilot-app
     restart: unless-stopped
+    init: true
     depends_on:
       postgres:
+        condition: service_healthy
+      collector:
+        condition: service_healthy
+      grafana:
         condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 8787
-      DATABASE_URL: postgresql://code_review:code_review@postgres:5432/code_review_copilot?schema=public
+      DATABASE_URL: postgresql://code_review:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/code_review_copilot?schema=public
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8787}
       APP_AUTH_USERNAME: ${APP_AUTH_USERNAME:?APP_AUTH_USERNAME is required}
       APP_AUTH_SECRET: ${APP_AUTH_SECRET:?APP_AUTH_SECRET is required}
       APP_AUTH_SESSION_SECRET: ${APP_AUTH_SESSION_SECRET:?APP_AUTH_SESSION_SECRET is required}
-      APP_AUTH_IP_WHITELIST: ${APP_AUTH_IP_WHITELIST:-}
-      # 审查工作区：agent clone 仓库并按 commit 建 worktree（持久化避免重启重 clone）
       WORKSPACE_ROOT: /app/.workspaces
+      TMPDIR: /app/.workspaces/tmp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_INSECURE: 'true'
+      OTEL_SERVICE_NAME: code-review-copilot
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=code-review
     ports:
-      - "8787:8787"
+      - '${APP_PORT:-8787}:8787'
     volumes:
       - workspace_data:/app/.workspaces
+    networks: [default, database, telemetry]
+    healthcheck:
+      test: ['CMD', 'node', '-e', 'fetch("http://127.0.0.1:8787/healthz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   postgres:
-    image: postgres:16-alpine
-    container_name: code-review-copilot-postgres
+    image: postgres:16.15-alpine3.24
     restart: unless-stopped
     environment:
       POSTGRES_USER: code_review
-      POSTGRES_PASSWORD: code_review
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: code_review_copilot
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks: [database]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U code_review -d code_review_copilot"]
+      test: ['CMD', 'pg_isready', '-U', 'code_review', '-d', 'code_review_copilot']
       interval: 10s
       timeout: 5s
       retries: 5
 
+  grafana:
+    image: grafana/grafana:13.2.4
+    restart: unless-stopped
+    environment:
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8787}
+    volumes:
+      - ./deploy/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks: [telemetry]
+    depends_on:
+      tempo:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:3000/observability/api/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  tempo:
+    build:
+      context: .
+      dockerfile: deploy/telemetry.Dockerfile
+      target: tempo
+    restart: unless-stopped
+    command: ['-target=all', '-config.file=/etc/tempo.yml']
+    volumes:
+      - ./deploy/tempo.yml:/etc/tempo.yml:ro
+      - tempo_data:/var/tempo
+    networks: [telemetry]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3200/ready']
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [telemetry]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/-/ready']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  collector:
+    build:
+      context: .
+      dockerfile: deploy/telemetry.Dockerfile
+      target: collector
+    restart: unless-stopped
+    command: ['--config=/etc/collector.yml']
+    depends_on:
+      tempo:
+        condition: service_healthy
+    volumes:
+      - ./deploy/collector.yml:/etc/collector.yml:ro
+    networks: [telemetry]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:13133/']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+networks:
+  database:
+    internal: true
+  telemetry:
+    internal: true
+
 volumes:
   postgres_data:
   workspace_data:
+  grafana_data:
+  tempo_data:
+  prometheus_data:

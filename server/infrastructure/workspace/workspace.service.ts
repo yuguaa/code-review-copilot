@@ -1,140 +1,118 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
-import path from 'node:path';
-import { workspaceConfig } from '../../config/workspace.config';
-import type { SessionWithRepository } from '../../modules/sessions/session-message-store.service';
-import { createLogger } from '../../shared/logger/logger.service';
+import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 
-const log = createLogger('workspace');
-const exec = promisify(execFile);
+import { workspaceConfig } from "@server/config/workspace.config";
+import { prisma } from "@server/infrastructure/prisma/prisma.service";
+import { executeChecked } from "@server/infrastructure/process/process.service";
+import { createGitLabService } from "@server/shared/gitlab/gitlab.service";
 
-/**
- * 同仓库的主仓操作（clone/fetch/worktree add）必须串行：它们都写 repo/.git 元数据，
- * 并发会触发 git index.lock 冲突。用 per-repoId 的 Promise 链做 mutex。
- */
-const repoLocks = new Map<string, Promise<unknown>>();
-function withRepoLock<T>(repoId: string, fn: () => Promise<T>): Promise<T> {
-  const prev = repoLocks.get(repoId) ?? Promise.resolve();
-  const next = prev.catch(() => undefined).then(fn);
-  repoLocks.set(repoId, next.catch(() => undefined));
+import type { SessionWithRepository } from "@server/modules/sessions/session-message-store.service";
+
+const locks = new Map<string, Promise<unknown>>();
+const commitPattern = /^[a-f0-9]{40}$/i;
+
+export function assertCommit(sha: string): string {
+  if (!commitPattern.test(sha)) throw new Error("无效的 Commit SHA");
+  return sha;
+}
+
+export function prepareRunWorkspace(session: SessionWithRepository, run: { id: string; baseSha: string | null; headSha: string | null }, signal?: AbortSignal): Promise<Workspace> {
+  const repo = session.repository;
+  if (!repo || !run.headSha || !run.baseSha) return Promise.reject(new Error("运行缺少仓库或提交范围"));
+  const head = assertCommit(run.headSha);
+  const base = assertCommit(run.baseSha);
+  const repositoryRoot = path.join(workspaceConfig.root, repo.id);
+  const gitDir = path.join(repositoryRoot, "repo.git");
+  const dir = path.join(repositoryRoot, "runs", run.id);
+  const gitUrl = new URL(repo.gitLabAccount.url);
+  gitUrl.pathname = `${gitUrl.pathname.replace(/\/$/, "")}/${repo.path}.git`;
+  if (!["http:", "https:"].includes(gitUrl.protocol) || gitUrl.username || gitUrl.password) throw new Error("GitLab 地址无效");
+  /* Git 认证通过进程环境传递，仓库地址和命令参数只包含公开信息。 */
+  const env = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.extraHeader",
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`oauth2:${repo.gitLabAccount.accessToken}`).toString("base64")}`,
+  };
+  const git = (args: string[]) => executeChecked("git", args, { env, signal, timeoutMs: 120_000 });
+  const previous = locks.get(repo.id) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(() => mkdir(repositoryRoot, { recursive: true }))
+    .then(() => stat(gitDir).then(() => true, (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return false;
+    }))
+    .then((exists) => {
+      if (exists) return;
+      const staging = path.join(repositoryRoot, `clone-${randomUUID()}`);
+      return git(["clone", "--bare", "--no-tags", "--", gitUrl.toString(), staging]).then(() => rename(staging, gitDir))
+        .catch((error: unknown) => rm(staging, { recursive: true, force: true }).then(() => { throw error; }));
+    })
+    .then(() => git(["--git-dir", gitDir, "fetch", "--no-tags", "origin", head, base]))
+    .then(() => git(["--git-dir", gitDir, "merge-base", base, head]))
+    .then((mergeBase) => {
+      if (mergeBase !== base) throw new Error("提交范围存在非祖先关系，OCR 无法按本次 Push 的直接差异审查");
+      return mkdir(path.dirname(dir), { recursive: true });
+    })
+    .then(() => stat(dir).then(() => true, (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return false;
+    }))
+    .then((exists) => exists ? git(["-C", dir, "rev-parse", "HEAD"]).then((actual) => {
+      if (actual !== head) throw new Error("工作区提交与运行记录不一致");
+    }) : git(["--git-dir", gitDir, "worktree", "add", "--detach", dir, head]).then(() => undefined))
+    .then(() => utimes(dir, new Date(), new Date()))
+    .then(() => git(["-C", dir, "diff", "--quiet", "HEAD", "--"]))
+    .then(() => ({ dir, diffRef: base }));
+  locks.set(repo.id, next);
+  void next.finally(() => { if (locks.get(repo.id) === next) locks.delete(repo.id); }).catch(() => undefined);
   return next;
 }
 
-/** 把 GitLab 实例地址 + 仓库 path 拼成干净的 clone 地址（不含 token）。 */
-function cloneUrl(accountUrl: string, repoPath: string): string {
-  return `${new URL(accountUrl).origin}/${repoPath}.git`;
-}
-
-/**
- * token 不落盘：clone 地址保持干净，认证用 http.extraHeader 通过 -c 临时注入。
- * GitLab 走 git over https 的标准方式是 Basic base64("oauth2:<token>")。
- */
-function authArgs(token: string): string[] {
-  const basic = Buffer.from(`oauth2:${token}`).toString('base64');
-  return ['-c', `http.extraHeader=Authorization: Basic ${basic}`];
-}
-
-/** worktree 目录名：commitSha 是 40 位 hex，安全；缺失时退回 sanitized 分支名；纯对话会话共用 default。 */
-function worktreeKey(session: SessionWithRepository): string {
-  const sha = session.commitSha?.trim();
-  if (sha) return sha;
-  const branch = session.sourceBranch?.trim();
-  return branch ? `branch-${branch.replace(/[^\w.-]/g, '_')}` : 'default';
-}
-
-/** 工作区准备结果。 */
-export type Workspace = {
-  /** worktree 绝对路径（agent 所有工具的 cwd） */
-  dir: string;
-  /** git diff 的基准引用（origin/main 或 Push 的 before sha）；纯对话会话没有 diff 概念，为 null */
-  diffRef: string | null;
-};
-
-/**
- * 准备一次会话的工作区：clone（首次）→ fetch → worktree add。
- * 审查会话按 commit 固定；纯对话会话跟随远端默认分支（origin/HEAD）。
- * 命中已存在的 worktree 直接复用（追问保活）。同仓库串行、不同 MR 各自独立 worktree。
- */
-export function prepareWorkspace(session: SessionWithRepository): Promise<Workspace> {
+export function prepareChatWorkspace(session: SessionWithRepository, run?: { id: string; baseSha: string | null; headSha: string | null } | null, signal?: AbortSignal): Promise<Workspace> {
+  if (run) return prepareRunWorkspace(session, run, signal);
   const repo = session.repository;
-  if (!repo) throw new Error('会话未绑定仓库，无法准备工作区');
+  if (!repo || !repo.isActive) return Promise.reject(new Error("会话仓库不存在或已停用"));
+  const gitlab = createGitLabService(repo.gitLabAccount.url, repo.gitLabAccount.accessToken);
+  const resolveCommit = session.commitSha ? Promise.resolve(session.commitSha) : gitlab.getProject(repo.gitLabProjectId)
+    .then((project) => {
+      if (!project.default_branch) throw new Error("仓库没有默认分支");
+      return gitlab.getBranch(repo.gitLabProjectId, project.default_branch);
+    }).then((branch) => prisma.session.update({ where: { id: session.id }, data: { commitSha: assertCommit(branch.commit.id) } }))
+    .then((updated) => updated.commitSha!);
+  return resolveCommit.then((headSha) => prepareRunWorkspace(session, { id: `chat-${session.id}-${headSha}`, baseSha: headSha, headSha }, signal))
+    .then((workspace) => ({ ...workspace, diffRef: null }));
+}
 
-  const repoId = repo.id;
-  const baseDir = path.join(workspaceConfig.root, repoId);
-  const gitDir = path.join(baseDir, 'repo');
-  const wtDir = path.join(baseDir, 'wt', worktreeKey(session));
-  const auth = authArgs(repo.gitLabAccount.accessToken);
-  const url = cloneUrl(repo.gitLabAccount.url, repo.path);
-  const sourceBranch = session.sourceBranch?.trim() ?? '';
-  const targetBranch = session.targetBranch?.trim() ?? '';
-  const pinnedSha = session.commitSha?.trim() || '';
-  const checkoutRef = pinnedSha || (sourceBranch ? `origin/${sourceBranch}` : 'origin/HEAD');
-  const diffRef = session.baseCommitSha?.trim() || (targetBranch ? `origin/${targetBranch}` : null);
+export function cleanupRunWorkspaces(): Promise<void> {
+  const cutoff = new Date(Date.now() - workspaceConfig.ttlMs);
+  return directories(workspaceConfig.root).then((repositories) => repositories.reduce<Promise<void>>((pending, repoId) => pending.then(() => {
+    const previous = locks.get(repoId) ?? Promise.resolve();
+    const root = path.join(workspaceConfig.root, repoId);
+    const next = previous.catch(() => undefined).then(() => ["runs", "artifacts"].reduce<Promise<void>>((sequence, family) => sequence
+      .then(() => directories(path.join(root, family)))
+      .then((ids) => ids.reduce<Promise<void>>((items, id) => items.then(() => {
+        const dir = path.join(root, family, id);
+        return stat(dir).then((info) => {
+          if (info.mtime >= cutoff) return;
+          return prisma.run.findUnique({ where: { id }, select: { status: true, finishedAt: true } }).then((run) => {
+            if (run && (!run.finishedAt || run.finishedAt >= cutoff || ["queued", "running", "cancelling"].includes(run.status))) return;
+            return family === "runs" ? executeChecked("git", ["--git-dir", path.join(root, "repo.git"), "worktree", "remove", "--force", dir]).then(() => undefined)
+              : rm(dir, { recursive: true });
+          });
+        });
+      }), Promise.resolve())), Promise.resolve()));
+    locks.set(repoId, next);
+    return next.finally(() => { if (locks.get(repoId) === next) locks.delete(repoId); }).then(() => undefined);
+  }), Promise.resolve()));
+}
 
-  return withRepoLock(repoId, async () => {
-    await cleanupExpired(baseDir).catch((err) => log.warn('清理过期工作区失败', err));
-
-    // 1. 首次 clone（保留 .git，作为 worktree 主仓）
-    if (!(await exists(gitDir))) {
-      await mkdir(baseDir, { recursive: true });
-      log.info(`clone 仓库 ${repo.path} → ${gitDir}`);
-      await git([...auth, 'clone', '--no-tags', url, gitDir]);
-    }
-
-    // 2. fetch 最新 source/target（target 供 MR diff 基准）；无具体分支时按默认 refspec 全量更新。
-    // MR 合并后源分支常被删除，fetch 会 fatal——但按 commitSha 固定、worktree 已存在的会话根本不需要新引用，
-    // 此时 fetch 失败仅告警、继续复用旧 worktree；只有需要新建 worktree 时缺引用才是硬错误。
-    const wtReady = await exists(wtDir);
-    const branches = [sourceBranch, targetBranch].filter(Boolean);
-    try {
-      await git(['-C', gitDir, ...auth, 'fetch', 'origin', ...branches, '--prune']);
-    } catch (err) {
-      if (!wtReady) throw err;
-      log.warn(`fetch 失败，复用已存在的 worktree ${wtDir}`, err);
-    }
-
-    // 3. worktree：命中复用并 touch；否则创建。跟随分支（非固定 sha）的 worktree 复用时刷新到最新
-    if (wtReady) {
-      const now = new Date();
-      await utimes(wtDir, now, now).catch(() => undefined);
-      if (!pinnedSha) await git(['-C', wtDir, 'reset', '--hard', checkoutRef]);
-    } else {
-      await mkdir(path.dirname(wtDir), { recursive: true }); // git worktree add 要求父目录存在
-      log.info(`worktree add ${wtDir} @ ${checkoutRef}`);
-      await git(['-C', gitDir, 'worktree', 'add', '--detach', wtDir, checkoutRef]);
-    }
-
-    return { dir: wtDir, diffRef };
+function directories(dir: string): Promise<string[]> {
+  return readdir(dir, { withFileTypes: true }).then((entries) => entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name), (error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+    return [];
   });
 }
 
-/** 执行 git 命令（数组传参，无 shell 注入）。失败抛出，交由调用方快速失败。 */
-async function git(args: string[]): Promise<string> {
-  const { stdout } = await exec('git', args, { maxBuffer: 64 * 1024 * 1024 });
-  return stdout;
-}
-
-async function exists(p: string): Promise<boolean> {
-  return stat(p).then(
-    () => true,
-    () => false,
-  );
-}
-
-/** 清理某仓库下 mtime 超过 TTL 的 worktree（best-effort，需在 repo 锁内调用）。 */
-async function cleanupExpired(baseDir: string): Promise<void> {
-  const wtRoot = path.join(baseDir, 'wt');
-  const gitDir = path.join(baseDir, 'repo');
-  const entries = await readdir(wtRoot, { withFileTypes: true }).catch(() => []);
-  const now = Date.now();
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    const wt = path.join(wtRoot, e.name);
-    const info = await stat(wt).catch(() => null);
-    if (!info || now - info.mtimeMs < workspaceConfig.ttlMs) continue;
-    log.info(`清理过期 worktree ${wt}`);
-    await git(['-C', gitDir, 'worktree', 'remove', '--force', wt]).catch(() => undefined);
-    await rm(wt, { recursive: true, force: true }).catch(() => undefined);
-  }
-}
+export type Workspace = { dir: string; diffRef: string | null };

@@ -1,0 +1,23 @@
+extensions:
+  health_check:
+    endpoint: 127.0.0.1:14333
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:14317
+      http:
+        endpoint: 127.0.0.1:14318
+processors:
+  batch:
+    timeout: 200ms
+exporters:
+  file/validation:
+    path: .dev-postgres/telemetry-validation/traces.json
+    flush_interval: 200ms
+  prometheus:
+    endpoint: 127.0.0.1:18889
+service:
+  pipelines:
+    traces:
+      exporters: [file/validation]

@@ -1,84 +1,32 @@
-import type { LanguageModel } from 'ai';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  findUnique: vi.fn(),
-  generateText: vi.fn(),
-  resolveModel: vi.fn(),
-}));
+import { maskModel } from "./ai-model-settings.service";
+import { aiModelInput, gitLabAccountInput, dingtalkRobotInput } from "./config-input";
 
-vi.mock('../../infrastructure/prisma/prisma.service', () => ({
-  prisma: { aIModel: { findUnique: mocks.findUnique } },
-}));
-
-vi.mock('ai', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('ai')>()),
-  generateText: mocks.generateText,
-}));
-
-vi.mock('../ai-models/ai-models.service', () => ({
-  resolveModel: mocks.resolveModel,
-}));
-
-import { testAIModel } from './ai-model-settings.service';
-
-const storedModel = {
-  id: 'model-1',
-  provider: 'openai-compatible',
-  modelId: 'coder',
-  apiKey: 'secret',
-  apiBaseUrl: 'https://model.test/v1',
-  maxSteps: 16,
-  isDefault: false,
-  isActive: false,
-};
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-describe('testAIModel', () => {
-  it('对已保存的停用模型发起最小生成请求', async () => {
-    const languageModel = { modelId: 'coder' } as unknown as LanguageModel;
-    mocks.findUnique.mockResolvedValue(storedModel);
-    mocks.resolveModel.mockReturnValue(languageModel);
-    mocks.generateText.mockResolvedValue({ text: 'OK' });
-
-    await expect(testAIModel('model-1')).resolves.toBe(true);
-    expect(mocks.findUnique).toHaveBeenCalledWith({ where: { id: 'model-1' } });
-    expect(mocks.resolveModel).toHaveBeenCalledWith(storedModel);
-    expect(mocks.generateText).toHaveBeenCalledWith({
-      model: languageModel,
-      prompt: '请只回复 OK。',
-      maxOutputTokens: 8,
-      maxRetries: 0,
-      timeout: 15_000,
+describe("配置凭证", () => {
+  it("模型响应移除 apiKey", () => {
+    const output = maskModel({
+      id: "model-1", provider: "openai", modelId: "gpt-test", apiKey: "secret", apiBaseUrl: null,
+      maxSteps: 16, isDefault: true, isActive: true, createdAt: new Date(0), updatedAt: new Date(0),
     });
+    expect(output).not.toHaveProperty("apiKey");
+    expect(output.hasApiKey).toBe(true);
   });
-
-  it('模型配置无法解析时返回连接失败', async () => {
-    mocks.findUnique.mockResolvedValue(storedModel);
-    mocks.resolveModel.mockImplementation(() => {
-      throw new Error('openai-compatible 必须配置 apiBaseUrl');
-    });
-
-    await expect(testAIModel('model-1')).resolves.toBe(false);
-    expect(mocks.generateText).not.toHaveBeenCalled();
+  it("模型和 GitLab 必填凭证不允许 null，空白输入保留原值", () => {
+    expect(aiModelInput.partial().parse({ apiKey: " " }).apiKey).toBeUndefined();
+    expect(gitLabAccountInput.partial().parse({ accessToken: "" }).accessToken).toBeUndefined();
+    expect(aiModelInput.partial().safeParse({ apiKey: null }).success).toBe(false);
+    expect(gitLabAccountInput.partial().safeParse({ accessToken: null }).success).toBe(false);
   });
-
-  it('模型服务请求失败时返回连接失败', async () => {
-    mocks.findUnique.mockResolvedValue(storedModel);
-    mocks.resolveModel.mockReturnValue({} as LanguageModel);
-    mocks.generateText.mockRejectedValue(new Error('upstream rejected'));
-
-    await expect(testAIModel('model-1')).resolves.toBe(false);
+  it("钉钉和 Webhook 可选凭证可以明确清除", () => {
+    expect(dingtalkRobotInput.partial().parse({ secret: null }).secret).toBeNull();
+    expect(dingtalkRobotInput.partial().parse({ webhookUrl: "" }).webhookUrl).toBeUndefined();
+    expect(dingtalkRobotInput.partial().safeParse({ webhookUrl: null }).success).toBe(false);
+    expect(gitLabAccountInput.partial().parse({ webhookSecret: null }).webhookSecret).toBeNull();
   });
-
-  it('模型不存在时返回 null 且不发起请求', async () => {
-    mocks.findUnique.mockResolvedValue(null);
-
-    await expect(testAIModel('missing-model')).resolves.toBeNull();
-    expect(mocks.resolveModel).not.toHaveBeenCalled();
-    expect(mocks.generateText).not.toHaveBeenCalled();
+  it("拒绝带登录凭证的实例地址和无效模型参数", () => {
+    expect(gitLabAccountInput.safeParse({ url: "https://user:secret@example.com", accessToken: "token" }).success).toBe(false);
+    expect(aiModelInput.safeParse({ provider: "unknown", modelId: "model", apiKey: "key" }).success).toBe(false);
+    expect(aiModelInput.safeParse({ provider: "openai", modelId: "model", apiKey: "key", maxSteps: 0 }).success).toBe(false);
   });
 });

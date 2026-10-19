@@ -1,10 +1,6 @@
-import type { AxiosError } from 'axios';
+import { z } from "zod";
 
-type Logger = {
-  error: (message: string, ...values: unknown[]) => void;
-};
-
-export type GitLabApiError = AxiosError<{ message?: string; error?: string }>;
+import type { GitLabCommitComment } from "./gitlab-types";
 
 export type MergeRequestPosition = {
   base_sha: string;
@@ -12,97 +8,61 @@ export type MergeRequestPosition = {
   start_sha: string;
   old_path: string;
   new_path: string;
-  position_type: 'text';
+  position_type: "text";
   new_line?: number;
   old_line?: number;
 };
 
-export type MergeRequestCommentPayload = {
-  body: string;
-  position?: {
-    base_sha: string;
-    head_sha: string;
-    start_sha: string;
-    old_path: string;
-    new_path: string;
-    position_type: 'text';
-    new_line?: number;
-    old_line?: number;
-  };
-};
-
-export type CommitCommentPayload = {
-  note: string;
-  path?: string;
-  line?: number;
-  line_type?: 'new' | 'old';
-};
-
-export type GitLabDiscussionResult = {
-  id: number | string;
-  notes?: Array<{ id: number }>;
-};
-
-export type GitLabCommentResult = {
-  id?: number | string;
-  note_id?: number;
-  notes?: Array<{ id: number }>;
-};
-
-export type GitLabWebhookResult = {
-  id: number;
-  url: string;
-};
-
 export type CommitCommentOptions = {
   path?: string;
+  old_path?: string;
   line?: number;
-  line_type?: 'new' | 'old';
+  line_type?: "new" | "old";
 };
 
+export const gitLabDiscussion = z.object({
+  id: z.string().min(1),
+  notes: z.array(z.object({ id: z.number().int().positive(), body: z.string() }).passthrough()).min(1),
+}).passthrough();
+
+export type GitLabDiscussionResult = z.infer<typeof gitLabDiscussion>;
+export type GitLabWebhookResult = { id: number; url: string };
+export type MergeRequestCommentPayload = { body: string; position?: MergeRequestPosition };
+
+const positionInput = z.object({
+  base_sha: z.string().min(1),
+  head_sha: z.string().min(1),
+  start_sha: z.string().min(1),
+  old_path: z.string().min(1),
+  new_path: z.string().min(1),
+  position_type: z.literal("text"),
+  new_line: z.number().int().positive().optional(),
+  old_line: z.number().int().positive().optional(),
+}).refine((position) => position.new_line !== undefined || position.old_line !== undefined, "行级评论需要行号");
+
 export function buildMergeRequestCommentPayload(comment: string, position?: MergeRequestPosition): MergeRequestCommentPayload {
-  const data: MergeRequestCommentPayload = { body: comment };
-  if (!position) return data;
-
-  data.position = {
-    base_sha: position.base_sha,
-    head_sha: position.head_sha,
-    start_sha: position.start_sha,
-    old_path: position.old_path,
-    new_path: position.new_path,
-    position_type: position.position_type,
-  };
-  if (position.new_line) data.position.new_line = position.new_line;
-  if (position.old_line) data.position.old_line = position.old_line;
-  return data;
-}
-
-export function formatCommitCommentBody(comment: string, options?: CommitCommentOptions): string {
-  if (!options?.path) return comment;
-  return `**文件**: \`${options.path}\`${options.line ? ` (行 ${options.line})` : ''}\n\n${comment}`;
+  if (!comment.trim()) throw new Error("GitLab 评论内容不能为空");
+  return position ? { body: comment, position: positionInput.parse(position) } : { body: comment };
 }
 
 export function buildCommitCommentPayload(
   comment: string,
+  commitSha: string,
+  parentSha?: string,
   options?: CommitCommentOptions,
-  includeLine = true,
-): CommitCommentPayload {
-  const data: CommitCommentPayload = { note: formatCommitCommentBody(comment, options) };
-
-  if (includeLine && options?.path && options?.line) {
-    data.path = options.path;
-    data.line = options.line;
-    data.line_type = options.line_type || 'new';
-  }
-
-  return data;
+): MergeRequestCommentPayload {
+  if (!options) return buildMergeRequestCommentPayload(comment);
+  if (!parentSha || !options.path || !options.line) throw new Error("Commit 行级评论需要父级提交、文件路径和行号");
+  return buildMergeRequestCommentPayload(comment, {
+    base_sha: parentSha, start_sha: parentSha, head_sha: commitSha,
+    old_path: options.old_path ?? options.path, new_path: options.path, position_type: "text",
+    ...(options.line_type === "old" ? { old_line: options.line } : { new_line: options.line }),
+  });
 }
 
-export function logGitLabApiError(log: Logger, message: string, error: unknown): GitLabApiError {
-  const apiError = error as GitLabApiError;
-  if (apiError.response?.data) {
-    log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2));
-  }
-  log.error(message, error);
-  return apiError;
+export function parseCommitDiscussion(value: unknown): GitLabCommitComment[] {
+  const discussion = gitLabDiscussion.parse(value);
+  return discussion.notes.map((note) => ({
+    id: note.id, note_id: note.id, discussion_id: discussion.id, note: note.body,
+  }));
 }

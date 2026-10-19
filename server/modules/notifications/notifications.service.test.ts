@@ -1,84 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { sendDingtalk } from '../../shared/dingtalk/dingtalk.service';
-import { prisma } from '../../infrastructure/prisma/prisma.service';
-import {
-  resolveDingtalkConfig,
-  sendRepositoryDingtalkNotification,
-  type DingtalkRepositoryConfig,
-} from './notifications.service';
+import { describe, expect, it } from "vitest";
 
-vi.mock('../../infrastructure/prisma/prisma.service', () => ({
-  prisma: {
-    notificationSetting: {
-      findUnique: vi.fn(),
-    },
-  },
-}));
+import { loadRepositoryDingtalkConfig, sendRepositoryDingtalkNotification } from "./notifications.service";
 
-vi.mock('../../shared/dingtalk/dingtalk.service', () => ({
-  sendDingtalk: vi.fn().mockResolvedValue(undefined),
-}));
+const repository = { enableDingtalk: true, dingtalkRobotId: null };
 
-const repo: DingtalkRepositoryConfig = {
-  enableDingtalk: true,
-  dingtalkWebhook: null,
-  dingtalkSecret: null,
-};
-
-describe('notifications.service', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe("钉钉发送配置", () => {
+  it("开启通知但未选择机器人立即失败", () => {
+    return expect(loadRepositoryDingtalkConfig(repository)).rejects.toThrow("选择钉钉机器人");
   });
-
-  it('仓库关闭钉钉时不读取全局配置并跳过', async () => {
-    await expect(
-      sendRepositoryDingtalkNotification({ ...repo, enableDingtalk: false }, '标题', '正文'),
-    ).resolves.toBe('skipped');
-
-    expect(prisma.notificationSetting.findUnique).not.toHaveBeenCalled();
-    expect(sendDingtalk).not.toHaveBeenCalled();
+  it("关闭仓库通知立即返回 skipped，不读取数据库或发送请求", () => {
+    return sendRepositoryDingtalkNotification({ ...repository, enableDingtalk: false }, "标题", "正文")
+      .then((result) => expect(result).toBe("skipped"));
   });
-
-  it('仓库配置优先于全局配置', () => {
-    expect(
-      resolveDingtalkConfig(
-        { ...repo, dingtalkWebhook: 'https://repo.example', dingtalkSecret: 'repo-secret' },
-        {
-          dingtalkEnabled: true,
-          dingtalkWebhookUrl: 'https://global.example',
-          dingtalkSecret: 'global-secret',
-        },
-      ),
-    ).toEqual({ webhook: 'https://repo.example', secret: 'repo-secret' });
-  });
-
-  it('仓库未配置 webhook 时使用启用的全局配置', async () => {
-    vi.mocked(prisma.notificationSetting.findUnique).mockResolvedValue({
-      id: 'n1',
-      scope: 'global',
-      dingtalkEnabled: true,
-      dingtalkWebhookUrl: 'https://global.example',
-      dingtalkSecret: 'global-secret',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    await expect(sendRepositoryDingtalkNotification(repo, '标题', '正文')).resolves.toBe('sent');
-    expect(sendDingtalk).toHaveBeenCalledWith({ webhook: 'https://global.example', secret: 'global-secret' }, '标题', '正文');
-  });
-
-  it('缺少可用 webhook 时跳过', async () => {
-    vi.mocked(prisma.notificationSetting.findUnique).mockResolvedValue({
-      id: 'n1',
-      scope: 'global',
-      dingtalkEnabled: true,
-      dingtalkWebhookUrl: null,
-      dingtalkSecret: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    await expect(sendRepositoryDingtalkNotification(repo, '标题', '正文')).resolves.toBe('skipped');
-    expect(sendDingtalk).not.toHaveBeenCalled();
+  it("关闭通知不要求选择机器人", () => {
+    return expect(loadRepositoryDingtalkConfig({ ...repository, enableDingtalk: false })).resolves.toBeNull();
   });
 });

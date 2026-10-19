@@ -1,3 +1,7 @@
+import { parseFragment } from "parse5";
+
+import type { DefaultTreeAdapterMap } from "parse5";
+
 export type RssItem = {
   guid: string;
   title: string;
@@ -6,42 +10,30 @@ export type RssItem = {
   summary: string | null;
 };
 
-function formatPublishedAt(publishedAt: Date | null): string {
-  if (!publishedAt) return '未提供发布时间';
-  return publishedAt.toLocaleString('zh-CN', { hour12: false });
-}
-
-/** 摘要压缩成单段，避免钉钉消息里出现大段空白与换行。 */
 function compactSummary(summary: string | null): string {
-  if (!summary) return '';
-  const compact = summary.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!compact) return '';
+  if (!summary) return "";
+  const nodes: DefaultTreeAdapterMap["node"][] = [...parseFragment(summary).childNodes].reverse();
+  const parts: string[] = [];
+  while (nodes.length) {
+    const node = nodes.pop()!;
+    if ("tagName" in node && ["script", "style", "template"].includes(node.tagName)) continue;
+    if ("value" in node) parts.push(node.value);
+    if ("childNodes" in node) {
+      parts.push(" ");
+      nodes.push(...[...node.childNodes].reverse());
+    }
+  }
+  const compact = parts.join("").replace(/\s+/g, " ").trim();
   return compact.length > 180 ? `${compact.slice(0, 180)}…` : compact;
 }
 
-/**
- * RSS 推送模板：与代码审查通知共用同一个钉钉机器人，标题与正文结构独立。
- */
-export function buildRssDingtalkMessage(
-  subscriptionName: string,
-  item: RssItem,
-): { title: string; text: string } {
+export function buildRssDingtalkMessage(subscriptionName: string, item: RssItem): { title: string; text: string } {
   const summary = compactSummary(item.summary);
+  const date = item.publishedAt?.toLocaleString("zh-CN", { hour12: false }) ?? "未提供发布时间";
   const lines = [
-    `### 📰 ${subscriptionName}`,
-    '',
-    `**${item.title}**`,
-    '',
-    ...(summary ? [summary, ''] : []),
-    `> 发布时间：${formatPublishedAt(item.publishedAt)}`,
+    `### 📰 ${subscriptionName}`, "", `**${item.title}**`, "",
+    ...(summary ? [summary, ""] : []), `> 发布时间：${date}`,
   ];
-
-  if (item.link) {
-    lines.push('', `[阅读全文](${item.link})`);
-  }
-
-  return {
-    title: `RSS 更新 · ${subscriptionName} · ${item.title}`,
-    text: lines.join('\n'),
-  };
+  if (item.link) lines.push("", `[阅读全文](${item.link})`);
+  return { title: `RSS 更新 · ${subscriptionName} · ${item.title}`, text: lines.join("\n") };
 }

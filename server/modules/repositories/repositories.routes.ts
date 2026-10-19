@@ -1,42 +1,16 @@
-import { Hono } from 'hono';
-import {
-  createRepository,
-  deleteRepository,
-  listRepositories,
-  listRepositoryBranches,
-  listRepositoryToolSkills,
-  updateRepository,
-} from './repositories.service';
+import { Hono } from "hono";
+
+import { configurationError } from "../settings/config-input";
+import { createRepository, deleteRepository, listRepositories, listRepositoryBranches, updateRepository } from "./repositories.service";
 
 export const repositoryRoutes = new Hono();
 
-repositoryRoutes.get('/', async (c) => {
-  return c.json({ repositories: await listRepositories() });
-});
-
-repositoryRoutes.post('/', async (c) => {
-  const body = await c.req.json();
-  return c.json({ repository: await createRepository(body) });
-});
-
-repositoryRoutes.patch('/:id', async (c) => {
-  const body = await c.req.json();
-  return c.json({ repository: await updateRepository(c.req.param('id'), body) });
-});
-
-repositoryRoutes.delete('/:id', async (c) => {
-  return c.json(await deleteRepository(c.req.param('id')));
-});
-
-/** 列出仓库分支（配置 watchBranches 时辅助）。 */
-repositoryRoutes.get('/:id/branches', async (c) => {
-  const branches = await listRepositoryBranches(c.req.param('id'));
-  if (!branches) return c.json({ error: '仓库不存在' }, 404);
-  return c.json({ branches });
-});
-
-repositoryRoutes.get('/:id/tool-skills', async (c) => {
-  const toolSkills = await listRepositoryToolSkills(c.req.param('id'));
-  if (!toolSkills) return c.json({ error: '仓库不存在' }, 404);
-  return c.json(toolSkills);
-});
+repositoryRoutes.onError(configurationError);
+repositoryRoutes.get("/", (c) => listRepositories().then((repositories) => c.json({ repositories })));
+repositoryRoutes.post("/", (c) => c.req.json().then(createRepository).then((repository) => c.json({ repository })));
+repositoryRoutes.patch("/:id", (c) => c.req.json().then((body) => updateRepository(c.req.param("id"), body))
+  .then((repository) => c.json({ repository })));
+repositoryRoutes.delete("/:id", (c) => deleteRepository(c.req.param("id")).then((result) => c.json(result)));
+repositoryRoutes.get("/:id/branches", (c) => listRepositoryBranches(c.req.param("id")).then((branches) => branches
+  ? c.json({ branches })
+  : c.json({ error: "仓库不存在" }, 404)));

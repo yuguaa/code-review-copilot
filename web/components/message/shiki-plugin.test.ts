@@ -1,10 +1,25 @@
 import type { ThemeInput } from 'streamdown';
 import { describe, expect, it } from 'vitest';
+import type { BundledLanguage } from 'shiki/bundle/web';
 import { shikiCodeHighlighter } from './shiki-plugin';
 
 type HighlightResult = NonNullable<ReturnType<typeof shikiCodeHighlighter.highlight>>;
 
 describe('shikiCodeHighlighter', () => {
+  it('未标注语言的代码块同步返回可读的深色主题文本', () => {
+    const result = shikiCodeHighlighter.highlight({
+      code: 'const visible = true\nreturn visible',
+      language: 'text' as BundledLanguage,
+      themes: ['github-dark', 'github-dark'],
+    }, () => undefined);
+
+    expect(result).not.toBeNull();
+    expect(result?.bg).toBe('#24292e');
+    expect(result?.fg).toBe('#E1E4E8');
+    expect(result?.tokens.map((line) => line.map((token) => token.content).join('')).join('\n'))
+      .toBe('const visible = true\nreturn visible');
+  });
+
   it('只暴露可加载语言，并把共享高亮结果通知给所有订阅者', () => {
     expect(shikiCodeHighlighter.getSupportedLanguages()).not.toContain('diff');
 

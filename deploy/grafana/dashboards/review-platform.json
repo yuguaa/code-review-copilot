@@ -1,0 +1,62 @@
+{
+  "uid": "review-platform",
+  "title": "代码审查运行",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "运行数量",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "sum by (status) (increase(review_run_count_total[$__rate_interval]))", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 2,
+      "title": "运行耗时 P95",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, status) (rate(review_run_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 3,
+      "title": "服务健康状态",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "up", "legendFormat": "{{job}}" }]
+    },
+    {
+      "id": 4,
+      "title": "审查追踪",
+      "type": "table",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "queryType": "traceql", "query": "{ resource.service.name = \"code-review-copilot\" && name = \"review.run\" }", "limit": 50, "tableType": "traces" }]
+    },
+    {
+      "id": 5,
+      "title": "执行阶段数量",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "expr": "sum by (name, status) (increase(review_operation_count_total[$__rate_interval]))", "legendFormat": "{{name}} / {{status}}" }]
+    },
+    {
+      "id": 6,
+      "title": "执行阶段耗时 P95",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, name, status) (rate(review_operation_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{name}} / {{status}}" }]
+    }
+  ]
+}

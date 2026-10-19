@@ -10,6 +10,27 @@ import {
 import type { UIMessage } from 'ai';
 
 describe('session events', () => {
+  it('已经取消的请求立即结束订阅', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const reader = subscribeSessionEvents('already-aborted', controller.signal).getReader();
+    expect((await reader.read()).done).toBe(true);
+    publishSessionStatus('already-aborted', 'completed');
+  });
+
+  it('请求取消后释放订阅，同一会话可以重新连接', async () => {
+    const controller = new AbortController();
+    const reader = subscribeSessionEvents('aborted', controller.signal).getReader();
+    await reader.read();
+    controller.abort();
+    expect((await reader.read()).done).toBe(true);
+    const next = subscribeSessionEvents('aborted').getReader();
+    await next.read();
+    publishSessionStatus('aborted', 'completed');
+    expect(new TextDecoder().decode((await next.read()).value)).toContain('completed');
+    await next.cancel();
+  });
+
   it('publishes message snapshots to session subscribers', async () => {
     const reader = subscribeSessionEvents('session-1').getReader();
     await reader.read();

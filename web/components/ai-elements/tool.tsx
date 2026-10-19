@@ -1,163 +1,51 @@
-"use client";
+import { CheckCircleIcon, ChevronDownIcon, CircleIcon, ClockIcon, WrenchIcon, XCircleIcon } from 'lucide-react';
 
-import { Badge } from "@web/components/ui/badge";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@web/components/ui/collapsible";
-import { cn } from "@web/lib/utils";
-import type { ToolUIPart } from "ai";
-import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  CircleIcon,
-  ClockIcon,
-  WrenchIcon,
-  XCircleIcon,
-} from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
-import { isValidElement } from "react";
-import { CodeBlock } from "./code-block";
+import { Badge } from '@web/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@web/components/ui/collapsible';
+import { cn } from '@web/lib/utils';
 
-export type ToolProps = ComponentProps<typeof Collapsible>;
+import type { ComponentProps, ReactNode } from 'react';
 
-export const Tool = ({ className, ...props }: ToolProps) => (
-  <Collapsible
-    className={cn("not-prose mb-4 w-full rounded-md border", className)}
-    {...props}
-  />
-);
-
-export type ToolHeaderProps = {
-  title?: string;
-  type: ToolUIPart["type"];
-  state: ToolUIPart["state"];
-  className?: string;
+const labels: Record<string, string> = {
+  'input-streaming': '等待参数', 'input-available': '执行中', 'output-available': '已完成',
+  'output-error': '失败', 'approval-requested': '等待确认', 'approval-responded': '已响应', 'output-denied': '已拒绝',
 };
 
-const getStatusBadge = (status: ToolUIPart["state"]) => {
-  const labels: Record<ToolUIPart["state"], string> = {
-    "input-streaming": "等待中",
-    "input-available": "执行中",
-    "approval-requested": "等待确认",
-    "approval-responded": "已响应",
-    "output-available": "已完成",
-    "output-error": "失败",
-    "output-denied": "已拒绝",
-  };
+function statusIcon(state: string): ReactNode {
+  if (state === 'output-available' || state === 'approval-responded') return <CheckCircleIcon />;
+  if (state === 'output-error' || state === 'output-denied') return <XCircleIcon />;
+  if (state === 'input-available' || state === 'approval-requested') return <ClockIcon />;
+  return <CircleIcon />;
+}
 
-  const icons: Record<ToolUIPart["state"], ReactNode> = {
-    "input-streaming": <CircleIcon className="size-4" />,
-    "input-available": <ClockIcon className="size-4 animate-pulse" />,
-    "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
-    "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
-    "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
-    "output-error": <XCircleIcon className="size-4 text-red-600" />,
-    "output-denied": <XCircleIcon className="size-4 text-orange-600" />,
-  };
+export function Tool({ className, ...props }: ComponentProps<typeof Collapsible>) {
+  return <Collapsible data-ai-element="tool" className={cn('w-full rounded-md border', className)} {...props} />;
+}
 
-  return (
-    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-      {icons[status]}
-      {labels[status]}
-    </Badge>
-  );
-};
+export function ToolHeader({ className, title, state, ...props }: ComponentProps<typeof CollapsibleTrigger> & { title: string; state: string }) {
+  return <CollapsibleTrigger className={cn('flex w-full items-center justify-between gap-4 p-3', className)} {...props}>
+    <span className="flex min-w-0 items-center gap-2"><WrenchIcon /><span className="truncate text-sm font-medium">{title}</span>
+      <Badge variant="secondary">{statusIcon(state)}{labels[state] ?? state}</Badge></span>
+    <ChevronDownIcon className="text-muted-foreground" />
+  </CollapsibleTrigger>;
+}
 
-export const ToolHeader = ({
-  className,
-  title,
-  type,
-  state,
-  ...props
-}: ToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      "flex w-full items-center justify-between gap-4 p-3",
-      className
-    )}
-    {...props}
-  >
-    <div className="flex items-center gap-2">
-      <WrenchIcon className="size-4 text-muted-foreground" />
-      <span className="font-medium text-sm">
-        {title ?? type.split("-").slice(1).join("-")}
-      </span>
-      {getStatusBadge(state)}
-    </div>
-    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-  </CollapsibleTrigger>
-);
+export function ToolContent({ className, ...props }: ComponentProps<typeof CollapsibleContent>) {
+  return <CollapsibleContent className={cn('border-t', className)} {...props} />;
+}
 
-export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
+function ToolData({ label, value, destructive }: { label: string; value: unknown; destructive?: boolean }) {
+  if (value === undefined) return null;
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return <div className="flex flex-col gap-2 p-3"><span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <pre className={cn('max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-xs leading-5 text-foreground', destructive && 'bg-destructive/10 text-destructive')}>{text}</pre>
+  </div>;
+}
 
-export const ToolContent = ({ className, ...props }: ToolContentProps) => (
-  <CollapsibleContent
-    className={cn(
-      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-      className
-    )}
-    {...props}
-  />
-);
+export function ToolInput({ input }: { input: unknown }) {
+  return <ToolData label="输入参数" value={input} />;
+}
 
-export type ToolInputProps = ComponentProps<"div"> & {
-  input: ToolUIPart["input"];
-};
-
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
-    <h4 className="font-medium text-muted-foreground text-xs tracking-wide">
-      输入参数
-    </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
-    </div>
-  </div>
-);
-
-export type ToolOutputProps = ComponentProps<"div"> & {
-  output: ToolUIPart["output"];
-  errorText: ToolUIPart["errorText"];
-};
-
-export const ToolOutput = ({
-  className,
-  output,
-  errorText,
-  ...props
-}: ToolOutputProps) => {
-  if (!(output || errorText)) {
-    return null;
-  }
-
-  let Output = <div>{output as ReactNode}</div>;
-
-  if (typeof output === "object" && !isValidElement(output)) {
-    Output = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
-    );
-  } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />;
-  }
-
-  return (
-    <div className={cn("space-y-2 p-4", className)} {...props}>
-      <h4 className="font-medium text-muted-foreground text-xs tracking-wide">
-        {errorText ? "错误" : "输出"}
-      </h4>
-      <div
-        className={cn(
-          "overflow-x-auto rounded-md text-xs [&_table]:w-full",
-          errorText
-            ? "bg-destructive/10 text-destructive"
-            : "bg-muted/50 text-foreground"
-        )}
-      >
-        {errorText && <div>{errorText}</div>}
-        {Output}
-      </div>
-    </div>
-  );
-};
+export function ToolOutput({ output, errorText }: { output: unknown; errorText?: string }) {
+  return <ToolData label={errorText ? '错误' : '输出'} value={errorText ?? output} destructive={Boolean(errorText)} />;
+}

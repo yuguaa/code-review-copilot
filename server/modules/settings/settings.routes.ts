@@ -1,106 +1,40 @@
-import { Hono } from 'hono';
-import { createAIModel, deleteAIModel, getAIModel, listAIModels, testAIModel, updateAIModel } from './ai-model-settings.service';
-import { listToolSkillSettings, updateToolSkillSettings } from './tool-skill-settings.service';
-import {
-  createGitLabAccount,
-  deleteGitLabAccount,
-  listGitLabAccounts,
-  listGitLabProjects,
-  testGitLabAccount,
-  updateGitLabAccount,
-} from './gitlab-account-settings.service';
-import { loadNotificationSetting, updateNotificationSetting } from './notification-settings.service';
-import { loadSettingsStats } from './settings-overview.service';
+import { Hono } from "hono";
+
+import { createAIModel, deleteAIModel, getAIModel, listAIModels, testAIModel, updateAIModel } from "./ai-model-settings.service";
+import { configurationError } from "./config-input";
+import { createGitLabAccount, deleteGitLabAccount, listGitLabAccounts, listGitLabProjects, testGitLabAccount, updateGitLabAccount } from "./gitlab-account-settings.service";
+import { createDingtalkRobot, deleteDingtalkRobot, listDingtalkRobots, updateDingtalkRobot } from "./dingtalk-robot-settings.service";
+import { loadSettingsStats } from "./settings-overview.service";
 
 export const settingsRoutes = new Hono();
 
-/** GitLab 账号列表。 */
-settingsRoutes.get('/gitlab', async (c) => {
-  return c.json({ accounts: await listGitLabAccounts() });
-});
+settingsRoutes.onError(configurationError);
+settingsRoutes.get("/gitlab", (c) => listGitLabAccounts().then((accounts) => c.json({ accounts })));
+settingsRoutes.post("/gitlab", (c) => c.req.json().then(createGitLabAccount).then((account) => c.json({ account })));
+settingsRoutes.patch("/gitlab/:id", (c) => c.req.json().then((body) => updateGitLabAccount(c.req.param("id"), body))
+  .then((account) => c.json({ account })));
+settingsRoutes.delete("/gitlab/:id", (c) => deleteGitLabAccount(c.req.param("id")).then((result) => c.json(result)));
+settingsRoutes.post("/gitlab/:id/test", (c) => testGitLabAccount(c.req.param("id")).then((ok) => ok === null
+  ? c.json({ error: "账号不存在" }, 404)
+  : c.json({ ok })));
+settingsRoutes.get("/gitlab/:id/projects", (c) => listGitLabProjects(c.req.param("id"), c.req.query("search"))
+  .then((projects) => projects ? c.json({ projects }) : c.json({ error: "账号不存在" }, 404)));
 
-/** 新增 GitLab 账号。 */
-settingsRoutes.post('/gitlab', async (c) => {
-  const body = await c.req.json();
-  return c.json({ account: await createGitLabAccount(body) });
-});
+settingsRoutes.get("/models", (c) => listAIModels().then((models) => c.json({ models })));
+settingsRoutes.get("/models/:id", (c) => getAIModel(c.req.param("id")).then((model) => model
+  ? c.json({ model })
+  : c.json({ error: "模型不存在" }, 404)));
+settingsRoutes.post("/models", (c) => c.req.json().then(createAIModel).then((model) => c.json({ model })));
+settingsRoutes.patch("/models/:id", (c) => c.req.json().then((body) => updateAIModel(c.req.param("id"), body))
+  .then((model) => c.json({ model })));
+settingsRoutes.delete("/models/:id", (c) => deleteAIModel(c.req.param("id")).then((result) => c.json(result)));
+settingsRoutes.post("/models/:id/test", (c) => testAIModel(c.req.param("id")).then((ok) => ok === null
+  ? c.json({ error: "模型不存在" }, 404)
+  : c.json({ ok })));
 
-settingsRoutes.patch('/gitlab/:id', async (c) => {
-  const body = await c.req.json();
-  return c.json({ account: await updateGitLabAccount(c.req.param('id'), body) });
-});
-
-settingsRoutes.delete('/gitlab/:id', async (c) => {
-  return c.json(await deleteGitLabAccount(c.req.param('id')));
-});
-
-/** 测试 GitLab 连接。 */
-settingsRoutes.post('/gitlab/:id/test', async (c) => {
-  const ok = await testGitLabAccount(c.req.param('id'));
-  if (ok === null) return c.json({ error: '账号不存在' }, 404);
-  return c.json({ ok });
-});
-
-/** 列出该账号下的 GitLab 项目（新增仓库时选择）。 */
-settingsRoutes.get('/gitlab/:id/projects', async (c) => {
-  const projects = await listGitLabProjects(c.req.param('id'), c.req.query('search'));
-  if (!projects) return c.json({ error: '账号不存在' }, 404);
-  return c.json({ projects });
-});
-
-/** 全局 AI 模型列表。 */
-settingsRoutes.get('/models', async (c) => {
-  return c.json({ models: await listAIModels() });
-});
-
-settingsRoutes.get('/models/:id', async (c) => {
-  const model = await getAIModel(c.req.param('id'));
-  if (!model) return c.json({ error: '模型不存在' }, 404);
-  return c.json({ model });
-});
-
-/** 新增全局 AI 模型。 */
-settingsRoutes.post('/models', async (c) => {
-  const body = await c.req.json();
-  return c.json({ model: await createAIModel(body) });
-});
-
-settingsRoutes.patch('/models/:id', async (c) => {
-  const body = await c.req.json();
-  return c.json({ model: await updateAIModel(c.req.param('id'), body) });
-});
-
-settingsRoutes.post('/models/:id/test', (c) => {
-  return testAIModel(c.req.param('id')).then((ok) => {
-    if (ok === null) return c.json({ error: '模型不存在' }, 404);
-    return c.json({ ok });
-  });
-});
-
-settingsRoutes.delete('/models/:id', async (c) => {
-  return c.json(await deleteAIModel(c.req.param('id')));
-});
-
-/** 全局通知配置。 */
-settingsRoutes.get('/notification', async (c) => {
-  return c.json({ notification: await loadNotificationSetting() });
-});
-
-settingsRoutes.patch('/notification', async (c) => {
-  const body = await c.req.json();
-  return c.json({ notification: await updateNotificationSetting(body) });
-});
-
-/** 系统配置与审查数据概览。 */
-settingsRoutes.get('/stats', async (c) => {
-  return c.json({ stats: await loadSettingsStats() });
-});
-
-settingsRoutes.get('/tool-skills', async (c) => {
-  return c.json(await listToolSkillSettings());
-});
-
-settingsRoutes.patch('/tool-skills', async (c) => {
-  const body = await c.req.json();
-  return c.json(await updateToolSkillSettings(body));
-});
+settingsRoutes.get("/dingtalk", (c) => listDingtalkRobots().then((robots) => c.json({ robots })));
+settingsRoutes.post("/dingtalk", (c) => c.req.json().then(createDingtalkRobot).then((robot) => c.json({ robot }, 201)));
+settingsRoutes.patch("/dingtalk/:id", (c) => c.req.json().then((body) => updateDingtalkRobot(c.req.param("id"), body))
+  .then((robot) => c.json({ robot })));
+settingsRoutes.delete("/dingtalk/:id", (c) => deleteDingtalkRobot(c.req.param("id")).then((result) => c.json(result)));
+settingsRoutes.get("/stats", (c) => loadSettingsStats().then((stats) => c.json({ stats })));

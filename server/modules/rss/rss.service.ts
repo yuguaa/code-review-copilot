@@ -1,245 +1,163 @@
-import Parser from 'rss-parser';
-import { prisma } from '../../infrastructure/prisma/prisma.service';
-import { createLogger } from '../../shared/logger/logger.service';
-import { sendDingtalk } from '../../shared/dingtalk/dingtalk.service';
-import { loadGlobalDingtalkConfig } from '../notifications/notifications.service';
-import { buildRssDingtalkMessage, type RssItem } from './rss-notification';
+import { isAxiosError } from "axios";
+import { HTTPException } from "hono/http-exception";
+import Parser from "rss-parser";
+import { z } from "zod";
 
-const log = createLogger('rss');
+import { prisma } from "@server/infrastructure/prisma/prisma.service";
+import { createLogger } from "@server/shared/logger/logger.service";
+import { loadDingtalkConfig, sendDingtalkNotification, validateDingtalkTarget } from "@server/modules/notifications/notifications.service";
+import { httpUrl } from "../settings/config-input";
+import { buildRssDingtalkMessage } from "./rss-notification";
 
-/** 单次抓取最多推送的条数，避免长时间未抓取后一次性刷屏。 */
-const MAX_PUSH_PER_FETCH = 5;
+import type { RssSubscription } from "@prisma/client";
+import type { RssItem } from "./rss-notification";
 
+const log = createLogger("rss");
 const parser = new Parser({ timeout: 15_000 });
+const inFlightFetches = new Map<string, Promise<RssFetchResult>>();
+const changingSubscriptions = new Set<string>();
+let acceptingFetches = true;
 
-export type RssSubscriptionInput = {
-  name: string;
-  url: string;
-  enabled: boolean;
-  intervalMinutes: number;
-};
+export const rssSubscriptionInput = z.object({
+  name: z.string().trim().min(1),
+  url: httpUrl,
+  enabled: z.boolean().default(true),
+  intervalMinutes: z.number().int().min(5).max(1440).default(30),
+  dingtalkRobotId: z.string().trim().min(1).nullable().optional(),
+}).strict();
 
-export type RssFetchResult = {
-  /** 首次抓取建立的基线条目数 */
-  baseline: number;
-  /** 本次推送的条目数 */
-  pushed: number;
-  /** 已推送过或超出单次上限而跳过的条目数 */
-  skipped: number;
-};
+export type RssSubscriptionInput = z.output<typeof rssSubscriptionInput>;
+export type RssFetchResult = { baseline: number; pushed: number; skipped: number };
 
-export type RssSubscriptionView = {
-  id: string;
-  name: string;
-  url: string;
-  enabled: boolean;
-  intervalMinutes: number;
-  lastFetchedAt: string | null;
-  lastError: string | null;
-  pushedCount: number;
-};
-
-function toRssItem(item: Parser.Item): RssItem | null {
-  const title = item.title?.trim();
-  const guid = (item.guid || item.link || title)?.trim();
-  if (!title || !guid) return null;
-
-  const publishedRaw = item.isoDate ?? item.pubDate;
-  const publishedAt = publishedRaw ? new Date(publishedRaw) : null;
+function toView(subscription: RssSubscription, pushedCount: number) {
   return {
-    guid,
-    title,
-    link: item.link?.trim() || null,
-    publishedAt: publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null,
-    summary: item.contentSnippet ?? item.summary ?? item.content ?? null,
-  };
-}
-
-function toView(
-  subscription: {
-    id: string;
-    name: string;
-    url: string;
-    enabled: boolean;
-    intervalMinutes: number;
-    lastFetchedAt: Date | null;
-    lastError: string | null;
-  },
-  pushedCount: number,
-): RssSubscriptionView {
-  return {
-    id: subscription.id,
-    name: subscription.name,
-    url: subscription.url,
-    enabled: subscription.enabled,
-    intervalMinutes: subscription.intervalMinutes,
+    ...subscription,
     lastFetchedAt: subscription.lastFetchedAt?.toISOString() ?? null,
-    lastError: subscription.lastError,
     pushedCount,
   };
 }
 
-export async function listRssSubscriptions(): Promise<RssSubscriptionView[]> {
-  const subscriptions = await prisma.rssSubscription.findMany({
-    orderBy: { createdAt: 'asc' },
-    include: { _count: { select: { items: true } } },
-  });
-  return subscriptions.map((subscription) => toView(subscription, subscription._count.items));
+/** rss-parser 负责解析 Feed，同次响应中的重复 GUID 只保留一次。 */
+export function collectRssItems(items: Parser.Item[]): RssItem[] {
+  const unique = new Map<string, RssItem>();
+  for (const item of items) {
+    const title = item.title?.trim();
+    const guid = (item.guid || item.link || title)?.trim();
+    if (!title || !guid || unique.has(guid)) continue;
+    const date = item.isoDate ?? item.pubDate;
+    const publishedAt = date ? new Date(date) : null;
+    unique.set(guid, {
+      guid, title,
+      link: item.link?.trim() || null,
+      publishedAt: publishedAt && Number.isFinite(publishedAt.getTime()) ? publishedAt : null,
+      summary: item.contentSnippet ?? item.summary ?? item.content ?? null,
+    });
+  }
+  return [...unique.values()].sort((a, b) => (a.publishedAt?.getTime() ?? 0) - (b.publishedAt?.getTime() ?? 0));
 }
 
-export async function createRssSubscription(input: RssSubscriptionInput): Promise<RssSubscriptionView> {
-  const subscription = await prisma.rssSubscription.create({
-    data: {
-      name: input.name,
-      url: input.url,
-      enabled: input.enabled,
-      intervalMinutes: input.intervalMinutes,
-    },
-  });
-  return toView(subscription, 0);
+export function listRssSubscriptions() {
+  return prisma.rssSubscription.findMany({
+    orderBy: { createdAt: "asc" }, include: { _count: { select: { items: true } } },
+  }).then((subscriptions) => subscriptions.map(({ _count, ...subscription }) => toView(subscription, _count.items)));
 }
 
-export async function updateRssSubscription(
-  id: string,
-  input: Partial<RssSubscriptionInput>,
-): Promise<RssSubscriptionView> {
-  const subscription = await prisma.rssSubscription.update({
-    where: { id },
-    data: {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.url !== undefined ? { url: input.url } : {}),
-      ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-      ...(input.intervalMinutes !== undefined ? { intervalMinutes: input.intervalMinutes } : {}),
-    },
-  });
-  const pushedCount = await prisma.rssPushedItem.count({ where: { subscriptionId: id } });
-  return toView(subscription, pushedCount);
+export function createRssSubscription(body: unknown) {
+  const data = rssSubscriptionInput.parse(body);
+  return prisma.$transaction((tx) => validateDingtalkTarget(tx, data.dingtalkRobotId, data.enabled)
+    .then(() => tx.rssSubscription.create({ data }))).then((subscription) => toView(subscription, 0));
 }
 
-export async function deleteRssSubscription(id: string): Promise<void> {
-  await prisma.rssSubscription.delete({ where: { id } });
+export function updateRssSubscription(id: string, body: unknown) {
+  const data = rssSubscriptionInput.partial().parse(body);
+  if (inFlightFetches.has(id) || changingSubscriptions.has(id)) throw new HTTPException(409, { message: "订阅正在处理，请等待完成后修改" });
+  changingSubscriptions.add(id);
+  return prisma.$transaction((tx) => tx.rssSubscription.findUniqueOrThrow({ where: { id } }).then((current) =>
+    validateDingtalkTarget(tx, data.dingtalkRobotId === undefined ? current.dingtalkRobotId : data.dingtalkRobotId, data.enabled ?? current.enabled)
+      .then(() => tx.rssSubscription.update({ where: { id }, data, include: { _count: { select: { items: true } } } }))))
+    .then(({ _count, ...subscription }) => toView(subscription, _count.items))
+    .finally(() => changingSubscriptions.delete(id));
 }
 
-/**
- * 抓取一个订阅：首次抓取只建立基线，后续抓取把新条目推送到全局钉钉机器人。
- * 同一订阅的并发抓取共享同一次执行，避免调度器与手动抓取重复推送。
- */
+export function deleteRssSubscription(id: string): Promise<void> {
+  if (inFlightFetches.has(id) || changingSubscriptions.has(id)) throw new HTTPException(409, { message: "订阅正在处理，请等待完成后删除" });
+  changingSubscriptions.add(id);
+  return prisma.rssSubscription.delete({ where: { id } }).then(() => undefined)
+    .finally(() => changingSubscriptions.delete(id));
+}
+
 export function fetchRssSubscription(subscriptionId: string): Promise<RssFetchResult> {
-  const running = inFlightFetches.get(subscriptionId);
-  if (running) return running;
-
-  const task = runRssFetch(subscriptionId).finally(() => {
-    inFlightFetches.delete(subscriptionId);
-  });
+  if (!acceptingFetches) return Promise.reject(new HTTPException(503, { message: "RSS 调度正在停止" }));
+  if (changingSubscriptions.has(subscriptionId)) return Promise.reject(new HTTPException(409, { message: "订阅配置正在修改" }));
+  const existing = inFlightFetches.get(subscriptionId);
+  if (existing) return existing;
+  const task = runRssFetch(subscriptionId).finally(() => inFlightFetches.delete(subscriptionId));
   inFlightFetches.set(subscriptionId, task);
   return task;
 }
 
-const inFlightFetches = new Map<string, Promise<RssFetchResult>>();
-
-async function runRssFetch(subscriptionId: string): Promise<RssFetchResult> {
-  const subscription = await prisma.rssSubscription.findUnique({ where: { id: subscriptionId } });
-  if (!subscription) throw new Error('订阅不存在');
-
-  const parsed = await parser.parseURL(subscription.url);
-  const items = parsed.items
-    .map((item) => toRssItem(item))
-    .filter((item): item is RssItem => item !== null);
-
-  const known = await prisma.rssPushedItem.findMany({
-    where: { subscriptionId, guid: { in: items.map((item) => item.guid) } },
-    select: { guid: true },
-  });
-  const knownGuids = new Set(known.map((row) => row.guid));
-  const fresh = items
-    .filter((item) => !knownGuids.has(item.guid))
-    .sort((left, right) => (left.publishedAt?.getTime() ?? 0) - (right.publishedAt?.getTime() ?? 0));
-
-  if (!subscription.lastFetchedAt) {
-    await prisma.rssPushedItem.createMany({
-      data: fresh.map((item) => ({
-        subscriptionId,
-        guid: item.guid,
-        title: item.title,
-        link: item.link,
-        publishedAt: item.publishedAt,
-      })),
-      skipDuplicates: true,
-    });
-    await prisma.rssSubscription.update({
-      where: { id: subscriptionId },
-      data: { lastFetchedAt: new Date(), lastError: null },
-    });
-    return { baseline: fresh.length, pushed: 0, skipped: items.length - fresh.length };
-  }
-
-  const toPush = fresh.slice(-MAX_PUSH_PER_FETCH);
-  const skippedByLimit = fresh.length - toPush.length;
-
-  // 没有新内容时不需要钉钉配置，避免未推送场景被误报为失败。
-  if (toPush.length > 0) {
-    const config = await loadGlobalDingtalkConfig();
-    if (!config) throw new Error('全局钉钉推送未启用，无法推送 RSS 新条目');
-
-    for (const item of toPush) {
-      const message = buildRssDingtalkMessage(subscription.name, item);
-      await sendDingtalk(config, message.title, message.text);
-      await prisma.rssPushedItem.create({
-        data: {
-          subscriptionId,
-          guid: item.guid,
-          title: item.title,
-          link: item.link,
-          publishedAt: item.publishedAt,
-        },
+function runRssFetch(subscriptionId: string): Promise<RssFetchResult> {
+  return prisma.rssSubscription.findUniqueOrThrow({ where: { id: subscriptionId } }).then((subscription) => {
+    return parser.parseURL(subscription.url).then((feed) => {
+      const items = collectRssItems(feed.items);
+      return prisma.rssPushedItem.findMany({
+        where: { subscriptionId, guid: { in: items.map((item) => item.guid) } }, select: { guid: true },
+      }).then((known) => {
+        const knownGuids = new Set(known.map((item) => item.guid));
+        const fresh = items.filter((item) => !knownGuids.has(item.guid));
+        if (!subscription.lastFetchedAt) {
+          return prisma.rssPushedItem.createMany({ data: fresh.map((item) => ({
+            subscriptionId, guid: item.guid, title: item.title, link: item.link, publishedAt: item.publishedAt,
+          })), skipDuplicates: true }).then(() => ({ baseline: fresh.length, pushed: 0, skipped: knownGuids.size }));
+        }
+        if (fresh.length === 0) return { baseline: 0, pushed: 0, skipped: items.length };
+        const batch = fresh.slice(0, 5);
+        if (!subscription.dingtalkRobotId) throw new Error("RSS 订阅尚未选择钉钉机器人");
+        return loadDingtalkConfig(subscription.dingtalkRobotId).then((config) => {
+          return batch.reduce((previous, item) => previous.then(() => {
+            const message = buildRssDingtalkMessage(subscription.name, item);
+            return sendDingtalkNotification(config, message.title, message.text)
+              .then(() => prisma.rssPushedItem.create({ data: {
+                subscriptionId, guid: item.guid, title: item.title,
+                link: item.link, publishedAt: item.publishedAt,
+              } })).then(() => undefined);
+          }), Promise.resolve()).then(() => ({ baseline: 0, pushed: batch.length, skipped: knownGuids.size }));
+        });
       });
-    }
-  }
-
-  await prisma.rssPushedItem.createMany({
-    data: fresh.map((item) => ({
-      subscriptionId,
-      guid: item.guid,
-      title: item.title,
-      link: item.link,
-      publishedAt: item.publishedAt,
-    })),
-    skipDuplicates: true,
+    }).then((result) => prisma.rssSubscription.update({
+      where: { id: subscriptionId }, data: { lastFetchedAt: new Date(), lastError: null },
+    }).then(() => result)).catch((error: unknown) => {
+      const message = rssFailureMessage(error);
+      return prisma.rssSubscription.update({ where: { id: subscriptionId }, data: { lastError: message } })
+        .then(() => { throw error; });
+    });
   });
-  await prisma.rssSubscription.update({
-    where: { id: subscriptionId },
-    data: { lastFetchedAt: new Date(), lastError: null },
-  });
-
-  log.info(`订阅「${subscription.name}」推送 ${toPush.length} 条新内容`);  return {
-    baseline: 0,
-    pushed: toPush.length,
-    skipped: items.length - fresh.length + skippedByLimit,
-  };
 }
 
-/** 调度器入口：执行所有到期订阅，单个订阅失败不影响其他订阅。 */
-export async function runDueRssSubscriptions(): Promise<{ checked: number; failed: number }> {
-  const subscriptions = await prisma.rssSubscription.findMany({ where: { enabled: true } });
-  const now = Date.now();
-  let failed = 0;
+function rssFailureMessage(error: unknown): string {
+  /* 请求对象可能包含机器人凭证，只保存不带地址和请求头的原因。 */
+  if (isAxiosError(error)) return "RSS 请求或钉钉发送失败";
+  return error instanceof Error ? error.message : "RSS 抓取失败";
+}
 
-  for (const subscription of subscriptions) {
-    const dueAt = (subscription.lastFetchedAt?.getTime() ?? 0) + subscription.intervalMinutes * 60_000;
-    if (subscription.lastFetchedAt && now < dueAt) continue;
+export function runDueRssSubscriptions(): Promise<{ checked: number; failed: number }> {
+  return prisma.rssSubscription.findMany({ where: { enabled: true } }).then((subscriptions) => {
+    const now = Date.now();
+    const due = subscriptions.filter((subscription) => !subscription.lastFetchedAt
+      || now >= subscription.lastFetchedAt.getTime() + subscription.intervalMinutes * 60_000);
+    return Promise.allSettled(due.map((subscription) => fetchRssSubscription(subscription.id))).then((results) => {
+      const failed = results.filter((result) => result.status === "rejected").length;
+      if (failed) log.warn(`RSS 检查失败：${failed} 个订阅`);
+      return { checked: due.length, failed };
+    });
+  });
+}
 
-    try {
-      await fetchRssSubscription(subscription.id);
-    } catch (error) {
-      failed += 1;
-      const message = error instanceof Error ? error.message : '抓取失败';
-      await prisma.rssSubscription.update({
-        where: { id: subscription.id },
-        data: { lastError: message },
-      });
-      log.error(`订阅「${subscription.name}」抓取失败：${message}`);
-    }
-  }
+export function resumeRssFetching(): void {
+  acceptingFetches = true;
+}
 
-  return { checked: subscriptions.length, failed };
+export function drainRssFetches(): Promise<void> {
+  acceptingFetches = false;
+  return Promise.allSettled([...inFlightFetches.values()]).then(() => undefined);
 }

@@ -12,6 +12,7 @@ import type { TokensResult } from 'shiki';
 type HighlightResult = NonNullable<ReturnType<CodeHighlighterPlugin['highlight']>>;
 
 const defaultThemes: [BundledTheme, BundledTheme] = ['github-dark', 'github-dark'];
+const plainTheme = { bg: '#24292e', fg: '#E1E4E8' } as const;
 const plainLanguages = new Set(['', 'text', 'txt', 'plain', 'plaintext']);
 const supportedLanguageIds = new Set<BundledLanguage>(
   Object.entries(bundledLanguages)
@@ -80,6 +81,15 @@ function toHighlightResult(result: TokensResult): HighlightResult {
   };
 }
 
+function plainHighlightResult(code: string): HighlightResult {
+  return {
+    bg: plainTheme.bg,
+    fg: plainTheme.fg,
+    rootStyle: `background-color:${plainTheme.bg};color:${plainTheme.fg}`,
+    tokens: code.split('\n').map((line) => [{ content: line, color: plainTheme.fg, offset: 0 }]),
+  };
+}
+
 function loadHighlightResult(
   code: string,
   language: BundledLanguage,
@@ -123,7 +133,7 @@ export const shikiCodeHighlighter: CodeHighlighterPlugin = {
     const key = cacheKey(code, lang, themes);
     const cached = resultCache.get(key);
     if (cached) return cached;
-    if (lang === 'text') return null;
+    if (lang === 'text') return plainHighlightResult(code);
 
     loadHighlightResult(code, lang, key).then((result) => {
       if (result) callback?.(result);

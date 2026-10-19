@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/.verification
+/.deployment
 
 # build output
 /.next/

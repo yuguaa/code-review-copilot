@@ -26,7 +26,7 @@ export function subscribeSessionEvents(sessionId: string, signal?: AbortSignal):
   const sessionClients = clients.get(sessionId) ?? new Set<Client>();
   clients.set(sessionId, sessionClients);
   return createClientStream(sessionClients, signal, () => {
-    if (sessionClients.size === 0) clients.delete(sessionId);
+    if (sessionClients.size === 0 && clients.get(sessionId) === sessionClients) clients.delete(sessionId);
   });
 }
 
@@ -68,29 +68,38 @@ function createClientStream(
   onEmpty?: () => void,
 ): ReadableStream<Uint8Array> {
   let client: Client | null = null;
-  let close: (() => void) | null = null;
+  let close: ((cancelled?: boolean) => void) | null = null;
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      const closeClient = () => {
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      const abortClient = () => closeClient();
+      const closeClient = (cancelled = false) => {
         if (!client) return;
         const closingClient = client;
         client = null;
         clientSet.delete(closingClient);
         if (clientSet.size === 0) onEmpty?.();
-        signal?.removeEventListener('abort', closeClient);
-        try {
-          controller.close();
-        } catch {
-          // 连接可能已由浏览器关闭。
-        }
+        signal?.removeEventListener('abort', abortClient);
+        if (heartbeat) clearInterval(heartbeat);
+        closingClient.pending.length = 0;
+        if (!cancelled) controller.close();
       };
       client = { controller, pending: [], close: closeClient };
       close = closeClient;
       clientSet.add(client);
+      if (signal?.aborted) {
+        closeClient();
+        return;
+      }
       controller.enqueue(encoder.encode(': connected\n\n'));
-
-      signal?.addEventListener('abort', closeClient, { once: true });
+      signal?.addEventListener('abort', abortClient, { once: true });
+      heartbeat = setInterval(() => {
+        if (client && !client.pending.length && (controller.desiredSize ?? 0) > 0) {
+          controller.enqueue(encoder.encode(': heartbeat\n\n'));
+        }
+      }, 15_000);
+      heartbeat.unref();
     },
     pull(controller) {
       const pending = client?.pending.shift();
@@ -102,7 +111,7 @@ function createClientStream(
       }
     },
     cancel() {
-      close?.();
+      close?.(true);
     },
   });
 }

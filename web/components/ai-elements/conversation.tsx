@@ -1,100 +1,20 @@
-"use client";
+import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerProvider, MessageScrollerViewport } from '@web/components/ui/message-scroller';
+import { cn } from '@web/lib/utils';
 
-import { Button } from "@web/components/ui/button";
-import { cn } from "@web/lib/utils";
-import { ArrowDownIcon } from "lucide-react";
-import type { ComponentProps } from "react";
-import { useCallback } from "react";
-import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
+import type { ComponentProps } from 'react';
 
-export type ConversationProps = ComponentProps<typeof StickToBottom>;
+export function Conversation({ className, children, ...props }: ComponentProps<typeof MessageScroller>) {
+  return <MessageScrollerProvider autoScroll>
+    <MessageScroller data-ai-element="conversation" className={cn('relative flex-1', className)} {...props}>{children}</MessageScroller>
+  </MessageScrollerProvider>;
+}
 
-export const Conversation = ({ className, ...props }: ConversationProps) => (
-  <StickToBottom
-    className={cn("relative flex-1 overflow-y-hidden", className)}
-    initial="smooth"
-    resize="smooth"
-    role="log"
-    {...props}
-  />
-);
+export function ConversationContent({ className, ...props }: ComponentProps<typeof MessageScrollerContent>) {
+  return <MessageScrollerViewport aria-label="审查追问记录">
+    <MessageScrollerContent data-ai-element="conversation-content" className={cn('mx-auto w-full max-w-3xl gap-7 p-5 sm:p-7', className)} {...props} />
+  </MessageScrollerViewport>;
+}
 
-export type ConversationContentProps = ComponentProps<
-  typeof StickToBottom.Content
->;
-
-export const ConversationContent = ({
-  className,
-  ...props
-}: ConversationContentProps) => (
-  <StickToBottom.Content
-    className={cn("flex flex-col gap-8 p-4", className)}
-    {...props}
-  />
-);
-
-export type ConversationEmptyStateProps = ComponentProps<"div"> & {
-  title?: string;
-  description?: string;
-  icon?: React.ReactNode;
-};
-
-export const ConversationEmptyState = ({
-  className,
-  title = "No messages yet",
-  description = "Start a conversation to see messages here",
-  icon,
-  children,
-  ...props
-}: ConversationEmptyStateProps) => (
-  <div
-    className={cn(
-      "flex size-full flex-col items-center justify-center gap-3 p-8 text-center",
-      className
-    )}
-    {...props}
-  >
-    {children ?? (
-      <>
-        {icon && <div className="text-muted-foreground">{icon}</div>}
-        <div className="space-y-1">
-          <h3 className="font-medium text-sm">{title}</h3>
-          {description && (
-            <p className="text-muted-foreground text-sm">{description}</p>
-          )}
-        </div>
-      </>
-    )}
-  </div>
-);
-
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
-
-export const ConversationScrollButton = ({
-  className,
-  ...props
-}: ConversationScrollButtonProps) => {
-  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
-
-  const handleScrollToBottom = useCallback(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
-
-  return (
-    !isAtBottom && (
-      <Button
-        className={cn(
-          "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full",
-          className
-        )}
-        onClick={handleScrollToBottom}
-        size="icon"
-        type="button"
-        variant="outline"
-        {...props}
-      >
-        <ArrowDownIcon className="size-4" />
-      </Button>
-    )
-  );
-};
+export function ConversationScrollButton(props: ComponentProps<typeof MessageScrollerButton>) {
+  return <MessageScrollerButton variant="outline" className="rounded-full shadow-sm" {...props} />;
+}

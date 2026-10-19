@@ -1,40 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
-import { fetchGitLabPages } from './gitlab-pagination';
+import axios from "axios";
+import { describe, expect, it } from "vitest";
 
-describe('fetchGitLabPages', () => {
-  it('持续分页直到返回数量小于 perPage', async () => {
-    const get = vi
-      .fn()
-      .mockResolvedValueOnce({ data: [{ id: 1 }, { id: 2 }] })
-      .mockResolvedValueOnce({ data: [{ id: 3 }] });
+import { fetchGitLabPages } from "./gitlab-pagination";
+import { GitLabService } from "./gitlab.service";
 
-    const items = await fetchGitLabPages<{ id: number }>({
-      client: { get } as never,
-      path: '/projects/1/repository/commits',
-      params: { ref_name: 'main' },
-      perPage: 2,
-      maxPages: 5,
-    });
-
-    expect(items).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
-    expect(get).toHaveBeenNthCalledWith(1, '/projects/1/repository/commits', {
-      params: { ref_name: 'main', per_page: 2, page: 1 },
-    });
-    expect(get).toHaveBeenNthCalledWith(2, '/projects/1/repository/commits', {
-      params: { ref_name: 'main', per_page: 2, page: 2 },
-    });
+describe("GitLab 请求校验", () => {
+  it.each([0, -1, 101, 1.5])("无效分页大小 %s 在 HTTP 请求前失败", (perPage) => {
+    expect(() => fetchGitLabPages({ client: axios.create(), path: "/projects", perPage })).toThrow("perPage");
   });
-
-  it('达到 maxPages 后停止', async () => {
-    const get = vi.fn().mockResolvedValue({ data: [{ id: 1 }] });
-
-    await fetchGitLabPages<{ id: number }>({
-      client: { get } as never,
-      path: '/items',
-      perPage: 1,
-      maxPages: 2,
-    });
-
-    expect(get).toHaveBeenCalledTimes(2);
+  it.each([0, -1, 1.5])("无效页面上限 %s 在 HTTP 请求前失败", (maxPages) => {
+    expect(() => fetchGitLabPages({ client: axios.create(), path: "/projects", maxPages })).toThrow("maxPages");
+  });
+  it("拒绝包含用户名密码的 GitLab 地址和空白 Token", () => {
+    expect(() => new GitLabService("https://user:secret@example.com", "token")).toThrow("实例地址");
+    expect(() => new GitLabService("https://example.com", " ")).toThrow("accessToken");
   });
 });

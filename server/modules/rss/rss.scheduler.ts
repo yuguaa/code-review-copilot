@@ -1,33 +1,31 @@
-import { createLogger } from '../../shared/logger/logger.service';
-import { runDueRssSubscriptions } from './rss.service';
+import { createLogger } from "@server/shared/logger/logger.service";
+import { drainRssFetches, resumeRssFetching, runDueRssSubscriptions } from "./rss.service";
 
-const log = createLogger('rss-scheduler');
-const CHECK_INTERVAL_MS = 60_000;
-
+const log = createLogger("rss-scheduler");
 let timer: NodeJS.Timeout | null = null;
+let batch: Promise<void> | null = null;
+let stopping: Promise<void> | null = null;
 
-/** 每分钟检查一次到期订阅；订阅自身的抓取间隔决定实际抓取频率。 */
 export function startRssScheduler(): void {
   if (timer) return;
-
+  if (stopping) throw new Error("RSS 调度仍在停止");
+  resumeRssFetching();
   const run = () => {
-    runDueRssSubscriptions()
-      .then((result) => {
-        if (result.failed > 0) {
-          log.warn(`订阅检查完成，${result.failed} 个订阅抓取失败`);
-        }
-      })
-      .catch((error) => {
-        log.error(`RSS 调度失败：${error instanceof Error ? error.message : String(error)}`);
-      });
+    if (batch) return;
+    batch = runDueRssSubscriptions().then(() => undefined).catch(() => {
+      log.error("RSS 调度执行失败");
+    }).finally(() => { batch = null; });
   };
-
+  timer = setInterval(run, 60_000);
+  timer.unref();
   run();
-  timer = setInterval(run, CHECK_INTERVAL_MS);
 }
 
-export function stopRssScheduler(): void {
-  if (!timer) return;
-  clearInterval(timer);
+export function stopRssScheduler(): Promise<void> {
+  if (stopping) return stopping;
+  if (timer) clearInterval(timer);
   timer = null;
+  stopping = Promise.all([batch, drainRssFetches()]).then(() => undefined)
+    .finally(() => { stopping = null; });
+  return stopping;
 }

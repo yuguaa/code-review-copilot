@@ -1,101 +1,101 @@
-# 代码审查 Agent（Code Review Agent）
+# Review Copilot
 
-一个**会话式**的 GitLab 代码审查 Agent：每个 webhook 触发的审查都是一个**可追问的会话**，由真正的 agent loop 驱动（真 tool calls + 多 subagent），用 [Vercel AI SDK](https://sdk.vercel.ai) v7 原生能力从零构建。
+代码审查管理平台，集中管理仓库、模型、GitLab、钉钉和 RSS。OCR 执行代码审查，平台保存每次运行的报告、提交范围、会话消息和渠道发布结果。
 
-> 不是「单次调用大模型」——agent 会自己 `list_changed_files → fetch_diff → read_file`，按需委派安全/架构/性能 subagent，最后把结论回写 MR；你还能在会话里继续追问。
+## 使用方式
 
-## 使用的技术
+- 活动：按时间查看审查运行，筛选仓库、触发来源和状态。
+- 运行详情：阅读 Markdown 报告，查看固定的提交范围、执行状态和发布结果。
+- 追问：基于报告所在消息分支继续提问，只读工具读取对应提交的代码。
+- 普通仓库对话：首次提问固定仓库默认分支的提交，后续提问使用相同版本。
+- 仓库：配置监听分支、模型、审查背景、OCR 并发、超时、Token 预算和通知渠道。
+- 模型：管理 OpenAI、Anthropic 和 OpenAI-compatible 端点，提供连通性检查。
+- 连接器：管理 GitLab 凭证和钉钉机器人。配置读取接口仅返回凭证是否已配置。
+- RSS：按间隔抓取，发送成功后登记条目，保留未发送内容。
+- 遥测：使用同一个项目账号访问 Grafana，查看运行指标与完整 trace。
 
-- **后端**：[Hono](https://hono.dev)（web 标准 Request/Response，AI SDK 的 `toUIMessageStreamResponse()` 直接 return）
-- **前端**：Vite + React 19 + [shadcn/ui](https://ui.shadcn.com)（`base-nova` 风格）+ [ReUI](https://reui.io) + [ai-elements](https://elements.ai-sdk.dev)
-- **Agent**：`ai` v7（`streamText` + `stopWhen` + subagent 委派）
-- **数据**：Prisma + PostgreSQL
-- **鉴权**：HMAC 签名 Cookie + 可选 IP 白名单，全局守卫所有 `/api/*`
-
-## 工程结构
-
-```
-server/                     # Hono 后端
-  index.ts                  # 装配：全局鉴权 + 静态托管 + 启动 RSS 调度
-  modules/
-    auth sessions repositories settings chat webhook dashboard
-    rss/                     # RSS 订阅：抓取、去重、钉钉推送、调度器
-  shared/                    # gitlab · dingtalk · logger
-web/                         # Vite + React SPA
-  components/
-    ui/                      # shadcn 组件
-    reui/                    # ReUI 组件
-    ai-elements/             # 对话界面组件
-    layout/                  # 应用外壳：可拖拽侧栏 + 顶栏
-    chat/ settings/ dashboard/ repositories/ rss/
-  pages/                     # Chat · Dashboard · Repositories · Settings · Rss · Help · Login
-  hooks/ lib/
-shared/                      # 前后端共享类型与解析逻辑
-prisma/schema.prisma
-```
+前端使用 React、TypeScript、Vite、shadcn 和 NeUI Base UI 组件。内网 NeUI registry 配置在 `components.json`，可通过 shadcn MCP 检索组件。后端使用 Hono、Prisma 和 PostgreSQL。
 
 ## 本地开发
 
-```bash
-# 1. 起一个本地 PostgreSQL（自带数据目录，监听 5433）
-npm run dev:db
+需要 Node.js 24、Git 2.41 或更新版本，以及 ripgrep。
 
-# 2. 配置 .env（见 .env.example）
+```bash
+npm ci
 cp .env.example .env
-
-npm install
-npm run db:deploy          # 应用迁移
-npm run dev                # 同时起 Hono(:8787) 与 Vite(:5173)
+npm run dev:db
 ```
 
-打开 `http://localhost:5173`，用 `.env` 里的 `APP_AUTH_USERNAME/SECRET` 登录。也可以直接用 `docker compose up -d postgres` 代替第一步。
-
-## 配置流程
-
-1. **设置 → 添加 GitLab 账号**：实例地址 + 访问令牌（api 权限）+ Webhook 密钥。
-2. **设置 → Tools / Skills 管理**：调整平台默认工具与审查方法。
-3. **仓库配置 → 添加仓库**：选账号 → 拉取并选项目 → 配模型（provider/modelId/apiKey）→ 监听分支 / 默认审查提示词 / 自动审查 / 仓库级 Tools 和 Skills 覆盖。
-4. 在 GitLab 项目里加 Webhook（**Merge Request events** 与 **Push events**），URL 指向 `<部署地址>/api/webhook/gitlab`，Secret Token 与账号的 Webhook 密钥一致。
-5. **数据看板**：查看 14 天趋势、状态分布、仓库热度、人员维度、失败样本和最近活动。
-
-之后每次 MR 打开/更新都会自动生成一个审查会话，agent 审查并回写 MR，你可在左侧会话里继续追问。
-
-## RSS 订阅推送
-
-「RSS 订阅」页维护订阅源：名称、Feed 地址、抓取间隔（5 到 1440 分钟）与启用开关。
-
-- 调度器每分钟检查一次到期订阅，抓取到的**新条目**推送到**全局钉钉机器人**，与代码审查通知共用同一个机器人。
-- RSS 使用独立消息模板：标题为 `RSS 更新 · 订阅名 · 条目标题`，正文包含订阅名、发布时间、摘要与原文链接。
-- 首次抓取只建立基线，不会把历史条目全部推送；单次抓取最多推送 5 条，避免长时间停用后一次性刷屏。
-- 推送记录按 Feed 条目标识去重，同一条内容只推送一次；抓取失败会记录在订阅卡片上。
-
-## 核心数据模型
-
-- `GitLabAccount` —— 接入凭证
-- `Repository` —— 仓库 + 按仓库的模型/提示词/通知配置
-- `AgentTool` / `AgentSkill` —— 平台级工具与 skill 注册表
-- `RepositoryToolSetting` / `RepositorySkillSetting` —— 仓库级能力覆盖
-- `Session` —— 一次会话（`kind=review|chat`，审查会话带 MR 元信息）
-- `Message` —— message tree 持久化（`parts` 为 `UIMessage.parts`）
-- `NotificationSetting` —— 全局钉钉配置
-- `RssSubscription` / `RssPushedItem` —— RSS 订阅源与已推送条目
-
-## 测试与门禁
+在 `.env` 中填写登录账号、密码和会话密钥。开发数据库数据保存在 `.dev-postgres`。另开终端执行：
 
 ```bash
-npm run typecheck   # tsc 服务端 + 前端
-npm test            # vitest
-npm run build       # prisma generate + vite build
+npm run db:deploy
+APP_PUBLIC_URL=http://localhost:5173 npm run dev
 ```
 
-## Docker 部署
+浏览器访问 `http://localhost:5173`。Hono 在端口 8787 提供 API，Vite 代理 `/api` 和 `/observability`。
 
-单镜像单容器（Hono 同进程托管前端静态产物 + `/api`）：
+## 审查执行
+
+GitLab Webhook 地址为 `/api/webhook/gitlab`，接收 Merge Request 和 Push 事件。GitLab 账号的 `webhookSecret` 用于验证 `X-Gitlab-Token`；GitLab 项目 Hook 的 Secret Token 必须与该值一致。
+
+每个 MR 运行保存触发提交对应的 `baseSha`、`startSha` 和 `headSha`。Push 保存 before/after。工作区在该提交创建独立 worktree。非祖先关系的 Push 明确失败，报告不使用其他提交范围。
+
+OCR 固定使用 `@alibaba-group/open-code-review@1.9.10` 的原生可执行文件。调用参数包括 `--format json`、`--audience agent`、确定的提交范围、并发数、任务超时和 Token 预算。平台从 stdout 读取 JSON，独立处理进程退出状态。
+
+OCR 原生规则由仓库中的 `.opencodereview/rule.json` 管理。平台审查背景通过 `--background-file` 传入。OCR 会话与运行期上下文保存在每个仓库独立的 `ocr-home`；平台不维护另一套规则、Skills 或长期记忆。
+
+PostgreSQL 保存排队任务，单实例执行器最多并行处理两个运行。取消时终止进程组并等待退出，再释放运行资格。服务重新启动后，在途任务保存为 `interrupted`，排队任务继续等待领取。
+
+运行状态包括 `queued`、`running`、`cancelling`、`completed`、`partial`、`skipped`、`failed`、`cancelled` 和 `interrupted`。部分完成的报告保留实际覆盖警告。
+
+完整报告保存成功后，平台按仓库配置执行自动发布。GitLab 和钉钉各自保存发送状态；网络中断且无法确认远端结果时记录 `unknown`，由用户确认远端状态后再次发起。GitLab 发布校验当前 MR 版本，并使用内容标记识别已有评论。
+
+## 钉钉机器人
+
+在连接器的钉钉页面管理多个机器人，每个机器人分别设置名称、Webhook、Secret 和启用状态。已保存的凭证不会通过接口返回，编辑时留空保留原值；Secret 可以明确清除。
+
+每个仓库和每个 RSS 订阅分别选择一个机器人。启用仓库通知或 RSS 订阅时必须选择已启用的机器人。机器人停用后停止接收新通知，引用它的配置需要选择可用机器人或关闭发送。仍被仓库或 RSS 订阅引用的机器人不能删除。
+
+迁移 `20261019120000_dingtalk_robots` 保留已有公共机器人及仓库独立机器人的凭证，建立仓库与 RSS 订阅的机器人关联。
+
+`WORKSPACE_TTL_HOURS` 控制已完成运行的工作区保留时间，默认 72 小时。清理流程检查工作区最近使用时间。OCR 原生会话目录和数据库报告独立保存。
+
+## Docker 与遥测
+
+在 `.env` 中填写 `POSTGRES_PASSWORD`、三个 `APP_AUTH_*` 字段、`APP_PORT` 和实际的 `APP_PUBLIC_URL`。数据库密码使用 URL 安全字符。
 
 ```bash
-cp .env.example .env   # 至少填好 APP_AUTH_*
-docker compose up -d --build
-# 访问 http://localhost:8787
+docker compose up -d --build --wait
 ```
 
-容器启动时自动执行 `prisma migrate deploy`。
+Compose 部署应用、PostgreSQL、Collector、Tempo、Prometheus 和 Grafana。仅应用端口对外开放。Grafana 通过应用的 `/observability/` 认证代理访问；每次请求验证数据库会话，退出登录或更改凭证后已有会话失效。
+
+平台向 OCR 传递 W3C `TRACEPARENT`，运行记录保存 trace ID。Collector 通过 OTLP/gRPC 接收平台与 OCR 的 trace 和指标；指标仅保留有限取值的属性。Tempo 保留 14 天 trace，Prometheus 保留 30 天指标。源码、模型凭证和完整请求正文不由平台遥测导出。
+
+## 配置与数据迁移
+
+迁移 `20261016160000_platform_runs` 保留 GitLab、模型、仓库、钉钉和 RSS 配置，清除历史审查会话、消息及运行数据。平台规则、Skills 和记忆结构由 OCR 原生功能接替。独立验证脚本会在迁移前插入配置，迁移后逐项比较内容、凭证和关联。
+
+`deploy/deploy-remote.sh` 用于目标 `ssh liuchang` 的首次平台部署。它在新部署目录构建镜像，保存配置备份和指纹，停止旧应用与旧 PostgreSQL，再使用已有数据库卷启动平台。配置指纹在部署后再次检查。
+
+```bash
+ssh liuchang sh /home/newcap/code-review-copilot-platform/deploy/deploy-remote.sh \
+  /home/newcap/code-review-copilot-platform http://192.168.0.81:3000
+```
+
+部署目录中的 `.env` 和 `.deployment` 属于运行数据，不提交到 Git。
+
+## 验证
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run verify:platform
+npm run verify:components
+```
+
+`verify:platform` 使用 `.verification` 中的独立 PostgreSQL，在端口 55433 验证迁移、认证、配置保存、Webhook 幂等、运行取消和原生 OCR preview。它不会连接现有开发或部署数据库，也不会发送外部通知。每项验证上限为 60 秒，报告保存为对应运行目录中的 `report.json`。
+
+`verify:components` 通过真实 shadcn MCP 连接读取项目 registry 和 NeUI Timeline 信息。`deploy/verify-telemetry.ts` 使用真实 Collector 检查 OTLP、W3C 上下文、运行指标及属性过滤。

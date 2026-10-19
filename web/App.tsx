@@ -1,70 +1,53 @@
-import { lazy, Suspense, useEffect, useState, createContext, useContext, type ReactNode } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
-import { checkAuth } from './lib/api';
-import { AppShell } from './components/layout/app-shell';
-import { Login } from './pages/Login';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
-const Chat = lazy(() => import('./pages/Chat').then((module) => ({ default: module.Chat })));
-const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
-const Help = lazy(() => import('./pages/Help').then((module) => ({ default: module.Help })));
-const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
-const Rss = lazy(() => import('./pages/Rss').then((module) => ({ default: module.Rss })));
-const Repositories = lazy(() => import('./pages/Repositories').then((module) => ({ default: module.Repositories })));
+import { AppShell } from '@web/components/layout/app-shell';
+import { ResourceState } from '@web/components/common/resource-state';
+import { checkAuth } from '@web/lib/api';
+import { Login } from '@web/pages/login-page';
 
-type AuthState = { authed: boolean; ready: boolean; refresh: () => Promise<void> };
-const AuthContext = createContext<AuthState>({ authed: false, ready: false, refresh: () => Promise.resolve() });
-export const useAuth = () => useContext(AuthContext);
+const Activities = lazy(() => import('@web/pages/activities').then((module) => ({ default: module.Activities })));
+const ReviewDetail = lazy(() => import('@web/pages/review-detail').then((module) => ({ default: module.ReviewDetail })));
+const Repositories = lazy(() => import('@web/pages/repositories-page').then((module) => ({ default: module.Repositories })));
+const Models = lazy(() => import('@web/pages/models').then((module) => ({ default: module.Models })));
+const Connections = lazy(() => import('@web/pages/connections').then((module) => ({ default: module.Connections })));
+const Rss = lazy(() => import('@web/pages/rss-page').then((module) => ({ default: module.Rss })));
+const AuthContext = createContext<{ authed: boolean; ready: boolean; refresh: () => Promise<void> }>({ authed: false, ready: false, refresh: () => Promise.resolve() });
 
-function PageFallback() {
-  return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">加载中…</div>;
-}
+export function useAuth() { return useContext(AuthContext); }
 
-function RequireAuth({ children }: { children: ReactNode }) {
-  const { authed, ready } = useAuth();
+function ProtectedShell() {
+  const auth = useAuth();
   const location = useLocation();
-  if (!ready) return <PageFallback />;
-  if (!authed) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  return <Suspense fallback={<PageFallback />}>{children}</Suspense>;
-}
-
-function ShellOutlet() {
-  return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
-  );
+  if (!auth.ready) return <ResourceState loading />;
+  if (!auth.authed) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  return <AppShell />;
 }
 
 export function App() {
+  const location = useLocation();
   const [authed, setAuthed] = useState(false);
   const [ready, setReady] = useState(false);
-
-  const refresh = () => checkAuth().then(setAuthed).finally(() => setReady(true));
+  const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(() => checkAuth().then((value) => { setAuthed(value); setReady(true); setError(null); }), []);
   useEffect(() => {
-    void refresh();
-  }, []);
-
-  return (
-    <AuthContext.Provider value={{ authed, ready, refresh }}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          element={
-            <RequireAuth>
-              <ShellOutlet />
-            </RequireAuth>
-          }
-        >
-          <Route path="/" element={<Chat />} />
-          <Route path="/c/:sessionId" element={<Chat />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/help" element={<Help />} />
-          <Route path="/rss" element={<Rss />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/repositories" element={<Repositories />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthContext.Provider>
-  );
+    const expire = () => { setAuthed(false); setReady(true); };
+    window.addEventListener('auth-expired', expire);
+    void refresh().catch((reason: Error) => setError(reason.message));
+    return () => window.removeEventListener('auth-expired', expire);
+  }, [refresh]);
+  if (error && location.pathname !== '/login') return <ResourceState error={error} retry={() => { void refresh().catch((reason: Error) => setError(reason.message)); }} />;
+  return <AuthContext.Provider value={{ authed, ready, refresh }}><Suspense fallback={<ResourceState loading />}><Routes>
+    <Route path="/login" element={<Login />} />
+    <Route element={<ProtectedShell />}>
+      <Route path="/" element={<Activities />} />
+      <Route path="/runs/:runId" element={<ReviewDetail />} />
+      <Route path="/c/:sessionId" element={<ReviewDetail />} />
+      <Route path="/repositories" element={<Repositories />} />
+      <Route path="/models" element={<Models />} />
+      <Route path="/connections" element={<Connections />} />
+      <Route path="/rss" element={<Rss />} />
+    </Route>
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes></Suspense></AuthContext.Provider>;
 }

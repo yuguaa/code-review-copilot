@@ -1,0 +1,7 @@
+services:
+  app:
+    image: code-review-copilot-platform:20261016
+volumes:
+  postgres_data:
+    external: true
+    name: code-review-copilot_postgres_data

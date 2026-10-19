@@ -1,535 +1,137 @@
-/**
- * GitLab 服务模块
- * 
- * 封装 GitLab API v4 的所有交互逻辑，包括：
- * - 项目/仓库管理
- * - Merge Request 操作
- * - Commit 和 Diff 获取
- * - 评论发布
- */
+import axios from "axios";
 
-import axios, { AxiosInstance } from 'axios'
-import type { GitLabProject, GitLabMergeRequest, GitLabDiff, GitLabCommit, GitLabCompareResult, GitLabCommitComment, GitLabRepositoryTreeItem, GitLabBranch } from './gitlab-types'
-import { createLogger } from '../logger/logger.service';
-import {
-  buildCommitCommentPayload,
-  buildMergeRequestCommentPayload,
-  logGitLabApiError,
-  type CommitCommentOptions,
-  type GitLabApiError,
-  type GitLabCommentResult,
-  type GitLabDiscussionResult,
-  type GitLabWebhookResult,
-  type MergeRequestPosition,
-} from './gitlab-comments';
-import { fetchGitLabPages } from './gitlab-pagination';
+import { buildCommitCommentPayload, buildMergeRequestCommentPayload, gitLabDiscussion, parseCommitDiscussion } from "./gitlab-comments";
+import { fetchGitLabPages } from "./gitlab-pagination";
 
-const log = createLogger("GitLabService");
+import type { AxiosInstance } from "axios";
+import type { CommitCommentOptions, GitLabDiscussionResult, GitLabWebhookResult, MergeRequestPosition } from "./gitlab-comments";
+import type { GitLabBranch, GitLabCommit, GitLabCommitComment, GitLabCompareResult, GitLabDiff, GitLabMergeRequest, GitLabMergeRequestVersion, GitLabProject, GitLabRepositoryTreeItem } from "./gitlab-types";
 
-const GITLAB_REQUEST_TIMEOUT_MS = 30 * 1000
-
-/**
- * GitLab 服务类
- */
 export class GitLabService {
-  private client: AxiosInstance
+  private readonly client: AxiosInstance;
 
   constructor(baseUrl: string, accessToken: string) {
-    const normalizedBaseUrl = GitLabService.normalizeApiBaseUrl(baseUrl)
+    const url = new URL(baseUrl.trim());
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      throw new Error("GitLab 地址必须是 HTTP 或 HTTPS 实例地址");
+    }
+    if (!accessToken.trim()) throw new Error("缺少 GitLab accessToken");
+    const path = url.pathname.replace(/\/+$/, "").replace(/\/api\/v4$/, "");
     this.client = axios.create({
-      baseURL: normalizedBaseUrl,
-      headers: { 'PRIVATE-TOKEN': accessToken },
-      timeout: GITLAB_REQUEST_TIMEOUT_MS,
-    })
+      baseURL: `${url.origin}${path}/api/v4`,
+      headers: { "PRIVATE-TOKEN": accessToken },
+      timeout: 30_000,
+      maxRedirects: 0,
+    });
   }
 
-  /**
-   * 规范化 GitLab API 基础地址
-   */
-  private static normalizeApiBaseUrl(baseUrl: string): string {
-    const trimmedBaseUrl = baseUrl.trim()
-    const parsedUrl = new URL(trimmedBaseUrl)
-    const origin = parsedUrl.origin
-    return `${origin}/api/v4`
+  getProjects(search?: string, params?: { membership?: boolean; owned?: boolean; per_page?: number }): Promise<GitLabProject[]> {
+    return fetchGitLabPages({ client: this.client, path: "/projects",
+      params: { membership: true, ...params, search }, perPage: params?.per_page });
   }
 
-  /**
-   * 获取所有项目（仓库）
-   */
-  async getProjects(search?: string, params?: { membership?: boolean; owned?: boolean; per_page?: number }): Promise<GitLabProject[]> {
-    try {
-      const response = await this.client.get('/projects', {
-        params: {
-          membership: true,
-          per_page: 100,
-          search: search || undefined,
-          ...params,
-        },
-      })
-      return response.data
-    } catch (error) {
-      log.error('Failed to fetch GitLab projects:', error)
-      throw new Error('Failed to fetch projects from GitLab')
+  getProject(projectId: number | string): Promise<GitLabProject> {
+    return this.client.get<GitLabProject>(`/projects/${encodeURIComponent(projectId)}`).then((response) => response.data);
+  }
+
+  getMergeRequest(projectId: number | string, mrIid: number): Promise<GitLabMergeRequest> {
+    return this.client.get<GitLabMergeRequest>(`/projects/${encodeURIComponent(projectId)}/merge_requests/${mrIid}`)
+      .then((response) => response.data);
+  }
+
+  getMergeRequestVersions(projectId: number | string, mrIid: number): Promise<GitLabMergeRequestVersion[]> {
+    return fetchGitLabPages({ client: this.client,
+      path: `/projects/${encodeURIComponent(projectId)}/merge_requests/${mrIid}/versions` });
+  }
+
+  getMergeRequestDiffs(projectId: number | string, mrIid: number, versionId?: number): Promise<GitLabDiff[]> {
+    const path = `/projects/${encodeURIComponent(projectId)}/merge_requests/${mrIid}`;
+    if (versionId !== undefined) {
+      return this.client.get<{ diffs: GitLabDiff[]; overflow?: boolean }>(`${path}/versions/${versionId}`)
+        .then((response) => {
+          if (response.data.overflow) throw new Error("GitLab MR diff 超过服务端读取上限");
+          if (!Array.isArray(response.data.diffs)) throw new Error("GitLab MR version 缺少 diffs");
+          return response.data.diffs;
+        });
     }
+    return fetchGitLabPages({ client: this.client, path: `${path}/diffs` });
   }
 
-  /**
-   * 获取单个项目详情
-   */
-  async getProject(projectId: number | string): Promise<GitLabProject> {
-    try {
-      const response = await this.client.get(`/projects/${projectId}`)
-      return response.data
-    } catch (error) {
-      log.error('Failed to fetch GitLab project:', error)
-      throw new Error('Failed to fetch project from GitLab')
-    }
+  getCommit(projectId: number | string, sha: string): Promise<GitLabCommit> {
+    return this.client.get<GitLabCommit>(`/projects/${encodeURIComponent(projectId)}/repository/commits/${encodeURIComponent(sha)}`)
+      .then((response) => response.data);
   }
 
-  /**
-   * 获取项目的 Merge Requests
-   */
-  async getMergeRequests(projectId: number | string, params?: {
-    state?: 'opened' | 'closed' | 'merged'
-    order_by?: 'created_at' | 'updated_at'
-    sort?: 'asc' | 'desc'
-    per_page?: number
-  }): Promise<GitLabMergeRequest[]> {
-    try {
-      const response = await this.client.get(`/projects/${projectId}/merge_requests`, {
-        params: {
-          state: 'opened',
-          order_by: 'created_at',
-          sort: 'desc',
-          per_page: 100,
-          ...params,
-        },
-      })
-      return response.data
-    } catch (error) {
-      log.error('Failed to fetch merge requests:', error)
-      throw new Error('Failed to fetch merge requests from GitLab')
-    }
+  compare(projectId: number | string, fromSha: string, toSha: string): Promise<GitLabCompareResult> {
+    return this.client.get<GitLabCompareResult>(`/projects/${encodeURIComponent(projectId)}/repository/compare`, {
+      params: { from: fromSha, to: toSha, straight: true },
+    }).then((response) => {
+      if (response.data.compare_timeout) throw new Error("GitLab compare 超时，无法获取完整变更");
+      return response.data;
+    });
   }
 
-  /**
-   * 获取单个 Merge Request 详情
-   */
-  async getMergeRequest(projectId: number | string, mergeRequestIid: number): Promise<GitLabMergeRequest> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}`
-      )
-      return response.data
-    } catch (error) {
-      log.error('Failed to fetch merge request:', error)
-      throw new Error('Failed to fetch merge request from GitLab')
-    }
-  }
-
-  /**
-   * 获取 Merge Request 的 diffs
-   */
-  async getMergeRequestDiffs(projectId: number | string, mergeRequestIid: number): Promise<GitLabDiff[]> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/diffs`
-      )
-      return response.data
-    } catch (error) {
-      log.error('Failed to fetch merge request diffs:', error)
-      throw new Error('Failed to fetch merge request diffs from GitLab')
-    }
-  }
-
-  /**
-   * 获取 MR 的所有 Commits
-   * @param per_page 每页返回的 commit 数量，默认 100
-   */
-  async getMergeRequestCommits(projectId: number | string, mergeRequestIid: number, per_page: number = 100): Promise<GitLabCommit[]> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/commits`,
-        { params: { per_page } }
-      )
-      return response.data
-    } catch (error) {
-      log.error('Failed to fetch merge request commits:', error)
-      throw new Error('Failed to fetch merge request commits from GitLab')
-    }
-  }
-
-  /**
-   * 获取项目的提交列表（支持分页聚合）
-   */
-  async getProjectCommits(
-    projectId: number | string,
-    params?: {
-      since?: string
-      until?: string
-      ref_name?: string
-      author?: string
-      per_page?: number
-      max_pages?: number
-    }
-  ): Promise<GitLabCommit[]> {
-    const perPage = params?.per_page ?? 100
-    const maxPages = params?.max_pages ?? 200
-    try {
-      return await fetchGitLabPages<GitLabCommit>({
-        client: this.client,
-        path: `/projects/${projectId}/repository/commits`,
-        params: {
-          since: params?.since,
-          until: params?.until,
-          ref_name: params?.ref_name,
-          author: params?.author,
-        },
-        perPage,
-        maxPages,
-      })
-    } catch (error) {
-      log.error('Failed to fetch project commits:', error)
-      throw new Error('Failed to fetch project commits from GitLab')
-    }
-  }
-
-  /**
-   * 获取分支当前 HEAD
-   */
   getBranch(projectId: number | string, branch: string): Promise<GitLabBranch> {
-    const encodedBranch = encodeURIComponent(branch)
-    return this.client.get(`/projects/${projectId}/repository/branches/${encodedBranch}`)
-      .then((response) => response.data as GitLabBranch)
-      .catch((error) => {
-        log.error(`Failed to fetch GitLab branch: ${branch}`, error)
-        throw new Error(`Failed to fetch branch ${branch} from GitLab`)
-      })
+    return this.client.get<GitLabBranch>(`/projects/${encodeURIComponent(projectId)}/repository/branches/${encodeURIComponent(branch)}`)
+      .then((response) => response.data);
   }
 
-  /**
-   * 获取项目分支列表
-   */
   getBranches(projectId: number | string, params?: { search?: string; per_page?: number; max_pages?: number }): Promise<GitLabBranch[]> {
-    const perPage = params?.per_page ?? 100
-    const maxPages = params?.max_pages ?? 10
-    return fetchGitLabPages<GitLabBranch>({
-      client: this.client,
-      path: `/projects/${projectId}/repository/branches`,
-      params: {
-        search: params?.search,
-      },
-      perPage,
-      maxPages,
-    }).catch((error) => {
-      log.error('Failed to fetch GitLab branches:', error)
-      throw new Error('Failed to fetch branches from GitLab')
-    })
+    return fetchGitLabPages({ client: this.client, path: `/projects/${encodeURIComponent(projectId)}/repository/branches`,
+      params: { search: params?.search }, perPage: params?.per_page, maxPages: params?.max_pages });
   }
 
-  /**
-   * 获取 MR 的所有变更（使用 version API 获取完整 diff）
-   * 这是获取 MR 所有变更的正确方法，不会遗漏任何 commit 的变更
-   */
-  async getMergeRequestChanges(projectId: number | string, mergeRequestIid: number): Promise<GitLabDiff[]> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/changes`
-      )
-      return response.data.changes || response.data
-    } catch (error) {
-      log.error('Failed to fetch merge request changes:', error)
-      throw new Error('Failed to fetch merge request changes from GitLab')
-    }
+  getRepositoryTree(projectId: number | string, params: {
+    ref: string; path?: string; recursive?: boolean; per_page?: number; max_pages?: number;
+  }): Promise<GitLabRepositoryTreeItem[]> {
+    return fetchGitLabPages({ client: this.client, path: `/projects/${encodeURIComponent(projectId)}/repository/tree`,
+      params: { ref: params.ref, path: params.path, recursive: params.recursive ?? true },
+      perPage: params.per_page, maxPages: params.max_pages });
   }
 
-  /**
-   * 获取单个 commit 的 diff
-   */
-  async getCommitDiff(projectId: number | string, commitSha: string): Promise<GitLabDiff[]> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/repository/commits/${commitSha}/diff`
-      )
-      return response.data
-    } catch (error) {
-      log.error('Failed to fetch commit diff:', error)
-      throw new Error('Failed to fetch commit diff from GitLab')
-    }
-  }
-
-  /**
-   * 获取仓库文件树（支持分页聚合）
-   */
-  getRepositoryTree(
-    projectId: number | string,
-    params: {
-      ref: string
-      path?: string
-      recursive?: boolean
-      per_page?: number
-      max_pages?: number
-    }
-  ): Promise<GitLabRepositoryTreeItem[]> {
-    const perPage = params.per_page ?? 100
-    const maxPages = params.max_pages ?? 20
-    return fetchGitLabPages<GitLabRepositoryTreeItem>({
-      client: this.client,
-      path: `/projects/${projectId}/repository/tree`,
-      params: {
-        ref: params.ref,
-        path: params.path,
-        recursive: params.recursive ?? true,
-      },
-      perPage,
-      maxPages,
-    }).catch((error) => {
-      log.error('Failed to fetch repository tree:', error)
-      throw new Error('Failed to fetch repository tree from GitLab')
-    })
-  }
-
-  /**
-   * 获取指定 ref 下的原始文件内容
-   */
   getRepositoryFileRaw(projectId: number | string, filePath: string, ref: string): Promise<string> {
-    const encodedPath = encodeURIComponent(filePath)
-    return this.client.get(`/projects/${projectId}/repository/files/${encodedPath}/raw`, {
-      params: {
-        ref,
-      },
-      responseType: 'text',
-      transformResponse: [(data) => data],
-    }).then((response) => String(response.data || '')).catch((error) => {
-      log.error(`Failed to fetch repository file raw: ${filePath}`, error)
-      throw new Error(`Failed to fetch repository file ${filePath} from GitLab`)
-    })
+    return this.client.get<string>(`/projects/${encodeURIComponent(projectId)}/repository/files/${encodeURIComponent(filePath)}/raw`, {
+      params: { ref }, responseType: "text", transformResponse: [(data: string) => data],
+    }).then((response) => response.data);
   }
 
-  /**
-   * 获取两个提交之间的增量 diff
-   */
-  async compareCommits(
-    projectId: number | string,
-    fromSha: string,
-    toSha: string
-  ): Promise<GitLabCompareResult> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/repository/compare`,
-        {
-          params: {
-            from: fromSha,
-            to: toSha,
-            straight: true,
-          },
-        }
-      )
-      return response.data
-    } catch (error) {
-      log.error('Failed to compare commits:', error)
-      throw new Error('Failed to compare commits from GitLab')
-    }
+  listMergeRequestDiscussions(projectId: number | string, mrIid: number): Promise<GitLabDiscussionResult[]> {
+    return fetchGitLabPages<unknown>({ client: this.client,
+      path: `/projects/${encodeURIComponent(projectId)}/merge_requests/${mrIid}/discussions`,
+    }).then((discussions) => discussions.map((discussion) => gitLabDiscussion.parse(discussion)));
   }
 
-  /**
-   * 获取 Commit 评论列表（用于按自定义 marker 回查占位评论）
-   */
-  async getCommitComments(projectId: number | string, commitSha: string): Promise<GitLabCommitComment[]> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/repository/commits/${commitSha}/comments`
-      )
-      return Array.isArray(response.data) ? response.data : []
-    } catch (error) {
-      log.error('Failed to fetch commit comments:', error)
-      throw new Error('Failed to fetch commit comments from GitLab')
-    }
+  getCommitComments(projectId: number | string, sha: string): Promise<GitLabCommitComment[]> {
+    return fetchGitLabPages<unknown>({ client: this.client,
+      path: `/projects/${encodeURIComponent(projectId)}/repository/commits/${encodeURIComponent(sha)}/discussions`,
+    }).then((discussions) => discussions.flatMap(parseCommitDiscussion));
   }
 
-  /**
-   * 在 MR 中创建评论（支持行内评论）
-   */
-  async createMergeRequestComment(
-    projectId: number | string,
-    mergeRequestIid: number,
-    comment: string,
-    position?: MergeRequestPosition
-  ): Promise<GitLabDiscussionResult> {
-    try {
-      const response = await this.client.post(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions`,
-        buildMergeRequestCommentPayload(comment, position)
-      )
-      return response.data
-    } catch (error) {
-      logGitLabApiError(log, 'Failed to create MR comment:', error)
-      throw error
-    }
+  createMergeRequestComment(projectId: number | string, mrIid: number, comment: string, position?: MergeRequestPosition): Promise<GitLabDiscussionResult> {
+    return this.client.post(`/projects/${encodeURIComponent(projectId)}/merge_requests/${mrIid}/discussions`,
+      buildMergeRequestCommentPayload(comment, position)).then((response) => gitLabDiscussion.parse(response.data));
   }
 
-  /**
-   * 更新 MR 中的 Discussion 评论
-   * @param projectId - 项目 ID
-   * @param mergeRequestIid - MR IID
-   * @param discussionId - Discussion ID
-   * @param noteId - Note ID（评论的具体 ID）
-   * @param newBody - 新的评论内容
-   */
-  async updateMergeRequestComment(
-    projectId: number | string,
-    mergeRequestIid: number,
-    discussionId: string,
-    noteId: number,
-    newBody: string
-  ): Promise<GitLabCommentResult> {
-    try {
-      // GitLab API: PUT /projects/:id/merge_requests/:merge_request_iid/discussions/:discussion_id/notes/:note_id
-      const response = await this.client.put(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}/notes/${noteId}`,
-        { body: newBody }
-      )
-      return response.data
-    } catch (error) {
-      logGitLabApiError(log, 'Failed to update MR comment:', error)
-      throw new Error('Failed to update comment on GitLab MR')
-    }
+  createCommitComment(projectId: number | string, sha: string, comment: string, options?: CommitCommentOptions): Promise<GitLabCommitComment> {
+    const payload = options
+      ? this.getCommit(projectId, sha).then((commit) => buildCommitCommentPayload(comment, commit.id, commit.parent_ids[0], options))
+      : Promise.resolve(buildCommitCommentPayload(comment, sha));
+    return payload.then((data) => this.client.post(
+      `/projects/${encodeURIComponent(projectId)}/repository/commits/${encodeURIComponent(sha)}/discussions`, data,
+    )).then((response) => parseCommitDiscussion(response.data)[0]);
   }
 
-  /**
-   * 获取 MR Discussion 详情（用于补偿获取 noteId）
-   */
-  async getMergeRequestDiscussion(
-    projectId: number | string,
-    mergeRequestIid: number,
-    discussionId: string
-  ): Promise<{ id: string; notes?: Array<{ id: number }> }> {
-    try {
-      const response = await this.client.get(
-        `/projects/${projectId}/merge_requests/${mergeRequestIid}/discussions/${discussionId}`
-      )
-      return response.data
-    } catch (error) {
-      logGitLabApiError(log, 'Failed to fetch MR discussion:', error)
-      throw error
-    }
+  createProjectWebhook(projectId: number | string, webhookUrl: string, webhookSecret?: string): Promise<GitLabWebhookResult> {
+    return this.client.post<GitLabWebhookResult>(`/projects/${encodeURIComponent(projectId)}/hooks`, {
+      url: webhookUrl, merge_requests_events: true, push_events: true, token: webhookSecret,
+    }).then((response) => response.data);
   }
 
-  /**
-   * 更新 Commit 上的评论
-   * @param projectId - 项目 ID
-   * @param commitSha - Commit SHA
-   * @param noteId - Note ID（评论的具体 ID）
-   * @param newBody - 新的评论内容
-   */
-  async updateCommitComment(
-    projectId: number | string,
-    commitSha: string,
-    noteId: number,
-    newBody: string
-  ): Promise<GitLabCommentResult> {
-    const triedIds = [noteId]
-    let lastError: GitLabApiError | null = null
-
-    for (const id of triedIds) {
-      try {
-        const response = await this.client.put(
-          `/projects/${projectId}/repository/commits/${commitSha}/comments/${id}`,
-          { note: newBody }
-        )
-        return response.data
-      } catch (error) {
-        const apiError = error as GitLabApiError
-        lastError = apiError
-        if (apiError.response?.data) {
-          log.error('GitLab API error response:', JSON.stringify(apiError.response.data, null, 2))
-        }
-        log.error(`Failed to update commit comment with id=${id}:`, apiError.response?.status || error)
-      }
-    }
-
-    throw new Error(`Failed to update comment on GitLab commit (tried ids: ${triedIds.join(', ')})${lastError?.response?.status ? `, status=${lastError.response.status}` : ''}`)
-  }
-
-  /**
-   * 创建项目 webhook
-   */
-  async createProjectWebhook(
-    projectId: number | string,
-    webhookUrl: string,
-    webhookSecret?: string
-  ): Promise<GitLabWebhookResult> {
-    try {
-      const response = await this.client.post(`/projects/${projectId}/hooks`, {
-        url: webhookUrl,
-        merge_requests_events: true,
-        push_events: true,
-        token: webhookSecret,
-      })
-      return response.data
-    } catch (error) {
-      log.error('Failed to create webhook:', error)
-      throw new Error('Failed to create webhook on GitLab')
-    }
-  }
-
-  /**
-   * 在 Commit 上创建评论（用于 Push 事件）
-   */
-  async createCommitComment(
-    projectId: number | string,
-    commitSha: string,
-    comment: string,
-    options?: CommitCommentOptions
-  ): Promise<GitLabCommentResult> {
-    try {
-      const data = buildCommitCommentPayload(comment, options)
-
-      log.info('Creating commit comment with data:', JSON.stringify(data, null, 2))
-
-      const response = await this.client.post(
-        `/projects/${projectId}/repository/commits/${commitSha}/comments`,
-        data
-      )
-      return response.data
-    } catch (error) {
-      const apiError = error as GitLabApiError
-      // 如果带行号失败，重试不带行号
-      if (apiError.response?.status === 400 && options?.path) {
-        log.info('Retry without line info...')
-        try {
-          const response = await this.client.post(
-            `/projects/${projectId}/repository/commits/${commitSha}/comments`,
-            buildCommitCommentPayload(comment, options, false)
-          )
-          return response.data
-        } catch (retryError) {
-          log.error('Retry also failed:', retryError)
-        }
-      }
-
-      logGitLabApiError(log, 'Failed to create commit comment:', error)
-      throw new Error('Failed to create comment on GitLab commit')
-    }
-  }
-
-  /**
-   * 测试 GitLab 连接
-   */
-  async testConnection(): Promise<boolean> {
-    try {
-      const response = await this.client.get('/user')
-      return !!response.data
-    } catch (error) {
-      log.error('GitLab connection test failed:', error)
-      return false
-    }
+  testConnection(): Promise<boolean> {
+    return this.client.get("/user").then(() => true);
   }
 }
 
-/**
- * 创建 GitLab 服务实例
- */
 export function createGitLabService(baseUrl: string, accessToken: string): GitLabService {
-  return new GitLabService(baseUrl, accessToken)
+  return new GitLabService(baseUrl, accessToken);
 }

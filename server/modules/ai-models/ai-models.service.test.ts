@@ -1,42 +1,50 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-const findFirstMock = vi.hoisted(() => vi.fn());
+import { resolveGlobalModelConfig, resolveModel, resolveRepositoryModelConfig } from "./ai-models.service";
 
-vi.mock('../../infrastructure/prisma/prisma.service', () => ({
-  prisma: { aIModel: { findFirst: findFirstMock } },
-}));
+import type { AIModel } from "@prisma/client";
+import type { RepositoryModelConfig } from "./ai-models.service";
 
-import { loadActiveModelConfig } from './ai-models.service';
+const model: AIModel = {
+  id: "model-1", provider: "openai", modelId: "gpt-test", apiKey: "test-key",
+  apiBaseUrl: null, maxSteps: 16, isDefault: true, isActive: true,
+  createdAt: new Date(0), updatedAt: new Date(0),
+};
+const repository: RepositoryModelConfig = {
+  defaultAIModel: null, customProvider: null, customModelId: null,
+  customApiKey: null, customApiBaseUrl: null, customMaxSteps: null,
+};
 
-beforeEach(() => {
-  findFirstMock.mockReset();
+describe("模型选择", () => {
+  it("没有仓库模型时使用全局默认模型", () => {
+    expect(resolveRepositoryModelConfig(repository, model)).toMatchObject({ provider: "openai", modelId: "gpt-test" });
+  });
+  it("显式选择的停用模型立即失败", () => {
+    expect(() => resolveRepositoryModelConfig({ ...repository, defaultAIModel: { ...model, isActive: false } }, model)).toThrow("停用");
+  });
+  it("不完整的自定义配置立即失败", () => {
+    expect(() => resolveRepositoryModelConfig({ ...repository, customProvider: "anthropic" }, model)).toThrow("不完整");
+    expect(() => resolveRepositoryModelConfig({ ...repository, customMaxSteps: 8 }, model)).toThrow("不完整");
+  });
+  it("自定义模型不借用其他模型的参数", () => {
+    expect(resolveRepositoryModelConfig({
+      ...repository, customProvider: "anthropic", customModelId: "claude-test", customApiKey: "test-key",
+    }, { ...model, maxSteps: 40 })).toMatchObject({ modelId: "claude-test", maxSteps: 16 });
+  });
+  it("缺少默认模型时立即失败", () => {
+    expect(() => resolveGlobalModelConfig(null)).toThrow("默认模型");
+  });
 });
 
-describe('loadActiveModelConfig', () => {
-  it('resolves the exact active record by database id', async () => {
-    findFirstMock.mockResolvedValue({
-      id: 'model-2',
-      provider: 'openai-compatible',
-      modelId: 'same-name',
-      apiKey: 'second-key',
-      apiBaseUrl: 'https://second.test/v1',
-      maxSteps: 24,
-      isActive: true,
-    });
-
-    await expect(loadActiveModelConfig('model-2')).resolves.toEqual({
-      provider: 'openai-compatible',
-      modelId: 'same-name',
-      apiKey: 'second-key',
-      apiBaseUrl: 'https://second.test/v1',
-      maxSteps: 24,
-    });
-    expect(findFirstMock).toHaveBeenCalledWith({ where: { id: 'model-2', isActive: true } });
+describe("模型 Provider", () => {
+  it("使用真实 AI SDK 创建三个 Provider 的模型对象，不发起生成请求", () => {
+    for (const provider of ["openai", "anthropic", "openai-compatible"]) {
+      expect(resolveModel({ ...model, provider, apiBaseUrl: "https://example.com/v1" })).toMatchObject({ modelId: "gpt-test" });
+    }
   });
-
-  it('returns null when the record does not exist or is inactive', async () => {
-    findFirstMock.mockResolvedValue(null);
-
-    await expect(loadActiveModelConfig('inactive-model')).resolves.toBeNull();
+  it("无效 Provider、凭证和自定义地址立即失败", () => {
+    expect(() => resolveModel({ ...model, provider: "unknown" })).toThrow("不支持");
+    expect(() => resolveModel({ ...model, apiKey: " " })).toThrow("apiKey");
+    expect(() => resolveModel({ ...model, provider: "openai-compatible" })).toThrow("apiBaseUrl");
   });
 });

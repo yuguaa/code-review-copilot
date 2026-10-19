@@ -17,6 +17,7 @@ export default defineConfig({
     port: Number(process.env.PORT) || 5173,
     proxy: {
       '/api': 'http://localhost:8787',
+      '/observability': 'http://localhost:8787',
     },
   },
   build: {
