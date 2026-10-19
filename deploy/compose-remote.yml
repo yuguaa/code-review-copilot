@@ -1,6 +1,8 @@
 services:
   app:
-    image: code-review-copilot-platform:20261016
+    image: code-review-copilot-platform:20261019
+  security-worker:
+    image: code-review-copilot-platform:20261019
 volumes:
   postgres_data:
     external: true

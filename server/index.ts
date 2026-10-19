@@ -6,6 +6,7 @@ import { appConfig } from "./config/app.config";
 import { getMissingAuthEnv } from "./config/auth.config";
 import { prisma } from "./infrastructure/prisma/prisma.service";
 import { startRssScheduler, stopRssScheduler } from "./modules/rss/rss.scheduler";
+import { startSecurityScheduler, stopSecurityScheduler } from "./modules/security/security-scheduler";
 import { stopChatSessions } from "./platform/chat/chat-runtime";
 import { startRunWorker, stopRunWorker } from "./platform/runs/run-service";
 import { startTelemetry, stopTelemetry } from "./platform/telemetry/telemetry.service";
@@ -17,7 +18,7 @@ function shutdown(exitCode: number): void {
   if (closing) return;
   closing = true;
   server?.close();
-  Promise.allSettled([stopRunWorker(), stopRssScheduler(), stopChatSessions()])
+  Promise.allSettled([stopRunWorker(), stopRssScheduler(), stopSecurityScheduler(), stopChatSessions()])
     .then((results) => Promise.allSettled([stopTelemetry(), prisma.$disconnect()]).then((cleanup) => {
       process.exit(results.concat(cleanup).some((result) => result.status === "rejected") ? 1 : exitCode);
     }));
@@ -29,6 +30,7 @@ startup.then(() => startRunWorker(() => shutdown(1))).then(() => {
   if (closing) return;
   server = serve({ fetch: createApp().fetch, port: appConfig.port });
   startRssScheduler();
+  startSecurityScheduler();
   console.info(`平台服务已启动，端口 ${appConfig.port}`);
   process.once("SIGTERM", () => shutdown(0));
   process.once("SIGINT", () => shutdown(0));

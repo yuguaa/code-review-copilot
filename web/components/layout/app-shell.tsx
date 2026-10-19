@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIcon, BlocksIcon, ChartNoAxesCombinedIcon, FolderGit2Icon, HistoryIcon, LogOutIcon, MenuIcon, PlusIcon, RssIcon, Settings2Icon } from 'lucide-react';
+import { ActivityIcon, BlocksIcon, ChartNoAxesCombinedIcon, ClipboardListIcon, FolderGit2Icon, HistoryIcon, LogOutIcon, MenuIcon, PlusIcon, RssIcon, Settings2Icon, ShieldCheckIcon, TargetIcon } from 'lucide-react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@web/App';
@@ -18,6 +18,7 @@ import type { RepositoryItem, ReviewRun, RunStatus } from '@web/lib/types';
 
 const navigation = [
   { to: '/', label: 'Code Review', icon: ActivityIcon },
+  { to: '/security', label: '安全测试', icon: ShieldCheckIcon },
   { to: '/repositories', label: '仓库', icon: FolderGit2Icon },
   { to: '/models', label: '模型', icon: BlocksIcon },
   { to: '/connections', label: '连接器', icon: Settings2Icon },
@@ -26,6 +27,10 @@ const navigation = [
 
 function isCodeReviewPath(pathname: string) {
   return pathname === '/' || pathname.startsWith('/runs/') || pathname.startsWith('/c/');
+}
+
+function isSecurityPath(pathname: string) {
+  return pathname === '/security' || pathname.startsWith('/security/');
 }
 
 function isNavigationActive(pathname: string, to: string) {
@@ -86,6 +91,9 @@ export function AppShell() {
   const [repositoryId, setRepositoryId] = useState('');
   const location = useLocation();
   const codeReview = isCodeReviewPath(location.pathname);
+  const security = isSecurityPath(location.pathname);
+  const securityTicketsActive = location.pathname === '/security' || location.pathname.startsWith('/security/tickets/');
+  const securityTargetsActive = location.pathname === '/security/targets';
   const history = useResource<{ runs: ReviewRun[]; total: number }>(codeReview ? '/api/runs?page=1' : null);
   const repositories = useResource<{ repositories: RepositoryItem[] }>(createOpen ? '/api/repositories' : null);
   const action = useAction();
@@ -103,7 +111,11 @@ export function AppShell() {
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   const currentNavigation = navigation.find(({ to }) => isNavigationActive(location.pathname, to)) ?? navigation[0];
-  const currentPage = codeReview ? (location.pathname === '/' ? 'Review 历史记录' : '审查详情') : null;
+  const currentPage = codeReview
+    ? (location.pathname === '/' ? 'Review 历史记录' : '审查详情')
+    : security
+      ? (location.pathname === '/security/targets' ? '测试目标' : location.pathname.startsWith('/security/tickets/') ? '工单详情' : '工单')
+      : null;
   const logout = () => action.execute('logout', () => api('/api/auth/logout', { method: 'POST' }).then(auth.refresh).then(() => navigate('/login', { replace: true })));
   const historyCount = history.data?.total ?? 0;
   const historyMenu = <>
@@ -121,6 +133,20 @@ export function AppShell() {
       retry={() => { void history.reload(); }}
     />
   </>;
+  const securityMenu = <div className="flex flex-col gap-1 p-3">
+    <NavLink to="/security" className={cn(
+      'flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors',
+      securityTicketsActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'hover:bg-sidebar-accent',
+    )}>
+      <ClipboardListIcon className="size-4" />安全测试工单
+    </NavLink>
+    <NavLink to="/security/targets" className={cn(
+      'flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors',
+      securityTargetsActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'hover:bg-sidebar-accent',
+    )}>
+      <TargetIcon className="size-4" />测试目标
+    </NavLink>
+  </div>;
 
   return <TooltipProvider>
     <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:bg-background focus:p-3">跳转到主要内容</a>
@@ -150,13 +176,14 @@ export function AppShell() {
         </Tooltip>
       </nav>
       {codeReview && <aside className="hidden w-60 shrink-0 flex-col border-r md:flex" aria-label="Review 历史记录">{historyMenu}</aside>}
+      {security && <aside className="hidden w-60 shrink-0 border-r p-0 md:block" aria-label="安全测试导航">{securityMenu}</aside>}
       <div className="flex min-w-0 flex-1 flex-col bg-background md:m-2 md:ml-0 md:rounded-xl md:border">
         <div className="flex h-10 shrink-0 items-center gap-3 border-b px-4">
           <Button variant="ghost" size="icon-xs" className="md:hidden" aria-label="打开导航" onClick={() => setMobileOpen(true)}><MenuIcon /></Button>
           <span className="text-xs font-medium">{currentNavigation.label}</span>
           {currentPage && <><span className="text-border">/</span><span className="truncate text-xs text-muted-foreground">{currentPage}</span></>}
           <span className="flex-1" />
-          <Button variant="ghost" size="sm" onClick={() => setCreateOpen(true)}><PlusIcon />新建对话</Button>
+          {!security && <Button variant="ghost" size="sm" onClick={() => setCreateOpen(true)}><PlusIcon />新建对话</Button>}
         </div>
         <main id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col"><Outlet /></main>
       </div>
@@ -173,6 +200,7 @@ export function AppShell() {
             })}
           </nav>
           {codeReview && <div className="flex min-h-0 flex-1 flex-col">{historyMenu}</div>}
+          {security && <div className="border-b">{securityMenu}</div>}
           <div className="mt-auto flex gap-2 border-t p-3">
             <Button variant="outline" size="sm" className="flex-1" render={<a href="/observability/" />}><ChartNoAxesCombinedIcon />遥测</Button>
             <Button variant="ghost" size="sm" className="flex-1" disabled={Boolean(action.pending)} onClick={logout}><LogOutIcon />退出登录</Button>

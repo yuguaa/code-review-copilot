@@ -5,12 +5,13 @@ import { dingtalkRobotInput } from "@server/modules/settings/config-input";
 
 import type { Prisma } from "@prisma/client";
 
-const robotInclude = { _count: { select: { repositories: true, rssSubscriptions: true } } } satisfies Prisma.DingtalkRobotInclude;
+const robotInclude = { _count: { select: { repositories: true, rssSubscriptions: true, securityTargets: true } } } satisfies Prisma.DingtalkRobotInclude;
 
 function maskRobot(robot: Prisma.DingtalkRobotGetPayload<{ include: typeof robotInclude }>) {
   const { webhookUrl, secret, _count, ...rest } = robot;
   return { ...rest, hasWebhookUrl: Boolean(webhookUrl), hasSecret: Boolean(secret),
-    repositoryCount: _count.repositories, rssSubscriptionCount: _count.rssSubscriptions };
+    repositoryCount: _count.repositories, rssSubscriptionCount: _count.rssSubscriptions,
+    securityTargetCount: _count.securityTargets };
 }
 
 export function listDingtalkRobots() {
@@ -33,8 +34,8 @@ export function deleteDingtalkRobot(id: string) {
   return prisma.$transaction((transaction) => transaction.dingtalkRobot.findUniqueOrThrow({
     where: { id }, include: robotInclude,
   }).then((robot) => {
-    if (robot._count.repositories || robot._count.rssSubscriptions) {
-      throw new HTTPException(409, { message: "机器人仍被仓库或 RSS 订阅使用" });
+    if (robot._count.repositories || robot._count.rssSubscriptions || robot._count.securityTargets) {
+      throw new HTTPException(409, { message: "机器人仍被仓库、RSS 订阅或安全测试目标使用" });
     }
     return transaction.dingtalkRobot.delete({ where: { id } });
   })).then(() => ({ success: true }));

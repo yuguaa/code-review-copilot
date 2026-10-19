@@ -53,6 +53,9 @@ next-env.d.ts
 # 审查工作区（运行时 clone）
 /.workspaces
 
+# 安全测试证据与报告
+/.security-artifacts
+
 # local env
 .env
 .env.local

@@ -12,6 +12,7 @@
 - 模型：管理 OpenAI、Anthropic 和 OpenAI-compatible 端点，提供连通性检查。
 - 连接器：管理 GitLab 凭证和钉钉机器人。配置读取接口仅返回凭证是否已配置。
 - RSS：按间隔抓取，发送成功后登记条目，保留未发送内容。
+- 安全测试：登记授权目标、范围、测试身份和计划，工单进入 Pi Agent Runtime 后调用 agent-browser 和 HTTP 工具，保存流量、截图、漏洞与报告。
 - 遥测：使用同一个项目账号访问 Grafana，查看运行指标与完整 trace。
 
 前端使用 React、TypeScript、Vite、shadcn 和 NeUI Base UI 组件。内网 NeUI registry 配置在 `components.json`，可通过 shadcn MCP 检索组件。后端使用 Hono、Prisma 和 PostgreSQL。
@@ -34,6 +35,12 @@ APP_PUBLIC_URL=http://localhost:5173 npm run dev
 ```
 
 浏览器访问 `http://localhost:5173`。Hono 在端口 8787 提供 API，Vite 代理 `/api` 和 `/observability`。
+
+安全测试执行器单独运行：
+
+```bash
+npm run dev:security-worker
+```
 
 ## 审查执行
 
@@ -61,6 +68,16 @@ PostgreSQL 保存排队任务，单实例执行器最多并行处理两个运行
 
 `WORKSPACE_TTL_HOURS` 控制已完成运行的工作区保留时间，默认 72 小时。清理流程检查工作区最近使用时间。OCR 原生会话目录和数据库报告独立保存。
 
+## 安全测试
+
+安全测试菜单包含工单和测试目标。每个目标必须登记授权人、授权依据、授权截止时间和域名范围。测试身份的用户名可以读取，密码使用 AES-256-GCM 加密保存，接口只返回是否已经配置。
+
+手动工单和自动计划工单都只创建 PostgreSQL 排队记录。`security-worker` 单实例领取工单，使用 `@earendil-works/pi-coding-agent` 加载 `security-skills/hack`，只开放四个自定义工具：HTTP 请求、浏览器、记录发现、完成报告。浏览器通过 `agent-browser` 执行，域名范围由 Runtime 校验，并同时启用 `--allowed-domains` 和静态 action policy。
+
+每次执行保存 `SecurityExecution`、工具事件、HTTP 流量、结构化发现、截图和 Markdown/HTML 报告。证据文件写入 `security_artifacts` Docker 持久卷；PostgreSQL 保存索引、SHA-256 和文件元数据。工单失败、取消和进程中断都保留执行记录与部分报告。
+
+`security-skills/hack` 是基于 `yaklang/hack-skills` 的精简授权 Web/API 入口，固定上游提交，只保留授权检查、范围控制、影响优先、证据和报告流程。安装第三方 Skill 前需要通过静态审查和 Skill 安全扫描。
+
 ## Docker 与遥测
 
 在 `.env` 中填写 `POSTGRES_PASSWORD`、三个 `APP_AUTH_*` 字段、`APP_PORT` 和实际的 `APP_PUBLIC_URL`。数据库密码使用 URL 安全字符。
@@ -69,7 +86,7 @@ PostgreSQL 保存排队任务，单实例执行器最多并行处理两个运行
 docker compose up -d --build --wait
 ```
 
-Compose 部署应用、PostgreSQL、Collector、Tempo、Prometheus 和 Grafana。仅应用端口对外开放。Grafana 通过应用的 `/observability/` 认证代理访问；每次请求验证数据库会话，退出登录或更改凭证后已有会话失效。
+Compose 部署应用、安全测试执行器、PostgreSQL、Collector、Tempo、Prometheus 和 Grafana。仅应用端口对外开放。Grafana 通过应用的 `/observability/` 认证代理访问；每次请求验证数据库会话，退出登录或更改凭证后已有会话失效。
 
 平台向 OCR 传递 W3C `TRACEPARENT`，运行记录保存 trace ID。Collector 通过 OTLP/gRPC 接收平台与 OCR 的 trace 和指标；指标仅保留有限取值的属性。Tempo 保留 14 天 trace，Prometheus 保留 30 天指标。源码、模型凭证和完整请求正文不由平台遥测导出。
 
@@ -92,9 +109,14 @@ ssh liuchang sh /home/newcap/code-review-copilot-platform/deploy/deploy-remote.s
 npm run typecheck
 npm test
 npm run build
+npm run verify:security-tools
+npm run verify:security-api
+npm run verify:security-browser
 npm run verify:platform
 npm run verify:components
 ```
+
+`verify:security-tools` 使用真实 agent-browser 验证页面快照、HTTP 请求、截图和 action policy。`verify:security-api` 使用当前开发数据库创建目标、身份和工单。`verify:security-browser` 需要设置 `SECURITY_TICKET_ID` 与 `SECURITY_BROWSER_URL`，验证安全菜单、目标、工单详情、报告和移动端导航。
 
 `verify:platform` 使用 `.verification` 中的独立 PostgreSQL，在端口 55433 验证迁移、认证、配置保存、Webhook 幂等、运行取消和原生 OCR preview。它不会连接现有开发或部署数据库，也不会发送外部通知。每项验证上限为 60 秒，报告保存为对应运行目录中的 `report.json`。
 

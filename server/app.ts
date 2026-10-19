@@ -9,6 +9,7 @@ import { authRoutes } from "./modules/auth/auth.routes";
 import { chatRoutes } from "./modules/chat/chat.routes";
 import { repositoryRoutes } from "./modules/repositories/repositories.routes";
 import { rssRoutes } from "./modules/rss/rss.routes";
+import { securityRoutes } from "./modules/security/security.routes";
 import { sessionRoutes } from "./modules/sessions/sessions.routes";
 import { settingsRoutes } from "./modules/settings/settings.routes";
 import { webhookRoutes } from "./modules/webhook/webhook.routes";
@@ -36,6 +37,7 @@ export function createApp() {
   app.route("/api/chat", chatRoutes);
   app.route("/api/webhook", webhookRoutes);
   app.route("/api/rss", rssRoutes);
+  app.route("/api/security", securityRoutes);
   app.route("/observability", observabilityRoutes);
   app.onError((error, context) => {
     if (error instanceof HTTPException) return context.json({ error: error.message }, error.status);

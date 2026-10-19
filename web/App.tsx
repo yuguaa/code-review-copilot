@@ -12,6 +12,9 @@ const Repositories = lazy(() => import('@web/pages/repositories-page').then((mod
 const Models = lazy(() => import('@web/pages/models').then((module) => ({ default: module.Models })));
 const Connections = lazy(() => import('@web/pages/connections').then((module) => ({ default: module.Connections })));
 const Rss = lazy(() => import('@web/pages/rss-page').then((module) => ({ default: module.Rss })));
+const SecurityTickets = lazy(() => import('@web/pages/security-tickets-page').then((module) => ({ default: module.SecurityTicketsPage })));
+const SecurityTargets = lazy(() => import('@web/pages/security-targets-page').then((module) => ({ default: module.SecurityTargetsPage })));
+const SecurityTicketDetail = lazy(() => import('@web/pages/security-ticket-detail-page').then((module) => ({ default: module.SecurityTicketDetailPage })));
 const AuthContext = createContext<{ authed: boolean; ready: boolean; refresh: () => Promise<void> }>({ authed: false, ready: false, refresh: () => Promise.resolve() });
 
 export function useAuth() { return useContext(AuthContext); }
@@ -47,6 +50,9 @@ export function App() {
       <Route path="/models" element={<Models />} />
       <Route path="/connections" element={<Connections />} />
       <Route path="/rss" element={<Rss />} />
+      <Route path="/security" element={<SecurityTickets />} />
+      <Route path="/security/targets" element={<SecurityTargets />} />
+      <Route path="/security/tickets/:ticketId" element={<SecurityTicketDetail />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></Suspense></AuthContext.Provider>;

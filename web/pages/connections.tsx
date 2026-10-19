@@ -97,7 +97,7 @@ function NotificationPanel() {
     <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.robots.length === 0} title="尚未添加机器人" description="添加钉钉机器人的 Webhook 和签名配置。" retry={resource.reload} />
     {resource.data?.robots.map((robot) => <Card key={robot.id}>
       <CardHeader><CardTitle className="flex items-center gap-2">{robot.name}<Badge variant={robot.enabled ? 'outline' : 'secondary'}>{robot.enabled ? '已启用' : '已停用'}</Badge></CardTitle>
-        <CardDescription>Webhook：{robot.hasWebhookUrl ? '已配置' : '未配置'} · Secret：{robot.hasSecret ? '已配置' : '未配置'} · 仓库 {robot.repositoryCount} 个 · RSS {robot.rssSubscriptionCount} 个</CardDescription></CardHeader>
+      <CardDescription>Webhook：{robot.hasWebhookUrl ? '已配置' : '未配置'} · Secret：{robot.hasSecret ? '已配置' : '未配置'} · 仓库 {robot.repositoryCount} 个 · RSS {robot.rssSubscriptionCount} 个 · 安全目标 {robot.securityTargetCount} 个</CardDescription></CardHeader>
       <CardContent className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={Boolean(action.pending)} onClick={() => { setEditing(robot); setForm({ name: robot.name, webhookUrl: '', secret: '', enabled: robot.enabled }); setOpen(true); }}><PencilIcon />编辑</Button>
         <Button variant="outline" size="sm" disabled={Boolean(action.pending)} onClick={() => action.execute(robot.id, () => api(`/api/settings/dingtalk/${robot.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: !robot.enabled }) }).then(resource.reload))}>{robot.enabled ? '停用' : '启用'}</Button>

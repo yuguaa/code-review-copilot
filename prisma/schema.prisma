@@ -21,51 +21,53 @@ model GitLabAccount {
 }
 
 model AIModel {
-  id           String       @id @default(cuid())
-  provider     String
-  modelId      String
-  apiKey       String
-  apiBaseUrl   String?
-  maxSteps     Int          @default(16)
-  isDefault    Boolean      @default(false)
-  isActive     Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  repositories Repository[]
+  id              String           @id @default(cuid())
+  provider        String
+  modelId         String
+  apiKey          String
+  apiBaseUrl      String?
+  maxSteps        Int              @default(16)
+  isDefault       Boolean          @default(false)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  repositories    Repository[]
+  securityTargets SecurityTarget[]
 
   @@map("ai_models")
 }
 
 model Repository {
-  id                  String        @id @default(cuid())
+  id                  String           @id @default(cuid())
   gitLabAccountId     String
-  gitLabAccount       GitLabAccount @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
+  gitLabAccount       GitLabAccount    @relation(fields: [gitLabAccountId], references: [id], onDelete: Cascade)
   gitLabProjectId     Int
   name                String
   path                String
   description         String?
   watchBranches       String?
-  autoReview          Boolean       @default(true)
+  autoReview          Boolean          @default(true)
   defaultAIModelId    String?
-  defaultAIModel      AIModel?      @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
+  defaultAIModel      AIModel?         @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
   customProvider      String?
   customModelId       String?
   customApiKey        String?
   customApiBaseUrl    String?
   customMaxSteps      Int?
-  ocrConcurrency      Int           @default(2)
-  ocrTimeoutMinutes   Int           @default(10)
-  ocrMaxTokensBudget  Int           @default(200000)
+  ocrConcurrency      Int              @default(2)
+  ocrTimeoutMinutes   Int              @default(10)
+  ocrMaxTokensBudget  Int              @default(200000)
   defaultReviewPrompt String?
-  enableMrComment     Boolean       @default(false)
-  enableDingtalk      Boolean       @default(false)
+  enableMrComment     Boolean          @default(false)
+  enableDingtalk      Boolean          @default(false)
   dingtalkRobotId     String?
-  dingtalkRobot       DingtalkRobot? @relation(fields: [dingtalkRobotId], references: [id], onDelete: Restrict)
-  isActive            Boolean       @default(true)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  dingtalkRobot       DingtalkRobot?   @relation(fields: [dingtalkRobotId], references: [id], onDelete: Restrict)
+  isActive            Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
   sessions            Session[]
   runs                Run[]
+  securityTargets     SecurityTarget[]
 
   @@unique([gitLabProjectId, gitLabAccountId])
   @@index([defaultAIModelId])
@@ -165,15 +167,16 @@ model Message {
 }
 
 model DingtalkRobot {
-  id               String   @id @default(cuid())
+  id               String            @id @default(cuid())
   name             String
   webhookUrl       String
   secret           String?
-  enabled          Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  enabled          Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   repositories     Repository[]
   rssSubscriptions RssSubscription[]
+  securityTargets  SecurityTarget[]
 
   @@map("dingtalk_robots")
 }
@@ -184,12 +187,12 @@ model RssSubscription {
   url             String          @unique
   enabled         Boolean         @default(true)
   intervalMinutes Int             @default(30)
-  dingtalkRobotId  String?
-  dingtalkRobot    DingtalkRobot?   @relation(fields: [dingtalkRobotId], references: [id], onDelete: Restrict)
+  dingtalkRobotId String?
+  dingtalkRobot   DingtalkRobot?  @relation(fields: [dingtalkRobotId], references: [id], onDelete: Restrict)
   lastFetchedAt   DateTime?
   lastError       String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   items           RssPushedItem[]
 
   @@map("rss_subscriptions")
@@ -208,4 +211,181 @@ model RssPushedItem {
   @@unique([subscriptionId, guid])
   @@index([subscriptionId, pushedAt])
   @@map("rss_pushed_items")
+}
+
+model SecurityTarget {
+  id                      String             @id @default(cuid())
+  repositoryId            String?
+  repository              Repository?        @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  name                    String
+  baseUrl                 String
+  scopeDomains            Json               @default("[]")
+  authorizationOwner      String
+  authorizationReference  String
+  authorizedUntil         DateTime
+  scheduleEnabled         Boolean            @default(false)
+  scheduleIntervalMinutes Int                @default(1440)
+  nextScheduledAt         DateTime?
+  lastScheduledAt         DateTime?
+  isActive                Boolean            @default(true)
+  maxDurationMinutes      Int                @default(30)
+  defaultAIModelId        String?
+  defaultAIModel          AIModel?           @relation(fields: [defaultAIModelId], references: [id], onDelete: SetNull)
+  dingtalkRobotId         String?
+  dingtalkRobot           DingtalkRobot?     @relation(fields: [dingtalkRobotId], references: [id], onDelete: SetNull)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  identities              SecurityIdentity[]
+  tickets                 SecurityTicket[]
+
+  @@index([repositoryId])
+  @@index([defaultAIModelId])
+  @@index([dingtalkRobotId])
+  @@index([scheduleEnabled, nextScheduledAt])
+  @@map("security_targets")
+}
+
+model SecurityIdentity {
+  id               String         @id @default(cuid())
+  targetId         String
+  target           SecurityTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  name             String
+  role             String         @default("user")
+  username         String
+  secretCiphertext String
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([targetId, isActive])
+  @@map("security_identities")
+}
+
+model SecurityTicket {
+  id            String              @id @default(cuid())
+  targetId      String
+  target        SecurityTarget      @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  triggerType   String              @default("manual")
+  status        String              @default("queued")
+  requestedAt   DateTime            @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  error         String?
+  report        String?
+  summary       String?
+  riskScore     Int?
+  modelProvider String?
+  modelId       String?
+  skillVersion  String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  executions    SecurityExecution[]
+  findings      SecurityFinding[]
+  traffic       SecurityTraffic[]
+  artifacts     SecurityArtifact[]
+  events        SecurityEvent[]
+
+  @@index([targetId, createdAt])
+  @@index([status, createdAt])
+  @@map("security_tickets")
+}
+
+model SecurityExecution {
+  id             String             @id @default(cuid())
+  ticketId       String
+  ticket         SecurityTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  status         String             @default("running")
+  agentSessionId String?
+  traceId        String?
+  startedAt      DateTime           @default(now())
+  finishedAt     DateTime?
+  error          String?
+  rawResult      Json?
+  findings       SecurityFinding[]
+  traffic        SecurityTraffic[]
+  artifacts      SecurityArtifact[]
+  events         SecurityEvent[]
+
+  @@index([ticketId, startedAt])
+  @@map("security_executions")
+}
+
+model SecurityFinding {
+  id          String             @id @default(cuid())
+  ticketId    String
+  ticket      SecurityTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  executionId String?
+  execution   SecurityExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  fingerprint String
+  category    String?
+  severity    String
+  confidence  String             @default("medium")
+  title       String
+  description String
+  evidence    String
+  remediation String
+  status      String             @default("open")
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([ticketId, fingerprint])
+  @@index([ticketId, severity])
+  @@index([executionId])
+  @@map("security_findings")
+}
+
+model SecurityTraffic {
+  id              String             @id @default(cuid())
+  ticketId        String
+  ticket          SecurityTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  executionId     String?
+  execution       SecurityExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  method          String
+  url             String
+  statusCode      Int?
+  requestHeaders  Json?
+  responseHeaders Json?
+  bodyPreview     String?
+  contentHash     String?
+  durationMs      Int
+  createdAt       DateTime           @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([executionId])
+  @@map("security_traffic")
+}
+
+model SecurityArtifact {
+  id          String             @id @default(cuid())
+  ticketId    String
+  ticket      SecurityTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  executionId String?
+  execution   SecurityExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  type        String
+  filename    String
+  storagePath String
+  mimeType    String
+  sha256      String
+  sizeBytes   Int
+  createdAt   DateTime           @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([executionId])
+  @@map("security_artifacts")
+}
+
+model SecurityEvent {
+  id          String             @id @default(cuid())
+  ticketId    String
+  ticket      SecurityTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  executionId String?
+  execution   SecurityExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  type        String
+  message     String
+  data        Json?
+  createdAt   DateTime           @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([executionId])
+  @@map("security_events")
 }

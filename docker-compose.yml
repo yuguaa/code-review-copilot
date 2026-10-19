@@ -23,6 +23,13 @@ services:
       APP_AUTH_SESSION_SECRET: ${APP_AUTH_SESSION_SECRET:?APP_AUTH_SESSION_SECRET is required}
       WORKSPACE_ROOT: /app/.workspaces
       TMPDIR: /app/.workspaces/tmp
+      SECURITY_ARTIFACTS_ROOT: /app/security-artifacts
+      SECURITY_SKILLS_ROOT: /app/security-skills
+      SECURITY_ACTION_POLICY: /app/security-skills/hack/action-policy.json
+      AGENT_BROWSER_BIN: /app/node_modules/.bin/agent-browser
+      AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      AGENT_BROWSER_ARGS: --no-sandbox,--disable-dev-shm-usage
+      ZAP_API_URL: ${ZAP_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_INSECURE: 'true'
@@ -32,6 +39,7 @@ services:
       - '${APP_PORT:-8787}:8787'
     volumes:
       - workspace_data:/app/.workspaces
+      - security_artifacts:/app/security-artifacts
     networks: [default, database, telemetry]
     healthcheck:
       test: ['CMD', 'node', '-e', 'fetch("http://127.0.0.1:8787/healthz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
@@ -39,6 +47,37 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  security-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ['sh', './deploy/security-worker-entrypoint.sh']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://code_review:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/code_review_copilot?schema=public
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8787}
+      APP_AUTH_SESSION_SECRET: ${APP_AUTH_SESSION_SECRET:?APP_AUTH_SESSION_SECRET is required}
+      WORKSPACE_ROOT: /app/.workspaces
+      TMPDIR: /app/.workspaces/tmp
+      SECURITY_ARTIFACTS_ROOT: /app/security-artifacts
+      SECURITY_SKILLS_ROOT: /app/security-skills
+      SECURITY_ACTION_POLICY: /app/security-skills/hack/action-policy.json
+      AGENT_BROWSER_BIN: /app/node_modules/.bin/agent-browser
+      AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      AGENT_BROWSER_ARGS: --no-sandbox,--disable-dev-shm-usage
+      ZAP_API_URL: ${ZAP_API_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - workspace_data:/app/.workspaces
+      - security_artifacts:/app/security-artifacts
+    networks: [default, database]
 
   postgres:
     image: postgres:16.15-alpine3.24
@@ -142,6 +181,7 @@ networks:
 volumes:
   postgres_data:
   workspace_data:
+  security_artifacts:
   grafana_data:
   tempo_data:
   prometheus_data:

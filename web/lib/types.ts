@@ -49,10 +49,146 @@ export type Repository = RepositoryItem & {
 };
 export type DingtalkRobot = {
   id: string; name: string; enabled: boolean; hasWebhookUrl: boolean; hasSecret: boolean;
-  repositoryCount: number; rssSubscriptionCount: number;
+  repositoryCount: number; rssSubscriptionCount: number; securityTargetCount: number;
 };
 export type GitLabAccount = { id: string; url: string; isActive: boolean; hasAccessToken: boolean; hasWebhookSecret: boolean };
 export type RssSubscriptionItem = {
   id: string; name: string; url: string; enabled: boolean; intervalMinutes: number; dingtalkRobotId: string | null;
   lastFetchedAt: string | null; lastError: string | null; pushedCount: number;
+};
+
+export type SecurityTarget = {
+  id: string;
+  repositoryId: string | null;
+  name: string;
+  baseUrl: string;
+  scopeDomains: string[];
+  authorizationOwner: string;
+  authorizationReference: string;
+  authorizedUntil: string;
+  scheduleEnabled: boolean;
+  scheduleIntervalMinutes: number;
+  nextScheduledAt: string | null;
+  lastScheduledAt: string | null;
+  isActive: boolean;
+  maxDurationMinutes: number;
+  defaultAIModelId: string | null;
+  dingtalkRobotId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SecurityIdentity = {
+  id: string;
+  targetId: string;
+  name: string;
+  role: string;
+  username: string;
+  hasPassword: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SecurityTicketStatus =
+  | 'queued'
+  | 'running'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
+export type SecuritySeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+export type SecurityFinding = {
+  id: string;
+  ticketId: string;
+  executionId: string | null;
+  fingerprint: string;
+  category: string | null;
+  severity: SecuritySeverity;
+  confidence: string;
+  title: string;
+  description: string;
+  evidence: string;
+  remediation: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SecurityExecution = {
+  id: string;
+  ticketId: string;
+  status: string;
+  agentSessionId: string | null;
+  traceId: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  rawResult: unknown;
+};
+
+export type SecurityTraffic = {
+  id: string;
+  ticketId: string;
+  executionId: string | null;
+  method: string;
+  url: string;
+  statusCode: number | null;
+  bodyPreview: string | null;
+  contentHash: string | null;
+  durationMs: number;
+  createdAt: string;
+};
+
+export type SecurityArtifact = {
+  id: string;
+  ticketId: string;
+  executionId: string | null;
+  type: string;
+  filename: string;
+  mimeType: string;
+  sha256: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
+export type SecurityEvent = {
+  id: string;
+  ticketId: string;
+  executionId: string | null;
+  type: string;
+  message: string;
+  data: unknown;
+  createdAt: string;
+};
+
+export type SecurityTicketSummary = {
+  id: string;
+  targetId: string;
+  triggerType: string;
+  status: SecurityTicketStatus;
+  requestedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  summary: string | null;
+  riskScore: number | null;
+  modelProvider: string | null;
+  modelId: string | null;
+  skillVersion: string | null;
+  createdAt: string;
+  updatedAt: string;
+  target: SecurityTarget;
+};
+
+export type SecurityTicketDetail = SecurityTicketSummary & {
+  report: string | null;
+  executions: SecurityExecution[];
+  findings: SecurityFinding[];
+  traffic: SecurityTraffic[];
+  artifacts: SecurityArtifact[];
+  events: SecurityEvent[];
 };
