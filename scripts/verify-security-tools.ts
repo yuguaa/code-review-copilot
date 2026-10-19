@@ -42,7 +42,9 @@ tool.execute("open", { action: "open", url: "https://example.com" }, undefined, 
   .then(() => tool.execute("screenshot", { action: "screenshot", filename: screenshotName }, undefined, undefined, {} as never))
   .then(() => tool.execute("close", { action: "close" }, undefined, undefined, {} as never))
   .then(() => {
-    if (artifacts.length !== 1) throw new Error(`截图 artifact 数量错误：${artifacts.length}`);
+    if (artifacts.length !== 2 || artifacts.some((artifact) => artifact.type !== "screenshot")) {
+      throw new Error(`截图 artifact 数量或类型错误：${JSON.stringify(artifacts)}`);
+    }
     if (traffic.length < 2) throw new Error(`流量记录数量错误：${JSON.stringify(traffic)}`);
     if (!traffic.some((entry) => entry.durationMs === 0 && entry.statusCode === 200)) {
       throw new Error(`浏览器网络请求未记录：${JSON.stringify(traffic)}`);

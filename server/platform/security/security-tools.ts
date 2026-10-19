@@ -484,7 +484,12 @@ async function executeBrowserAction(
         action: "open",
         signal,
       });
-      return textResult(output.trim() || "页面已经打开", { action: "open", url });
+      const screenshot = await captureBrowserScreenshot(host, `page-${Date.now()}.png`, signal);
+      return textResult(`${output.trim() || "页面已经打开"}\n截图已经保存：${screenshot.filename}`, {
+        action: "open",
+        url,
+        screenshot,
+      });
     }
     case "snapshot": {
       const output = await runAgentBrowserCommand(host.agentBrowserBin, browserCommandArgs(host, ["snapshot", "-i", "--json"]), {
@@ -586,19 +591,7 @@ async function executeBrowserAction(
     }
     case "screenshot": {
       const filename = params.filename ?? `screenshot-${Date.now()}.png`;
-      const location = {
-        artifactRoot: host.artifactRoot,
-        ticketId: host.ticketId,
-        executionId: host.executionId,
-        filename,
-      };
-      const storagePath = await createSecurityArtifactTarget(location);
-      await runAgentBrowserCommand(host.agentBrowserBin, browserCommandArgs(host, ["screenshot", storagePath, "--json"]), {
-        action: "screenshot",
-        signal,
-      });
-      const metadata = await describeSecurityArtifact(location);
-      await host.recordArtifact({ ...metadata, type: "screenshot" });
+      const metadata = await captureBrowserScreenshot(host, filename, signal);
       return textResult(`截图已经保存：${metadata.filename}`, {
         action: "screenshot",
         ...metadata,
@@ -612,6 +605,27 @@ async function executeBrowserAction(
       return textResult("浏览器会话已经关闭", { action: "close" });
     }
   }
+}
+
+async function captureBrowserScreenshot(
+  host: SecurityToolHost,
+  filename: string,
+  signal: AbortSignal | undefined,
+) {
+  const location = {
+    artifactRoot: host.artifactRoot,
+    ticketId: host.ticketId,
+    executionId: host.executionId,
+    filename,
+  };
+  const storagePath = await createSecurityArtifactTarget(location);
+  await runAgentBrowserCommand(host.agentBrowserBin, browserCommandArgs(host, ["screenshot", storagePath, "--json"]), {
+    action: "screenshot",
+    signal,
+  });
+  const metadata = await describeSecurityArtifact(location);
+  await host.recordArtifact({ ...metadata, type: "screenshot" });
+  return metadata;
 }
 
 export function closeSecurityBrowserSession(host: BrowserCommandHost): Promise<void> {

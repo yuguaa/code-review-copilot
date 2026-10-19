@@ -69,8 +69,9 @@ try {
   await page.goto(`${origin}/security/tickets/${ticket.id}`);
   await page.getByRole("heading", { name: targetName, exact: true }).waitFor();
 
+  const waitAttempts = Math.ceil(((maxDurationMinutes + 2) * 60_000) / 2_000);
   let detail;
-  for (let attempt = 0; attempt < 90; attempt += 1) {
+  for (let attempt = 0; attempt < waitAttempts; attempt += 1) {
     const response = await context.request.get(`${origin}/api/security/tickets/${ticket.id}`);
     assert.equal(response.status(), 200);
     detail = (await response.json()).ticket;
