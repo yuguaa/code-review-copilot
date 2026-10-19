@@ -34,12 +34,18 @@ try {
   await page.goto(`${origin}/login`);
   await page.getByLabel("账号", { exact: true }).fill(username);
   await page.getByLabel("密码", { exact: true }).fill(password);
-  const activitiesLoaded = waitForData(["/api/runs", "/api/repositories"]);
+  const activitiesLoaded = waitForData(["/api/runs", "/api/repositories", "/api/sessions"]);
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await activitiesLoaded;
   await page.waitForURL(`${origin}/`, { timeout: 15_000 });
   await page.getByRole("heading", { name: "活动", exact: true }).waitFor();
   await assertLoaded();
+  const chatSessionsResponse = await context.request.get(`${origin}/api/sessions?kind=chat`);
+  assert.equal(chatSessionsResponse.status(), 200);
+  const chatSessions = (await chatSessionsResponse.json()).sessions;
+  const sidebarSessionIds = await page.locator('aside[aria-label="工作空间导航"] a[href^="/c/"]').evaluateAll((links) =>
+    links.map((link) => new URL(link.href).pathname.split("/").at(-1)));
+  assert.deepEqual(sidebarSessionIds, chatSessions.map((session) => session.id), "最近对话包含非对话会话");
   console.info("浏览器：登录与活动页面通过");
   const repositoriesResponse = await context.request.get(`${origin}/api/repositories`);
   assert.equal(repositoriesResponse.status(), 200);
