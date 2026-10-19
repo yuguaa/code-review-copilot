@@ -16,6 +16,9 @@ const valueOf = (key) => environment.find((value) => value.startsWith(`${key}=`)
 const username = valueOf("APP_AUTH_USERNAME");
 const password = valueOf("APP_AUTH_SECRET");
 assert(username && password, "部署服务缺少登录配置");
+const runId = Date.now().toString(36);
+const targetName = `平台安全测试部署验证 ${runId}`;
+const authorizationReference = `DEPLOY-SECURITY-SELF-CHECK-${runId}`;
 
 const browser = await chromium.launch({
   headless: true,
@@ -35,11 +38,11 @@ try {
 
   const targetResponse = await context.request.post(`${origin}/api/security/targets`, {
     data: {
-      name: "平台安全测试部署验证",
-      baseUrl: "http://app:8787",
-      scopeDomains: ["app"],
+      name: targetName,
+      baseUrl: "http://app.localhost:8787",
+      scopeDomains: ["app.localhost"],
       authorizationOwner: "平台管理员",
-      authorizationReference: "DEPLOY-SECURITY-SELF-CHECK",
+      authorizationReference,
       authorizedUntil: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
       scheduleEnabled: false,
       scheduleIntervalMinutes: 1440,
@@ -55,13 +58,13 @@ try {
 
   await page.goto(`${origin}/security`);
   await page.getByRole("heading", { name: "安全测试工单", exact: true }).waitFor();
-  await expect(page.getByText("平台安全测试部署验证", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(targetName, { exact: true }).first()).toBeVisible();
   await expect(page.locator('aside[aria-label="安全测试导航"]')).toBeVisible();
   await page.getByRole("link", { name: "测试目标", exact: true }).click();
   await page.getByRole("heading", { name: "测试目标", exact: true }).waitFor();
-  await expect(page.getByText("DEPLOY-SECURITY-SELF-CHECK", { exact: true })).toBeVisible();
+  await expect(page.getByText(authorizationReference, { exact: true }).first()).toBeVisible();
   await page.goto(`${origin}/security/tickets/${ticket.id}`);
-  await page.getByRole("heading", { name: "平台安全测试部署验证", exact: true }).waitFor();
+  await page.getByRole("heading", { name: targetName, exact: true }).waitFor();
 
   let detail;
   for (let attempt = 0; attempt < 90; attempt += 1) {

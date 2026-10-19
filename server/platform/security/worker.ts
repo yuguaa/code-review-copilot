@@ -422,7 +422,11 @@ function pump(): Promise<void> {
     }).finally(() => {
       clearInterval(cancelPoll);
       active.delete(ticket.id);
-      if (!stopping) return pump();
+      if (!stopping) {
+        setTimeout(() => {
+          void pump().catch(failWorker);
+        }, 0);
+      }
     });
     active.set(ticket.id, { controller, promise });
     return promise;
