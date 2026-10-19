@@ -86,7 +86,7 @@ export function SecurityTicketDetailPage() {
       <Button variant="outline" size="sm" render={<NavLink to="/security" />}><ArrowLeftIcon />返回工单</Button>
       {ticket && isSecurityRunning(ticket.status) && <Button variant="outline" size="sm" disabled={Boolean(action.pending)} onClick={cancel}><XCircleIcon />取消</Button>}
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <ActionError error={action.error} />
       <ResourceState loading={resource.loading && !ticket} error={resource.error} retry={resource.reload} />
       {ticket && <div className="flex flex-col gap-6">

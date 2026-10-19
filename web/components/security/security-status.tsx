@@ -28,24 +28,30 @@ export function securityStatusDotClass(status: SecurityTicketStatus) {
   return 'bg-muted-foreground/50';
 }
 
+function securityStatusVariant(status: SecurityTicketStatus) {
+  if (status === 'completed') return 'success-light' as const;
+  if (status === 'failed' || status === 'interrupted') return 'destructive-light' as const;
+  if (status === 'running' || status === 'queued') return 'info-light' as const;
+  if (status === 'cancelling') return 'warning-light' as const;
+  return 'secondary' as const;
+}
+
+function securitySeverityVariant(severity: SecuritySeverity) {
+  if (severity === 'critical' || severity === 'high') return 'destructive-light' as const;
+  if (severity === 'medium') return 'warning-light' as const;
+  if (severity === 'low') return 'info-light' as const;
+  return 'secondary' as const;
+}
+
 export function SecurityStatusBadge({ status }: { status: SecurityTicketStatus }) {
-  return <Badge variant="outline" className={cn(
-    status === 'completed' && 'border-success/40 text-success',
-    (status === 'failed' || status === 'interrupted') && 'border-destructive/40 text-destructive',
-    status === 'running' && 'border-info/40 text-info',
-  )}>
+  return <Badge variant={securityStatusVariant(status)}>
     <span className={cn('size-1.5 rounded-full', securityStatusDotClass(status))} />
     {securityStatusLabels[status]}
   </Badge>;
 }
 
 export function SecuritySeverityBadge({ severity }: { severity: SecuritySeverity }) {
-  return <Badge variant="outline" className={cn(
-    severity === 'critical' && 'border-destructive bg-destructive/10 text-destructive',
-    severity === 'high' && 'border-orange-500/50 bg-orange-500/10 text-orange-600',
-    severity === 'medium' && 'border-amber-500/50 bg-amber-500/10 text-amber-700',
-    severity === 'low' && 'border-sky-500/50 bg-sky-500/10 text-sky-700',
-  )}>
+  return <Badge variant={securitySeverityVariant(severity)}>
     {securitySeverityLabels[severity]}
   </Badge>;
 }

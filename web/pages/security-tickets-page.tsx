@@ -61,12 +61,12 @@ export function SecurityTicketsPage() {
     <ShellHeader title="安全测试工单" meta="工单驱动 Agent Runtime，执行授权 Web/API 安全测试">
       <Button onClick={() => setCreateOpen(true)}><PlusIcon />新建工单</Button>
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <ActionError error={action.error} />
       <ResourceState loading={tickets.loading && !tickets.data} error={tickets.error}
         empty={tickets.data?.tickets.length === 0} title="还没有安全测试工单"
         description="先配置测试目标，再发起手动工单或等待计划触发。" retry={tickets.reload} />
-      {tickets.data && tickets.data.tickets.length > 0 && <div className="overflow-hidden rounded-xl border bg-card">
+      {tickets.data && tickets.data.tickets.length > 0 && <div className="overflow-hidden rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>

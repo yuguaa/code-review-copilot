@@ -56,7 +56,7 @@ export function Rss() {
     <ShellHeader title="RSS 订阅" meta="定时抓取订阅内容并发送钉钉通知">
       <Button onClick={() => { setEditing(null); setForm(emptyForm); setOpen(true); }}><PlusIcon />添加订阅</Button>
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <ActionError error={action.error} />
       <ResourceState loading={false} error={robots.error} retry={robots.reload} />
       <ResourceState loading={resource.loading && !resource.data} error={resource.error}

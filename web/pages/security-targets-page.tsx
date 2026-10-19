@@ -64,7 +64,7 @@ export function SecurityTargetsPage() {
     <ShellHeader title="测试目标" meta="管理授权范围、测试身份和自动执行计划">
       <Button onClick={() => { setEditing(null); setEditorOpen(true); }}><PlusIcon />新增目标</Button>
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <ActionError error={action.error} />
       <ResourceState loading={targets.loading && !targets.data} error={targets.error}
         empty={targets.data?.targets.length === 0} title="尚未配置安全测试目标"

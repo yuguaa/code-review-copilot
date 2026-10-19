@@ -121,5 +121,5 @@ function NotificationPanel() {
 }
 
 export function Connections() {
-  return <><ShellHeader title="连接器" meta="GitLab 访问凭证与钉钉通知" /><div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7"><Tabs defaultValue="gitlab"><TabsList variant="line"><TabsTrigger value="gitlab">GitLab</TabsTrigger><TabsTrigger value="dingtalk">钉钉</TabsTrigger></TabsList><TabsContent value="gitlab" className="pt-6"><GitLabPanel /></TabsContent><TabsContent value="dingtalk" className="pt-6"><NotificationPanel /></TabsContent></Tabs></div></>;
+  return <><ShellHeader title="连接器" meta="GitLab 访问凭证与钉钉通知" /><div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><Tabs defaultValue="gitlab"><TabsList variant="line"><TabsTrigger value="gitlab">GitLab</TabsTrigger><TabsTrigger value="dingtalk">钉钉</TabsTrigger></TabsList><TabsContent value="gitlab" className="pt-5"><GitLabPanel /></TabsContent><TabsContent value="dingtalk" className="pt-5"><NotificationPanel /></TabsContent></Tabs></div></>;
 }

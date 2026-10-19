@@ -24,7 +24,7 @@ export function Modal({
       }}
     >
       <DialogContent className={cn('max-h-[85vh] overflow-y-auto', maxWidth)}>
-        <DialogHeader>
+        <DialogHeader className="border-b border-border/70 pb-3">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {children}

@@ -13,7 +13,7 @@ export function Textarea(props: ComponentProps<'textarea'>) {
 }
 
 const SELECT_CLASS =
-  'h-8 w-full min-w-0 cursor-pointer rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+  'h-8 w-full min-w-0 cursor-pointer rounded-md border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 原生下拉：配置项数量有限，直接用 select 保持表单语义与键盘行为。 */
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {

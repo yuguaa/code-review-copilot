@@ -45,7 +45,7 @@ export function Models() {
 
   return <>
     <ShellHeader title="模型" meta="管理 OCR 审查和追问使用的模型"><Button onClick={() => { setEditing(null); setForm({ ...emptyForm, isDefault: resource.data?.models.length === 0 }); setOpen(true); }}><PlusIcon />添加模型</Button></ShellHeader>
-    <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-7">
+    <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
       <ActionError error={action.error} />
       <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.models.length === 0} title="尚未配置模型" description="添加 Provider、Model ID 和 API Key 后，仓库可以选择对应模型。" retry={resource.reload} />
       {resource.data && resource.data.models.length > 0 && <div className="overflow-hidden rounded-lg border"><Table>
