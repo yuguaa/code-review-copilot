@@ -115,7 +115,8 @@ function buildSystemPrompt(): string {
     "只执行当前工单授权范围内的测试，严格遵守授权截止时间和目标范围。",
     "只使用 security_http_request、security_browser、security_record_finding、security_finish 四个工具。",
     "不得输出或记录密码、API Key、Cookie 和其他凭据。",
-    "所有发现必须有可复核证据，并在结束前调用 security_finish。",
+    "所有发现必须有可复核证据。",
+    "在输出任何最终结论之前，必须调用 security_finish；未调用 security_finish 的结果视为协议失败。",
   ].join("\n");
 }
 
@@ -159,7 +160,8 @@ function buildPrompt(options: {
     "- 登录只通过 identityId 和登录工具完成，禁止索取、输出或记录密码。",
     "- 禁止删除、批量写入、密码猜测、DoS、提权、横向移动、反向 Shell、EDR 规避、无线网络、AD 和二进制利用。",
     "- 每个发现调用 security_record_finding，保存结构化证据和修复建议。",
-    "- 必须调用 security_finish 恰好一次，保存摘要、风险评分和 Markdown 报告。",
+    "- 在输出最终回答之前必须调用 security_finish，保存摘要、风险评分和 Markdown 报告。",
+    "- security_finish 每次执行只调用一次。",
   ].join("\n");
 }
 
@@ -310,7 +312,8 @@ export async function createSecurityAgent(
       sessionManager: SessionManager.inMemory(),
       settingsManager,
     });
-    session = created.session;
+    const activeSession = created.session;
+    session = activeSession;
 
     const enqueueEvent = (type: string, message: string, data: Record<string, unknown>) => {
       eventQueue = eventQueue.then(() => Promise.resolve(options.callbacks.recordEvent({
@@ -327,7 +330,7 @@ export async function createSecurityAgent(
       });
     };
 
-    unsubscribe = session.subscribe((event) => {
+    unsubscribe = activeSession.subscribe((event) => {
       if (event.type === "tool_execution_start") {
         enqueueEvent("tool.start", `工具 ${event.toolName} 开始执行`, {
           toolCallId: event.toolCallId,
@@ -346,7 +349,7 @@ export async function createSecurityAgent(
     });
 
     abortSession = () => {
-      void session?.abort().catch((error: unknown) => {
+      void activeSession.abort().catch((error: unknown) => {
         if (!eventError) eventError = error;
       });
     };
@@ -365,20 +368,28 @@ export async function createSecurityAgent(
     });
 
     let promptError: unknown;
-    await session.prompt(prompt).catch((error: unknown) => {
+    const runPrompt = (value: string) => activeSession.prompt(value).catch((error: unknown) => {
       promptError = error;
-    });
-    await eventQueue.catch((error: unknown) => {
+    }).then(() => eventQueue.catch((error: unknown) => {
       if (!eventError) eventError = error;
-    });
+    }));
+
+    await runPrompt(prompt);
+    if (!promptError && !eventError && !finished) {
+      await runPrompt([
+        "协议未完成：上一轮回复没有调用 security_finish。",
+        "现在必须调用 security_finish，保存摘要、风险评分和 Markdown 报告。",
+        "不要在调用 security_finish 之前输出最终回答。",
+      ].join("\n"));
+    }
 
     if (eventError) throw eventError;
     if (promptError) throw promptError;
     throwIfAborted(controller.signal);
-    if (!finished) throw new Error("Agent 未调用 security_finish");
+    if (!finished) throw new Error("Agent 连续未调用 security_finish，执行协议失败");
 
     return {
-      sessionId: session.sessionId,
+      sessionId: activeSession.sessionId,
       summary: finished.summary,
       riskScore: finished.riskScore,
       report: finished.report,

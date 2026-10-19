@@ -112,11 +112,12 @@ npm run build
 npm run verify:security-tools
 npm run verify:security-api
 npm run verify:security-browser
+npm run verify:security-deployed
 npm run verify:platform
 npm run verify:components
 ```
 
-`verify:security-tools` 使用真实 agent-browser 验证页面快照、HTTP 请求、截图和 action policy。`verify:security-api` 使用当前开发数据库创建目标、身份和工单。`verify:security-browser` 需要设置 `SECURITY_TICKET_ID` 与 `SECURITY_BROWSER_URL`，验证安全菜单、目标、工单详情、报告和移动端导航。
+`verify:security-tools` 使用真实 agent-browser 验证页面快照、HTTP 请求、截图和 action policy。`verify:security-api` 使用当前开发数据库创建目标、身份和工单。`verify:security-browser` 需要设置 `SECURITY_TICKET_ID` 与 `SECURITY_BROWSER_URL`，验证安全菜单、目标、工单详情、报告和移动端导航。`verify:security-deployed` 在部署环境创建平台自测目标和真实工单，等待 Pi Agent 完成后检查报告。
 
 `verify:platform` 使用 `.verification` 中的独立 PostgreSQL，在端口 55433 验证迁移、认证、配置保存、Webhook 幂等、运行取消和原生 OCR preview。它不会连接现有开发或部署数据库，也不会发送外部通知。每项验证上限为 60 秒，报告保存为对应运行目录中的 `report.json`。
 

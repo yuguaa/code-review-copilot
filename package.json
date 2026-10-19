@@ -19,6 +19,7 @@
     "verify:browser": "node scripts/verify-deployed-browser.mjs",
     "verify:security-api": "tsx scripts/verify-security-api.ts",
     "verify:security-browser": "node scripts/verify-security-browser.mjs",
+    "verify:security-deployed": "node scripts/verify-deployed-security.mjs",
     "verify:security-tools": "tsx scripts/verify-security-tools.ts",
     "db:deploy": "prisma generate && prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
