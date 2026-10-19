@@ -134,6 +134,7 @@ function buildSystemPrompt(): string {
     "只使用 security_http_request、security_browser、security_record_finding、security_finish 四个工具。",
     "不得输出或记录密码、API Key、Cookie 和其他凭据。",
     "所有发现必须有可复核证据。",
+    "完成前至少保存一条成功的网络请求和一张页面截图。",
     "在输出任何最终结论之前，必须调用 security_finish；未调用 security_finish 的结果视为协议失败。",
   ].join("\n");
 }
@@ -141,6 +142,7 @@ function buildSystemPrompt(): string {
 function buildPrompt(options: {
   ticketId: string;
   executionId: string;
+  skillNames: readonly string[];
   target: SecurityAgentTarget;
   scopeDomains: readonly string[];
   deadline: Date;
@@ -153,7 +155,7 @@ function buildPrompt(options: {
     : "- 无可用身份";
 
   return [
-    "/skill:hack",
+    ...options.skillNames.map((name) => `/skill:${name}`),
     "",
     "## 本次测试",
     `- 工单：${options.ticketId}`,
@@ -174,10 +176,12 @@ function buildPrompt(options: {
     "## 执行要求",
     "- 仅测试授权 Web/API 表面，所有 URL 必须处于授权范围。",
     "- 浏览器操作先调用 snapshot；随后根据页面和响应信号选择测试路径。",
+    "- 页面加载或交互后调用 security_browser 的 network_requests，分析接口路径、状态码和资源关系。",
     "- 优先证明真实影响，并保持证据可复核。",
     "- 登录只通过 identityId 和登录工具完成，禁止索取、输出或记录密码。",
     "- 禁止删除、批量写入、密码猜测、DoS、提权、横向移动、反向 Shell、EDR 规避、无线网络、AD 和二进制利用。",
     "- 每个发现调用 security_record_finding，保存结构化证据和修复建议。",
+    "- 完成前至少保存一条成功的网络请求和一张页面截图。",
     "- 在输出最终回答之前必须调用 security_finish，保存摘要、风险评分和 Markdown 报告。",
     "- security_finish 每次执行只调用一次。",
   ].join("\n");
@@ -246,6 +250,8 @@ export async function createSecurityAgent(
   let finished: SecurityFinishRecord | undefined;
   let eventQueue = Promise.resolve();
   let toolExecutionCount = 0;
+  let successfulTrafficCount = 0;
+  let screenshotCount = 0;
 
   try {
     throwIfAborted(controller.signal);
@@ -260,13 +266,12 @@ export async function createSecurityAgent(
       cwd: process.cwd(),
       agentDir: process.cwd(),
       settingsManager,
-      additionalSkillPaths: [path.join(securityConfig.skillsRoot, "hack")],
+      additionalSkillPaths: securityConfig.skillNames.map((name) => path.join(securityConfig.skillsRoot, name)),
       noExtensions: true,
       noContextFiles: true,
       noPromptTemplates: true,
       skillsOverride: (current) => ({
-        skills: current.skills.filter((skill) =>
-          path.resolve(skill.baseDir) === path.resolve(securityConfig.skillsRoot, "hack")),
+        skills: current.skills.filter((skill) => securityConfig.skillNames.includes(skill.name)),
         diagnostics: current.diagnostics,
       }),
       systemPrompt: buildSystemPrompt(),
@@ -275,8 +280,10 @@ export async function createSecurityAgent(
     await resourceLoader.reload();
     throwIfAborted(controller.signal);
 
-    if (!resourceLoader.getSkills().skills.some((skill) => skill.name === "hack")) {
-      throw new Error("hack Skill 未加载");
+    const loadedSkillNames = new Set(resourceLoader.getSkills().skills.map((skill) => skill.name));
+    const missingSkillNames = securityConfig.skillNames.filter((name) => !loadedSkillNames.has(name));
+    if (missingSkillNames.length) {
+      throw new Error(`安全测试 Skill 未加载：${missingSkillNames.join(", ")}`);
     }
 
     browserSessionId = `security-${options.ticketId}`;
@@ -296,12 +303,16 @@ export async function createSecurityAgent(
         ...input,
         ticketId: options.ticketId,
         executionId: options.executionId,
-      })),
+      })).then(() => {
+        if (input.statusCode !== null && input.statusCode >= 100) successfulTrafficCount += 1;
+      }),
       recordArtifact: (input) => Promise.resolve(options.callbacks.recordArtifact({
         ...input,
         ticketId: options.ticketId,
         executionId: options.executionId,
-      })),
+      })).then(() => {
+        if (input.type === "screenshot") screenshotCount += 1;
+      }),
       recordFinding: (input) => Promise.resolve(options.callbacks.recordFinding({
         ...input,
         ticketId: options.ticketId,
@@ -309,6 +320,12 @@ export async function createSecurityAgent(
       })),
       finish: (input) => {
         if (finished) return Promise.reject(new Error("security_finish 只允许调用一次"));
+        if (!successfulTrafficCount) {
+          return Promise.reject(new Error("security_finish 前必须记录至少一条成功的 HTTP 或浏览器网络请求"));
+        }
+        if (!screenshotCount) {
+          return Promise.reject(new Error("security_finish 前必须保存至少一张页面截图"));
+        }
         return Promise.resolve(options.callbacks.finish({
           ...input,
           ticketId: options.ticketId,
@@ -381,6 +398,7 @@ export async function createSecurityAgent(
     const prompt = buildPrompt({
       ticketId: options.ticketId,
       executionId: options.executionId,
+      skillNames: securityConfig.skillNames,
       target: options.target,
       scopeDomains,
       deadline,
@@ -418,6 +436,7 @@ export async function createSecurityAgent(
       await runPrompt([
         "协议未完成：上一轮回复没有调用 security_finish。",
         "现在必须调用 security_finish，保存摘要、风险评分和 Markdown 报告。",
+        "如果 security_finish 返回证据不足，先补充成功请求和页面截图，再重新调用。",
         "不要在调用 security_finish 之前输出最终回答。",
       ].join("\n"));
       await recordAgentReply("Agent 协议补全回复");
@@ -426,8 +445,13 @@ export async function createSecurityAgent(
     if (eventError) throw eventError;
     if (promptError) throw promptError;
     throwIfAborted(controller.signal);
+    if (finished && (!successfulTrafficCount || !screenshotCount)) {
+      throw new Error("Agent 未保存完整的请求与截图证据");
+    }
     if (!finished) {
       if (!toolExecutionCount) throw new Error("Agent 未执行任何安全测试工具");
+      if (!successfulTrafficCount) throw new Error("Agent 未记录成功的 HTTP 或浏览器网络请求");
+      if (!screenshotCount) throw new Error("Agent 未保存页面截图");
       const reply = lastAssistantReply(activeSession.messages);
       const warning = "Agent 未调用 security_finish，运行时已根据已保存的流量、发现和证据生成报告";
       await options.callbacks.recordEvent({

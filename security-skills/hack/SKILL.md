@@ -26,12 +26,13 @@ allowed-tools: security_http_request, security_browser, security_record_finding,
 ## 执行流程
 
 1. 使用 `security_browser` 的 `open` 打开目标，随后立即执行 `snapshot`，记录页面结构和可用引用。
-2. 根据页面、响应状态、对象标识、权限差异和业务状态选择测试信号，优先验证未授权访问、对象越权和身份边界。
-3. 使用 `security_http_request` 获取可复核的请求与响应证据。每次请求保持在范围内，并避免读取与目标无关的数据。
-4. 对每个候选问题复现最小攻击链。只有请求、响应、影响和修复建议能够相互印证时，才记录为发现。
-5. 使用 `security_browser` 的 `screenshot` 保存关键页面证据。截图文件名应能对应测试步骤。
-6. 使用 `security_record_finding` 记录标题、严重程度、置信度、证据、影响和修复建议。
-7. 使用 `security_finish` 保存摘要、风险评分和 Markdown 报告。每次执行只调用一次。
+2. 页面加载或交互后执行 `security_browser` 的 `network_requests`，检查接口路径、状态码、资源类型和请求关系，识别隐藏接口与异常响应。
+3. 根据页面、响应状态、对象标识、权限差异和业务状态选择测试信号，优先验证未授权访问、对象越权和身份边界。
+4. 使用 `security_http_request` 获取可复核的请求与响应证据。每次请求保持在范围内，并避免读取与目标无关的数据。
+5. 对每个候选问题复现最小攻击链。只有请求、响应、影响和修复建议能够相互印证时，才记录为发现。
+6. 使用 `security_browser` 的 `screenshot` 保存关键页面证据。截图文件名应能对应测试步骤。
+7. 使用 `security_record_finding` 记录标题、严重程度、置信度、证据、影响和修复建议。
+8. 使用 `security_finish` 保存摘要、风险评分和 Markdown 报告。每次执行只调用一次。
 
 ## 证据标准
 
@@ -42,6 +43,7 @@ allowed-tools: security_http_request, security_browser, security_record_finding,
 
 ## 完成条件
 
+- 至少保存一条成功的 HTTP 或浏览器网络请求和一张页面截图。
 - 授权范围内的高价值信号已经覆盖。
 - 每个发现具备可复核证据和明确影响。
 - 未确认的问题不写入发现列表。

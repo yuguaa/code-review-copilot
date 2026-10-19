@@ -72,6 +72,7 @@ export function SecurityTargetsPage() {
       <div className="grid gap-5 xl:grid-cols-2">
         {targets.data?.targets.map((target) => {
           const expired = authorizationExpired(target);
+          const scheduleActive = target.scheduleEnabled && target.isActive && !expired;
           return <Card key={target.id}>
             <CardHeader>
               <div className="flex items-start gap-3">
@@ -95,8 +96,8 @@ export function SecurityTargetsPage() {
                 <div className="sm:col-span-2"><dt className="mb-1.5 text-muted-foreground">授权依据</dt><dd className="break-words">{target.authorizationReference}</dd></div>
                 <div className="sm:col-span-2"><dt className="mb-1.5 text-muted-foreground">测试范围</dt><dd className="flex flex-wrap gap-1.5">{target.scopeDomains.map((domain) => <Badge key={domain} variant="secondary">{domain}</Badge>)}</dd></div>
                 <div><dt className="mb-1.5 text-muted-foreground">执行上限</dt><dd>{target.maxDurationMinutes} 分钟</dd></div>
-                <div><dt className="mb-1.5 text-muted-foreground">计划</dt><dd className="flex items-center gap-1.5"><CalendarClockIcon className="size-3.5" />{target.scheduleEnabled ? `每 ${target.scheduleIntervalMinutes} 分钟` : '手动触发'}</dd></div>
-                <div className="sm:col-span-2"><dt className="mb-1.5 text-muted-foreground">下次执行</dt><dd>{target.scheduleEnabled ? formatSecurityDate(target.nextScheduledAt) : '未启用自动执行'}</dd></div>
+                <div><dt className="mb-1.5 text-muted-foreground">计划</dt><dd className="flex items-center gap-1.5"><CalendarClockIcon className="size-3.5" />{target.scheduleEnabled ? scheduleActive ? `每 ${target.scheduleIntervalMinutes} 分钟` : '自动执行已暂停' : '手动触发'}</dd></div>
+                <div className="sm:col-span-2"><dt className="mb-1.5 text-muted-foreground">下次执行</dt><dd>{scheduleActive ? formatSecurityDate(target.nextScheduledAt) : target.scheduleEnabled ? expired ? '授权已到期' : '目标已停用' : '未启用自动执行'}</dd></div>
               </dl>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => setIdentityTarget(target)}><KeyRoundIcon />测试身份</Button>

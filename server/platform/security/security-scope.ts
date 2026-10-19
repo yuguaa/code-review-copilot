@@ -6,29 +6,34 @@ function normalizeHostname(value: string): string {
 
 function matchesDomain(hostname: string, scopeDomain: string): boolean {
   const pattern = normalizeHostname(scopeDomain);
-  if (!pattern || pattern.includes("/") || pattern.includes("\\")) return false;
-
-  if (pattern.startsWith("*.")) {
-    const suffix = pattern.slice(2);
-    if (!suffix || suffix.includes("*")) return false;
-    return hostname !== suffix && hostname.endsWith(`.${suffix}`);
-  }
-
-  if (pattern.includes("*")) return false;
+  if (!pattern || pattern.includes("/") || pattern.includes("\\") || pattern.includes("*")) return false;
   return hostname === pattern;
+}
+
+function scopedUrl(url: URL, scopeDomains: readonly string[]): boolean {
+  if (!allowedProtocols.has(url.protocol) || url.username || url.password) return false;
+  const hostname = normalizeHostname(url.hostname);
+  return Boolean(hostname) && scopeDomains.some((domain) => matchesDomain(hostname, domain));
+}
+
+function parseUrl(input: string | URL): URL {
+  const href = input instanceof URL ? input.href : input;
+  if (!URL.canParse(href)) throw new Error("URL 格式无效");
+  return new URL(href);
+}
+
+export function isUrlInScope(input: string | URL, scopeDomains: readonly string[]): boolean {
+  const href = input instanceof URL ? input.href : input;
+  if (!URL.canParse(href)) return false;
+  return scopedUrl(new URL(href), scopeDomains);
 }
 
 /**
  * 校验目标地址处于授权域名范围内。
- * 通配符只接受开头的 `*.`，并且必须匹配至少一个子域。
+ * 授权范围使用完整域名，避免浏览器层通配符扩大实际请求范围。
  */
 export function assertUrlInScope(input: string | URL, scopeDomains: readonly string[]): URL {
-  let url: URL;
-  try {
-    url = new URL(input instanceof URL ? input.href : input);
-  } catch {
-    throw new Error("URL 格式无效");
-  }
+  const url = parseUrl(input);
 
   if (!allowedProtocols.has(url.protocol)) {
     throw new Error("URL 必须使用 http 或 https 协议");
@@ -37,8 +42,7 @@ export function assertUrlInScope(input: string | URL, scopeDomains: readonly str
     throw new Error("URL 不能包含用户名或密码");
   }
 
-  const hostname = normalizeHostname(url.hostname);
-  if (!hostname || !scopeDomains.some((domain) => matchesDomain(hostname, domain))) {
+  if (!scopedUrl(url, scopeDomains)) {
     throw new Error(`URL 不在授权范围内：${url.origin}`);
   }
   return url;

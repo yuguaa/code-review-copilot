@@ -37,6 +37,7 @@ export function SecurityTicketDetailPage() {
   const resource = useResource<{ ticket: SecurityTicketDetail }>(ticketId ? `/api/security/tickets/${ticketId}` : null);
   const action = useAction();
   const ticket = resource.data?.ticket;
+  const ticketStatus = ticket?.status;
 
   useEffect(() => {
     if (!ticketId) return;
@@ -50,12 +51,23 @@ export function SecurityTicketDetailPage() {
       'execution.started',
       'execution.completed',
       'execution.failed',
+      'agent.message',
+      'agent.protocol-warning',
       'notification.error',
+      'changed',
     ];
     eventNames.forEach((name) => events.addEventListener(name, reload));
     events.addEventListener('open', reload);
     return () => events.close();
   }, [resource.reload, ticketId]);
+
+  useEffect(() => {
+    if (!ticketId || (ticketStatus && !isSecurityRunning(ticketStatus))) return;
+    const timer = window.setInterval(() => {
+      void resource.reload();
+    }, 3_000);
+    return () => window.clearInterval(timer);
+  }, [resource.reload, ticketId, ticketStatus]);
 
   const cancel = () => {
     if (!ticket) return;
@@ -87,7 +99,9 @@ export function SecurityTicketDetailPage() {
               <span className="flex-1" />
               {ticket.skillVersion && <Badge variant="secondary">{ticket.skillVersion}</Badge>}
             </div>
-            <CardTitle className="mt-3">{ticket.summary || '安全测试正在执行'}</CardTitle>
+            <CardTitle className="mt-3">
+              {ticket.summary || (isSecurityRunning(ticket.status) ? '安全测试正在执行' : '安全测试未生成摘要')}
+            </CardTitle>
             {ticket.error && <CardDescription className="text-destructive">{ticket.error}</CardDescription>}
           </CardHeader>
           <CardContent className="grid gap-4 text-xs sm:grid-cols-2 xl:grid-cols-4">
@@ -102,7 +116,11 @@ export function SecurityTicketDetailPage() {
         <Card>
           <CardHeader><CardTitle>测试报告</CardTitle><CardDescription>Agent 生成的结论、影响与修复建议</CardDescription></CardHeader>
           <CardContent>
-            {ticket.report ? <MarkdownBlock text={ticket.report} /> : <p className="text-sm text-muted-foreground">报告尚未生成。</p>}
+            {ticket.report
+              ? <MarkdownBlock text={ticket.report} />
+              : <p className="text-sm text-muted-foreground">
+                {isSecurityRunning(ticket.status) ? '报告尚未生成。' : '本次工单没有生成执行报告。'}
+              </p>}
           </CardContent>
         </Card>
 
@@ -163,7 +181,7 @@ export function SecurityTicketDetailPage() {
                   <TableCell className="font-mono text-xs">{traffic.method}</TableCell>
                   <TableCell className="max-w-xl break-all text-xs">{traffic.url}</TableCell>
                   <TableCell className="text-xs">{traffic.statusCode ?? '失败'}</TableCell>
-                  <TableCell className="text-xs">{traffic.durationMs} ms</TableCell>
+                  <TableCell className="text-xs">{traffic.durationMs > 0 ? `${traffic.durationMs} ms` : '—'}</TableCell>
                 </TableRow>)}</TableBody>
               </Table>
             </div>}
@@ -171,7 +189,7 @@ export function SecurityTicketDetailPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>证据文件</CardTitle><CardDescription>截图、HAR、Trace 和最终报告</CardDescription></CardHeader>
+          <CardHeader><CardTitle>证据文件</CardTitle><CardDescription>截图、结构化流量和最终报告</CardDescription></CardHeader>
           <CardContent className="flex flex-col gap-4">
             {ticket.artifacts.length === 0 && <p className="text-sm text-muted-foreground">没有保存证据文件。</p>}
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -195,7 +213,9 @@ export function SecurityTicketDetailPage() {
           <CardHeader><CardTitle>报告文件</CardTitle><CardDescription>完整报告可作为 HTML 或 Markdown 归档</CardDescription></CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {ticket.artifacts.filter((artifact) => artifact.type === 'report').map((artifact) => <Button key={artifact.id} variant="outline" render={<a href={artifactUrl(artifact)} target="_blank" rel="noreferrer" />}><ExternalLinkIcon />{artifact.filename}</Button>)}
-            {!ticket.artifacts.some((artifact) => artifact.type === 'report') && <p className="text-sm text-muted-foreground">报告文件正在生成。</p>}
+            {!ticket.artifacts.some((artifact) => artifact.type === 'report') && <p className="text-sm text-muted-foreground">
+              {isSecurityRunning(ticket.status) ? '报告文件正在生成。' : '本次工单没有生成报告文件。'}
+            </p>}
           </CardContent>
         </Card>
       </div>}

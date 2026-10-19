@@ -25,6 +25,8 @@ services:
       TMPDIR: /app/.workspaces/tmp
       SECURITY_ARTIFACTS_ROOT: /app/security-artifacts
       SECURITY_SKILLS_ROOT: /app/security-skills
+      SECURITY_SKILLS: ${SECURITY_SKILLS:-hack}
+      SECURITY_SKILL_VERSION: ${SECURITY_SKILL_VERSION:-}
       SECURITY_ACTION_POLICY: /app/security-skills/hack/action-policy.json
       AGENT_BROWSER_BIN: /app/node_modules/.bin/agent-browser
       AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium-browser
@@ -74,6 +76,8 @@ services:
       TMPDIR: /app/.workspaces/tmp
       SECURITY_ARTIFACTS_ROOT: /app/security-artifacts
       SECURITY_SKILLS_ROOT: /app/security-skills
+      SECURITY_SKILLS: ${SECURITY_SKILLS:-hack}
+      SECURITY_SKILL_VERSION: ${SECURITY_SKILL_VERSION:-}
       SECURITY_ACTION_POLICY: /app/security-skills/hack/action-policy.json
       AGENT_BROWSER_BIN: /app/node_modules/.bin/agent-browser
       AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium-browser

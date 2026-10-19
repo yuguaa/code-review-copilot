@@ -29,7 +29,6 @@ import type { ModelConfig } from "@server/modules/ai-models/ai-models.service";
 import type { SecurityAgentCallbacks, SecurityAgentResult } from "./security-agent";
 
 const log = createLogger("security-worker");
-const skillVersion = "hack-skills";
 const active = new Map<string, { controller: AbortController; promise: Promise<void> }>();
 let timer: NodeJS.Timeout | null = null;
 let pumpTask: Promise<void> | undefined;
@@ -236,7 +235,7 @@ function finishSuccess(
         report: report.narrative,
         modelProvider: model.provider,
         modelId: model.modelId,
-        skillVersion,
+        skillVersion: securityConfig.skillVersion,
       }).then(() => finishSecurityExecution(executionId, {
         status: "completed",
         rawResult: {
@@ -272,7 +271,7 @@ function finishFailure(
       report: report.narrative,
       modelProvider: model?.provider ?? null,
       modelId: model?.modelId ?? null,
-      skillVersion,
+      skillVersion: securityConfig.skillVersion,
     }))
     .then(() => finishSecurityExecution(executionId, {
       status,
@@ -405,7 +404,7 @@ function executeTicket(ticketId: string, signal: AbortSignal): Promise<void> {
         riskScore: 0,
         modelProvider: modelConfig?.provider ?? null,
         modelId: modelConfig?.modelId ?? null,
-        skillVersion,
+        skillVersion: securityConfig.skillVersion,
       }).then(() => {
         throw new SecurityExecutionError(message);
       });
@@ -474,7 +473,7 @@ function recoverWorkerState(): Promise<void> {
 function verifyRuntime(): Promise<void> {
   const checks = [
     access(securityConfig.agentBrowserBin, constants.X_OK),
-    access(path.join(securityConfig.skillsRoot, "hack", "SKILL.md"), constants.R_OK),
+    ...securityConfig.skillNames.map((name) => access(path.join(securityConfig.skillsRoot, name, "SKILL.md"), constants.R_OK)),
     access(securityConfig.actionPolicyPath, constants.R_OK),
   ];
   const browser = process.env.AGENT_BROWSER_EXECUTABLE_PATH?.trim();

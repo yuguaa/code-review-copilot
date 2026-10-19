@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { securityIdentityInput, securityIdentityUpdateInput, securityTargetInput, securityTargetUpdateInput } from "./security-targets.service";
+import {
+  assertSecurityTargetScope,
+  securityIdentityInput,
+  securityIdentityUpdateInput,
+  securityTargetInput,
+  securityTargetUpdateInput,
+} from "./security-targets.service";
 
 const target = {
   name: "生产环境",
@@ -28,12 +34,19 @@ describe("安全测试目标输入", () => {
     expect(securityTargetInput.safeParse({ ...target, scheduleIntervalMinutes: 0 }).success).toBe(false);
     expect(securityTargetInput.safeParse({ ...target, maxDurationMinutes: 1.5 }).success).toBe(false);
     expect(securityTargetInput.safeParse({ ...target, scopeDomains: [1] }).success).toBe(false);
+    expect(securityTargetInput.safeParse({ ...target, scopeDomains: ["*.example.com"] }).success).toBe(false);
   });
 
   it("部分更新不会补入创建默认值", () => {
     expect(securityTargetUpdateInput.parse({ name: "更新名称" })).toEqual({ name: "更新名称" });
     expect(securityTargetUpdateInput.parse({ scheduleEnabled: false, scheduleIntervalMinutes: 60 }))
       .toEqual({ scheduleEnabled: false, scheduleIntervalMinutes: 60 });
+  });
+
+  it("目标地址必须处于授权范围", () => {
+    expect(() => assertSecurityTargetScope("https://app.example.com", ["app.example.com"])).not.toThrow();
+    expect(() => assertSecurityTargetScope("https://app.example.com", ["api.example.com"])).toThrow("授权范围");
+    expect(() => assertSecurityTargetScope("https://app.example.com", ["*.example.com"])).toThrow("授权范围");
   });
 });
 

@@ -3,13 +3,14 @@ import { createHash } from "node:crypto";
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "typebox";
+import { z } from "zod";
 
 import {
   createSecurityArtifactTarget,
   describeSecurityArtifact,
   type SecurityArtifactMetadata,
 } from "./security-artifacts";
-import { assertUrlInScope } from "./security-scope";
+import { assertUrlInScope, isUrlInScope } from "./security-scope";
 
 export const SECURITY_TOOL_NAMES = [
   "security_http_request",
@@ -87,6 +88,7 @@ const sensitiveHeaders = new Set([
   "x-api-key",
   "api-key",
 ]);
+const sensitiveHeaderPattern = /(?:^|[-_])(authorization|auth|token|secret|password|passwd|api[-_]?key|cookie|session|csrf)(?:$|[-_])/i;
 
 const httpRequestParameters = Type.Object({
   method: Type.Union(allowedHttpMethods.map((method) => Type.Literal(method))),
@@ -103,6 +105,7 @@ const browserParameters = Type.Object({
     Type.Literal("click"),
     Type.Literal("fill"),
     Type.Literal("login"),
+    Type.Literal("network_requests"),
     Type.Literal("screenshot"),
     Type.Literal("close"),
   ]),
@@ -115,6 +118,27 @@ const browserParameters = Type.Object({
   submitRef: Type.Optional(Type.String({ minLength: 1, maxLength: 512 })),
   filename: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
 }, { additionalProperties: false });
+
+const browserNetworkRequest = z.object({
+  requestId: z.string().min(1),
+  method: z.string().min(1),
+  url: z.string().url(),
+  status: z.number().int().nonnegative().nullable(),
+  headers: z.record(z.string()).default({}),
+  responseHeaders: z.record(z.string()).nullable().optional(),
+  resourceType: z.string().optional(),
+  mimeType: z.string().nullable().optional(),
+});
+
+const browserNetworkResult = z.object({
+  success: z.boolean(),
+  error: z.unknown().nullable(),
+  data: z.object({
+    requests: z.array(browserNetworkRequest),
+  }),
+}).passthrough();
+
+type BrowserNetworkRequest = z.infer<typeof browserNetworkRequest>;
 
 const findingParameters = Type.Object({
   fingerprint: Type.String({ minLength: 1, maxLength: 200 }),
@@ -162,12 +186,29 @@ function abortReason(signal: AbortSignal, fallback: string): Error {
   return new Error(fallback);
 }
 
+function isSensitiveHeader(name: string): boolean {
+  return sensitiveHeaders.has(name.toLowerCase()) || sensitiveHeaderPattern.test(name);
+}
+
 function safeHeaders(headers: Headers): Record<string, string> {
   const result: Record<string, string> = {};
   headers.forEach((value, name) => {
-    result[name] = sensitiveHeaders.has(name.toLowerCase()) ? redactedValue : value;
+    result[name] = isSensitiveHeader(name) ? redactedValue : value;
   });
   return result;
+}
+
+export function safeHeaderRecord(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).map(([name, value]) => [
+    name,
+    isSensitiveHeader(name) ? redactedValue : value,
+  ]));
+}
+
+function parseBrowserNetworkRequests(output: string): BrowserNetworkRequest[] {
+  const result = browserNetworkResult.parse(JSON.parse(output));
+  if (!result.success) throw new Error(`读取 agent-browser 网络请求失败：${JSON.stringify(result.error)}`);
+  return result.data.requests;
 }
 
 function basicAuthorization(identity: SecurityToolIdentity): string {
@@ -403,7 +444,9 @@ function runAgentBrowserCommand(
         return;
       }
 
-      const output = redact(Buffer.concat(stderrChunks, stderrBytes).toString("utf8").trim());
+      const stderr = Buffer.concat(stderrChunks, stderrBytes).toString("utf8").trim();
+      const stdout = Buffer.concat(stdoutChunks, stdoutBytes).toString("utf8").trim();
+      const output = redact([stderr, stdout].filter(Boolean).join("\n"));
       reject(new Error(output
         ? `agent-browser ${options.action} 执行失败（退出码 ${code}）：${output}`
         : `agent-browser ${options.action} 执行失败（退出码 ${code}）`));
@@ -431,6 +474,7 @@ async function executeBrowserAction(
   host: SecurityToolHost,
   params: BrowserParameters,
   signal: AbortSignal | undefined,
+  recordedRequestIds: Set<string>,
 ) {
   switch (params.action) {
     case "open": {
@@ -497,6 +541,49 @@ async function executeBrowserAction(
         submitted: Boolean(params.submitRef),
       });
     }
+    case "network_requests": {
+      const output = await runAgentBrowserCommand(
+        host.agentBrowserBin,
+        browserCommandArgs(host, ["network", "requests", "--json"]),
+        { action: "network_requests", signal },
+      );
+      const requests = parseBrowserNetworkRequests(output);
+      const inScope = requests.filter((request) => isUrlInScope(request.url, host.scopeDomains));
+      const fresh = inScope.filter((request) => !recordedRequestIds.has(request.requestId));
+
+      await Promise.all(fresh.map((request) => Promise.resolve(host.recordTraffic({
+        method: request.method,
+        url: request.url,
+        statusCode: request.status,
+        requestHeaders: safeHeaderRecord(request.headers),
+        responseHeaders: request.responseHeaders ? safeHeaderRecord(request.responseHeaders) : null,
+        bodyPreview: null,
+        contentHash: null,
+        durationMs: 0,
+      })).then(() => {
+        recordedRequestIds.add(request.requestId);
+      })));
+
+      const visibleRequests = inScope.map((request) => ({
+        requestId: request.requestId,
+        method: request.method,
+        url: request.url,
+        status: request.status,
+        resourceType: request.resourceType ?? null,
+        mimeType: request.mimeType ?? null,
+        requestHeaders: safeHeaderRecord(request.headers),
+        responseHeaders: request.responseHeaders ? safeHeaderRecord(request.responseHeaders) : null,
+      }));
+      return textResult(JSON.stringify({
+        requests: visibleRequests,
+        outOfScopeRequests: requests.length - inScope.length,
+      }, null, 2), {
+        action: "network_requests",
+        requestCount: visibleRequests.length,
+        recordedCount: fresh.length,
+        outOfScopeRequestCount: requests.length - inScope.length,
+      });
+    }
     case "screenshot": {
       const filename = params.filename ?? `screenshot-${Date.now()}.png`;
       const location = {
@@ -546,12 +633,13 @@ export function createSecurityHttpRequestTool(host: SecurityToolHost): ToolDefin
 }
 
 export function createSecurityBrowserTool(host: SecurityToolHost): ToolDefinition {
+  const recordedRequestIds = new Set<string>();
   return defineTool({
     name: "security_browser",
     label: "安全浏览器",
-    description: "通过独立 agent-browser 会话执行页面快照、点击、填充、登录、截图和关闭。",
+    description: "通过独立 agent-browser 会话执行页面快照、点击、填充、登录、网络请求读取、截图和关闭。",
     parameters: browserParameters,
-    execute: (_toolCallId, params, signal) => executeBrowserAction(host, params, signal),
+    execute: (_toolCallId, params, signal) => executeBrowserAction(host, params, signal, recordedRequestIds),
   });
 }
 

@@ -28,6 +28,8 @@ export function SecurityTicketsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [targetId, setTargetId] = useState('');
   const action = useAction();
+  const availableTargets = (targets.data?.targets ?? []).filter((target) =>
+    target.isActive && new Date(target.authorizedUntil).getTime() > Date.now());
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -102,11 +104,18 @@ export function SecurityTicketsPage() {
           </TableBody>
         </Table>
       </div>}
-      {tickets.data?.tickets.length === 0 && targets.data?.targets.length === 0 && <Card className="mt-5 max-w-xl">
-        <CardHeader><CardTitle className="flex items-center gap-2"><ShieldAlertIcon className="size-4 text-primary" />先配置测试目标</CardTitle><CardDescription>安全测试必须登记授权人和授权范围。</CardDescription></CardHeader>
+      {tickets.data?.tickets.length === 0 && targets.data && availableTargets.length === 0 && <Card className="mt-5 max-w-xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShieldAlertIcon className="size-4 text-primary" />
+            {targets.data.targets.length === 0 ? '先配置测试目标' : '没有可用的测试目标'}
+          </CardTitle>
+          <CardDescription>
+            {targets.data.targets.length === 0 ? '安全测试必须登记授权人和授权范围。' : '请启用目标并检查授权是否到期。'}
+          </CardDescription>
+        </CardHeader>
         <CardContent><Button render={<NavLink to="/security/targets" />}>前往测试目标</Button></CardContent>
       </Card>}
-      {tickets.data?.tickets.length === 0 && targets.data?.targets.length ? <div className="mt-5"><BugIcon className="size-4 text-primary" /><span className="ml-2 text-sm text-muted-foreground">目标已经准备完成，可以创建第一条工单。</span></div> : null}
+      {tickets.data?.tickets.length === 0 && availableTargets.length > 0 ? <div className="mt-5"><BugIcon className="size-4 text-primary" /><span className="ml-2 text-sm text-muted-foreground">目标已经准备完成，可以创建第一条工单。</span></div> : null}
     </div>
     <Modal open={createOpen} title="新建安全测试工单" onClose={() => !action.pending && setCreateOpen(false)} maxWidth="sm:max-w-lg">
       <form className="flex flex-col gap-6" onSubmit={(event) => { event.preventDefault(); createTicket(); }}>
@@ -114,8 +123,7 @@ export function SecurityTicketsPage() {
         <Field label="测试目标" hint="工单创建后固定使用该目标的授权范围和模型配置。">
           <Select required value={targetId} onChange={(event) => setTargetId(event.target.value)}>
             <option value="">请选择测试目标</option>
-            {targets.data?.targets.filter((target) => target.isActive && new Date(target.authorizedUntil).getTime() > Date.now())
-              .map((target) => <option key={target.id} value={target.id}>{target.name} · {target.baseUrl}</option>)}
+            {availableTargets.map((target) => <option key={target.id} value={target.id}>{target.name} · {target.baseUrl}</option>)}
           </Select>
         </Field>
         <div className="flex justify-end gap-2">

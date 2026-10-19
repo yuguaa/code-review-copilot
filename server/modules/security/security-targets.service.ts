@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@server/infrastructure/prisma/prisma.service";
+import { assertUrlInScope } from "@server/platform/security/security-scope";
 import {
   securityIdentityInput,
   securityIdentityUpdateInput,
@@ -66,6 +67,10 @@ export function securityNextScheduledAt(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * millisecondsPerMinute);
 }
 
+export function assertSecurityTargetScope(baseUrl: string, scopeDomains: readonly string[]): void {
+  assertUrlInScope(baseUrl, scopeDomains);
+}
+
 export function listSecurityTargets(): Promise<SecurityTargetView[]> {
   return prisma.securityTarget.findMany({ orderBy: [{ createdAt: "desc" }, { id: "asc" }], select: securityTargetSelect })
     .then((targets) => targets.map(toSecurityTargetView));
@@ -77,6 +82,7 @@ export function getSecurityTarget(id: string): Promise<SecurityTargetView> {
 
 export function createSecurityTarget(body: unknown): Promise<SecurityTargetView> {
   const input = securityTargetInput.parse(body);
+  assertSecurityTargetScope(input.baseUrl, input.scopeDomains);
   const now = new Date();
   return prisma.securityTarget.create({
     data: {
@@ -94,6 +100,10 @@ export function updateSecurityTarget(id: string, body: unknown): Promise<Securit
       const scheduleChanged = input.scheduleEnabled !== undefined || input.scheduleIntervalMinutes !== undefined;
       const scheduleEnabled = input.scheduleEnabled ?? current.scheduleEnabled;
       const scheduleIntervalMinutes = input.scheduleIntervalMinutes ?? current.scheduleIntervalMinutes;
+      assertSecurityTargetScope(
+        input.baseUrl ?? current.baseUrl,
+        input.scopeDomains ?? securityScopeDomains.parse(current.scopeDomains),
+      );
       return transaction.securityTarget.update({
         where: { id },
         data: {

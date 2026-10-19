@@ -70,15 +70,15 @@ PostgreSQL 保存排队任务，单实例执行器最多并行处理两个运行
 
 ## 安全测试
 
-安全测试菜单包含工单和测试目标。每个目标必须登记授权人、授权依据、授权截止时间和域名范围。测试身份的用户名可以读取，密码使用 AES-256-GCM 加密保存，接口只返回是否已经配置。
+安全测试菜单包含工单和测试目标。每个目标必须登记授权人、授权依据、授权截止时间和完整域名范围，子域名需要分别登记。测试身份的用户名可以读取，密码使用 AES-256-GCM 加密保存，接口只返回是否已经配置。
 
-手动工单和自动计划工单都只创建 PostgreSQL 排队记录。`security-worker` 单实例领取工单，使用 `@earendil-works/pi-coding-agent` 加载 `security-skills/hack`，只开放四个自定义工具：HTTP 请求、浏览器、记录发现、完成报告。浏览器通过 `agent-browser` 执行，域名范围由 Runtime 校验，并同时启用 `--allowed-domains` 和静态 action policy。
+手动工单和自动计划工单都只创建 PostgreSQL 排队记录。`security-worker` 单实例领取工单，使用 `@earendil-works/pi-coding-agent` 加载 `SECURITY_SKILLS` 指定的 Skill 目录，只开放四个自定义工具：HTTP 请求、浏览器、记录发现、完成报告。浏览器通过 `agent-browser` 执行，域名范围由 Runtime 校验，并同时启用 `--allowed-domains` 和静态 action policy。
 
-每次执行保存 `SecurityExecution`、工具事件、HTTP 流量、结构化发现、截图和 Markdown/HTML 报告。证据文件写入 `security_artifacts` Docker 持久卷；PostgreSQL 保存索引、SHA-256 和文件元数据。工单失败、取消和进程中断都保留执行记录与部分报告。
+每次执行保存 `SecurityExecution`、工具事件、HTTP 与浏览器网络流量、结构化发现、截图和 Markdown/HTML 报告。浏览器网络事件会按授权域名筛选、对敏感请求头做遮蔽并写入 `SecurityTraffic`。证据文件写入 `security_artifacts` Docker 持久卷；PostgreSQL 保存索引、SHA-256 和文件元数据。工单失败、取消和进程中断都保留执行记录与部分报告。
 
-Agent 至少需要执行一次安全测试工具。优先调用 `security_finish` 保存最终摘要；没有调用时，Runtime 根据已经保存的流量、结构化发现和证据生成报告，并写入 `agent.protocol-warning` 事件。完全没有执行任何工具的工单直接失败。
+完成门禁要求至少保存一条成功的 HTTP 或浏览器网络请求和一张页面截图。优先调用 `security_finish` 保存最终摘要；没有调用时，Runtime 根据已经保存的流量、结构化发现和证据生成报告，并写入 `agent.protocol-warning` 事件。完全没有执行任何工具的工单直接失败。
 
-`security-skills/hack` 是基于 `yaklang/hack-skills` 的精简授权 Web/API 入口，固定上游提交，只保留授权检查、范围控制、影响优先、证据和报告流程。安装第三方 Skill 前需要通过静态审查和 Skill 安全扫描。
+`security-skills/hack` 是基于 `yaklang/hack-skills` 的精简授权 Web/API 入口，固定上游提交，只保留授权检查、范围控制、影响优先、证据和报告流程。新增 Skill 时把目录放入 `security-skills/`，再通过逗号分隔的 `SECURITY_SKILLS` 启用；`SECURITY_SKILL_VERSION` 会记录到工单。安装第三方 Skill 前需要通过静态审查和 Skill 安全扫描。
 
 ## Docker 与遥测
 

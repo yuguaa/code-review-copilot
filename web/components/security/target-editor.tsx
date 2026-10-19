@@ -131,8 +131,8 @@ export function TargetEditor({
           <Field label="目标名称"><Input required value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="面向用户的业务系统" /></Field>
           <Field label="目标地址"><Input type="url" required value={form.baseUrl} onChange={(event) => update('baseUrl', event.target.value)} placeholder="https://app.example.com" /></Field>
         </div>
-        <Field label="授权范围" hint="每行一个域名；支持 *.example.com，不会允许范围外地址。">
-          <Textarea required rows={4} value={form.scopeDomains} onChange={(event) => update('scopeDomains', event.target.value)} placeholder={'app.example.com\n*.example.com'} />
+        <Field label="授权范围" hint="每行一个完整域名；子域名需要分别填写，不会允许范围外地址。">
+          <Textarea required rows={4} value={form.scopeDomains} onChange={(event) => update('scopeDomains', event.target.value)} placeholder={'app.example.com\napi.example.com'} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="关联仓库" hint="用于关联代码来源，可留空。">

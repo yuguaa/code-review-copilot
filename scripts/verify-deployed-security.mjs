@@ -78,11 +78,14 @@ try {
     await page.waitForTimeout(2_000);
   }
   assert(detail, "没有读取到安全工单详情");
-  assert(["completed", "failed", "cancelled", "interrupted"].includes(detail.status), `安全工单未结束：${detail.status}`);
+  assert.equal(detail.status, "completed", `安全工单未正常完成：${detail.error ?? detail.status}`);
+  assert(detail.traffic.length > 0, "安全工单没有保存网络流量");
   await page.reload();
   await expect(page.getByText("报告文件", { exact: true })).toBeVisible();
   const report = detail.artifacts.find((artifact) => artifact.type === "report" && artifact.filename === "report.md");
   assert(report, "安全工单没有生成 report.md");
+  const screenshot = detail.artifacts.find((artifact) => artifact.type === "screenshot");
+  assert(screenshot, "安全工单没有保存页面截图");
   assert.deepEqual(errors, [], `页面存在运行错误：${errors.join("；")}`);
   console.log(JSON.stringify({
     targetId: target.id,
@@ -91,6 +94,7 @@ try {
     summary: detail.summary,
     error: detail.error,
     findings: detail.findings.length,
+    traffic: detail.traffic.length,
     artifacts: detail.artifacts.length,
   }));
 } finally {

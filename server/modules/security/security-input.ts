@@ -11,7 +11,7 @@ const isoDateTime = z.string().trim().datetime({ offset: true }).transform((valu
 const scopeDomain = z.string().trim().min(1).max(253).refine((value) => {
   const normalized = value.toLowerCase();
   if (normalized.includes("://") || /[/\\?#@]/.test(normalized) || normalized.startsWith(".")) return false;
-  return /^(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(normalized)
+  return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(normalized)
     || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(normalized);
 }, "测试范围域名格式无效");
 

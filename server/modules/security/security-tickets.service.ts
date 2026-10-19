@@ -136,7 +136,13 @@ export function cancelSecurityTicket(id: string) {
       if (ticket.status === "queued") {
         return transaction.securityTicket.update({
           where: { id },
-          data: { status: "cancelled", finishedAt: now },
+          data: {
+            status: "cancelled",
+            finishedAt: now,
+            error: "用户取消安全测试",
+            summary: "安全测试未正常完成",
+            riskScore: 0,
+          },
         });
       }
       if (ticket.status === "running" || ticket.status === "cancelling") {

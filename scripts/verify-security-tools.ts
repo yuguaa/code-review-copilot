@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import "dotenv/config";
 
 import { securityConfig } from "@server/config/security.config";
@@ -31,12 +32,23 @@ const httpTool = createSecurityHttpRequestTool(host);
 const screenshotName = `example-${Date.now()}.png`;
 
 tool.execute("open", { action: "open", url: "https://example.com" }, undefined, undefined, {} as never)
+  .then(() => assert.rejects(
+    () => tool.execute("scope", { action: "open", url: "https://example.org" }, undefined, undefined, {} as never),
+    /授权范围/,
+  ))
   .then(() => tool.execute("snapshot", { action: "snapshot" }, undefined, undefined, {} as never))
+  .then(() => tool.execute("network", { action: "network_requests" }, undefined, undefined, {} as never))
   .then(() => httpTool.execute("http", { method: "GET", url: "https://example.com" }, undefined, undefined, {} as never))
   .then(() => tool.execute("screenshot", { action: "screenshot", filename: screenshotName }, undefined, undefined, {} as never))
   .then(() => tool.execute("close", { action: "close" }, undefined, undefined, {} as never))
   .then(() => {
     if (artifacts.length !== 1) throw new Error(`截图 artifact 数量错误：${artifacts.length}`);
-    if (traffic.length !== 1 || traffic[0].statusCode !== 200) throw new Error(`HTTP 流量记录错误：${JSON.stringify(traffic)}`);
-    console.log(JSON.stringify({ artifact: artifacts[0], traffic: traffic[0] }));
+    if (traffic.length < 2) throw new Error(`流量记录数量错误：${JSON.stringify(traffic)}`);
+    if (!traffic.some((entry) => entry.durationMs === 0 && entry.statusCode === 200)) {
+      throw new Error(`浏览器网络请求未记录：${JSON.stringify(traffic)}`);
+    }
+    if (!traffic.some((entry) => entry.durationMs > 0 && entry.statusCode === 200)) {
+      throw new Error(`HTTP 请求未记录：${JSON.stringify(traffic)}`);
+    }
+    console.log(JSON.stringify({ artifact: artifacts[0], traffic }));
   });
