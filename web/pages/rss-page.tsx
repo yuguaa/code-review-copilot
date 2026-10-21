@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@web/
 import { useConfirm } from "@web/components/ui/confirm-dialog";
 import { Checkbox, Field, FieldGroup, Input, Select } from "@web/components/ui/forms";
 import { Modal } from "@web/components/ui/modal";
+import { ScrollArea } from "@web/components/ui/scroll-area";
 import { useAction, useResource } from "@web/hooks/use-resource";
 import { api } from "@web/lib/api";
 import { formatDate } from "@web/lib/run-format";
@@ -56,13 +57,14 @@ export function Rss() {
     <ShellHeader title="RSS 订阅" meta="定时抓取订阅内容并发送钉钉通知">
       <Button onClick={() => { setEditing(null); setForm(emptyForm); setOpen(true); }}><PlusIcon />添加订阅</Button>
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-      <ActionError error={action.error} />
-      <ResourceState loading={false} error={robots.error} retry={robots.reload} />
-      <ResourceState loading={resource.loading && !resource.data} error={resource.error}
-        empty={resource.data?.subscriptions.length === 0} title="尚未添加订阅"
-        description="添加 Feed 地址，并在连接器中配置钉钉机器人。" retry={resource.reload} />
-      <div className="grid gap-5 xl:grid-cols-2">
+    <ScrollArea className="min-h-0 flex-1">
+      <div className="p-4 sm:p-6">
+        <ActionError error={action.error} />
+        <ResourceState loading={false} error={robots.error} retry={robots.reload} />
+        <ResourceState loading={resource.loading && !resource.data} error={resource.error}
+          empty={resource.data?.subscriptions.length === 0} title="尚未添加订阅"
+          description="添加 Feed 地址，并在连接器中配置钉钉机器人。" retry={resource.reload} />
+        <div className="grid gap-5 xl:grid-cols-2">
         {resource.data?.subscriptions.map((item) => <Card key={item.id}>
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -93,8 +95,9 @@ export function Rss() {
             </div>
           </CardContent>
         </Card>)}
+        </div>
       </div>
-    </div>
+    </ScrollArea>
     <Modal open={open} title={editing ? "编辑订阅" : "添加订阅"} onClose={() => !action.pending && setOpen(false)} maxWidth="sm:max-w-lg">
       <form className="flex flex-col gap-6" onSubmit={(event) => { event.preventDefault(); save(); }}>
         <ActionError error={action.error} />

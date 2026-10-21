@@ -7,6 +7,7 @@ import { ResourceState } from '@web/components/common/resource-state';
 import { Button } from '@web/components/ui/button';
 import { Field, Select } from '@web/components/ui/forms';
 import { Modal } from '@web/components/ui/modal';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTitle } from '@web/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@web/components/ui/tooltip';
 import { useAction, useResource } from '@web/hooks/use-resource';
@@ -54,35 +55,37 @@ function ReviewHistoryList({ runs, loading, error, retry }: {
   error: string | null;
   retry: () => void;
 }) {
-  return <div className="min-h-0 flex-1 overflow-y-auto p-2">
-    <div className="flex items-center justify-between px-2 py-2">
-      <span className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground">最近审查</span>
-      <span className="text-[10px] text-muted-foreground">{runs.length}</span>
-    </div>
-    {loading ? <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="正在加载审查历史">
-      {[0, 1, 2].map((item) => <div key={item} className="h-12 animate-pulse rounded-md bg-muted" />)}
-    </div> : error ? <div className="px-2 py-3">
-      <p className="text-xs text-destructive">{error}</p>
-      <Button variant="ghost" size="xs" className="mt-2" onClick={retry}>重新加载</Button>
-    </div> : runs.length === 0 ? <p className="px-2 py-3 text-xs leading-6 text-muted-foreground">暂无审查记录。</p> : <div className="flex flex-col gap-0.5">
-      {runs.map((run) => <NavLink
-        key={run.id}
-        to={`/runs/${run.id}`}
-        title={`${runTitle(run)} · ${runStatusLabels[run.status]}`}
-        className={({ isActive }) => cn('flex items-start gap-2 rounded-md px-2 py-2 text-xs transition-colors hover:bg-sidebar-accent', isActive && 'bg-sidebar-accent text-sidebar-accent-foreground')}
-      >
-        <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', statusDotClass(run.status))} aria-label={runStatusLabels[run.status]} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{runTitle(run)}</span>
-          <span className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-            <span className="truncate">{run.repository?.path ?? '未关联仓库'}</span>
-            <span>·</span>
-            <time dateTime={runDate(run) ?? undefined}>{reviewTime(runDate(run))}</time>
+  return <ScrollArea className="min-h-0 flex-1">
+    <div className="p-2">
+      <div className="flex items-center justify-between px-2 py-2">
+        <span className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground">最近审查</span>
+        <span className="text-[10px] text-muted-foreground">{runs.length}</span>
+      </div>
+      {loading ? <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="正在加载审查历史">
+        {[0, 1, 2].map((item) => <div key={item} className="h-12 animate-pulse rounded-md bg-muted" />)}
+      </div> : error ? <div className="px-2 py-3">
+        <p className="text-xs text-destructive">{error}</p>
+        <Button variant="ghost" size="xs" className="mt-2" onClick={retry}>重新加载</Button>
+      </div> : runs.length === 0 ? <p className="px-2 py-3 text-xs leading-6 text-muted-foreground">暂无审查记录。</p> : <div className="flex flex-col gap-0.5">
+        {runs.map((run) => <NavLink
+          key={run.id}
+          to={`/runs/${run.id}`}
+          title={`${runTitle(run)} · ${runStatusLabels[run.status]}`}
+          className={({ isActive }) => cn('flex items-start gap-2 rounded-md px-2 py-2 text-xs transition-colors hover:bg-sidebar-accent', isActive && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+        >
+          <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', statusDotClass(run.status))} aria-label={runStatusLabels[run.status]} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">{runTitle(run)}</span>
+            <span className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+              <span className="truncate">{run.repository?.path ?? '未关联仓库'}</span>
+              <span>·</span>
+              <time dateTime={runDate(run) ?? undefined}>{reviewTime(runDate(run))}</time>
+            </span>
           </span>
-        </span>
-      </NavLink>)}
-    </div>}
-  </div>;
+        </NavLink>)}
+      </div>}
+    </div>
+  </ScrollArea>;
 }
 
 export function AppShell() {

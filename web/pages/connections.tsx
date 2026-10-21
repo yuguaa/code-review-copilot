@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@web/
 import { useConfirm } from '@web/components/ui/confirm-dialog';
 import { Checkbox, Field, FieldGroup, Input } from '@web/components/ui/forms';
 import { Modal } from '@web/components/ui/modal';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@web/components/ui/tabs';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
@@ -121,5 +122,5 @@ function NotificationPanel() {
 }
 
 export function Connections() {
-  return <><ShellHeader title="连接器" meta="GitLab 访问凭证与钉钉通知" /><div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><Tabs defaultValue="gitlab"><TabsList variant="line"><TabsTrigger value="gitlab">GitLab</TabsTrigger><TabsTrigger value="dingtalk">钉钉</TabsTrigger></TabsList><TabsContent value="gitlab" className="pt-5"><GitLabPanel /></TabsContent><TabsContent value="dingtalk" className="pt-5"><NotificationPanel /></TabsContent></Tabs></div></>;
+  return <><ShellHeader title="连接器" meta="GitLab 访问凭证与钉钉通知" /><ScrollArea className="min-h-0 flex-1"><div className="p-4 sm:p-6"><Tabs defaultValue="gitlab"><TabsList variant="line"><TabsTrigger value="gitlab">GitLab</TabsTrigger><TabsTrigger value="dingtalk">钉钉</TabsTrigger></TabsList><TabsContent value="gitlab" className="pt-5"><GitLabPanel /></TabsContent><TabsContent value="dingtalk" className="pt-5"><NotificationPanel /></TabsContent></Tabs></div></ScrollArea></>;
 }

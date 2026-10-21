@@ -55,6 +55,9 @@ export function verifyPlatformRequests(context: VerificationContext): Promise<vo
   });
   const event = { project: { id: 101 }, ref: 'refs/heads/main', before: baseSha, after: headSha, checkout_sha: headSha, user_name: 'Platform Verification' };
   const sendWebhook = () => request('/api/webhook/gitlab', 'POST', event, { Cookie: '', 'X-Gitlab-Event': 'Push Hook', 'X-Gitlab-Token': webhookSecret }).then(json);
+  const ignoredWebhook = () => request('/api/webhook/gitlab', 'POST', { ...event, ref: 'refs/heads/not-watched' }, {
+    Cookie: '', 'X-Gitlab-Event': 'Push Hook', 'X-Gitlab-Token': webhookSecret,
+  }).then(json);
 
   return check('应用健康与 API、遥测认证', () => request('/healthz').then((response) => response.text()).then((text) => {
     assert.equal(text, 'ok');
@@ -183,7 +186,11 @@ export function verifyPlatformRequests(context: VerificationContext): Promise<vo
       request('/api/rss/subscriptions', 'POST', { name: '重复地址', url: 'https://rss.example.invalid/feed.xml', enabled: false }, {}, 409),
       request(`/api/repositories/${repositoryId}`, 'PATCH', { name: '跨来源写入' }, { Origin: 'https://external.example.invalid' }, 403),
     ]).then(() => undefined)))
-    .then(() => check('真实 Webhook 路由创建排队 Run', () => sendWebhook().then((body) => {
+    .then(() => check('真实 Webhook 路由创建排队 Run', () => ignoredWebhook().then((body) => {
+      assert.equal(body.ignored, true);
+      assert.match(body.reason, /监听范围/);
+      return sendWebhook();
+    }).then((body) => {
       assert.equal(body.triggered, true);
       sessionId = body.sessionId;
       return prisma.run.findMany({ where: { sessionId } });

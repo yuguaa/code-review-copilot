@@ -9,6 +9,7 @@ import { Timeline, TimelineIndicator, TimelineItem, TimelineSeparator } from '@w
 import { Badge } from '@web/components/ui/badge';
 import { Button } from '@web/components/ui/button';
 import { Input, Select } from '@web/components/ui/forms';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { useResource } from '@web/hooks/use-resource';
 import { formatDate, runDate, runStatusLabels, runTitle } from '@web/lib/run-format';
 import { NewReviewDialog } from "@web/components/review/new-review-dialog";
@@ -89,7 +90,7 @@ export function Activities() {
   return <>
     {createOpen && repositories.data && <NewReviewDialog repositories={repositories.data.repositories} close={() => setCreateOpen(false)} />}
     <ShellHeader title="Review 历史记录" meta="按时间查看代码变更与审查运行"><Button disabled={!repositories.data} onClick={() => setCreateOpen(true)}>新建审查</Button><Button variant="outline" disabled={resource.loading} onClick={() => { void resource.reload(); }}><RefreshCwIcon className={resource.loading ? 'animate-spin' : ''} />刷新</Button></ShellHeader>
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <ScrollArea className="min-h-0 flex-1">
       <div className="flex flex-wrap items-center gap-3 border-b border-border/70 bg-background/55 px-4 py-3 sm:px-6">
         <div className="relative min-w-44 flex-1"><SearchIcon className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input aria-label="搜索审查运行" placeholder="搜索标题、仓库、提交…" className="pl-8" value={search} onChange={(event) => update('search', event.target.value)} /></div>
         <Select aria-label="筛选仓库" className="w-auto max-w-48" value={repositoryId} onChange={(event) => update('repository', event.target.value)}><option value="">全部仓库</option>{repositories.data?.repositories.map((repo) => <option key={repo.id} value={repo.id}>{repo.name}</option>)}</Select>
@@ -106,6 +107,6 @@ export function Activities() {
         </section>)}
         {pageCount > 1 && <nav aria-label="活动分页" className="flex items-center justify-end gap-3 border-t pt-4"><Button variant="outline" size="sm" disabled={page <= 1} onClick={() => changePage(page - 1)}>上一页</Button><span className="text-xs text-muted-foreground">{page} / {pageCount}</span><Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => changePage(page + 1)}>下一页</Button></nav>}
       </div>
-    </div>
+    </ScrollArea>
   </>;
 }

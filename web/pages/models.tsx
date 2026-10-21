@@ -10,6 +10,7 @@ import { Button } from '@web/components/ui/button';
 import { useConfirm } from '@web/components/ui/confirm-dialog';
 import { Checkbox, Field, FieldGroup, Input, Select } from '@web/components/ui/forms';
 import { Modal } from '@web/components/ui/modal';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@web/components/ui/table';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
@@ -45,10 +46,11 @@ export function Models() {
 
   return <>
     <ShellHeader title="模型" meta="管理 OCR 审查和继续对话使用的模型"><Button onClick={() => { setEditing(null); setForm({ ...emptyForm, isDefault: resource.data?.models.length === 0 }); setOpen(true); }}><PlusIcon />添加模型</Button></ShellHeader>
-    <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
-      <ActionError error={action.error} />
-      <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.models.length === 0} title="尚未配置模型" description="添加 Provider、Model ID 和 API Key 后，仓库可以选择对应模型。" retry={resource.reload} />
-      {resource.data && resource.data.models.length > 0 && <div className="overflow-hidden rounded-lg border"><Table>
+    <ScrollArea className="min-h-0 flex-1">
+      <div className="p-4 sm:p-6">
+        <ActionError error={action.error} />
+        <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.models.length === 0} title="尚未配置模型" description="添加 Provider、Model ID 和 API Key 后，仓库可以选择对应模型。" retry={resource.reload} />
+        {resource.data && resource.data.models.length > 0 && <ScrollArea orientation="horizontal" className="rounded-lg border"><Table>
         <TableHeader><TableRow><TableHead>模型</TableHead><TableHead>接口地址</TableHead><TableHead>状态</TableHead><TableHead>凭证</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
         <TableBody>{resource.data.models.map((model) => <TableRow key={model.id}>
           <TableCell><div className="flex items-center gap-3"><BlocksIcon className="size-4 text-muted-foreground" /><div><p className="font-medium">{model.modelId}</p><p className="mt-1 text-xs text-muted-foreground">{model.provider}</p></div>{model.isDefault && <Badge variant="secondary">默认</Badge>}</div></TableCell>
@@ -62,8 +64,9 @@ export function Models() {
             <Button variant="ghost" size="icon" aria-label={`删除 ${model.modelId}`} disabled={Boolean(action.pending)} onClick={() => remove(model)}><Trash2Icon /></Button>
           </div></TableCell>
         </TableRow>)}</TableBody>
-      </Table></div>}
-    </div>
+      </Table></ScrollArea>}
+      </div>
+    </ScrollArea>
     <Modal open={open} title={editing ? '编辑模型' : '添加模型'} onClose={() => !action.pending && setOpen(false)} maxWidth="sm:max-w-lg">
       <form className="flex flex-col gap-6" onSubmit={(event) => { event.preventDefault(); save(); }}>
         <ActionError error={action.error} />

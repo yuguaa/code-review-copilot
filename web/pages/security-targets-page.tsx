@@ -12,6 +12,7 @@ import { Button } from '@web/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@web/components/ui/card';
 import { useConfirm } from '@web/components/ui/confirm-dialog';
 import { Modal } from '@web/components/ui/modal';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
 import { cn } from '@web/lib/utils';
@@ -64,7 +65,7 @@ export function SecurityTargetsPage() {
     <ShellHeader title="测试目标" meta="管理授权范围、测试身份和自动执行计划">
       <Button onClick={() => { setEditing(null); setEditorOpen(true); }}><PlusIcon />新增目标</Button>
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+    <ScrollArea className="min-h-0 flex-1"><div className="p-4 sm:p-6">
       <ActionError error={action.error} />
       <ResourceState loading={targets.loading && !targets.data} error={targets.error}
         empty={targets.data?.targets.length === 0} title="尚未配置安全测试目标"
@@ -108,7 +109,7 @@ export function SecurityTargetsPage() {
           </Card>;
         })}
       </div>
-    </div>
+    </div></ScrollArea>
     <TargetEditor
       open={editorOpen}
       target={editing}

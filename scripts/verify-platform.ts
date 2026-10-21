@@ -38,7 +38,11 @@ function main(): Promise<void> {
     .then((runDirectory) => Promise.all([
       cp(join(projectRoot, 'prisma/schema.prisma'), join(runDirectory, 'prisma/schema.prisma')),
       cp(join(projectRoot, 'prisma/migrations'), join(runDirectory, 'prisma/migrations'), {
-        recursive: true, filter: (source) => !['20261016160000_platform_runs', '20261019120000_dingtalk_robots'].some((name) => source.endsWith(`/${name}`)),
+        recursive: true, filter: (source) => ![
+          '20261016160000_platform_runs',
+          '20261019120000_dingtalk_robots',
+          '20261019130000_add_security_testing',
+        ].some((name) => source.endsWith(`/${name}`)),
       }),
       writeFile(join(runDirectory, 'package.json'), '{"private":true,"type":"module"}\n', { mode: 0o600 }),
     ]).then(() => runDirectory))

@@ -22,6 +22,8 @@ export const busyRunStatuses = [...busySessionStatuses];
 const log = createLogger('run-worker');
 const active = new Map<string, { controller: AbortController; promise: Promise<void> }>();
 const failures = new Set<unknown>();
+/* 交互事务只执行短写操作，连接等待与事务执行分别设置明确上限。 */
+const transactionOptions = { maxWait: 10_000, timeout: 20_000 };
 const inputSchema = z.object({
   context: z.string(),
   background: z.string(),
@@ -91,27 +93,28 @@ export function enqueueRun(request: EnqueueRequest): Promise<void> {
           eventKey: request.eventKey, input, inputMessageId: message.id,
         } }).then(() => tx.session.update({ where: { id: session.id }, data: { status: 'queued', error: null, activeLeafMessageId: message.id } })));
       });
-    }))).then(() => publishCurrentSession(request.sessionId));
+    }), transactionOptions)).then(() => publishCurrentSession(request.sessionId));
 }
 
 /** 领取与取消都先锁定 Session，随后在同一事务更新 Run 和 Session。 */
 export function claimNextRun(): Promise<Run | null> {
   return prisma.$transaction((tx) => tx.$queryRaw<Array<{ id: string }>>`
-    SELECT s.id FROM sessions s
-    WHERE EXISTS (SELECT 1 FROM runs r WHERE r."sessionId" = s.id AND r.status = 'queued')
-      AND NOT EXISTS (SELECT 1 FROM runs r WHERE r."sessionId" = s.id AND r.status IN ('running', 'cancelling'))
-    ORDER BY (SELECT MIN(r."createdAt") FROM runs r WHERE r."sessionId" = s.id AND r.status = 'queued'), s.id
-    FOR UPDATE OF s SKIP LOCKED LIMIT 1
-  `.then((sessions) => {
-    const session = sessions[0];
-    if (!session || stopping || isChatSessionActive(session.id)) return null;
-    return tx.run.findFirst({ where: { sessionId: session.id, status: 'queued' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })
-      .then((run) => {
-        if (!run) return null;
-        return tx.run.update({ where: { id: run.id }, data: { status: 'running', startedAt: new Date(), error: null } })
-          .then((claimed) => tx.session.update({ where: { id: session.id }, data: { status: 'running', error: null } }).then(() => claimed));
-      });
-  })).then((run) => run ? publishCurrentSession(run.sessionId).then(() => run) : null);
+      SELECT s.id FROM sessions s
+      WHERE EXISTS (SELECT 1 FROM runs r WHERE r."sessionId" = s.id AND r.status = 'queued')
+        AND NOT EXISTS (SELECT 1 FROM runs r WHERE r."sessionId" = s.id AND r.status IN ('running', 'cancelling'))
+      ORDER BY (SELECT MIN(r."createdAt") FROM runs r WHERE r."sessionId" = s.id AND r.status = 'queued'), s.id
+      FOR UPDATE OF s SKIP LOCKED LIMIT 1
+    `.then((sessions) => {
+      const session = sessions[0];
+      if (!session || stopping || isChatSessionActive(session.id)) return null;
+      return tx.run.findFirst({ where: { sessionId: session.id, status: 'queued' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })
+        .then((run) => {
+          if (!run) return null;
+          return tx.run.update({ where: { id: run.id }, data: { status: 'running', startedAt: new Date(), error: null } })
+            .then((claimed) => tx.session.update({ where: { id: session.id }, data: { status: 'running', error: null } }).then(() => claimed));
+        });
+    }), transactionOptions)
+    .then((run) => run ? publishCurrentSession(run.sessionId).then(() => run) : null);
 }
 
 export function cancelSessionReview(sessionId: string): Promise<void> {
@@ -122,7 +125,7 @@ export function cancelSessionReview(sessionId: string): Promise<void> {
       if (run.status === 'queued') return finishRunInTransaction(tx, run, 'cancelled', '用户取消排队任务');
       return tx.run.update({ where: { id: run.id }, data: { status: 'cancelling' } })
         .then((updated) => tx.session.update({ where: { id: sessionId }, data: { status: 'cancelling' } }).then(() => updated));
-    }))
+    }), transactionOptions)
     .then((run) => publishCurrentSession(sessionId).then(() => {
       const running = active.get(run.id);
       running?.controller.abort(new Error('用户取消审查'));
@@ -134,7 +137,7 @@ export function finishRun(id: string, status: string, error: string | null, repo
   return prisma.run.findUniqueOrThrow({ where: { id }, select: { sessionId: true } })
     .then(({ sessionId }) => prisma.$transaction((tx) => lockSession(tx, sessionId)
       .then(() => tx.run.findUniqueOrThrow({ where: { id } }))
-      .then((run) => finishRunInTransaction(tx, run, status, error, report))))
+      .then((run) => finishRunInTransaction(tx, run, status, error, report)), transactionOptions))
     .then((run) => publishCurrentSession(run.sessionId).then(() => run));
 }
 
@@ -215,11 +218,11 @@ export function recoverRunWorkerState(): Promise<void> {
 }
 
 function publishCurrentSession(sessionId: string): Promise<void> {
-  return prisma.$transaction((tx) => tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM sessions WHERE id = ${sessionId} FOR UPDATE`
-    .then((rows) => rows.length ? tx.session.findUniqueOrThrow({ where: { id: sessionId }, include: {
-      messages: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
-    } }) : null)
-    .then((session) => session ? { status: session.status, error: session.error, tree: buildSessionMessageTree(session.messages, session.activeLeafMessageId) } : null))
+  return prisma.session.findUnique({
+    where: { id: sessionId },
+    include: { messages: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] } },
+  })
+    .then((session) => session ? { status: session.status, error: session.error, tree: buildSessionMessageTree(session.messages, session.activeLeafMessageId) } : null)
     .then((snapshot) => {
       if (!snapshot) return;
       const { tree, ...session } = snapshot;

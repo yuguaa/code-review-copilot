@@ -11,6 +11,7 @@ import { RunDeliveries, RunMetadata } from '@web/components/review/run-panels';
 import { Alert, AlertDescription, AlertTitle } from '@web/components/ui/alert';
 import { Button } from '@web/components/ui/button';
 import { Select } from '@web/components/ui/forms';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@web/components/ui/tabs';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
@@ -116,13 +117,13 @@ export function ReviewDetail() {
         </div>
         <Tabs value={tab} onValueChange={(value) => setParams({ tab: String(value) }, { replace: true })} className="flex min-h-0 flex-1 flex-col gap-0">
           <div className="border-b px-5"><TabsList variant="line" className="h-11"><TabsTrigger value="report" disabled={!run}>报告</TabsTrigger><TabsTrigger value="chat">继续对话</TabsTrigger><TabsTrigger value="execution" disabled={!run}>执行记录</TabsTrigger><TabsTrigger value="deliveries" disabled={!run}>发布结果</TabsTrigger></TabsList></div>
-          <TabsContent value="report" className="min-h-0 overflow-y-auto">{run && <ReportPanel key={run.id} run={run} detail={detail} update={session.setData} onAsk={() => setParams({ tab: 'chat' }, { replace: true })} />}</TabsContent>
+          <TabsContent value="report" className="min-h-0 overflow-hidden"><ScrollArea className="h-full">{run && <ReportPanel key={run.id} run={run} detail={detail} update={session.setData} onAsk={() => setParams({ tab: 'chat' }, { replace: true })} />}</ScrollArea></TabsContent>
           <TabsContent value="chat" className="flex min-h-0 flex-1 flex-col"><ReviewChat key={`${detail.session.id}:${run?.id ?? 'chat'}`} detail={detail} runId={run?.id} blocked={active} refresh={refresh} /></TabsContent>
-          <TabsContent value="execution" className="min-h-0 overflow-y-auto p-5 sm:p-8">{run && <RunMetadata run={run} />}</TabsContent>
-          <TabsContent value="deliveries" className="min-h-0 overflow-y-auto p-5 sm:p-8">{run && <RunDeliveries run={run} reload={refresh} />}</TabsContent>
+          <TabsContent value="execution" className="min-h-0 overflow-hidden"><ScrollArea className="h-full"><div className="p-5 sm:p-8">{run && <RunMetadata run={run} />}</div></ScrollArea></TabsContent>
+          <TabsContent value="deliveries" className="min-h-0 overflow-hidden"><ScrollArea className="h-full"><div className="p-5 sm:p-8">{run && <RunDeliveries run={run} reload={refresh} />}</div></ScrollArea></TabsContent>
         </Tabs>
       </div>
-      {run && <aside className="hidden w-72 shrink-0 overflow-y-auto border-l p-5 xl:block" aria-label="运行摘要"><RunMetadata run={run} /></aside>}
+      {run && <aside className="hidden w-72 shrink-0 border-l xl:block" aria-label="运行摘要"><ScrollArea className="h-full"><div className="p-5"><RunMetadata run={run} /></div></ScrollArea></aside>}
     </div>
   </>;
 }

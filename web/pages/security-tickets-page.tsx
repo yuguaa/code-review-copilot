@@ -15,6 +15,7 @@ import { Button } from '@web/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@web/components/ui/card';
 import { Field, Select } from '@web/components/ui/forms';
 import { Modal } from '@web/components/ui/modal';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@web/components/ui/table';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
@@ -61,12 +62,13 @@ export function SecurityTicketsPage() {
     <ShellHeader title="安全测试工单" meta="工单驱动 Agent Runtime，执行授权 Web/API 安全测试">
       <Button onClick={() => setCreateOpen(true)}><PlusIcon />新建工单</Button>
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-      <ActionError error={action.error} />
-      <ResourceState loading={tickets.loading && !tickets.data} error={tickets.error}
-        empty={tickets.data?.tickets.length === 0} title="还没有安全测试工单"
-        description="先配置测试目标，再发起手动工单或等待计划触发。" retry={tickets.reload} />
-      {tickets.data && tickets.data.tickets.length > 0 && <div className="overflow-hidden rounded-lg border bg-card">
+    <ScrollArea className="min-h-0 flex-1">
+      <div className="p-4 sm:p-6">
+        <ActionError error={action.error} />
+        <ResourceState loading={tickets.loading && !tickets.data} error={tickets.error}
+          empty={tickets.data?.tickets.length === 0} title="还没有安全测试工单"
+          description="先配置测试目标，再发起手动工单或等待计划触发。" retry={tickets.reload} />
+        {tickets.data && tickets.data.tickets.length > 0 && <ScrollArea orientation="horizontal" className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -103,7 +105,7 @@ export function SecurityTicketsPage() {
             </TableRow>)}
           </TableBody>
         </Table>
-      </div>}
+        </ScrollArea>}
       {tickets.data?.tickets.length === 0 && targets.data && availableTargets.length === 0 && <Card className="mt-5 max-w-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ShieldAlertIcon className="size-4 text-primary" />
@@ -116,7 +118,8 @@ export function SecurityTicketsPage() {
         <CardContent><Button render={<NavLink to="/security/targets" />}>前往测试目标</Button></CardContent>
       </Card>}
       {tickets.data?.tickets.length === 0 && availableTargets.length > 0 ? <div className="mt-5"><BugIcon className="size-4 text-primary" /><span className="ml-2 text-sm text-muted-foreground">目标已经准备完成，可以创建第一条工单。</span></div> : null}
-    </div>
+      </div>
+    </ScrollArea>
     <Modal open={createOpen} title="新建安全测试工单" onClose={() => !action.pending && setCreateOpen(false)} maxWidth="sm:max-w-lg">
       <form className="flex flex-col gap-6" onSubmit={(event) => { event.preventDefault(); createTicket(); }}>
         <ActionError error={action.error} />

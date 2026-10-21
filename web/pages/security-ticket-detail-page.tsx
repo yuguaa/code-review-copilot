@@ -17,6 +17,7 @@ import {
 import { Badge } from '@web/components/ui/badge';
 import { Button } from '@web/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@web/components/ui/card';
+import { ScrollArea } from '@web/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@web/components/ui/table';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
@@ -86,10 +87,11 @@ export function SecurityTicketDetailPage() {
       <Button variant="outline" size="sm" render={<NavLink to="/security" />}><ArrowLeftIcon />返回工单</Button>
       {ticket && isSecurityRunning(ticket.status) && <Button variant="outline" size="sm" disabled={Boolean(action.pending)} onClick={cancel}><XCircleIcon />取消</Button>}
     </ShellHeader>
-    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-      <ActionError error={action.error} />
-      <ResourceState loading={resource.loading && !ticket} error={resource.error} retry={resource.reload} />
-      {ticket && <div className="flex flex-col gap-6">
+    <ScrollArea className="min-h-0 flex-1">
+      <div className="p-4 sm:p-6">
+        <ActionError error={action.error} />
+        <ResourceState loading={resource.loading && !ticket} error={resource.error} retry={resource.reload} />
+        {ticket && <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-3">
@@ -175,7 +177,7 @@ export function SecurityTicketDetailPage() {
         <Card>
           <CardHeader><CardTitle>请求记录</CardTitle><CardDescription>共 {ticket.traffic.length} 条 HTTP 流量</CardDescription></CardHeader>
           <CardContent>
-            {ticket.traffic.length === 0 ? <p className="text-sm text-muted-foreground">没有记录到 HTTP 请求。</p> : <div className="overflow-auto rounded-lg border">
+            {ticket.traffic.length === 0 ? <p className="text-sm text-muted-foreground">没有记录到 HTTP 请求。</p> : <ScrollArea orientation="horizontal" className="rounded-lg border">
               <Table><TableHeader><TableRow><TableHead>方法</TableHead><TableHead>地址</TableHead><TableHead>状态</TableHead><TableHead>耗时</TableHead></TableRow></TableHeader>
                 <TableBody>{ticket.traffic.map((traffic) => <TableRow key={traffic.id}>
                   <TableCell className="font-mono text-xs">{traffic.method}</TableCell>
@@ -184,7 +186,7 @@ export function SecurityTicketDetailPage() {
                   <TableCell className="text-xs">{traffic.durationMs > 0 ? `${traffic.durationMs} ms` : '—'}</TableCell>
                 </TableRow>)}</TableBody>
               </Table>
-            </div>}
+            </ScrollArea>}
           </CardContent>
         </Card>
 
@@ -218,7 +220,8 @@ export function SecurityTicketDetailPage() {
             </p>}
           </CardContent>
         </Card>
-      </div>}
-    </div>
+        </div>}
+      </div>
+    </ScrollArea>
   </>;
 }
