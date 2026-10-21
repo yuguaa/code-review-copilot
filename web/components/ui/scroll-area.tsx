@@ -4,12 +4,14 @@ import { cn } from "cn"
 
 type ScrollAreaProps = ScrollAreaPrimitive.Root.Props & {
   orientation?: "vertical" | "horizontal" | "both"
+  alwaysVisible?: boolean
 }
 
 function ScrollArea({
   className,
   children,
   orientation = "vertical",
+  alwaysVisible = false,
   ...props
 }: ScrollAreaProps) {
   return (
@@ -24,8 +26,8 @@ function ScrollArea({
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      {orientation !== "horizontal" && <ScrollBar />}
-      {orientation !== "vertical" && <ScrollBar orientation="horizontal" />}
+      {orientation !== "horizontal" && <ScrollBar alwaysVisible={alwaysVisible} />}
+      {orientation !== "vertical" && <ScrollBar orientation="horizontal" alwaysVisible={alwaysVisible} />}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )
@@ -34,15 +36,18 @@ function ScrollArea({
 function ScrollBar({
   className,
   orientation = "vertical",
+  alwaysVisible = false,
   ...props
-}: ScrollAreaPrimitive.Scrollbar.Props) {
+}: ScrollAreaPrimitive.Scrollbar.Props & { alwaysVisible?: boolean }) {
   return (
     <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
       data-orientation={orientation}
+      keepMounted
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        "flex touch-none p-px transition-opacity select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        alwaysVisible ? "opacity-100" : "opacity-0 data-hovering:opacity-100 data-scrolling:opacity-100",
         className
       )}
       {...props}
