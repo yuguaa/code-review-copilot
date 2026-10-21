@@ -11,7 +11,7 @@ function ScrollArea({
   className,
   children,
   orientation = "vertical",
-  alwaysVisible = false,
+  alwaysVisible = true,
   ...props
 }: ScrollAreaProps) {
   return (
