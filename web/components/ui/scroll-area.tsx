@@ -43,6 +43,7 @@ function ScrollBar({
     <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
       data-orientation={orientation}
+      keepMounted
       orientation={orientation}
       className={cn(
         "flex touch-none p-px transition-opacity select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
