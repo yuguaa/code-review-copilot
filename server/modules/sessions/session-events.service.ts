@@ -42,7 +42,7 @@ export function publishSessionMessages(
 }
 
 export function publishSessionStatus(sessionId: string, status: string): void {
-  if (status === 'queued' || !['running', 'cancelling'].includes(status)) {
+  if (!['running', 'cancelling'].includes(status)) {
     latestProgress.delete(sessionId);
     progressSequences.delete(sessionId);
   }

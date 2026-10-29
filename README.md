@@ -48,7 +48,9 @@ GitLab Webhook 地址为 `/api/webhook/gitlab`，接收 Merge Request 和 Push �
 
 每个 MR 运行保存触发提交对应的 `baseSha`、`startSha` 和 `headSha`。Push 保存 before/after。工作区在该提交创建独立 worktree。非祖先关系的 Push 明确失败，报告不使用其他提交范围。
 
-OCR 固定使用 `@alibaba-group/open-code-review@1.9.10` 的原生可执行文件。调用参数包括 `--format json`、`--audience agent`、确定的提交范围、并发数、任务超时和 Token 预算。平台从 stdout 读取 JSON，独立处理进程退出状态。
+OCR 固定使用 `@alibaba-group/open-code-review@1.9.10` 的原生可执行文件。调用参数包括 `--format json`、`--audience human`、确定的提交范围、并发数、任务超时和 Token 预算；stderr 的进度通过平台 SSE 展示，平台从 stdout 读取最终 JSON。
+
+OpenAI-compatible 的 DeepSeek 模型默认关闭 thinking 请求字段，以兼容不支持 thinking 与 tool_choice 同时使用的网关；如需覆盖该行为，可在部署环境设置 `OCR_DISABLE_THINKING=1` 或 `OCR_DISABLE_THINKING=0`。
 
 OCR 原生规则由仓库中的 `.opencodereview/rule.json` 管理。平台审查背景通过 `--background-file` 传入。OCR 会话与运行期上下文保存在每个仓库独立的 `ocr-home`；平台不维护另一套规则、Skills 或长期记忆。
 

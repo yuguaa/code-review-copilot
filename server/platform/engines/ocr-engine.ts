@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -6,13 +6,16 @@ import { context, propagation } from "@opentelemetry/api";
 
 import { workspaceConfig } from "@server/config/workspace.config";
 import { executeChecked, executeProcess } from "@server/infrastructure/process/process.service";
+import { createLogger } from "@server/shared/logger/logger.service";
 import { parseOcrResult, renderOcrReport, reviewStatus } from "./ocr-result";
 
 import type { ModelConfig } from "@server/modules/ai-models/ai-models.service";
 
 const require = createRequire(import.meta.url);
+const log = createLogger("ocr-engine");
 const platform = require("@alibaba-group/open-code-review/scripts/platform") as { resolveNativeBinary(): { path: string } | null };
 const packageInfo = require("@alibaba-group/open-code-review/package.json") as { version: string };
+const configLocks = new Map<string, Promise<void>>();
 
 export function ocrBinary(): string {
   const binary = platform.resolveNativeBinary();
@@ -33,20 +36,55 @@ export function redactSecrets(text: string, secrets: Array<string | null | undef
     .reduce((result, secret) => result.replaceAll(secret, "[REDACTED]"), text);
 }
 
+export function shouldDisableThinking(model: Pick<ModelConfig, "provider" | "modelId">): boolean {
+  const override = process.env.OCR_DISABLE_THINKING?.trim();
+  if (override === "1") return true;
+  if (override === "0") return false;
+  return model.provider === "openai-compatible" && /deepseek/i.test(model.modelId);
+}
+
+type OcrConfig = Record<string, unknown>;
+
+export function applyThinkingCompatibility(config: OcrConfig, model: Pick<ModelConfig, "provider" | "modelId">): { config: OcrConfig; changed: boolean } {
+  if (!shouldDisableThinking(model)) return { config, changed: false };
+  const llm = config.llm && typeof config.llm === "object" && !Array.isArray(config.llm) ? config.llm as OcrConfig : {};
+  if (llm.extra_body && typeof llm.extra_body === "object" && !Array.isArray(llm.extra_body)
+    && Object.hasOwn(llm.extra_body, "thinking")) return { config, changed: false };
+  const extraBody = llm.extra_body && typeof llm.extra_body === "object" && !Array.isArray(llm.extra_body)
+    ? llm.extra_body as OcrConfig : {};
+  return { config: { ...config, llm: { ...llm, extra_body: { ...extraBody, thinking: { type: "disabled" } } } }, changed: true };
+}
+
 function ensureCompatibleLlmConfig(stateDir: string, model: ModelConfig): Promise<void> {
-  if (model.provider !== "openai-compatible") return Promise.resolve();
+  if (!shouldDisableThinking(model)) return Promise.resolve();
   const configDir = path.join(stateDir, ".opencodereview");
   const configFile = path.join(configDir, "config.json");
-  return mkdir(configDir, { recursive: true }).then(() => readFile(configFile, "utf8").then((text) => JSON.parse(text) as Record<string, unknown>, (error: unknown) => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {} as Record<string, unknown>;
-    throw error;
-  })).then((config) => {
-    const llm = config.llm && typeof config.llm === "object" && !Array.isArray(config.llm) ? config.llm as Record<string, unknown> : {};
-    const extraBody = llm.extra_body && typeof llm.extra_body === "object" && !Array.isArray(llm.extra_body)
-      ? llm.extra_body as Record<string, unknown> : {};
-    llm.extra_body = { ...extraBody, thinking: { type: "disabled" } };
-    return writeFile(configFile, JSON.stringify({ ...config, llm }, null, 2), { mode: 0o600 });
-  }).then(() => undefined);
+  const previous = configLocks.get(configFile) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(() => mkdir(configDir, { recursive: true }))
+    .then(() => readFile(configFile, "utf8").then((text) => {
+      try {
+        return JSON.parse(text) as OcrConfig;
+      } catch {
+        return {};
+      }
+    }, (error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+      throw error;
+    }))
+    .then((config) => {
+      const result = applyThinkingCompatibility(config, model);
+      if (!result.changed) return;
+      const tempFile = `${configFile}.${process.pid}.tmp`;
+      return writeFile(tempFile, JSON.stringify(result.config, null, 2), { mode: 0o600 })
+        .then(() => rename(tempFile, configFile));
+    })
+    .catch((error: unknown) => {
+      log.warn("OCR 兼容配置写入失败，继续使用当前配置", { error: error instanceof Error ? error.message : String(error) });
+    });
+  configLocks.set(configFile, current);
+  return current.finally(() => {
+    if (configLocks.get(configFile) === current) configLocks.delete(configFile);
+  });
 }
 
 function stripAnsi(text: string): string {

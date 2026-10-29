@@ -31,6 +31,7 @@ services:
       AGENT_BROWSER_BIN: /app/node_modules/.bin/agent-browser
       AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       AGENT_BROWSER_ARGS: --no-sandbox,--disable-dev-shm-usage
+      OCR_DISABLE_THINKING: ${OCR_DISABLE_THINKING:-}
       ZAP_API_URL: ${ZAP_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc

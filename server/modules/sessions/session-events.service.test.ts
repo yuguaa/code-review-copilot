@@ -74,6 +74,21 @@ describe('session events', () => {
     await reader.cancel();
   });
 
+  it('new queued runs do not replay the previous run progress', async () => {
+    publishSessionProgress('session-progress-reset', 'run-old', '[ocr] old run');
+    publishSessionStatus('session-progress-reset', 'queued');
+    const reader = subscribeSessionEvents('session-progress-reset').getReader();
+    await reader.read();
+
+    const result = await Promise.race([
+      reader.read().then((chunk) => new TextDecoder().decode(chunk.value)),
+      new Promise<string>((resolve) => setTimeout(() => resolve('no-progress'), 20)),
+    ]);
+    expect(result).not.toContain('old run');
+
+    await reader.cancel();
+  });
+
   it('publishes list changed events', async () => {
     const reader = subscribeSessionListEvents().getReader();
     await reader.read();
