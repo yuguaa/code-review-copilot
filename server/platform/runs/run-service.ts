@@ -80,7 +80,7 @@ export function enqueueRun(request: EnqueueRequest): Promise<void> {
         const context = request.background ?? session.mrTitle ?? '';
         const input = inputSchema.parse({
           context,
-          background: ['请使用简体中文审查代码，依据仓库内 OCR 原生规则与项目上下文提出有证据的问题。', repo.defaultReviewPrompt, context].filter(Boolean).join('\n\n'),
+          background: ['请使用简体中文审查代码，依据仓库内 OCR 原生规则与项目上下文提出有证据的问题。', context].filter(Boolean).join('\n\n'),
           reviewRule: repo.defaultReviewPrompt ?? '',
           model: { provider: model.provider, modelId: model.modelId, apiBaseUrl: model.apiBaseUrl ?? null },
           concurrency: repo.ocrConcurrency, timeoutMinutes: repo.ocrTimeoutMinutes, maxTokensBudget: repo.ocrMaxTokensBudget,

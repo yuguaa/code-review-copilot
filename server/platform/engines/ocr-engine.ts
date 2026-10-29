@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -31,6 +31,22 @@ export function redactSecrets(text: string, secrets: Array<string | null | undef
   return secrets.filter((secret): secret is string => Boolean(secret))
     .sort((left, right) => right.length - left.length)
     .reduce((result, secret) => result.replaceAll(secret, "[REDACTED]"), text);
+}
+
+function ensureCompatibleLlmConfig(stateDir: string, model: ModelConfig): Promise<void> {
+  if (model.provider !== "openai-compatible") return Promise.resolve();
+  const configDir = path.join(stateDir, ".opencodereview");
+  const configFile = path.join(configDir, "config.json");
+  return mkdir(configDir, { recursive: true }).then(() => readFile(configFile, "utf8").then((text) => JSON.parse(text) as Record<string, unknown>, (error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {} as Record<string, unknown>;
+    throw error;
+  })).then((config) => {
+    const llm = config.llm && typeof config.llm === "object" && !Array.isArray(config.llm) ? config.llm as Record<string, unknown> : {};
+    const extraBody = llm.extra_body && typeof llm.extra_body === "object" && !Array.isArray(llm.extra_body)
+      ? llm.extra_body as Record<string, unknown> : {};
+    llm.extra_body = { ...extraBody, thinking: { type: "disabled" } };
+    return writeFile(configFile, JSON.stringify({ ...config, llm }, null, 2), { mode: 0o600 });
+  }).then(() => undefined);
 }
 
 function stripAnsi(text: string): string {
@@ -72,11 +88,14 @@ export function runOcr(request: OcrRequest) {
     "--max-tokens-budget", String(request.maxTokensBudget), "--background-file", backgroundFile];
   const ruleFile = path.join(workspaceConfig.root, request.repositoryId, "artifacts", request.id, "review-rule.json");
   const projectRuleFile = path.join(request.workdir, ".opencodereview", "rule.json");
-  const prepareRule = request.reviewRule?.trim()
-    ? access(projectRuleFile).then(() => false, () => writeFile(ruleFile, JSON.stringify({ rules: [{
-      path: "**/*", rule: request.reviewRule, merge_system_rule: true,
-    }] }, null, 2), { mode: 0o600 }).then(() => true))
-    : Promise.resolve(false);
+  const prepareRule = access(projectRuleFile).then(() => true, () => false).then((hasProjectRule) => {
+    if (hasProjectRule || !request.reviewRule?.trim()) return hasProjectRule;
+    return mkdir(path.dirname(ruleFile), { recursive: true })
+      .then(() => writeFile(ruleFile, JSON.stringify({ rules: [{
+        path: "**/*", rule: request.reviewRule, merge_system_rule: true,
+      }] }, null, 2), { mode: 0o600 }))
+      .then(() => false);
+  });
   let stderrBuffer = "";
   const emitProgressLines = (chunk: Buffer, flush = false) => {
     stderrBuffer += chunk.toString("utf8");
@@ -87,9 +106,18 @@ export function runOcr(request: OcrRequest) {
       if (line) request.onProgress?.(line);
     }
   };
-  return Promise.all([mkdir(path.join(stateDir, "tmp"), { recursive: true }), mkdir(path.dirname(backgroundFile), { recursive: true }), prepareRule])
-    .then(([, , generatedRule]) => generatedRule ? [...baseArgs, "--rule", ruleFile] : baseArgs)
-    .then((args) => writeFile(backgroundFile, request.background, { mode: 0o600 }).then(() => args))
+  return Promise.all([
+    mkdir(path.join(stateDir, "tmp"), { recursive: true }),
+    mkdir(path.dirname(backgroundFile), { recursive: true }),
+    ensureCompatibleLlmConfig(stateDir, model),
+    prepareRule,
+  ])
+    .then(([, , , hasProjectRule]) => ({
+      args: hasProjectRule ? baseArgs : [...baseArgs, ...(request.reviewRule?.trim() ? ["--rule", ruleFile] : [])],
+      background: hasProjectRule && request.reviewRule?.trim()
+        ? `${request.background}\n\n${request.reviewRule}` : request.background,
+    }))
+    .then(({ args, background }) => writeFile(backgroundFile, background, { mode: 0o600 }).then(() => args))
     .then((args) => executeProcess(ocrBinary(), args, {
       cwd: request.workdir, env, signal: request.signal, timeoutMs: 60 * 60_000,
       onStderr: (chunk) => emitProgressLines(chunk),
