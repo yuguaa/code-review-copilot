@@ -88,8 +88,9 @@ export function ReviewDetail() {
     const onProgress = (event: Event) => {
       try {
         const payload = JSON.parse((event as MessageEvent<string>).data) as ReviewProgress;
-        if (payload.type !== 'review-progress' || !payload.runId || !payload.message) return;
-        setProgress((current) => [...current.slice(-99), payload]);
+        if (payload.type !== 'review-progress' || !payload.runId || !payload.message || !Number.isSafeInteger(payload.sequence)) return;
+        setProgress((current) => current.some((item) => item.runId === payload.runId && item.sequence === payload.sequence)
+          ? current : [...current.slice(-99), payload]);
       } catch {
         // Ignore malformed progress events; the session snapshot remains authoritative.
       }

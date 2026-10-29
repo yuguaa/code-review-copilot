@@ -9,7 +9,7 @@ type SessionMessagePayload = Pick<
 type SessionEvent =
   | ({ type: 'messages'; messages: UIMessage[] } & Partial<Omit<SessionMessagePayload, 'messages'>>)
   | { type: 'status'; status: string }
-  | { type: 'review-progress'; runId: string; message: string }
+  | { type: 'review-progress'; runId: string; message: string; sequence: number }
   | { type: 'review-error'; error: string };
 
 type Client = {
@@ -23,6 +23,7 @@ const encoder = new TextEncoder();
 const clients = new Map<string, Set<Client>>();
 const listClients = new Set<Client>();
 const latestProgress = new Map<string, Extract<SessionEvent, { type: 'review-progress' }>>();
+const progressSequences = new Map<string, number>();
 
 export function subscribeSessionEvents(sessionId: string, signal?: AbortSignal): ReadableStream<Uint8Array> {
   const sessionClients = clients.get(sessionId) ?? new Set<Client>();
@@ -41,12 +42,17 @@ export function publishSessionMessages(
 }
 
 export function publishSessionStatus(sessionId: string, status: string): void {
-  if (!['queued', 'running', 'cancelling'].includes(status)) latestProgress.delete(sessionId);
+  if (status === 'queued' || !['running', 'cancelling'].includes(status)) {
+    latestProgress.delete(sessionId);
+    progressSequences.delete(sessionId);
+  }
   publishSessionEvent(sessionId, { type: 'status', status });
 }
 
 export function publishSessionProgress(sessionId: string, runId: string, message: string): void {
-  const event = { type: 'review-progress' as const, runId, message };
+  const sequence = (progressSequences.get(sessionId) ?? 0) + 1;
+  progressSequences.set(sessionId, sequence);
+  const event = { type: 'review-progress' as const, runId, message, sequence };
   latestProgress.set(sessionId, event);
   publishSessionEvent(sessionId, event);
 }
