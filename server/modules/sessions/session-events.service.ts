@@ -9,6 +9,7 @@ type SessionMessagePayload = Pick<
 type SessionEvent =
   | ({ type: 'messages'; messages: UIMessage[] } & Partial<Omit<SessionMessagePayload, 'messages'>>)
   | { type: 'status'; status: string }
+  | { type: 'review-progress'; runId: string; message: string }
   | { type: 'review-error'; error: string };
 
 type Client = {
@@ -40,6 +41,10 @@ export function publishSessionMessages(
 
 export function publishSessionStatus(sessionId: string, status: string): void {
   publishSessionEvent(sessionId, { type: 'status', status });
+}
+
+export function publishSessionProgress(sessionId: string, runId: string, message: string): void {
+  publishSessionEvent(sessionId, { type: 'review-progress', runId, message });
 }
 
 export function publishSessionError(sessionId: string, error: string): void {
@@ -122,8 +127,8 @@ function publishClients(clientSet: Set<Client>, event: { type: string }): void {
   const chunk = encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
   for (const client of clientSet) {
     if (client.pending.length > 0 || (client.controller.desiredSize ?? 0) <= 0) {
-      if (event.type === 'messages') {
-        client.pending = client.pending.filter((pending) => pending.type !== 'messages');
+      if (event.type === 'messages' || event.type === 'review-progress') {
+        client.pending = client.pending.filter((pending) => pending.type !== event.type);
       }
       if (client.pending.length >= MAX_PENDING_EVENTS) {
         client.close();

@@ -44,7 +44,7 @@ npm run dev:security-worker
 
 ## 审查执行
 
-GitLab Webhook 地址为 `/api/webhook/gitlab`，接收 Merge Request 和 Push 事件。GitLab 账号的 `webhookSecret` 用于验证 `X-Gitlab-Token`；GitLab 项目 Hook 的 Secret Token 必须与该值一致。
+GitLab Webhook 地址为 `/api/webhook/gitlab`，接收 Merge Request 和 Push 事件。生产环境保存仓库配置时会使用 GitLab 账号的 Access Token 自动创建或更新项目 Hook；Access Token 必须具备管理项目 Hook 的权限。账号的 `webhookSecret` 用于验证 `X-Gitlab-Token`，项目 Hook 的 Secret Token 必须与该值一致。
 
 每个 MR 运行保存触发提交对应的 `baseSha`、`startSha` 和 `headSha`。Push 保存 before/after。工作区在该提交创建独立 worktree。非祖先关系的 Push 明确失败，报告不使用其他提交范围。
 

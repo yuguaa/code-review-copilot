@@ -7,6 +7,8 @@ export function executeProcess(command: string, args: string[], options: {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxBytes?: number;
+  onStdout?: (chunk: Buffer) => void;
+  onStderr?: (chunk: Buffer) => void;
 } = {}): Promise<ProcessResult> {
   options.signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
@@ -46,8 +48,18 @@ export function executeProcess(command: string, args: string[], options: {
       if (bytes > (options.maxBytes ?? 64 * 1024 * 1024)) terminate(new Error("进程输出超出限制"));
       else target.push(chunk);
     };
-    child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
-    child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
+    const stream = (target: Buffer[], callback: ((chunk: Buffer) => void) | undefined, chunk: Buffer) => {
+      collect(target, chunk);
+      if (!termination && callback) {
+        try {
+          callback(chunk);
+        } catch (error) {
+          terminate(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+    };
+    child.stdout.on("data", (chunk: Buffer) => stream(stdout, options.onStdout, chunk));
+    child.stderr.on("data", (chunk: Buffer) => stream(stderr, options.onStderr, chunk));
     const cleanup = () => {
       clearTimeout(timer);
       clearTimeout(forceTimer);

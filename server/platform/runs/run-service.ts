@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
 import { assertCommit, cleanupRunWorkspaces, prepareRunWorkspace } from '@server/infrastructure/workspace/workspace.service';
 import { loadGlobalDefaultModel, resolveRepositoryModelConfig } from '@server/modules/ai-models/ai-models.service';
-import { publishSessionError, publishSessionListChanged, publishSessionMessages, publishSessionStatus } from '@server/modules/sessions/session-events.service';
+import { publishSessionError, publishSessionListChanged, publishSessionMessages, publishSessionProgress, publishSessionStatus } from '@server/modules/sessions/session-events.service';
 import { busySessionStatuses } from '@server/modules/sessions/session-lifecycle.service';
 import { buildSessionMessageTree, getSessionWithRepository, lockSession } from '@server/modules/sessions/session-message-store.service';
 import { isChatSessionActive } from '@server/platform/chat/chat-runtime';
@@ -176,9 +176,13 @@ export function executeRun(id: string, signal: AbortSignal): Promise<void> {
       signal.throwIfAborted();
       if (run.status === 'cancelling') throw new Error('任务已取消');
       return prisma.run.update({ where: { id }, data: { traceId: traceId || null, engineVersion: engineVersion || run.engineVersion } })
-        .then(() => withSpan('workspace.prepare', { 'review.run.id': id }, () => prepareRunWorkspace(session, run, signal)))
+        .then(() => {
+          publishSessionProgress(run.sessionId, id, '正在准备 OCR 审查工作区');
+          return withSpan('workspace.prepare', { 'review.run.id': id }, () => prepareRunWorkspace(session, run, signal));
+        })
         .then((workspace) => withSpan('engine.process', { 'review.run.id': id, 'engine.key': run.engineKey }, () => runOcr({
           ...input, id, repositoryId: repo.id, model, workdir: workspace.dir, baseSha: run.baseSha!, headSha: run.headSha!, signal, traceparent,
+          onProgress: (message) => publishSessionProgress(run.sessionId, id, message),
         }).then((result) => {
           if (result.status === 'failed') throw new EngineResultError(result);
           return result;

@@ -27,6 +27,10 @@ export const gitLabDiscussion = z.object({
 
 export type GitLabDiscussionResult = z.infer<typeof gitLabDiscussion>;
 export type GitLabWebhookResult = { id: number; url: string };
+export type GitLabWebhook = GitLabWebhookResult & {
+  push_events?: boolean;
+  merge_requests_events?: boolean;
+};
 export type MergeRequestCommentPayload = { body: string; position?: MergeRequestPosition };
 
 const positionInput = z.object({

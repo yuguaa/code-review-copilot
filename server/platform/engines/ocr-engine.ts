@@ -33,6 +33,10 @@ export function redactSecrets(text: string, secrets: Array<string | null | undef
     .reduce((result, secret) => result.replaceAll(secret, "[REDACTED]"), text);
 }
 
+function stripAnsi(text: string): string {
+  return text.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
 export function runOcr(request: OcrRequest) {
   const carrier: Record<string, string> = {};
   propagation.inject(context.active(), carrier);
@@ -63,13 +67,27 @@ export function runOcr(request: OcrRequest) {
     OCR_CONTENT_LOGGING: "0",
   };
   const args = ["review", "--repo", request.workdir, "--from", request.baseSha, "--to", request.headSha,
-    "--format", "json", "--audience", "agent", "--color", "never",
+    "--format", "json", "--audience", "human", "--color", "never",
     "--concurrency", String(request.concurrency), "--timeout", String(request.timeoutMinutes),
     "--max-tokens-budget", String(request.maxTokensBudget), "--background-file", backgroundFile];
+  let stderrBuffer = "";
+  const emitProgressLines = (chunk: Buffer, flush = false) => {
+    stderrBuffer += chunk.toString("utf8");
+    const parts = stderrBuffer.split(/\r\n|\n|\r/);
+    stderrBuffer = flush ? "" : parts.pop() ?? "";
+    for (const part of parts) {
+      const line = redactSecrets(stripAnsi(part).trim(), [model.apiKey]);
+      if (line) request.onProgress?.(line);
+    }
+  };
   return Promise.all([mkdir(path.join(stateDir, "tmp"), { recursive: true }), mkdir(path.dirname(backgroundFile), { recursive: true })])
     .then(() => writeFile(backgroundFile, request.background, { mode: 0o600 }))
-    .then(() => executeProcess(ocrBinary(), args, { cwd: request.workdir, env, signal: request.signal, timeoutMs: 60 * 60_000 }))
+    .then(() => executeProcess(ocrBinary(), args, {
+      cwd: request.workdir, env, signal: request.signal, timeoutMs: 60 * 60_000,
+      onStderr: (chunk) => emitProgressLines(chunk),
+    }))
     .then((processResult) => {
+      emitProgressLines(Buffer.alloc(0), true);
       if (processResult.error) throw processResult.error;
       if (!processResult.stdout.trim()) throw new Error(`OCR 没有输出结果，退出状态 ${processResult.code ?? processResult.signal}`);
       const safe = redactSecrets(processResult.stdout, [model.apiKey]);
@@ -97,4 +115,5 @@ export type OcrRequest = {
   maxTokensBudget: number;
   traceparent: string;
   signal: AbortSignal;
+  onProgress?: (message: string) => void;
 };

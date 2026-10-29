@@ -4,7 +4,7 @@ import { buildCommitCommentPayload, buildMergeRequestCommentPayload, gitLabDiscu
 import { fetchGitLabPages } from "./gitlab-pagination";
 
 import type { AxiosInstance } from "axios";
-import type { CommitCommentOptions, GitLabDiscussionResult, GitLabWebhookResult, MergeRequestPosition } from "./gitlab-comments";
+import type { CommitCommentOptions, GitLabDiscussionResult, GitLabWebhook, GitLabWebhookResult, MergeRequestPosition } from "./gitlab-comments";
 import type { GitLabBranch, GitLabCommit, GitLabCommitComment, GitLabCompareResult, GitLabDiff, GitLabMergeRequest, GitLabMergeRequestVersion, GitLabProject, GitLabRepositoryTreeItem } from "./gitlab-types";
 
 export class GitLabService {
@@ -125,6 +125,26 @@ export class GitLabService {
     return this.client.post<GitLabWebhookResult>(`/projects/${encodeURIComponent(projectId)}/hooks`, {
       url: webhookUrl, merge_requests_events: true, push_events: true, token: webhookSecret,
     }).then((response) => response.data);
+  }
+
+  listProjectWebhooks(projectId: number | string): Promise<GitLabWebhook[]> {
+    return fetchGitLabPages<GitLabWebhook>({ client: this.client, path: `/projects/${encodeURIComponent(projectId)}/hooks` });
+  }
+
+  ensureProjectWebhook(projectId: number | string, webhookUrl: string, webhookSecret: string): Promise<GitLabWebhookResult> {
+    const token = webhookSecret.trim();
+    if (!token) throw new Error("GitLab Webhook Secret 不能为空");
+    const normalizedUrl = webhookUrl.replace(/\/+$/, "");
+    const data = { url: webhookUrl, merge_requests_events: true, push_events: true, token };
+    return this.listProjectWebhooks(projectId).then((hooks) => {
+      const matches = hooks.filter((hook) => hook.url.replace(/\/+$/, "") === normalizedUrl);
+      if (matches.length > 1) throw new Error("GitLab 项目存在重复的 Review Webhook");
+      const existing = matches[0];
+      return existing
+        ? this.client.put<GitLabWebhookResult>(`/projects/${encodeURIComponent(projectId)}/hooks/${existing.id}`, data)
+          .then((response) => response.data)
+        : this.createProjectWebhook(projectId, webhookUrl, token);
+    });
   }
 
   testConnection(): Promise<boolean> {

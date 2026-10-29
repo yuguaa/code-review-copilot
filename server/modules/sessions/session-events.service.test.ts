@@ -3,6 +3,7 @@ import {
   publishSessionError,
   publishSessionListChanged,
   publishSessionMessages,
+  publishSessionProgress,
   publishSessionStatus,
   subscribeSessionEvents,
   subscribeSessionListEvents,
@@ -43,6 +44,20 @@ describe('session events', () => {
 
     expect(text).toContain('event: messages');
     expect(text).toContain('审查结果');
+
+    await reader.cancel();
+  });
+
+  it('publishes OCR progress to session subscribers', async () => {
+    const reader = subscribeSessionEvents('session-progress').getReader();
+    await reader.read();
+
+    publishSessionProgress('session-progress', 'run-1', '[ocr] reviewing sample.ts');
+
+    const text = new TextDecoder().decode((await reader.read()).value);
+    expect(text).toContain('event: review-progress');
+    expect(text).toContain('run-1');
+    expect(text).toContain('reviewing sample.ts');
 
     await reader.cancel();
   });

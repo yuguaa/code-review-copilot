@@ -12,6 +12,7 @@ export type ReviewRun = {
   repository?: { id: string; name: string; path: string } | null;
   session?: { title: string | null; mrIid: number | null };
 };
+export type ReviewProgress = { type: 'review-progress'; runId: string; message: string };
 export type MessageTreeNode = {
   id: string; parentId: string | null; role: UIMessage['role']; createdAt: string;
   siblingIds: string[]; siblingIndex: number; siblingCount: number; active: boolean;
