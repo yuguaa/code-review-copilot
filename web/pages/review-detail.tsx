@@ -7,7 +7,6 @@ import { RunStatusBadge } from '@web/components/common/run-status';
 import { ShellHeader } from '@web/components/layout/shell-header';
 import { MarkdownBlock } from '@web/components/message/MarkdownBlock';
 import { ReviewChat } from '@web/components/review/review-chat';
-import { Badge } from '@web/components/ui/badge';
 import { RunDeliveries, RunMetadata } from '@web/components/review/run-panels';
 import { Alert, AlertDescription, AlertTitle } from '@web/components/ui/alert';
 import { Button } from '@web/components/ui/button';
@@ -23,29 +22,8 @@ import type { ReviewProgress, ReviewRun, SessionDetail } from '@web/lib/types';
 
 type MessageTree = Pick<SessionDetail, 'messages' | 'messageTree' | 'activeLeafMessageId' | 'activePathIds'>;
 
-function LiveReviewProgress({ run, progress }: { run: ReviewRun; progress: ReviewProgress[] }) {
-  const items = progress.filter((item) => item.runId === run.id);
-  const container = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (container.current) container.current.scrollTop = container.current.scrollHeight;
-  }, [items.length]);
-
-  if (!items.length && !activeRunStatuses.has(run.status)) return null;
-  return <section className="rounded-lg border bg-muted/30 p-4">
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="text-sm font-semibold">实时审查过程</h2>
-      <Badge variant="secondary">{activeRunStatuses.has(run.status) ? '正在接收' : '已结束'}</Badge>
-    </div>
-    <div ref={container} aria-live="polite" className="mt-3 max-h-72 overflow-auto rounded-md bg-background p-3 font-mono text-xs leading-6 text-muted-foreground">
-      {items.length ? items.map((item, index) => <div key={`${item.runId}:${index}`}>{item.message}</div>) : <div>正在等待 OCR 输出…</div>}
-    </div>
-  </section>;
-}
-
-function ReportPanel({ run, detail, update, onAsk, progress }: {
+function ReportPanel({ run, detail, update, onAsk }: {
   run: ReviewRun; detail: SessionDetail; update: Dispatch<SetStateAction<SessionDetail | null>>; onAsk: () => void;
-  progress: ReviewProgress[];
 }) {
   const reportId = run.reportMessageId;
   const message = detail.messages.find((item) => item.id === reportId);
@@ -79,7 +57,6 @@ function ReportPanel({ run, detail, update, onAsk, progress }: {
         <Button variant="outline" size="sm" onClick={onAsk}>询问助手</Button>
       </AlertDescription>
     </Alert>}
-    <LiveReviewProgress run={run} progress={progress} />
     <ResourceState error={error} retry={() => setRevision((current) => current + 1)} />
     {content ? <MarkdownBlock text={content} /> : !error && <ResourceState
       loading={Boolean(reportId && content === undefined)}
@@ -152,8 +129,8 @@ export function ReviewDetail() {
         </div>
         <Tabs value={tab} onValueChange={(value) => setParams({ tab: String(value) }, { replace: true })} className="flex min-h-0 flex-1 flex-col gap-0">
           <div className="border-b px-5"><TabsList variant="line" className="h-11"><TabsTrigger value="report" disabled={!run}>报告</TabsTrigger><TabsTrigger value="chat">继续对话</TabsTrigger><TabsTrigger value="execution" disabled={!run}>执行记录</TabsTrigger><TabsTrigger value="deliveries" disabled={!run}>发布结果</TabsTrigger></TabsList></div>
-          <TabsContent value="report" className="min-h-0 overflow-hidden"><ScrollArea className="h-full">{run && <ReportPanel key={run.id} run={run} detail={detail} update={session.setData} onAsk={() => setParams({ tab: 'chat' }, { replace: true })} progress={progress} />}</ScrollArea></TabsContent>
-          <TabsContent value="chat" className="flex min-h-0 flex-1 flex-col"><ReviewChat key={`${detail.session.id}:${run?.id ?? 'chat'}`} detail={detail} runId={run?.id} blocked={active} refresh={refresh} /></TabsContent>
+          <TabsContent value="report" className="min-h-0 overflow-hidden"><ScrollArea className="h-full">{run && <ReportPanel key={run.id} run={run} detail={detail} update={session.setData} onAsk={() => setParams({ tab: 'chat' }, { replace: true })} />}</ScrollArea></TabsContent>
+          <TabsContent value="chat" className="flex min-h-0 flex-1 flex-col"><ReviewChat key={`${detail.session.id}:${run?.id ?? 'chat'}`} detail={detail} run={run} runId={run?.id} blocked={active} refresh={refresh} progress={progress} /></TabsContent>
           <TabsContent value="execution" className="min-h-0 overflow-hidden"><ScrollArea className="h-full"><div className="p-5 sm:p-8">{run && <RunMetadata run={run} />}</div></ScrollArea></TabsContent>
           <TabsContent value="deliveries" className="min-h-0 overflow-hidden"><ScrollArea className="h-full"><div className="p-5 sm:p-8">{run && <RunDeliveries run={run} reload={refresh} />}</div></ScrollArea></TabsContent>
         </Tabs>

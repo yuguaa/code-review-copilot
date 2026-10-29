@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -66,10 +66,17 @@ export function runOcr(request: OcrRequest) {
     OTEL_RESOURCE_ATTRIBUTES: `run.id=${request.id},repository.id=${request.repositoryId},engine.key=ocr-review`,
     OCR_CONTENT_LOGGING: "0",
   };
-  const args = ["review", "--repo", request.workdir, "--from", request.baseSha, "--to", request.headSha,
+  const baseArgs = ["review", "--repo", request.workdir, "--from", request.baseSha, "--to", request.headSha,
     "--format", "json", "--audience", "human", "--color", "never",
     "--concurrency", String(request.concurrency), "--timeout", String(request.timeoutMinutes),
     "--max-tokens-budget", String(request.maxTokensBudget), "--background-file", backgroundFile];
+  const ruleFile = path.join(workspaceConfig.root, request.repositoryId, "artifacts", request.id, "review-rule.json");
+  const projectRuleFile = path.join(request.workdir, ".opencodereview", "rule.json");
+  const prepareRule = request.reviewRule?.trim()
+    ? access(projectRuleFile).then(() => false, () => writeFile(ruleFile, JSON.stringify({ rules: [{
+      path: "**/*", rule: request.reviewRule, merge_system_rule: true,
+    }] }, null, 2), { mode: 0o600 }).then(() => true))
+    : Promise.resolve(false);
   let stderrBuffer = "";
   const emitProgressLines = (chunk: Buffer, flush = false) => {
     stderrBuffer += chunk.toString("utf8");
@@ -80,9 +87,10 @@ export function runOcr(request: OcrRequest) {
       if (line) request.onProgress?.(line);
     }
   };
-  return Promise.all([mkdir(path.join(stateDir, "tmp"), { recursive: true }), mkdir(path.dirname(backgroundFile), { recursive: true })])
-    .then(() => writeFile(backgroundFile, request.background, { mode: 0o600 }))
-    .then(() => executeProcess(ocrBinary(), args, {
+  return Promise.all([mkdir(path.join(stateDir, "tmp"), { recursive: true }), mkdir(path.dirname(backgroundFile), { recursive: true }), prepareRule])
+    .then(([, , generatedRule]) => generatedRule ? [...baseArgs, "--rule", ruleFile] : baseArgs)
+    .then((args) => writeFile(backgroundFile, request.background, { mode: 0o600 }).then(() => args))
+    .then((args) => executeProcess(ocrBinary(), args, {
       cwd: request.workdir, env, signal: request.signal, timeoutMs: 60 * 60_000,
       onStderr: (chunk) => emitProgressLines(chunk),
     }))
@@ -115,5 +123,6 @@ export type OcrRequest = {
   maxTokensBudget: number;
   traceparent: string;
   signal: AbortSignal;
+  reviewRule?: string;
   onProgress?: (message: string) => void;
 };

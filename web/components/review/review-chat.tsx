@@ -10,12 +10,13 @@ import { Message, MessageAction, MessageActions, MessageContent, MessageResponse
 import { PromptInput, PromptInputBody, PromptInputFooter, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from '@web/components/ai-elements/prompt-input';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@web/components/ai-elements/reasoning';
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@web/components/ai-elements/tool';
+import { Badge } from '@web/components/ui/badge';
 import { Button } from '@web/components/ui/button';
 import { Select } from '@web/components/ui/forms';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
 
-import type { AIModelSummary, SessionDetail } from '@web/lib/types';
+import type { AIModelSummary, ReviewProgress, ReviewRun, SessionDetail } from '@web/lib/types';
 import type { UIMessage } from 'ai';
 
 type ToolPartView = { type: string; state?: string; toolName?: string; input?: unknown; output?: unknown; errorText?: string };
@@ -41,8 +42,28 @@ function hasRenderablePart(message: UIMessage): boolean {
     || part.type === 'dynamic-tool' || part.type.startsWith('tool-'));
 }
 
-export function ReviewChat({ detail, runId, blocked, refresh }: {
-  detail: SessionDetail; runId?: string; blocked: boolean; refresh: () => Promise<SessionDetail | undefined | void>;
+function LiveReviewProgress({ run, progress }: { run: ReviewRun; progress: ReviewProgress[] }) {
+  const items = progress.filter((item) => item.runId === run.id);
+  const container = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (container.current) container.current.scrollTop = container.current.scrollHeight;
+  }, [items.length]);
+
+  if (!items.length && !['queued', 'running', 'cancelling'].includes(run.status)) return null;
+  return <div className="mb-4 rounded-lg border bg-muted/30 p-4">
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-sm font-semibold">实时审查过程</h2>
+      <Badge variant="secondary">{['queued', 'running', 'cancelling'].includes(run.status) ? '正在接收' : '已结束'}</Badge>
+    </div>
+    <div ref={container} aria-live="polite" className="mt-3 max-h-72 overflow-auto rounded-md bg-background p-3 font-mono text-xs leading-6 text-muted-foreground">
+      {items.length ? items.map((item, index) => <div key={`${item.runId}:${index}`}>{item.message}</div>) : <div>正在等待 OCR 输出…</div>}
+    </div>
+  </div>;
+}
+
+export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
+  detail: SessionDetail; run?: ReviewRun; runId?: string; blocked: boolean; refresh: () => Promise<SessionDetail | undefined | void>; progress: ReviewProgress[];
 }) {
   const [input, setInput] = useState('');
   const [modelId, setModelId] = useState('');
@@ -94,6 +115,7 @@ export function ReviewChat({ detail, runId, blocked, refresh }: {
   return <div className="flex min-h-0 flex-1 flex-col">
     <Conversation className="flex-1">
       <ConversationContent aria-busy={busy}>
+            {run && <LiveReviewProgress run={run} progress={progress} />}
             {chat.messages.length === 0 && <ResourceState empty title="围绕代码继续提问" description="描述你想了解的实现、提交或审查结论。" />}
             {chat.messages.map((message) => {
               const streaming = busy && message.id === chat.messages.at(-1)?.id && message.role === 'assistant';

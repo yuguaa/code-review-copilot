@@ -96,6 +96,12 @@ function completedRun(): Promise<Run> {
 }
 
 describe('运行事务、取消与重新执行', () => {
+  it('入队时保存仓库审查规则快照', () => createSession().then((sessionId) => enqueue(sessionId)
+    .then(() => latest(sessionId)).then((run) => {
+      expect(run.input).toMatchObject({ reviewRule: '仓库审查要求' });
+      return runs.cancelSessionReview(sessionId);
+    })));
+
   it('并发入队仅创建一个 Run 与输入消息', () => createSession().then((sessionId) => Promise.allSettled([enqueue(sessionId), enqueue(sessionId)])
     .then((results) => {
       expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);

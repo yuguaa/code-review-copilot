@@ -62,6 +62,18 @@ describe('session events', () => {
     await reader.cancel();
   });
 
+  it('new subscribers receive the latest OCR progress snapshot', async () => {
+    publishSessionProgress('session-progress-replay', 'run-2', '[ocr] reviewing TeachOS');
+    const reader = subscribeSessionEvents('session-progress-replay').getReader();
+    await reader.read();
+
+    const text = new TextDecoder().decode((await reader.read()).value);
+    expect(text).toContain('event: review-progress');
+    expect(text).toContain('reviewing TeachOS');
+
+    await reader.cancel();
+  });
+
   it('publishes list changed events', async () => {
     const reader = subscribeSessionListEvents().getReader();
     await reader.read();
