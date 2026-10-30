@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -15,7 +15,6 @@ const require = createRequire(import.meta.url);
 const log = createLogger("ocr-engine");
 const platform = require("@alibaba-group/open-code-review/scripts/platform") as { resolveNativeBinary(): { path: string } | null };
 const packageInfo = require("@alibaba-group/open-code-review/package.json") as { version: string };
-const configLocks = new Map<string, Promise<void>>();
 
 export function ocrBinary(): string {
   const binary = platform.resolveNativeBinary();
@@ -55,16 +54,21 @@ export function applyThinkingCompatibility(config: OcrConfig, model: Pick<ModelC
   return { config: { ...config, llm: { ...llm, extra_body: { ...extraBody, thinking: { type: "disabled" } } } }, changed: true };
 }
 
-function ensureCompatibleLlmConfig(stateDir: string, model: ModelConfig): Promise<void> {
-  if (!shouldDisableThinking(model)) return Promise.resolve();
+function prepareRuntimeLlmConfig(options: { stateDir: string; sharedStateDir: string; model: ModelConfig; baseUrl: string; protocol: string }): Promise<void> {
+  const { stateDir, sharedStateDir, model, baseUrl, protocol } = options;
+  if (stateDir === sharedStateDir) return Promise.resolve();
   const configDir = path.join(stateDir, ".opencodereview");
   const configFile = path.join(configDir, "config.json");
-  const previous = configLocks.get(configFile) ?? Promise.resolve();
-  const current = previous.catch(() => undefined).then(() => mkdir(configDir, { recursive: true }))
-    .then(() => readFile(configFile, "utf8").then((text) => {
+  const sharedConfigDir = path.join(sharedStateDir, ".opencodereview");
+  const sessionsDir = path.join(sharedConfigDir, "sessions");
+  return mkdir(configDir, { recursive: true, mode: 0o700 })
+    .then(() => readFile(path.join(sharedConfigDir, "config.json"), "utf8").then((text) => {
       try {
-        return JSON.parse(text) as OcrConfig;
+        const config: unknown = JSON.parse(text);
+        if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("配置必须为 JSON 对象");
+        return config as OcrConfig;
       } catch {
+        log.warn("OCR 共享配置格式无效，使用本次运行的模型配置，不改写原文件");
         return {};
       }
     }, (error: unknown) => {
@@ -73,18 +77,19 @@ function ensureCompatibleLlmConfig(stateDir: string, model: ModelConfig): Promis
     }))
     .then((config) => {
       const result = applyThinkingCompatibility(config, model);
-      if (!result.changed) return;
-      const tempFile = `${configFile}.${process.pid}.tmp`;
-      return writeFile(tempFile, JSON.stringify(result.config, null, 2), { mode: 0o600 })
-        .then(() => rename(tempFile, configFile));
+      const llm = result.config.llm as OcrConfig;
+      /* OCR 不合并不完整配置与环境变量；独立 HOME 避免并发运行串用模型，密钥仅从子进程环境读取。 */
+      return writeFile(configFile, JSON.stringify({ llm: { ...llm, url: baseUrl, model: model.modelId, protocol,
+        auth_token: undefined, auth_token_cmd: 'printf \'%s\' "$OCR_LLM_TOKEN"',
+      } }, null, 2), { mode: 0o600 });
     })
-    .catch((error: unknown) => {
-      log.warn("OCR 兼容配置写入失败，继续使用当前配置", { error: error instanceof Error ? error.message : String(error) });
-    });
-  configLocks.set(configFile, current);
-  return current.finally(() => {
-    if (configLocks.get(configFile) === current) configLocks.delete(configFile);
-  });
+    .then(() => mkdir(sessionsDir, { recursive: true, mode: 0o700 }))
+    .then(() => symlink(sessionsDir, path.join(configDir, "sessions"), "dir").catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      return Promise.all([realpath(path.join(configDir, "sessions")), realpath(sessionsDir)]).then(([actual, expected]) => {
+        if (actual !== expected) throw new Error("OCR 会话目录与仓库持久化目录不一致");
+      });
+    }));
 }
 
 function stripAnsi(text: string): string {
@@ -94,7 +99,8 @@ function stripAnsi(text: string): string {
 export function runOcr(request: OcrRequest) {
   const carrier: Record<string, string> = {};
   propagation.inject(context.active(), carrier);
-  const stateDir = path.join(workspaceConfig.root, request.repositoryId, "ocr-home");
+  const sharedStateDir = path.join(workspaceConfig.root, request.repositoryId, "ocr-home");
+  const stateDir = shouldDisableThinking(request.model) ? path.join(sharedStateDir, "runs", request.id) : sharedStateDir;
   const backgroundFile = path.join(workspaceConfig.root, request.repositoryId, "artifacts", request.id, "background.md");
   const model = request.model;
   const protocol = model.provider === "anthropic" ? "anthropic" : model.provider === "openai" ? "openai-responses" : "openai";
@@ -147,7 +153,7 @@ export function runOcr(request: OcrRequest) {
   return Promise.all([
     mkdir(path.join(stateDir, "tmp"), { recursive: true }),
     mkdir(path.dirname(backgroundFile), { recursive: true }),
-    ensureCompatibleLlmConfig(stateDir, model),
+    prepareRuntimeLlmConfig({ stateDir, sharedStateDir, model, baseUrl, protocol }),
     prepareRule,
   ])
     .then(([, , , hasProjectRule]) => ({

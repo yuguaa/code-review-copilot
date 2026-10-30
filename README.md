@@ -65,6 +65,8 @@ OCR 固定使用 `@alibaba-group/open-code-review@1.9.10` 的原生可执行文�
 
 OpenAI-compatible 的 DeepSeek 模型默认关闭 thinking 请求字段，以兼容不支持 thinking 与 tool_choice 同时使用的网关；如需覆盖该行为，可在部署环境设置 `OCR_DISABLE_THINKING=1` 或 `OCR_DISABLE_THINKING=0`。
 
+这类运行使用独立 HOME 下完整的 OCR 原生模型配置，避免不完整的 `llm.extra_body` 被 OCR 忽略或并发任务串用模型。密钥通过固定命令从运行环境读取，不写入配置文件；仅将会话目录链接至仓库原有的持久化目录，保留历史会话和共享配置原文。
+
 OCR 原生规则由仓库中的 `.opencodereview/rule.json` 管理。平台审查背景通过 `--background-file` 传入。OCR 会话与运行期上下文保存在每个仓库独立的 `ocr-home`；平台不维护另一套规则、Skills 或长期记忆。
 
 PostgreSQL 保存排队任务，单实例执行器最多并行处理两个运行。取消时终止进程组并等待退出，再释放运行资格。服务重新启动后，在途任务保存为 `interrupted`，排队任务继续等待领取。
