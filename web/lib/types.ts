@@ -2,6 +2,7 @@ import type { UIMessage } from 'ai';
 
 export type RunStatus = 'queued' | 'running' | 'cancelling' | 'completed' | 'partial' | 'skipped' | 'failed' | 'cancelled' | 'interrupted';
 export type Delivery = { status: string; error?: string; remoteIds?: string[]; startedAt?: string; finishedAt?: string };
+export type OcrTokenUsage = { inputTokens: number; outputTokens: number; totalTokens: number; cacheReadTokens: number };
 export type ReviewRun = {
   id: string; sessionId: string; repositoryId: string | null;
   triggerType: string; engineKey: string; engineVersion: string | null; status: RunStatus;
@@ -9,6 +10,7 @@ export type ReviewRun = {
   provider: string | null; modelId: string | null; traceId: string | null; error: string | null;
   createdAt?: string; startedAt: string | null; finishedAt: string | null;
   deliveries: Partial<Record<'gitlab' | 'dingtalk', Delivery>>; reportMessageId: string | null;
+  tokenUsage?: OcrTokenUsage | null;
   repository?: { id: string; name: string; path: string } | null;
   session?: { title: string | null; mrIid: number | null };
 };

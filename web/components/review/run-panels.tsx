@@ -14,6 +14,11 @@ import { formatDate } from '@web/lib/run-format';
 import type { ReviewRun } from '@web/lib/types';
 
 export function RunMetadata({ run }: { run: ReviewRun }) {
+  const number = new Intl.NumberFormat('zh-CN');
+  const tokenUsage = run.tokenUsage ? [
+    ['输入 Token', run.tokenUsage.inputTokens], ['输出 Token', run.tokenUsage.outputTokens],
+    ['总 Token', run.tokenUsage.totalTokens], ['缓存读取 Token', run.tokenUsage.cacheReadTokens],
+  ] as const : [];
   const values = [
     ['运行 ID', run.id], ['触发来源', run.triggerType], ['审查引擎', `${run.engineKey} ${run.engineVersion ?? ''}`],
     ['Provider', run.provider], ['模型', run.modelId], ['base SHA', run.baseSha], ['start SHA', run.startSha],
@@ -22,6 +27,12 @@ export function RunMetadata({ run }: { run: ReviewRun }) {
   const traceLink = `/observability/explore?${new URLSearchParams({ left: JSON.stringify({ datasource: 'tempo', queries: [{ refId: 'A', queryType: 'traceql', query: run.traceId }] }) })}`;
   return <div className="flex flex-col gap-6">
     <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">执行记录</h2><RunStatusBadge status={run.status} /></div>
+    {tokenUsage.length > 0 && <section>
+      <h3 className="text-sm font-semibold">Token 消耗</h3>
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">{tokenUsage.map(([label, value]) => <div key={label} className="rounded-lg border p-3">
+        <dt className="text-muted-foreground">{label}</dt><dd className="mt-1 font-mono text-base font-semibold">{number.format(value)}</dd>
+      </div>)}</dl>
+    </section>}
     <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-4 gap-y-4 text-xs">{values.map(([label, value]) => <div key={label} className="contents"><dt className="text-muted-foreground">{label}</dt><dd className="break-all font-mono leading-5">{value || '尚未记录'}</dd></div>)}</dl>
     {run.error && <Alert variant="destructive"><AlertTitle>执行错误</AlertTitle><AlertDescription>{run.error}</AlertDescription></Alert>}
     {run.traceId && <Button variant="outline" render={<a href={traceLink} target="_blank" rel="noreferrer" />}><ExternalLinkIcon />查看关联 trace</Button>}

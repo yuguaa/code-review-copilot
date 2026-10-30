@@ -19,8 +19,35 @@ export const ocrResultSchema = z.object({
   trace_id: z.string().optional(),
 }).passthrough();
 
+const tokenUsageSchema = z.object({
+  input_tokens: z.number().int().nonnegative(),
+  output_tokens: z.number().int().nonnegative(),
+  total_tokens: z.number().int().nonnegative(),
+  cache_read_tokens: z.number().int().nonnegative().optional().default(0),
+}).passthrough();
+
+export type OcrTokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+};
+
 export function parseOcrResult(stdout: string): OcrResult {
   return ocrResultSchema.parse(JSON.parse(stdout));
+}
+
+export function tokenUsageFromOcrResult(value: unknown): OcrTokenUsage | null {
+  const result = ocrResultSchema.safeParse(value);
+  if (!result.success || !result.data.summary) return null;
+  const usage = tokenUsageSchema.safeParse(result.data.summary);
+  if (!usage.success) return null;
+  return {
+    inputTokens: usage.data.input_tokens,
+    outputTokens: usage.data.output_tokens,
+    totalTokens: usage.data.total_tokens,
+    cacheReadTokens: usage.data.cache_read_tokens,
+  };
 }
 
 export function reviewStatus(result: OcrResult, exitCode: number | null): string {

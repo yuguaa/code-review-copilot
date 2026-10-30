@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import { prisma } from "@server/infrastructure/prisma/prisma.service";
+import { tokenUsageFromOcrResult } from "@server/platform/engines/ocr-result";
 import { publishRun } from "./run-publication";
 import { createManualReview } from "./run-trigger";
 
@@ -40,12 +41,14 @@ runRoutes.get("/", (context) => {
       include: { repository: { select: { id: true, name: true, path: true } }, session: { select: { title: true, mrIid: true } } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: input.pageSize, skip: (input.page - 1) * input.pageSize,
     }),
-  ]).then(([total, runs]) => context.json({ total, page: input.page, pageSize: input.pageSize, runs: runs.map(({ rawResult, input: request, ...run }) => run) }));
+  ]).then(([total, runs]) => context.json({ total, page: input.page, pageSize: input.pageSize, runs: runs.map(({ rawResult, input: request, ...run }) => ({
+    ...run, tokenUsage: tokenUsageFromOcrResult(rawResult),
+  })) }));
 });
 
 runRoutes.get("/:id", (context) => prisma.run.findUnique({ where: { id: context.req.param("id") } }).then((run) => {
   if (!run) throw new HTTPException(404, { message: "运行记录不存在" });
-  return context.json({ run });
+  return context.json({ run: { ...run, tokenUsage: tokenUsageFromOcrResult(run.rawResult) } });
 }));
 
 runRoutes.post("/:id/publish", (context) => context.req.json().then((body) => {

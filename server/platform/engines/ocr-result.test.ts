@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseOcrResult, renderOcrReport, reviewStatus } from "./ocr-result";
+import { parseOcrResult, renderOcrReport, reviewStatus, tokenUsageFromOcrResult } from "./ocr-result";
 
 describe("OCR 结果", () => {
   it("未知状态和无效位置立即失败", () => {
@@ -18,5 +18,12 @@ describe("OCR 结果", () => {
     expect(report).toContain("app.ts:3");
     expect(report).toContain("一个文件未完成");
     expect(report).toContain("````\n```\n````");
+  });
+  it("从 OCR 汇总中提取 Token 使用量", () => {
+    expect(tokenUsageFromOcrResult({
+      status: "complete", comments: [],
+      summary: { input_tokens: 100, output_tokens: 20, total_tokens: 120, cache_read_tokens: 30 },
+    })).toEqual({ inputTokens: 100, outputTokens: 20, totalTokens: 120, cacheReadTokens: 30 });
+    expect(tokenUsageFromOcrResult({ status: "running" })).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { HTTPException } from 'hono/http-exception';
 
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
 import { isChatSessionActive } from '@server/platform/chat/chat-runtime';
+import { tokenUsageFromOcrResult } from '@server/platform/engines/ocr-result';
 import { cancelSessionReview, enqueueSessionReview } from '@server/platform/runs/run-service';
 import { publishSessionListChanged, publishSessionMessages } from './session-events.service';
 import { busySessionStatuses, isSessionBusy } from './session-lifecycle.service';
@@ -69,7 +70,7 @@ export function loadSessionDetail(id: string) {
         webUrl: sessionWebUrl(session),
       },
       ...buildSessionMessageTree(session.messages, session.activeLeafMessageId),
-      runs: session.runs,
+      runs: session.runs.map((run) => ({ ...run, tokenUsage: tokenUsageFromOcrResult(run.rawResult) })),
     })));
 }
 
