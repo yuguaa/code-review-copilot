@@ -52,14 +52,16 @@ export function Checkbox({
   label,
   checked,
   onChange,
+  disabled = false,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="flex cursor-pointer items-center gap-2 text-sm">
-      <CheckboxPrimitive checked={checked} onCheckedChange={(value) => onChange(Boolean(value))} />
+      <CheckboxPrimitive checked={checked} disabled={disabled} onCheckedChange={(value) => onChange(Boolean(value))} />
       {label}
     </label>
   );

@@ -104,6 +104,8 @@ describe('真实 Pi SDK 与 UIMessageStream', () => {
         expect(JSON.stringify(first.messages)).toContain('数据库保存的审查报告');
         expect(first.thinking).toEqual({ type: 'disabled' });
         expect(first.messages[0].role).toBe('system');
+        expect(first.messages[0].content).toContain('当前没有关联仓库');
+        expect(first.messages[0].content).toContain('不得声称已核查代码');
         expect(first.max_tokens).toBe(8192);
         expect(first).not.toHaveProperty('max_completion_tokens');
         expect(first).not.toHaveProperty('store');
@@ -121,6 +123,20 @@ describe('真实 Pi SDK 与 UIMessageStream', () => {
         expect(saved).toHaveLength(2);
         expect(saved[0].parts).toContainEqual(expect.objectContaining({ type: 'dynamic-tool', state: 'output-available' }));
       });
+  });
+
+  it('运行缺少固定提交范围时明确仅提供诊断，不回退到仓库 HEAD', () => {
+    const signal = controller().signal;
+    return createChatStream({ session: { repository: { id: 'not-prepared' } } as SessionWithRepository,
+      run: { id: 'queued-run', status: 'queued', baseSha: null, headSha: null } as Run,
+      messages: [question], modelConfig: config, abortSignal: signal,
+    }).then((execute) => readMessages(createUIMessageStream({ execute: ({ writer }) => execute(writer) }))).then(() => {
+      expect(requests).toHaveLength(1);
+      expect(requests[0].messages[0].content).toContain('当前运行缺少固定 base/head 提交范围');
+      expect(requests[0].messages[0].content).toContain('不得声称已核查代码');
+      expect(requests[0].tools.map((tool: any) => tool.function.name)).toContain('review_run_context');
+      expect(requests[0].tools.map((tool: any) => tool.function.name)).not.toContain('read_file');
+    });
   });
 
   it('仅允许显式工具，不发现宿主机指令、不写 Pi 会话文件', () => writeFile(path.join(root, 'AGENTS.md'), 'HOST-INSTRUCTIONS-SHOULD-NOT-LEAK')

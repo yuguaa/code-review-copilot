@@ -5,11 +5,13 @@ import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
+import { loadGlobalDefaultModel, resolveRepositoryModelConfig } from '@server/modules/ai-models/ai-models.service';
 import { loadRepositoryDingtalkConfig, sendDingtalkNotification } from '@server/modules/notifications/notifications.service';
 import { publishSessionListChanged } from '@server/modules/sessions/session-events.service';
 import { parseOcrResult } from '@server/platform/engines/ocr-result';
 import { withSpan } from '@server/platform/telemetry/telemetry.service';
 import { createGitLabService } from '@server/shared/gitlab/gitlab.service';
+import { notifyReviewSubmitter } from './review-notifier';
 
 import type { Prisma } from '@prisma/client';
 
@@ -21,6 +23,9 @@ const deliverySchema = z.object({
   error: z.string().optional(),
   startedAt: z.string().optional(),
   finishedAt: z.string().optional(),
+  steps: z.array(z.string()).max(50).optional(),
+  recipient: z.object({ userId: z.string(), name: z.string(), employeeNo: z.string().optional() }).optional(),
+  profile: z.string().optional(),
 });
 const deliveriesSchema = z.record(deliverySchema);
 const publicationLocks = new Map<string, Promise<void>>();
@@ -62,7 +67,7 @@ export function buildDingtalkReviewMessage(input: {
   return { title, text: `${metadata}\n\n---\n\n${input.report}` };
 }
 
-export function publishRun(id: string, channel: Channel, manual: boolean): Promise<void> {
+export function publishRun(id: string, channel: Channel, manual: boolean, signal?: AbortSignal): Promise<void> {
   return withSpan(`connector.${channel}.publish`, { 'review.run.id': id, channel }, () => claimRunDelivery(id, channel, manual)
     .then((claim) => {
       if (!claim) return;
@@ -70,6 +75,7 @@ export function publishRun(id: string, channel: Channel, manual: boolean): Promi
       const previous = deliveriesSchema.parse(claim.run.deliveries)[channel];
       const remoteIds = new Set(previous?.remoteIds ?? []);
       const noteIds = new Set(previous?.noteIds ?? []);
+      let notification: Pick<Delivery, 'recipient' | 'profile'> = {};
       const checkpoint = () => saveRunDelivery(id, channel, claim.attemptId, {
         status: 'sending', remoteIds: [...remoteIds], noteIds: [...noteIds],
       });
@@ -78,6 +84,29 @@ export function publishRun(id: string, channel: Channel, manual: boolean): Promi
         ? `${repo.id}:${claim.run.session.mrIid == null ? `commit:${claim.run.headSha}` : `mr:${claim.run.session.mrIid}`}`
         : repo.id;
       return withPublicationLock(`${channel}:${target}`, () => {
+        if (channel === 'dingtalk-cli') {
+          const result = parseOcrResult(JSON.stringify(claim.run.rawResult));
+          if (!result.comments.length) return Promise.resolve('skipped' as const);
+          const publicUrl = process.env.APP_PUBLIC_URL;
+          if (!publicUrl) throw new Error('APP_PUBLIC_URL 未配置');
+          const text = [`项目：${repo.name}`, `提交人：${claim.run.session.author ?? ''}（${claim.run.session.authorUsername ?? '缺少工号'}）`,
+            `提交：${claim.run.baseSha} → ${claim.run.headSha}`, `OCR 发现 ${result.comments.length} 个问题：`,
+            ...result.comments.slice(0, 10).map((item, index) => `${index + 1}. ${item.path}:${item.start_line}\n${item.content.slice(0, 500)}`),
+            `完整报告与继续问答：${publicUrl.replace(/\/$/, '')}/runs/${id}`].join('\n\n');
+          const steps: string[] = [];
+          return loadGlobalDefaultModel().then((model) => notifyReviewSubmitter({ runId: id,
+            employeeNo: claim.run.session.authorUsername ?? '', title: `[代码审查问题] ${repo.name}`, text,
+            model: resolveRepositoryModelConfig(repo, model), signal, onSending: () => { mayHaveSent = true; },
+            onStep: (step) => { steps.push(step); return saveRunDelivery(id, channel, claim.attemptId, { status: 'sending', steps: steps.slice(-50) }); },
+          })).then((receipt) => {
+            notification = { recipient: receipt.recipient, profile: receipt.profile };
+            for (const remoteId of receipt.remoteIds) remoteIds.add(remoteId);
+            return 'sent' as const;
+          }).catch((error: unknown) => {
+            if (mayHaveSent) throw new Error('CLI 通知已尝试发送，结果需要核对，不会自动重发', { cause: error });
+            throw error;
+          });
+        }
         if (channel === 'dingtalk') {
           return loadRepositoryDingtalkConfig(repo).then((config) => {
             if (!config) return 'skipped' as const;
@@ -164,7 +193,7 @@ export function publishRun(id: string, channel: Channel, manual: boolean): Promi
           });
         });
       }).then((status) => saveRunDelivery(id, channel, claim.attemptId, {
-        status, remoteIds: [...remoteIds], noteIds: [...noteIds], finishedAt: new Date().toISOString(),
+        status, remoteIds: [...remoteIds], noteIds: [...noteIds], finishedAt: new Date().toISOString(), ...notification,
       })).catch((error: unknown) => {
         if (error instanceof DeliveryStorageError) throw error;
         const { status, error: message } = classifyDeliveryError(error, mayHaveSent, previous?.status === 'unknown');
@@ -187,7 +216,7 @@ export function classifyDeliveryError(error: unknown, mayHaveSent: boolean, prev
 /** 同一 Run 的发送资格和报告归属在行锁中检查。 */
 export function claimRunDelivery(id: string, channel: Channel, manual: boolean) {
   return prisma.$transaction((tx) => tx.$queryRaw`SELECT id FROM runs WHERE id = ${id} FOR UPDATE`
-    .then(() => tx.run.findUnique({ where: { id }, include: { session: { include: { repository: { include: { gitLabAccount: true } } } } } }))
+    .then(() => tx.run.findUnique({ where: { id }, include: { session: { include: { repository: { include: { gitLabAccount: true, defaultAIModel: true } } } } } }))
     .then((run) => {
       if (!run) throw new HTTPException(404, { message: '运行记录不存在' });
       if (!isPublishableRunStatus(run.status) || !run.reportMessageId) {
@@ -201,22 +230,27 @@ export function claimRunDelivery(id: string, channel: Channel, manual: boolean) 
       const deliveries = deliveriesSchema.parse(run.deliveries);
       const previous = deliveries[channel];
       if (previous?.status === 'sent' || previous?.status === 'sending' || (!manual && previous)) return null;
-      const enabled = channel === 'gitlab' ? repo.enableMrComment : repo.enableDingtalk;
-      if (!enabled && previous) return null;
-      if (!enabled) return tx.run.update({ where: { id }, data: {
-        deliveries: { ...deliveries, [channel]: { status: 'skipped', finishedAt: new Date().toISOString() } },
-      } }).then(() => null);
-      return tx.message.findFirst({ where: { id: run.reportMessageId, sessionId: run.sessionId, role: 'assistant', parentId: run.inputMessageId } })
-        .then((message) => {
-          if (!message) throw new HTTPException(409, { message: '报告消息不存在于当前运行的消息分支' });
-          const parts = z.array(z.object({ type: z.string(), text: z.string().optional() }).passthrough()).parse(message.parts);
-          const report = parts.filter((part) => part.type === 'text').map((part) => part.text ?? '').join('\n\n').trim();
-          if (!report) throw new HTTPException(409, { message: '报告没有可以发布的正文' });
-          const attemptId = randomUUID();
-          return tx.run.update({ where: { id }, data: { deliveries: {
-            ...deliveries, [channel]: { status: 'sending', attemptId, startedAt: new Date().toISOString() },
-          } } }).then(() => ({ run, report, attemptId }));
-        });
+      const active = channel === 'dingtalk-cli'
+        ? tx.dingtalkRobot.findUnique({ where: { cliSingleton: true }, select: { enabled: true, cliEnableAfterLogin: true } })
+          .then((connection) => Boolean(connection && (connection.enabled || connection.cliEnableAfterLogin)))
+        : Promise.resolve(channel === 'gitlab' ? repo.enableMrComment : repo.enableDingtalk);
+      return active.then((enabled) => {
+        if (!enabled && previous) return null;
+        if (!enabled) return tx.run.update({ where: { id }, data: {
+          deliveries: { ...deliveries, [channel]: { status: 'skipped', finishedAt: new Date().toISOString() } },
+        } }).then(() => null);
+        return tx.message.findFirst({ where: { id: run.reportMessageId!, sessionId: run.sessionId, role: 'assistant', parentId: run.inputMessageId } })
+          .then((message) => {
+            if (!message) throw new HTTPException(409, { message: '报告消息不存在于当前运行的消息分支' });
+            const parts = z.array(z.object({ type: z.string(), text: z.string().optional() }).passthrough()).parse(message.parts);
+            const report = parts.filter((part) => part.type === 'text').map((part) => part.text ?? '').join('\n\n').trim();
+            if (!report) throw new HTTPException(409, { message: '报告没有可以发布的正文' });
+            const attemptId = randomUUID();
+            return tx.run.update({ where: { id }, data: { deliveries: {
+              ...deliveries, [channel]: { status: 'sending', attemptId, startedAt: new Date().toISOString() },
+            } } }).then(() => ({ run, report, attemptId }));
+          });
+      });
     }));
 }
 
@@ -239,6 +273,7 @@ export function recoverRunPublications(): Promise<void> {
   return prisma.run.findMany({ where: { OR: [
     { deliveries: { path: ['gitlab', 'status'], equals: 'sending' } },
     { deliveries: { path: ['dingtalk', 'status'], equals: 'sending' } },
+    { deliveries: { path: ['dingtalk-cli', 'status'], equals: 'sending' } },
   ] }, select: { id: true } }).then((runs) => runs.reduce<Promise<void>>((pending, run) => pending.then(() => prisma.$transaction((tx) =>
     tx.$queryRaw`SELECT id FROM runs WHERE id = ${run.id} FOR UPDATE`
       .then(() => tx.run.findUniqueOrThrow({ where: { id: run.id } }))
@@ -267,5 +302,5 @@ function withPublicationLock<T>(key: string, operation: () => Promise<T>): Promi
 export class PublicationError extends HTTPException {}
 class DeliveryStorageError extends Error {}
 
-export type Channel = 'gitlab' | 'dingtalk';
+export type Channel = 'gitlab' | 'dingtalk' | 'dingtalk-cli';
 export type Delivery = z.infer<typeof deliverySchema>;

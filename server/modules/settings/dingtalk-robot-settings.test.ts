@@ -23,6 +23,7 @@ let workerServer: ReturnType<typeof serve>;
 let cliSendCount = 0;
 let lastProfile = '';
 let rejectSends = false;
+let activeProfile = 'corp-a:user-a';
 const webhookA = `https://robot-a.example.invalid/send?access_token=${randomUUID()}`;
 const webhookB = `https://robot-b.example.invalid/send?access_token=${randomUUID()}`;
 const secretA = randomUUID();
@@ -58,8 +59,9 @@ beforeAll(() => mkdir(directory, { recursive: true }).then(() => {
     .route('/api/repositories', repositories.repositoryRoutes).route('/api/rss', rss.rssRoutes);
   process.env.DINGTALK_WORKER_TOKEN = randomUUID();
   const workerApp = worker.createDingtalkWorker(process.env.DINGTALK_WORKER_TOKEN, (input) => {
-    lastProfile = input.profile;
-    if (input.action === 'search') return Promise.resolve({ people: [{ userId: 'ding-user-1', name: '测试钉钉用户' }], returnedCount: 1 });
+    lastProfile = 'profile' in input ? input.profile : '';
+    if (input.action === 'search') return Promise.resolve({ people: [{ userId: 'ding-user-1', name: '测试钉钉用户', employeeNo: '251111' }], returnedCount: 1 });
+    if (input.action === 'auth-status') return Promise.resolve({ authenticated: true, tokenValid: true, profile: activeProfile, userName: '授权用户', corpName: '测试组织', reason: null });
     if (input.action === 'status') return Promise.resolve({ authenticated: true, tokenValid: true, userName: '授权用户', corpName: '测试组织', reason: null });
     cliSendCount++;
     if (rejectSends) return Promise.reject(new Error('simulated worker failure'));
@@ -169,16 +171,18 @@ describe('真实 PostgreSQL 多钉钉机器人', () => {
       .then(() => request(`/api/settings/dingtalk/${robotId}`, 'PATCH', { name: '不存在' }, 404));
   }, 60_000);
 
-  it('CLI 配置、名单与发送链路隔离组织，并发重复请求只发送一次', async () => {
+  it('CLI 只允许一个扫码登录身份，所有仓库共享，私聊请求仍然去重并保留回执', async () => {
     const connection = { name: 'CLI 连接', transport: 'cli', cliProfile: 'corp-a:user-a', cliRobotCode: 'test-bot', cliGroupId: 'test-group' };
     await request('/api/settings/dingtalk', 'POST', { name: '缺少 CLI 配置', transport: 'cli' }, 400);
-    const { robot } = await request('/api/settings/dingtalk', 'POST', connection, 201);
-    expect(robot).toMatchObject({ transport: 'cli', isConfigured: true, hasWebhookUrl: false });
-    const cliConfig = await notifications.loadDingtalkConfig(robot.id);
-    expect(cliConfig).toMatchObject({ transport: 'cli', cliProfile: connection.cliProfile });
-    const notificationCount = cliSendCount;
-    await notifications.sendDingtalkNotification(cliConfig, '自动通知', '通知正文');
-    expect(cliSendCount).toBe(notificationCount + 1);
+    await request('/api/settings/dingtalk', 'POST', connection, 400);
+    const state = await request('/api/settings/dingtalk/cli');
+    const robot = await prisma.dingtalkRobot.findUniqueOrThrow({ where: { cliSingleton: true } });
+    expect(state.auth).toMatchObject({ authenticated: true, profile: connection.cliProfile });
+    expect(state.connection.enabled).toBe(false);
+    await request('/api/settings/dingtalk/cli', 'PATCH', { enabled: true });
+    expect((await request('/api/settings/dingtalk')).robots.every((item: any) => item.transport === 'webhook')).toBe(true);
+    await expect(prisma.dingtalkRobot.create({ data: { ...connection, cliSingleton: true } })).rejects.toMatchObject({ code: 'P2002' });
+    await expect(prisma.dingtalkRobot.create({ data: { ...connection, cliSingleton: false } })).rejects.toThrow();
     await request(`/api/settings/dingtalk/${robot.id}`, 'PATCH', { cliGroupId: null }, 400);
     await request(`/api/settings/dingtalk/${robot.id}`, 'PATCH', { cliPath: '/bin/sh' }, 400);
     expect((await request(`/api/settings/dingtalk/${robot.id}/status`, 'POST')).status.authenticated).toBe(true);
@@ -186,9 +190,9 @@ describe('真实 PostgreSQL 多钉钉机器人', () => {
     expect(contact).toMatchObject({ employeeNo: '251111', userId: 'ding-user-1', name: '测试钉钉用户' });
     expect(lastProfile).toBe(connection.cliProfile);
     await request(`/api/settings/dingtalk/${robot.id}/contacts`, 'POST', { query: '251111', dimension: 'jobNumber', userId: '914' }, 409);
-    await request(`/api/settings/dingtalk/${robot.id}`, 'PATCH', { cliProfile: 'corp-b:user-b' }, 409);
+    await request(`/api/settings/dingtalk/${robot.id}`, 'PATCH', { cliProfile: 'corp-b:user-b' }, 400);
     const session = await prisma.session.create({ data: { kind: 'chat' } });
-    const send = { requestId: randomUUID(), connectionId: robot.id, targetKind: 'direct', title: '审查讨论', text: '经用户确认的正文', contactIds: [contact.id], confirmed: true };
+    const send = { requestId: randomUUID(), connectionId: robot.id, profile: connection.cliProfile, targetKind: 'direct', title: '审查讨论', text: '经用户确认的正文', contactIds: [contact.id], confirmed: true };
     const before = cliSendCount;
     await Promise.all([messageServices.sendSessionDingtalkMessage(session.id, 'admin', send), messageServices.sendSessionDingtalkMessage(session.id, 'admin', send)]);
     expect(cliSendCount - before).toBe(1);
@@ -202,15 +206,116 @@ describe('真实 PostgreSQL 多钉钉机器人', () => {
     await messageServices.sendSessionDingtalkMessage(session.id, 'admin', failedRequest);
     expect(cliSendCount - beforeFailure).toBe(1);
     rejectSends = false;
+    activeProfile = 'corp-b:user-b';
+    await request('/api/settings/dingtalk/cli');
+    expect(await prisma.dingtalkContact.findUniqueOrThrow({ where: { id: contact.id } })).toMatchObject({ enabled: false, employeeNo: null, cliProfile: connection.cliProfile });
+    await request(`/api/settings/dingtalk/${robot.id}/contacts/${contact.id}`, 'PATCH', { enabled: true });
+    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), profile: activeProfile })).rejects.toMatchObject({ status: 400 });
+    expect((await messageServices.listDingtalkMessages(session.id)).find((item) => item.id === send.requestId)).toMatchObject({ cliProfile: connection.cliProfile });
+    activeProfile = connection.cliProfile;
+    await request('/api/settings/dingtalk/cli');
     const pendingId = randomUUID();
     await prisma.dingtalkMessage.create({ data: { id: pendingId, connectionId: robot.id, sessionId: session.id,
       requestedBy: 'admin', payloadHash: 'interrupted-request', targetKind: 'group', recipients: [], title: '中断发送', text: '正文' } });
     await messageServices.recoverDingtalkMessages();
     expect(await prisma.dingtalkMessage.findUniqueOrThrow({ where: { id: pendingId } })).toMatchObject({ status: 'unknown' });
-    const other = await request('/api/settings/dingtalk', 'POST', { ...connection, name: '其他组织', cliProfile: 'corp-b:user-b' }, 201);
-    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), connectionId: other.robot.id })).rejects.toMatchObject({ status: 400 });
+    await request('/api/settings/dingtalk', 'POST', { ...connection, name: '其他组织', cliProfile: 'corp-b:user-b' }, 400);
+    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), profile: 'corp-b:user-b' })).rejects.toMatchObject({ status: 409 });
     await request(`/api/settings/dingtalk/${robot.id}`, 'DELETE', undefined, 409);
-    await request(`/api/settings/dingtalk/${robot.id}`, 'PATCH', { enabled: false });
+    await request('/api/settings/dingtalk/cli', 'PATCH', { enabled: false });
     await expect(notifications.loadDingtalkConfig(robot.id)).rejects.toThrow('停用');
+  });
+
+  it('登录请求尚未返回时关闭共享通知，迟到的登录完成不能重新启用', async () => {
+    const previousUrl = process.env.DINGTALK_WORKER_URL;
+    let releaseLogin!: () => void;
+    let receivedLogin!: () => void;
+    const received = new Promise<void>((resolve) => { receivedLogin = resolve; });
+    const login = { id: randomUUID(), status: 'pending', authorizationUrl: null, userCode: null,
+      expiresAt: new Date(Date.now() + 60000).toISOString(), error: null };
+    const fixture = new Hono().post('/execute', (c) => c.req.json().then((body) => {
+      if (body.action === 'login-start') return new Promise<Response>((resolve) => {
+        releaseLogin = () => resolve(c.json(login));
+        receivedLogin();
+      });
+      if (body.action === 'login-state') return c.json(login);
+      return c.json({ authenticated: true, tokenValid: true, profile: activeProfile, userName: '授权用户', corpName: '测试组织', reason: null });
+    }));
+    let fixtureServer!: ReturnType<typeof serve>;
+    await new Promise<void>((resolve) => { fixtureServer = serve({ fetch: fixture.fetch, port: 0, hostname: '127.0.0.1' }, (address) => {
+      process.env.DINGTALK_WORKER_URL = `http://127.0.0.1:${address.port}`; resolve();
+    }); });
+    try {
+      const starting = request('/api/settings/dingtalk/cli/login', 'POST');
+      await received;
+      expect((await request('/api/settings/dingtalk/cli', 'PATCH', { enabled: false })).connection.enabled).toBe(false);
+      releaseLogin();
+      await starting;
+      login.status = 'completed';
+      expect((await request('/api/settings/dingtalk/cli')).connection.enabled).toBe(false);
+      expect(await prisma.dingtalkRobot.findUniqueOrThrow({ where: { cliSingleton: true } })).toMatchObject({ enabled: false, cliEnableAfterLogin: false });
+    } finally { fixtureServer.close(); process.env.DINGTALK_WORKER_URL = previousUrl; }
+  });
+
+  it('迟到的旧身份状态不能覆盖新身份或停用新身份的收件人', async () => {
+    const previousUrl = process.env.DINGTALK_WORKER_URL;
+    let releaseAuth!: () => void;
+    let receivedAuth!: () => void;
+    const received = new Promise<void>((resolve) => { receivedAuth = resolve; });
+    let calls = 0;
+    const fixture = new Hono().post('/execute', (c) => c.req.json().then((body) => {
+      if (body.action === 'login-state') return c.json(null);
+      const auth = { authenticated: true, tokenValid: true, profile: calls++ === 0 ? 'corp-a:user-a' : 'corp-b:user-b',
+        userName: '授权用户', corpName: '测试组织', reason: null };
+      if (calls === 1) return new Promise<Response>((resolve) => { releaseAuth = () => resolve(c.json(auth)); receivedAuth(); });
+      return c.json(auth);
+    }));
+    let fixtureServer!: ReturnType<typeof serve>;
+    await new Promise<void>((resolve) => { fixtureServer = serve({ fetch: fixture.fetch, port: 0, hostname: '127.0.0.1' }, (address) => {
+      process.env.DINGTALK_WORKER_URL = `http://127.0.0.1:${address.port}`; resolve();
+    }); });
+    try {
+      const { ensureGlobalDingtalkCli } = await import('../notifications/dingtalk-global.service');
+      const row = await ensureGlobalDingtalkCli();
+      const connection = await prisma.dingtalkRobot.update({ where: { id: row.id }, data: { cliProfile: 'corp-a:user-a', cliEnableAfterLogin: false } });
+      const stale = request('/api/settings/dingtalk/cli', 'GET', undefined, 409);
+      await received;
+      expect((await request('/api/settings/dingtalk/cli')).auth.profile).toBe('corp-b:user-b');
+      const contact = await prisma.dingtalkContact.create({ data: { connectionId: connection.id, cliProfile: 'corp-b:user-b', userId: 'new-identity-contact', name: '新身份收件人', employeeNo: 'new-number' } });
+      releaseAuth();
+      await stale;
+      expect(await prisma.dingtalkRobot.findUniqueOrThrow({ where: { id: connection.id } })).toMatchObject({ cliProfile: 'corp-b:user-b' });
+      expect(await prisma.dingtalkContact.findUniqueOrThrow({ where: { id: contact.id } })).toMatchObject({ enabled: true, employeeNo: 'new-number' });
+    } finally { fixtureServer.close(); process.env.DINGTALK_WORKER_URL = previousUrl; }
+  });
+
+  it('取消登录撤销待启用意图，旧的取消请求不影响新的登录', async () => {
+    const previousUrl = process.env.DINGTALK_WORKER_URL;
+    const login = { id: randomUUID(), status: 'pending', authorizationUrl: null, userCode: null,
+      expiresAt: new Date(Date.now() + 60000).toISOString(), error: null };
+    const fixture = new Hono().post('/execute', (c) => c.req.json().then((body) => {
+      if (body.action === 'login-cancel' && body.loginId === login.id) login.status = 'cancelled';
+      if (body.action !== 'auth-status') return c.json(login);
+      return c.json({ authenticated: true, tokenValid: true, profile: activeProfile, userName: '授权用户', corpName: '测试组织', reason: null });
+    }));
+    let fixtureServer!: ReturnType<typeof serve>;
+    await new Promise<void>((resolve) => { fixtureServer = serve({ fetch: fixture.fetch, port: 0, hostname: '127.0.0.1' }, (address) => {
+      process.env.DINGTALK_WORKER_URL = `http://127.0.0.1:${address.port}`; resolve();
+    }); });
+    try {
+      await request('/api/settings/dingtalk/cli', 'PATCH', { enabled: true });
+      await request('/api/settings/dingtalk/cli/login', 'POST');
+      expect((await request('/api/settings/dingtalk/cli')).connection.enabled).toBe(false);
+      await request('/api/settings/dingtalk/cli/cancel', 'POST', { loginId: login.id });
+      expect(await prisma.dingtalkRobot.findUniqueOrThrow({ where: { cliSingleton: true } })).toMatchObject({ enabled: false, cliEnableAfterLogin: false });
+      const oldId = login.id;
+      login.id = randomUUID(); login.status = 'pending';
+      await request('/api/settings/dingtalk/cli/login', 'POST');
+      await request('/api/settings/dingtalk/cli/cancel', 'POST', { loginId: oldId });
+      expect(await prisma.dingtalkRobot.findUniqueOrThrow({ where: { cliSingleton: true } })).toMatchObject({ cliLoginId: login.id, cliEnableAfterLogin: true });
+      login.status = 'failed';
+      await request('/api/settings/dingtalk/cli');
+      expect(await prisma.dingtalkRobot.findUniqueOrThrow({ where: { cliSingleton: true } })).toMatchObject({ enabled: false, cliEnableAfterLogin: false });
+    } finally { fixtureServer.close(); process.env.DINGTALK_WORKER_URL = previousUrl; }
   });
 });

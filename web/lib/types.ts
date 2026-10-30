@@ -1,7 +1,8 @@
 import type { UIMessage } from 'ai';
 
 export type RunStatus = 'queued' | 'running' | 'cancelling' | 'completed' | 'partial' | 'skipped' | 'failed' | 'cancelled' | 'interrupted';
-export type Delivery = { status: string; error?: string; remoteIds?: string[]; startedAt?: string; finishedAt?: string };
+export type Delivery = { status: string; error?: string; remoteIds?: string[]; startedAt?: string; finishedAt?: string; steps?: string[];
+  recipient?: { userId: string; name: string; employeeNo?: string }; profile?: string };
 export type OcrTokenUsage = { inputTokens: number; outputTokens: number; totalTokens: number; cacheReadTokens: number };
 export type ReviewRun = {
   id: string; sessionId: string; repositoryId: string | null;
@@ -9,7 +10,7 @@ export type ReviewRun = {
   baseSha: string | null; startSha: string | null; headSha: string | null;
   provider: string | null; modelId: string | null; traceId: string | null; error: string | null;
   createdAt?: string; startedAt: string | null; finishedAt: string | null;
-  deliveries: Partial<Record<'gitlab' | 'dingtalk', Delivery>>; reportMessageId: string | null;
+  deliveries: Partial<Record<'gitlab' | 'dingtalk' | 'dingtalk-cli', Delivery>>; reportMessageId: string | null;
   tokenUsage?: OcrTokenUsage | null;
   repository?: { id: string; name: string; path: string } | null;
   session?: { title: string | null; mrIid: number | null };

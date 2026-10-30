@@ -46,6 +46,7 @@ function main(): Promise<void> {
           '20261030150000_default_ocr_token_budget',
           '20261030160000_set_ocr_token_budget_two_million',
           '20261030170000_add_dingtalk_cli_connections',
+          '20261030190000_global_dingtalk_cli',
         ].some((name) => source.endsWith(`/${name}`)),
       }),
       writeFile(join(runDirectory, 'package.json'), '{"private":true,"type":"module"}\n', { mode: 0o600 }),

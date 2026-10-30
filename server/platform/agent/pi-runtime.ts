@@ -8,14 +8,17 @@ export const PI_MODEL_PROVIDER_ID = 'platform-runtime';
 export const PI_MODEL_CONTEXT_WINDOW = 128_000;
 export const PI_MODEL_MAX_OUTPUT_TOKENS = 8_192;
 
-export function createPiModel(config: ModelConfig, signal?: AbortSignal) {
+export async function createPiModel(config: ModelConfig, signal?: AbortSignal) {
   const modelId = config.modelId.trim();
   const apiKey = config.apiKey.trim();
   if (!modelId || !apiKey) throw new Error('模型缺少 modelId 或 apiKey');
-  const settings = config.provider === 'anthropic' ? { api: 'anthropic-messages' as const, baseUrl: config.apiBaseUrl?.trim() || 'https://api.anthropic.com' }
-    : config.provider === 'openai' ? { api: 'openai-responses' as const, baseUrl: config.apiBaseUrl?.trim() || 'https://api.openai.com/v1' }
-      : config.provider === 'openai-compatible' ? { api: 'openai-completions' as const, baseUrl: config.apiBaseUrl?.trim() ?? '' } : null;
-  if (!settings) throw new Error(`不支持的模型 provider：${config.provider}`);
+  let settings: { api: 'anthropic-messages' | 'openai-responses' | 'openai-completions'; baseUrl: string };
+  switch (config.provider) {
+    case 'anthropic': settings = { api: 'anthropic-messages', baseUrl: config.apiBaseUrl?.trim() || 'https://api.anthropic.com' }; break;
+    case 'openai': settings = { api: 'openai-responses', baseUrl: config.apiBaseUrl?.trim() || 'https://api.openai.com/v1' }; break;
+    case 'openai-compatible': settings = { api: 'openai-completions', baseUrl: config.apiBaseUrl?.trim() ?? '' }; break;
+    default: throw new Error(`不支持的模型 provider：${config.provider}`);
+  }
   if (!settings.baseUrl) throw new Error('openai-compatible 必须配置 apiBaseUrl');
   const deepseek = config.provider === 'openai-compatible' && /deepseek/i.test(modelId);
   return ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null,
@@ -35,16 +38,12 @@ export function createPiModel(config: ModelConfig, signal?: AbortSignal) {
   });
 }
 
-export function createPiRuntime(options: PiRuntimeOptions): Promise<PiRuntime> {
+export async function createPiRuntime(options: PiRuntimeOptions): Promise<PiRuntime> {
   const controller = new AbortController();
   const forwardAbort = () => controller.abort(options.signal?.reason ?? new Error('Agent 已取消'));
   const timeoutMs = options.timeoutMs;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Agent timeoutMs 必须大于 0');
   if (options.maxSteps !== undefined && (!Number.isInteger(options.maxSteps) || options.maxSteps < 1)) throw new Error('Agent maxSteps 必须为正整数');
-  options.signal?.addEventListener('abort', forwardAbort, { once: true });
-  if (options.signal?.aborted) forwardAbort();
-  const timer = setTimeout(() => controller.abort(new Error('Agent 执行超时')), timeoutMs);
-  timer.unref();
   const cwd = options.cwd ?? process.cwd();
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false }, cacheWarming: 'off' });
   const skills = options.skills ?? [];
@@ -55,16 +54,30 @@ export function createPiRuntime(options: PiRuntimeOptions): Promise<PiRuntime> {
     systemPrompt: options.systemPrompt, appendSystemPromptOverride: () => [],
   });
   let session: AgentSession | undefined;
-  let abortFailure: unknown;
-  let disposed = false;
-  const stopSession = () => { void session?.abort().catch((error: unknown) => { abortFailure = error; }); };
+  let aborting: Promise<void> | undefined;
+  let disposal: Promise<void> | undefined;
+  options.signal?.addEventListener('abort', forwardAbort, { once: true });
+  if (options.signal?.aborted) forwardAbort();
+  const timer = setTimeout(() => controller.abort(new Error('Agent 执行超时')), timeoutMs);
+  timer.unref();
+  const stopSession = () => {
+    aborting ??= Promise.resolve().then(() => session?.abort());
+    /* 事件回调不能等待 Promise；失败保留在 aborting，由 dispose 统一上报。 */
+    void aborting.catch(() => undefined);
+  };
   const dispose = () => {
-    if (disposed) return Promise.resolve();
-    disposed = true;
+    if (disposal) return disposal;
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', forwardAbort);
     controller.signal.removeEventListener('abort', stopSession);
-    return Promise.resolve(session?.abort()).then(() => { if (abortFailure) throw abortFailure; }).finally(() => session?.dispose());
+    stopSession();
+    const failures: unknown[] = [];
+    disposal = aborting!.catch((error: unknown) => { failures.push(error); }).then(() => {
+      try { session?.dispose(); } catch (error) { failures.push(error); }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) throw new AggregateError(failures, 'Agent 取消和释放失败', { cause: failures[0] });
+    });
+    return disposal;
   };
   return Promise.resolve().then(() => { controller.signal.throwIfAborted(); return createPiModel(options.modelConfig, controller.signal); })
     .then(({ modelRuntime, model }) => resourceLoader.reload().then(() => {
@@ -107,7 +120,7 @@ export function createPiRuntime(options: PiRuntimeOptions): Promise<PiRuntime> {
       };
       return { session: active, resourceLoader, signal: controller.signal,
         abort: (reason: unknown) => controller.abort(reason), dispose,
-        prompt: (text: string) => {
+        prompt: async (text: string) => {
           controller.signal.throwIfAborted();
           steps = 0;
           limitReached = false;
@@ -121,7 +134,9 @@ export function createPiRuntime(options: PiRuntimeOptions): Promise<PiRuntime> {
           });
         },
       };
-    }).catch((error: unknown) => dispose().then(() => { throw error; }));
+    }).catch((error: unknown) => dispose().then(() => { throw error; }, (cleanupError: unknown) => {
+      throw new AggregateError([error, cleanupError], error instanceof Error ? error.message : 'Agent 初始化失败', { cause: error });
+    }));
 }
 
 export type PiRuntimeOptions = {

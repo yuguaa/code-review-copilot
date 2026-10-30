@@ -29,7 +29,7 @@ export function createManualReview(body: unknown) {
       if (input.kind === "merge_request") return gitlab.getMergeRequest(repository.gitLabProjectId, input.mrIid).then((mr) => {
         if (!mr.diff_refs) throw new HTTPException(409, { message: "GitLab 尚未生成 MR 的提交范围" });
         return createReviewSession({ repositoryId: repository.id, title: mr.title, mrTitle: mr.title, mrIid: mr.iid,
-          sourceBranch: mr.source_branch, targetBranch: mr.target_branch, author: mr.author.name,
+          sourceBranch: mr.source_branch, targetBranch: mr.target_branch, author: mr.author.name, authorUsername: mr.author.username,
           baseCommitSha: mr.diff_refs.base_sha, commitSha: mr.diff_refs.head_sha,
         }, { eventKey, triggerType: "manual", baseSha: mr.diff_refs.base_sha, startSha: mr.diff_refs.start_sha, headSha: mr.diff_refs.head_sha,
           background: [mr.title, mr.description].filter(Boolean).join("\n\n"),
@@ -67,5 +67,5 @@ export function createReviewSession(seed: SessionSeed, request: Omit<EnqueueRequ
     })));
 }
 
-type SessionSeed = Pick<Prisma.SessionUncheckedCreateInput, "title" | "mrTitle" | "mrIid" | "sourceBranch" | "targetBranch" | "author" | "baseCommitSha" | "commitSha"> & { repositoryId: string };
+type SessionSeed = Pick<Prisma.SessionUncheckedCreateInput, "title" | "mrTitle" | "mrIid" | "sourceBranch" | "targetBranch" | "author" | "authorUsername" | "baseCommitSha" | "commitSha"> & { repositoryId: string };
 type TriggeredRun = { created: boolean; sessionId: string; runId: string };

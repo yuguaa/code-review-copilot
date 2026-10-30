@@ -87,6 +87,8 @@ model Session {
   baseCommitSha       String?
   commitSha           String?
   author              String?
+  /// Push 推送人或 MR 作者的 GitLab username，用于核对工号，不能用 GitLab 数字 ID 替代。
+  authorUsername      String?
   status              String      @default("completed")
   error               String?
   activeLeafMessageId String?
@@ -174,6 +176,9 @@ model DingtalkRobot {
   webhookUrl       String?
   secret           String?
   cliProfile       String?
+  cliSingleton     Boolean?          @unique
+  cliLoginId       String?
+  cliEnableAfterLogin Boolean        @default(false)
   cliRobotCode     String?
   cliGroupId       String?
   enabled          Boolean           @default(true)
@@ -193,6 +198,7 @@ model DingtalkContact {
   connectionId String
   connection   DingtalkRobot @relation(fields: [connectionId], references: [id], onDelete: Restrict)
   userId       String
+  cliProfile   String?
   name         String
   employeeNo   String?
   enabled      Boolean       @default(true)
@@ -200,7 +206,7 @@ model DingtalkContact {
   updatedAt    DateTime      @updatedAt
 
   @@unique([connectionId, userId])
-  @@unique([connectionId, employeeNo])
+  @@unique([connectionId, cliProfile, employeeNo])
   @@map("dingtalk_contacts")
 }
 
@@ -212,6 +218,7 @@ model DingtalkMessage {
   session       Session?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   requestedBy   String
   payloadHash   String
+  cliProfile    String?
   targetKind    String
   recipients    Json
   title         String

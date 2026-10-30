@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 
 import { checkDingtalkConnection, listDingtalkContacts, saveDingtalkContact, searchDingtalkPeople, updateDingtalkContact } from '@server/modules/notifications/dingtalk-directory.service';
+import { cancelGlobalDingtalkLogin, getGlobalDingtalkState, startGlobalDingtalkLogin, updateGlobalDingtalk } from '@server/modules/notifications/dingtalk-global.service';
 
 import { createAIModel, deleteAIModel, getAIModel, listAIModels, testAIModel, updateAIModel } from "./ai-model-settings.service";
 import { configurationError } from "./config-input";
@@ -35,6 +36,10 @@ settingsRoutes.post("/models/:id/test", (c) => testAIModel(c.req.param("id")).th
   : c.json({ ok })));
 
 settingsRoutes.get("/dingtalk", (c) => listDingtalkRobots().then((robots) => c.json({ robots })));
+settingsRoutes.get('/dingtalk/cli', (c) => getGlobalDingtalkState().then((state) => c.json(state)));
+settingsRoutes.post('/dingtalk/cli/login', (c) => startGlobalDingtalkLogin().then((state) => c.json(state)));
+settingsRoutes.post('/dingtalk/cli/cancel', (c) => c.req.json().then(cancelGlobalDingtalkLogin).then((state) => c.json(state)));
+settingsRoutes.patch('/dingtalk/cli', (c) => c.req.json().then(updateGlobalDingtalk).then((state) => c.json(state)));
 settingsRoutes.post("/dingtalk", (c) => c.req.json().then(createDingtalkRobot).then((robot) => c.json({ robot }, 201)));
 settingsRoutes.patch("/dingtalk/:id", (c) => c.req.json().then((body) => updateDingtalkRobot(c.req.param("id"), body))
   .then((robot) => c.json({ robot })));

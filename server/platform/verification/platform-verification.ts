@@ -14,7 +14,7 @@ import { preserveConfigurationAcrossMigration } from './migration-verification';
 import type { VerificationContext } from './request-verification';
 
 const databasePort = 55433;
-const latestMigration = '20261030170000_add_dingtalk_cli_connections';
+const latestMigration = '20261030190000_global_dingtalk_cli';
 const require = createRequire(import.meta.url);
 
 function assertPortAvailable(): Promise<void> {
@@ -122,7 +122,7 @@ function main(): Promise<void> {
     .then(() => preserveConfigurationAcrossMigration(postgres!, check, secrets, () =>
       Promise.all(['20261016160000_platform_runs', '20261019120000_dingtalk_robots', '20261019130000_add_security_testing',
         '20261030120000_allow_unlimited_ocr_tokens', '20261030150000_default_ocr_token_budget',
-        '20261030160000_set_ocr_token_budget_two_million', latestMigration].map((name) =>
+        '20261030160000_set_ocr_token_budget_two_million', '20261030170000_add_dingtalk_cli_connections', latestMigration].map((name) =>
         cp(join(projectRoot, 'prisma/migrations', name), join(directory, 'prisma/migrations', name), { recursive: true })))
         .then(() => command('migrate-deploy', process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy', '--schema', join(directory, 'prisma')]))))
     .then(() => import('@server/infrastructure/prisma/prisma.service'))

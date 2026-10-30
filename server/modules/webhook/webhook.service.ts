@@ -13,7 +13,7 @@ import { createLogger } from "@server/shared/logger/logger.service";
 const payloadSchema = z.object({
   project: z.object({ id: z.number().int().positive() }),
   user: z.object({ name: z.string().optional(), username: z.string().optional() }).optional(),
-  user_name: z.string().optional(), ref: z.string().optional(), before: z.string().optional(), after: z.string().optional(), checkout_sha: z.string().nullable().optional(),
+  user_name: z.string().optional(), user_username: z.string().optional(), ref: z.string().optional(), before: z.string().optional(), after: z.string().optional(), checkout_sha: z.string().nullable().optional(),
   object_attributes: z.object({ iid: z.number().int().positive(), title: z.string(), description: z.string().nullable().optional(), source_branch: z.string(), target_branch: z.string(), action: z.string().optional(), last_commit: z.object({ id: z.string() }).optional() }).optional(),
 }).passthrough();
 
@@ -103,14 +103,16 @@ export function handleGitLabWebhook(input: { event?: string | null; token?: stri
           log.info("GitLab Webhook 命中已有审查", { ...commitContext, eventKey, sessionId: existing.sessionId });
           return { status: 200 as const, body: { triggered: false, sessionId: existing.sessionId } };
         }
-        return createReviewSession({
+        const author = isMr ? gitlab.getMergeRequest(repo.gitLabProjectId, attrs!.iid).then((mr) => mr.author)
+          : Promise.resolve({ name: body.user?.name ?? body.user_name, username: body.user_username ?? body.user?.username });
+        return author.then((submitter) => createReviewSession({
           repositoryId: repo.id, title: isMr ? attrs!.title : `Push ${branch}`,
           mrIid: isMr ? attrs!.iid : null, mrTitle: isMr ? attrs!.title : null,
           sourceBranch: isMr ? attrs!.source_branch : branch, targetBranch: branch,
-          baseCommitSha: refs.baseSha, commitSha: headSha, author: body.user?.name ?? body.user_name,
+          baseCommitSha: refs.baseSha, commitSha: headSha, author: submitter.name, authorUsername: submitter.username,
         }, { ...refs, triggerType: isMr ? "merge_request" : "push", eventKey,
           background: isMr ? [attrs!.title, attrs!.description].filter(Boolean).join("\n\n") : `Push ${branch}`,
-        }).then((result) => {
+        })).then((result) => {
           log.info("GitLab Webhook 已创建审查", {
             ...commitContext, eventKey, sessionId: result.sessionId, runId: result.runId, triggered: result.created,
           });

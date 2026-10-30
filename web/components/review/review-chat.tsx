@@ -162,7 +162,7 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
           }} /></PromptInputBody>
           <PromptInputFooter><PromptInputTools>
-            <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => setDingtalkText(input)}>钉钉 @ / 私聊</Button>
+            <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => setDingtalkText(input)}>钉钉私聊</Button>
             <Select aria-label="对话模型" className="max-w-64" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={disabled || models.loading}>
               <option value="">仓库默认模型</option>
               {models.data?.models.filter((model) => model.isActive).map((model) => <option value={model.id} key={model.id}>{model.provider}/{model.modelId}{model.isDefault ? '（默认）' : ''} · {model.id.slice(-6)}</option>)}

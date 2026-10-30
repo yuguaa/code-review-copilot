@@ -106,7 +106,8 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
       </FieldGroup></FormSection>
       <FormSection title="发布渠道"><FieldGroup>
         <Checkbox label="自动发布到 GitLab" checked={form.enableMrComment} onChange={(value) => update("enableMrComment", value)} />
-        <Checkbox label="发送钉钉通知" checked={form.enableDingtalk} onChange={(value) => update("enableDingtalk", value)} />
+        <Checkbox label="发送 Webhook 群通知" checked={form.enableDingtalk} onChange={(value) => update("enableDingtalk", value)} />
+        <p className="text-xs text-muted-foreground">OCR 发现问题后的提交人私聊由平台共享 CLI 和 Pi 自动处理，无需在仓库中单独配置。</p>
         <Field label="钉钉连接" error={robots.error} hint={robots.loading ? "正在加载连接…" : "支持 Webhook 或 DWS CLI；CLI 必须已完成授权。"}>
           <Select required={form.enableDingtalk} disabled={robots.loading || Boolean(robots.error)} value={form.dingtalkRobotId ?? ""} onChange={(event) => update("dingtalkRobotId", event.target.value || null)}>
             <option value="">请选择机器人</option>

@@ -52,6 +52,6 @@ runRoutes.get("/:id", (context) => prisma.run.findUnique({ where: { id: context.
 }));
 
 runRoutes.post("/:id/publish", (context) => context.req.json().then((body) => {
-  const { channel } = z.object({ channel: z.enum(["gitlab", "dingtalk"]) }).strict().parse(body);
+  const { channel } = z.object({ channel: z.enum(["gitlab", "dingtalk", "dingtalk-cli"]) }).strict().parse(body);
   return publishRun(context.req.param("id"), channel, true);
 }).then(() => context.json({ success: true })));

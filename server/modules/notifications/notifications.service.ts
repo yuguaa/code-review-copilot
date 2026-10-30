@@ -18,6 +18,7 @@ export function validateDingtalkTarget(client: Pick<Prisma.TransactionClient, "d
   if (!id) return required ? Promise.reject(new HTTPException(400, { message: "请选择钉钉机器人" })) : Promise.resolve();
   return client.dingtalkRobot.findUnique({ where: { id } }).then((robot) => {
     if (!robot) throw new HTTPException(400, { message: "所选钉钉机器人不存在" });
+    if (robot.transport === 'cli') throw new HTTPException(400, { message: '共享 CLI 自动通知所有仓库，不需也不能关联单个仓库、订阅或安全目标' });
     if (required && !robot.enabled) throw new HTTPException(400, { message: "所选钉钉机器人已停用" });
     if (required && !dingtalkConnectionConfigured(robot)) throw new HTTPException(400, { message: "所选钉钉连接配置不完整" });
   });
@@ -34,8 +35,7 @@ export function loadDingtalkConfig(id: string): Promise<DingtalkConfig> {
     if (!robot) throw new Error("所选钉钉机器人不存在");
     if (!robot.enabled) throw new Error("所选钉钉机器人已停用");
     if (!dingtalkConnectionConfigured(robot)) throw new Error("所选钉钉连接配置不完整");
-    if (robot.transport === "cli") return { transport: "cli" as const,
-      cliProfile: robot.cliProfile!, cliRobotCode: robot.cliRobotCode!, cliGroupId: robot.cliGroupId! };
+    if (robot.transport === 'cli') throw new Error('共享 CLI 由 Pi 通知链路使用，不作为仓库 Webhook 机器人配置');
     return { webhook: robot.webhookUrl!, secret: robot.secret };
   });
 }

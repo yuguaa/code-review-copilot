@@ -7,9 +7,13 @@ import type { DingtalkCliRequest } from '@shared/dingtalk';
 
 export function buildDwsCommand(input: DingtalkCliRequest): { args: string[]; stdin?: string } {
   const request = dingtalkCliRequest.parse(input);
+  if (request.action === 'auth-status') return { args: ['auth', 'status', '--format=json', '--timeout=30'] };
+  if (request.action === 'login-start' || request.action === 'login-state' || request.action === 'login-cancel') throw new Error('登录须由 Worker 登录生命周期管理');
   const common = [`--profile=${request.profile}`, '--format=json', '--timeout=30'];
   if (request.action === 'status') return { args: ['auth', 'status', ...common] };
   if (request.action === 'search') return { args: ['aisearch', 'person', `--query=${request.query}`, `--dimension=${request.dimension}`, ...common] };
+  if (request.action === 'send-user') return { args: ['chat', '+messages-send', '--as=user', `--user=${request.userId}`,
+    `--idempotency-key=${request.idempotencyKey}`, '--wait-delivery', '--text=-', '--body-stdin', '--yes', ...common], stdin: `${request.title}\n\n${request.text}` };
   if (!request.groupId && !request.userIds.length) throw new Error('缺少钉钉收件人');
   const mentions = request.groupId && request.userIds.length ? request.userIds.map((id) => `@${id}`).join(' ') + '\n\n' : '';
   return { args: ['chat', '+messages-send', '--as=bot', `--robot-code=${request.robotCode}`,
@@ -19,18 +23,26 @@ export function buildDwsCommand(input: DingtalkCliRequest): { args: string[]; st
 }
 
 export function parseDwsResult(request: DingtalkCliRequest, value: unknown) {
-  if (request.action === 'status') {
+  if (request.action === 'login-start' || request.action === 'login-state' || request.action === 'login-cancel') throw new Error('登录须由 Worker 登录生命周期管理');
+  if (request.action === 'status' || request.action === 'auth-status') {
     const status = z.object({ authenticated: z.boolean(), token_valid: z.boolean().optional(),
+      corp_id: z.string().optional(), user_id: z.string().optional(),
       user_name: z.string().optional(), corp_name: z.string().optional(), reason: z.string().optional() }).parse(value);
     return { authenticated: status.authenticated, tokenValid: status.token_valid ?? false,
+      ...(request.action === 'auth-status' ? { profile: status.corp_id && status.user_id ? `${status.corp_id}:${status.user_id}` : null } : {}),
       userName: status.user_name ?? null, corpName: status.corp_name ?? null, reason: status.reason ?? null };
   }
   if (request.action === 'search') {
     const response = z.object({ success: z.literal(true), result: z.array(z.object({
-      userId: z.string().min(1), title: z.string().min(1),
+      userId: z.string().min(1), title: z.string().min(1), jobNumber: z.string().optional(),
     }).passthrough()), searchEvidence: z.object({ returnedCandidateCount: z.number().int() }).optional() }).parse(value);
-    return { people: response.result.map((person) => dingtalkPerson.parse({ userId: person.userId, name: person.title })),
+    return { people: response.result.map((person) => dingtalkPerson.parse({ userId: person.userId, name: person.title,
+      ...(person.jobNumber ? { employeeNo: person.jobNumber } : {}) })),
       returnedCount: response.searchEvidence?.returnedCandidateCount ?? response.result.length };
+  }
+  if (request.action === 'send-user') {
+    const receipt = z.object({ openMessageId: z.string().min(1), deliveryStatus: z.literal('delivered'), idempotencyKey: z.literal(request.idempotencyKey) }).parse(value);
+    return { status: 'accepted' as const, remoteIds: [receipt.openMessageId] };
   }
   const response = z.object({ ok: z.literal(true), identity: z.literal('bot'), tool: z.string(),
     result: z.unknown(), dry_run: z.never().optional() }).parse(value);

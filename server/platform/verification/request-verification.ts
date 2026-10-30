@@ -53,7 +53,7 @@ export function verifyPlatformRequests(context: VerificationContext): Promise<vo
     secrets.push(value, value.slice(value.indexOf('=') + 1));
     return value;
   });
-  const event = { project: { id: 101 }, ref: 'refs/heads/main', before: baseSha, after: headSha, checkout_sha: headSha, user_name: 'Platform Verification' };
+  const event = { project: { id: 101 }, ref: 'refs/heads/main', before: baseSha, after: headSha, checkout_sha: headSha, user_name: 'Platform Verification', user_username: '251111', user_id: 914 };
   const sendWebhook = () => request('/api/webhook/gitlab', 'POST', event, { Cookie: '', 'X-Gitlab-Event': 'Push Hook', 'X-Gitlab-Token': webhookSecret }).then(json);
   const ignoredWebhook = () => request('/api/webhook/gitlab', 'POST', { ...event, ref: 'refs/heads/not-watched' }, {
     Cookie: '', 'X-Gitlab-Event': 'Push Hook', 'X-Gitlab-Token': webhookSecret,
@@ -229,7 +229,11 @@ export function verifyPlatformRequests(context: VerificationContext): Promise<vo
       assert.equal(body.messages[0].role, 'user');
       assert.equal(body.activeLeafMessageId, body.messages[0].id);
       return request('/api/sessions?kind=review').then(json);
-    }).then(({ sessions }) => assert.equal(sessions[0].id, sessionId))))
+    }).then(({ sessions }) => {
+      assert.equal(sessions[0].id, sessionId);
+      return prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { authorUsername: true } })
+        .then((saved) => assert.equal(saved.authorUsername, '251111'));
+    })))
     .then(() => check('排队取消与并发重新排队', () => request(`/api/sessions/${sessionId}/stop-review`, 'POST').then(json)
       .then(() => request(`/api/runs/${firstRunId}`).then(json))
       .then(({ run }) => {

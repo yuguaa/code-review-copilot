@@ -35,12 +35,12 @@ export function DingtalkPeople({ connectionId, selected, onSelect }: {
       <p className="text-xs text-muted-foreground">本次返回 {result.returnedCount} 位候选，不代表完整通讯录。</p>
       {result.people.map((person) => <div className="flex items-center justify-between gap-3" key={person.userId}>
         <span className="text-sm">{person.name}<span className="ml-2 font-mono text-xs text-muted-foreground">{person.userId}</span></span>
-        <Button type="button" size="sm" variant="outline" disabled={Boolean(action.pending)} onClick={() => action.execute(person.userId, () => api(`/api/settings/dingtalk/${connectionId}/contacts`, {
+        <Button type="button" size="sm" variant="outline" disabled={Boolean(action.pending)} onClick={() => action.execute(person.userId, () => api<{ contact: DingtalkContact }>(`/api/settings/dingtalk/${connectionId}/contacts`, {
           method: 'POST', body: JSON.stringify({ query: result.query, dimension: result.dimension, userId: person.userId }),
-        }).then(resource.reload))}>加入名单</Button>
+        }).then((body) => { if (onSelect) onSelect([body.contact.id]); return resource.reload(); }))}>{onSelect ? '选择此人' : '保存解析结果'}</Button>
       </div>)}
     </div>}
-    <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.contacts.length === 0} title="名单为空" description="查询通讯录并选择人员加入平台名单。" retry={resource.reload} />
+    <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.contacts.length === 0} title="请查询收件人" description="按工号或姓名搜索钉钉通讯录，核对后选择一个收件人，无需事先维护名单。" retry={resource.reload} />
     {resource.data?.contacts.filter((contact) => !onSelect || contact.enabled).map((contact) => <div key={contact.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
       {onSelect ? <Checkbox label={`${contact.name}${contact.employeeNo ? ` · ${contact.employeeNo}` : ''}${contact.enabled ? '' : '（已停用）'}`}
         checked={selected?.includes(contact.id) ?? false}
