@@ -26,7 +26,7 @@ datasources:
         enabled: true
   - name: Review PostgreSQL
     uid: review-postgres
-    type: postgres
+    type: grafana-postgresql-datasource
     access: proxy
     url: postgres:5432
     database: code_review_copilot
