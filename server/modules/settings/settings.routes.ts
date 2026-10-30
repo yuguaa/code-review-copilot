@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 
+import { checkDingtalkConnection, listDingtalkContacts, saveDingtalkContact, searchDingtalkPeople, updateDingtalkContact } from '@server/modules/notifications/dingtalk-directory.service';
+
 import { createAIModel, deleteAIModel, getAIModel, listAIModels, testAIModel, updateAIModel } from "./ai-model-settings.service";
 import { configurationError } from "./config-input";
 import { createGitLabAccount, deleteGitLabAccount, listGitLabAccounts, listGitLabProjects, testGitLabAccount, updateGitLabAccount } from "./gitlab-account-settings.service";
@@ -37,4 +39,9 @@ settingsRoutes.post("/dingtalk", (c) => c.req.json().then(createDingtalkRobot).t
 settingsRoutes.patch("/dingtalk/:id", (c) => c.req.json().then((body) => updateDingtalkRobot(c.req.param("id"), body))
   .then((robot) => c.json({ robot })));
 settingsRoutes.delete("/dingtalk/:id", (c) => deleteDingtalkRobot(c.req.param("id")).then((result) => c.json(result)));
+settingsRoutes.post('/dingtalk/:id/status', (c) => checkDingtalkConnection(c.req.param('id')).then((status) => c.json({ status })));
+settingsRoutes.post('/dingtalk/:id/people/search', (c) => c.req.json().then((body) => searchDingtalkPeople(c.req.param('id'), body)).then((result) => c.json(result)));
+settingsRoutes.get('/dingtalk/:id/contacts', (c) => listDingtalkContacts(c.req.param('id')).then((contacts) => c.json({ contacts })));
+settingsRoutes.post('/dingtalk/:id/contacts', (c) => c.req.json().then((body) => saveDingtalkContact(c.req.param('id'), body)).then((contact) => c.json({ contact })));
+settingsRoutes.patch('/dingtalk/:connectionId/contacts/:id', (c) => c.req.json().then((body) => updateDingtalkContact(c.req.param('connectionId'), c.req.param('id'), body)).then((contact) => c.json({ contact })));
 settingsRoutes.get("/stats", (c) => loadSettingsStats().then((stats) => c.json({ stats })));

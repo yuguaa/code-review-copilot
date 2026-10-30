@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
+import { dingtalkId, dingtalkProfile } from '@shared/dingtalk';
+
 import type { Context } from "hono";
 
 export const httpUrl = z.string().trim().url().refine((value) => {
@@ -37,12 +39,16 @@ export const gitLabAccountInput = z.object({
 
 export const dingtalkRobotInput = z.object({
   name: z.string().trim().min(1).max(100),
+  transport: z.enum(["webhook", "cli"]).default("webhook"),
   enabled: z.boolean().default(true),
   webhookUrl: credentialInput.refine(
     (value) => value === undefined || httpUrl.safeParse(value).success,
     "钉钉 webhook 必须是 HTTP 或 HTTPS 地址",
   ),
   secret: optionalCredentialInput,
+  cliProfile: dingtalkProfile.nullable().optional(),
+  cliRobotCode: dingtalkId.nullable().optional(),
+  cliGroupId: dingtalkId.nullable().optional(),
 }).strict();
 
 export function configurationError(error: Error, context: Context) {

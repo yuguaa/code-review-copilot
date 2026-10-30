@@ -15,6 +15,7 @@ import { Button } from '@web/components/ui/button';
 import { Select } from '@web/components/ui/forms';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
+import { DingtalkSendDialog } from './dingtalk-send-dialog';
 
 import type { AIModelSummary, ReviewProgress, ReviewRun, SessionDetail } from '@web/lib/types';
 import type { UIMessage } from 'ai';
@@ -67,6 +68,7 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
 }) {
   const [input, setInput] = useState('');
   const [modelId, setModelId] = useState('');
+  const [dingtalkText, setDingtalkText] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const submittedText = useRef('');
   const busyRef = useRef(false);
@@ -128,6 +130,9 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
                     {message.parts.map((part, index) => renderPart(part, index, streaming))}
                     {streaming && !hasRenderablePart(message) && <MessageResponse streaming>{''}</MessageResponse>}
                   </MessageContent>
+                    {!streaming && message.parts.some((part) => part.type === 'text') && <MessageActions>
+                      <Button variant="ghost" size="sm" onClick={() => setDingtalkText(message.parts.filter((part) => part.type === 'text').map((part) => part.text).join('\n\n'))}>发到钉钉</Button>
+                    </MessageActions>}
                     {node && node.siblingCount > 1 && <MessageActions>
                       <div className="ml-auto flex items-center gap-2">
                         <MessageAction tooltip="上一个消息分支" size="icon-xs" disabled={disabled || node.siblingIndex <= 0} onClick={() => changeBranch(node.siblingIds[node.siblingIndex - 1])}><ChevronLeftIcon /></MessageAction>
@@ -151,6 +156,7 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
           }} /></PromptInputBody>
           <PromptInputFooter><PromptInputTools>
+            <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => setDingtalkText(input)}>钉钉 @ / 私聊</Button>
             <Select aria-label="对话模型" className="max-w-64" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={disabled || models.loading}>
               <option value="">仓库默认模型</option>
               {models.data?.models.filter((model) => model.isActive).map((model) => <option value={model.id} key={model.id}>{model.provider}/{model.modelId}{model.isDefault ? '（默认）' : ''} · {model.id.slice(-6)}</option>)}
@@ -162,5 +168,6 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
         </PromptInput>
       </div>
     </div>
+    {dingtalkText !== null && <DingtalkSendDialog sessionId={detail.session.id} initialText={dingtalkText} close={() => setDingtalkText(null)} />}
   </div>;
 }

@@ -9,10 +9,26 @@ FROM deps AS builder
 ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 COPY prisma ./prisma
 COPY server ./server
+COPY shared ./shared
 COPY web ./web
 COPY security-skills ./security-skills
 COPY prisma.config.ts vite.config.ts tsconfig.json ./
-RUN npx prisma generate && npx vite build
+RUN npx prisma generate && npx vite build \
+  && ./node_modules/.bin/esbuild server/platform/dingtalk/cli-worker-main.ts --bundle --platform=node --format=cjs --outfile=dist/dingtalk-worker.cjs
+
+FROM node:24.22.0-bookworm-slim AS dingtalk-worker
+WORKDIR /app
+ENV NODE_ENV=production
+ENV DWS_CONFIG_DIR=/home/node/.dws
+ENV DWS_NO_UPDATE_CHECK=1
+ENV PATH=/opt/dws/bin:$PATH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && DWS_NO_SKILLS=1 npm install --prefix /opt/dws --global dingtalk-workspace-cli@1.0.66 \
+  && mkdir -p /home/node/.dws && chown node:node /home/node/.dws
+COPY --from=builder --chown=node:node /app/dist/dingtalk-worker.cjs ./dingtalk-worker.cjs
+USER node
+CMD ["node", "dingtalk-worker.cjs"]
 
 FROM node:24.22.0-alpine3.24 AS runner
 WORKDIR /app
@@ -31,6 +47,7 @@ RUN apk add --no-cache openssl git ripgrep ca-certificates chromium font-noto-cj
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
+COPY --from=builder --chown=node:node /app/shared ./shared
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=node:node /app/package.json ./package.json

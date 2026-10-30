@@ -7,6 +7,7 @@ export function executeProcess(command: string, args: string[], options: {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxBytes?: number;
+  stdin?: string;
   onStdout?: (chunk: Buffer) => void;
   onStderr?: (chunk: Buffer) => void;
 } = {}): Promise<ProcessResult> {
@@ -16,7 +17,7 @@ export function executeProcess(command: string, args: string[], options: {
       cwd: options.cwd,
       env: options.env,
       detached: process.platform !== "win32",
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       shell: false,
     });
     const stdout: Buffer[] = [];
@@ -58,8 +59,12 @@ export function executeProcess(command: string, args: string[], options: {
         }
       }
     };
-    child.stdout.on("data", (chunk: Buffer) => stream(stdout, options.onStdout, chunk));
-    child.stderr.on("data", (chunk: Buffer) => stream(stderr, options.onStderr, chunk));
+    child.stdout!.on("data", (chunk: Buffer) => stream(stdout, options.onStdout, chunk));
+    child.stderr!.on("data", (chunk: Buffer) => stream(stderr, options.onStderr, chunk));
+    if (child.stdin) {
+      child.stdin.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'EPIPE') terminate(error); });
+      child.stdin.end(options.stdin);
+    }
     const cleanup = () => {
       clearTimeout(timer);
       clearTimeout(forceTimer);

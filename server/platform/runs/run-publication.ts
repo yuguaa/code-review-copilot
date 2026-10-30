@@ -91,7 +91,10 @@ export function publishRun(id: string, channel: Channel, manual: boolean): Promi
                 targetBranch: claim.run.session.targetBranch, mrIid: claim.run.session.mrIid },
             });
             mayHaveSent = true;
-            return sendDingtalkNotification(config, message.title, message.text).then(() => 'sent' as const);
+            return sendDingtalkNotification(config, message.title, message.text).then((receipt) => {
+              for (const remoteId of receipt.remoteIds) remoteIds.add(remoteId);
+              return 'sent' as const;
+            });
           });
         }
         const run = claim.run;

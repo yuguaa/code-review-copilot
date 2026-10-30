@@ -1,0 +1,18 @@
+import { z } from 'zod';
+
+export const dingtalkId = z.string().trim().min(1).max(256).regex(/^[^\s,@\u0000]+$/, '请输入单个钉钉 ID');
+export const dingtalkProfile = z.string().trim().regex(/^[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/, 'Profile 必须为 corpId:userId');
+export const dingtalkText = z.string().trim().min(1).max(60_000);
+export const dingtalkSearch = z.object({ query: z.string().trim().min(1).max(100), dimension: z.enum(['name', 'jobNumber']) }).strict();
+export const dingtalkPerson = z.object({ userId: dingtalkId, name: z.string().min(1).max(256) });
+export const dingtalkCliRequest = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('status'), profile: dingtalkProfile }).strict(),
+  z.object({ action: z.literal('search'), profile: dingtalkProfile, ...dingtalkSearch.shape }).strict(),
+  z.object({ action: z.literal('send'), profile: dingtalkProfile, robotCode: dingtalkId,
+    groupId: dingtalkId.optional(), userIds: z.array(dingtalkId).max(20),
+    title: z.string().trim().min(1).max(200), text: dingtalkText,
+  }).strict(),
+]);
+
+export type DingtalkPerson = z.infer<typeof dingtalkPerson>;
+export type DingtalkCliRequest = z.infer<typeof dingtalkCliRequest>;

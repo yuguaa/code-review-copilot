@@ -157,7 +157,7 @@ export function TargetEditor({
           <Field label="钉钉机器人" hint="完成后发送摘要。">
             <Select value={form.dingtalkRobotId} onChange={(event) => update('dingtalkRobotId', event.target.value)}>
               <option value="">不发送通知</option>
-              {robots.filter((robot) => robot.enabled && robot.hasWebhookUrl).map((robot) => <option key={robot.id} value={robot.id}>{robot.name}</option>)}
+              {robots.filter((robot) => robot.enabled && robot.isConfigured).map((robot) => <option key={robot.id} value={robot.id}>{robot.name} · {robot.transport === 'cli' ? 'CLI' : 'Webhook'}</option>)}
             </Select>
           </Field>
         </div>

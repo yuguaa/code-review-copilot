@@ -51,9 +51,14 @@ export type Repository = RepositoryItem & {
   enableMrComment: boolean; enableDingtalk: boolean; dingtalkRobotId: string | null;
 };
 export type DingtalkRobot = {
-  id: string; name: string; enabled: boolean; hasWebhookUrl: boolean; hasSecret: boolean;
+  id: string; name: string; transport: 'webhook' | 'cli'; enabled: boolean; hasWebhookUrl: boolean; hasSecret: boolean; isConfigured: boolean;
+  cliProfile: string | null; cliRobotCode: string | null; cliGroupId: string | null;
   repositoryCount: number; rssSubscriptionCount: number; securityTargetCount: number;
 };
+export type DingtalkContact = { id: string; connectionId: string; userId: string; name: string; employeeNo: string | null; enabled: boolean };
+export type DingtalkMessage = { id: string; title: string; status: 'sending' | 'accepted' | 'failed' | 'unknown';
+  targetKind: 'group' | 'direct'; recipients: Array<{ userId: string; name: string; employeeNo: string | null }>;
+  error: string | null; createdAt: string; requestedBy: string };
 export type GitLabAccount = { id: string; url: string; isActive: boolean; hasAccessToken: boolean; hasWebhookSecret: boolean };
 export type RssSubscriptionItem = {
   id: string; name: string; url: string; enabled: boolean; intervalMinutes: number; dingtalkRobotId: string | null;

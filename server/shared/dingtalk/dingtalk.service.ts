@@ -1,13 +1,8 @@
 import axios from 'axios';
 import crypto from 'node:crypto';
-import { createLogger } from '../logger/logger.service';
+import { z } from 'zod';
 
-const log = createLogger('dingtalk');
-
-export type DingtalkConfig = {
-  webhook: string;
-  secret?: string | null;
-};
+import { callDingtalkCli } from './dingtalk-cli.service';
 
 /** 钉钉加签：sign = base64(HMAC-SHA256(secret, `${ts}\n${secret}`))，拼到 URL。 */
 export function signedUrl(webhook: string, secret?: string | null): string {
@@ -22,15 +17,26 @@ export function signedUrl(webhook: string, secret?: string | null): string {
  * 推送 markdown 消息到钉钉自定义机器人。
  * 接口错误统一抛出，由调用方快速失败；不在此处兜底降级。
  */
-export function sendDingtalk(config: DingtalkConfig, title: string, text: string): Promise<void> {
+export function sendDingtalk(config: DingtalkConfig, title: string, text: string,
+  target: { userIds: string[]; direct?: boolean } = { userIds: [] }): Promise<{ remoteIds: string[] }> {
+  if (config.transport === 'cli') {
+    return callDingtalkCli({ action: 'send', profile: config.cliProfile, robotCode: config.cliRobotCode,
+      ...(target.direct ? {} : { groupId: config.cliGroupId }), userIds: target.userIds, title, text,
+    }).then((body) => z.object({ status: z.literal('accepted'), remoteIds: z.array(z.string()) }).parse(body));
+  }
+  if (target.direct) return Promise.reject(new Error('Webhook 不支持私聊'));
+  const mentions = target.userIds.length ? target.userIds.map((id) => `@${id}`).join(' ') + '\n\n' : '';
   const url = signedUrl(config.webhook, config.secret);
   return axios
-    .post(url, { msgtype: 'markdown', markdown: { title, text } }, { timeout: 10_000 })
+    .post(url, { msgtype: 'markdown', markdown: { title, text: mentions + text },
+      ...(target.userIds.length ? { at: { atUserIds: target.userIds, isAtAll: false } } : {}),
+    }, { timeout: 10_000, maxRedirects: 0 })
     .then((res) => {
-      const data = res.data as { errcode?: number; errmsg?: string };
-      if (data.errcode && data.errcode !== 0) {
-        throw new Error(`钉钉推送失败：${data.errcode} ${data.errmsg ?? ''}`);
-      }
-      log.info('钉钉推送成功');
+      const data = z.object({ errcode: z.number().int() }).parse(res.data);
+      if (data.errcode !== 0) throw new Error(`钉钉发送失败：${data.errcode}`);
+      return { remoteIds: [] };
     });
 }
+
+export type DingtalkConfig = { transport?: 'webhook'; webhook: string; secret?: string | null }
+  | { transport: 'cli'; cliProfile: string; cliRobotCode: string; cliGroupId: string };

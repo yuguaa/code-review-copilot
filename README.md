@@ -50,7 +50,7 @@ GitLab Webhook 地址为 `/api/webhook/gitlab`，接收 Merge Request 和 Push �
 
 OCR 固定使用 `@alibaba-group/open-code-review@1.9.10` 的原生可执行文件。调用参数包括 `--format json`、`--audience human`、确定的提交范围、并发数、任务超时和 Token 预算；stderr 的进度通过平台 SSE 展示，平台从 stdout 读取最终 JSON。
 
-仓库的 OCR Token 预算设置为 `0` 时不限制总 Token 用量，也是新仓库的默认值。
+新仓库的 OCR Token 预算默认为 `2,000,000`；设置为 `0` 时不限制总 Token 用量。
 
 OpenAI-compatible 的 DeepSeek 模型默认关闭 thinking 请求字段，以兼容不支持 thinking 与 tool_choice 同时使用的网关；如需覆盖该行为，可在部署环境设置 `OCR_DISABLE_THINKING=1` 或 `OCR_DISABLE_THINKING=0`。
 
@@ -62,9 +62,25 @@ PostgreSQL 保存排队任务，单实例执行器最多并行处理两个运行
 
 完整报告保存成功后，平台按仓库配置执行自动发布。GitLab 和钉钉各自保存发送状态；网络中断且无法确认远端结果时记录 `unknown`，由用户确认远端状态后再次发起。GitLab 发布校验当前 MR 版本，并使用内容标记识别已有评论。
 
-## 钉钉机器人
+## 钉钉连接
 
-在连接器的钉钉页面管理多个机器人，每个机器人分别设置名称、Webhook、Secret 和启用状态。已保存的凭证不会通过接口返回，编辑时留空保留原值；Secret 可以明确清除。
+在连接器的钉钉页面配置 Webhook 或 DWS CLI。已有机器人自动保留为 Webhook 连接，不改变凭证、启用状态和仓库/RSS/安全目标关联。Webhook 编辑时凭证留空保留原值，Secret 可明确清除。
+
+DWS CLI 连接配置明确的 `corpId:userId` Profile、Robot Code 和默认群 `openConversationId`。CLI 固定为 `1.0.66`，在独立 Debian/glibc 容器中执行；网页不能指定可执行文件、命令或凭据目录。Worker 不开放宿主机端口，不访问应用数据库，只接受带内部密钥的授权检查、人员搜索和机器人发送请求。
+
+在 `.env` 设置至少 32 位随机 `DINGTALK_WORKER_TOKEN`，然后启动可选服务：
+
+```bash
+docker compose --profile dingtalk up -d --build dingtalk-worker
+docker compose --profile dingtalk exec dingtalk-worker dws auth login --device --recommend
+docker compose --profile dingtalk exec dingtalk-worker dws profile list --format json
+```
+
+企业授权由管理员完成。认证状态保存在专用 `dingtalk_auth` 卷，不复制个人电脑登录态，不通过平台 API 返回凭据。Profile 必须使用上述命令返回的准确身份，在连接器中点“检查授权”验证。机器人需要对应发送权限并已加入默认群；缺少授权时明确报错，不自动改用 Webhook。
+
+“人员名单”支持按姓名或工号查询钉钉通讯录，管理员明确选择候选后存入平台名单。名单按连接隔离；工号与 GitLab 用户名一致可以作为查找线索，但工号和 GitLab User ID 均不能替代真实钉钉 userId。
+
+继续问答中可点“钉钉 @ / 私聊”编辑正文，或在一条回答下点“发到钉钉”。发送方式支持默认群及 @ 所选人员，或以配置的机器人身份私聊名单人员；发送前必须确认收件人和正文。平台保存发送人、收件人快照、正文、状态和回执；同一请求 ID 不重复发送，超时或中断后状态未知时不自动重发。此版本不监听钉钉入站消息，也不允许模型自主向联系人发送消息。
 
 每个仓库和每个 RSS 订阅分别选择一个机器人。启用仓库通知或 RSS 订阅时必须选择已启用的机器人。机器人停用后停止接收新通知，引用它的配置需要选择可用机器人或关闭发送。仍被仓库或 RSS 订阅引用的机器人不能删除。
 

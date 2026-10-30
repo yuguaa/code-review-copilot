@@ -17,6 +17,7 @@ dev.db
 prisma/dev.db
 .verification
 .deployment
+temp
 .dev-postgres
 .workspaces
 .codex

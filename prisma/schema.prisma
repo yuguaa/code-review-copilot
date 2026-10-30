@@ -95,6 +95,7 @@ model Session {
   updatedAt           DateTime    @updatedAt
   messages            Message[]   @relation("SessionMessages")
   runs                Run[]
+  dingtalkMessages    DingtalkMessage[]
 
   @@index([kind, updatedAt])
   @@index([repositoryId])
@@ -169,16 +170,60 @@ model Message {
 model DingtalkRobot {
   id               String            @id @default(cuid())
   name             String
-  webhookUrl       String
+  transport        String            @default("webhook")
+  webhookUrl       String?
   secret           String?
+  cliProfile       String?
+  cliRobotCode     String?
+  cliGroupId       String?
   enabled          Boolean           @default(true)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   repositories     Repository[]
   rssSubscriptions RssSubscription[]
   securityTargets  SecurityTarget[]
+  contacts         DingtalkContact[]
+  messages         DingtalkMessage[]
 
   @@map("dingtalk_robots")
+}
+
+model DingtalkContact {
+  id           String        @id @default(cuid())
+  connectionId String
+  connection   DingtalkRobot @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  userId       String
+  name         String
+  employeeNo   String?
+  enabled      Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([connectionId, userId])
+  @@unique([connectionId, employeeNo])
+  @@map("dingtalk_contacts")
+}
+
+model DingtalkMessage {
+  id            String        @id
+  connectionId  String
+  connection    DingtalkRobot @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  sessionId     String?
+  session       Session?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  requestedBy   String
+  payloadHash   String
+  targetKind    String
+  recipients    Json
+  title         String
+  text          String
+  status        String        @default("sending")
+  remoteIds     Json          @default("[]")
+  error         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([sessionId, createdAt])
+  @@map("dingtalk_messages")
 }
 
 model RssSubscription {

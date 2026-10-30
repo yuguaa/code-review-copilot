@@ -32,6 +32,8 @@ services:
       AGENT_BROWSER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       AGENT_BROWSER_ARGS: --no-sandbox,--disable-dev-shm-usage
       OCR_DISABLE_THINKING: ${OCR_DISABLE_THINKING:-}
+      DINGTALK_WORKER_URL: http://dingtalk-worker:8791
+      DINGTALK_WORKER_TOKEN: ${DINGTALK_WORKER_TOKEN:-}
       ZAP_API_URL: ${ZAP_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4317
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
@@ -85,10 +87,34 @@ services:
       AGENT_BROWSER_ARGS: --no-sandbox,--disable-dev-shm-usage
       ZAP_API_URL: ${ZAP_API_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      DINGTALK_WORKER_URL: http://dingtalk-worker:8791
+      DINGTALK_WORKER_TOKEN: ${DINGTALK_WORKER_TOKEN:-}
     volumes:
       - workspace_data:/app/.workspaces
       - security_artifacts:/app/security-artifacts
     networks: [default, database]
+
+  dingtalk-worker:
+    profiles: [dingtalk]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dingtalk-worker
+    restart: unless-stopped
+    init: true
+    environment:
+      DINGTALK_WORKER_TOKEN: ${DINGTALK_WORKER_TOKEN:-}
+    volumes:
+      - dingtalk_auth:/home/node/.dws
+    networks: [default]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ['CMD', 'node', '-e', 'fetch("http://127.0.0.1:8791/healthz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   postgres:
     image: postgres:16.15-alpine3.24
@@ -197,3 +223,4 @@ volumes:
   grafana_data:
   tempo_data:
   prometheus_data:
+  dingtalk_auth:

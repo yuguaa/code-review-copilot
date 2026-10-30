@@ -28,13 +28,13 @@ export function Rss() {
   const action = useAction();
   const confirmation = useConfirm();
   const selectedRobot = robots.data?.robots.find((robot) => robot.id === form.dingtalkRobotId);
-  const robotValid = Boolean(selectedRobot?.enabled && selectedRobot.hasWebhookUrl);
-  const canEnable = (id: string | null) => Boolean(robots.data?.robots.some((robot) => robot.id === id && robot.enabled && robot.hasWebhookUrl));
+  const robotValid = Boolean(selectedRobot?.enabled && selectedRobot.isConfigured);
+  const canEnable = (id: string | null) => Boolean(robots.data?.robots.some((robot) => robot.id === id && robot.enabled && robot.isConfigured));
   const robotLabel = (id: string | null) => {
     if (!id) return "未选择机器人";
     if (!robots.data) return robots.error ? "机器人名单加载失败" : "正在加载机器人…";
     const robot = robots.data.robots.find((item) => item.id === id);
-    return robot ? `${robot.name}${!robot.enabled ? "（已停用）" : !robot.hasWebhookUrl ? "（未配置 Webhook）" : ""}` : "原关联机器人不可用";
+    return robot ? `${robot.name}${!robot.enabled ? "（已停用）" : !robot.isConfigured ? "（配置不完整）" : ""}` : "原关联机器人不可用";
   };
   const remove = (item: RssSubscriptionItem) => {
     void confirmation.confirm({ title: "删除 RSS 订阅", description: `确认删除「${item.name}」？之后停止抓取和发送该订阅。` }).then((approved) => {
@@ -47,7 +47,7 @@ export function Rss() {
       return resource.reload();
     }));
   const save = () => action.execute("save", () => {
-    if (form.enabled && !robotValid) throw new Error("请选择已启用且配置 Webhook 的钉钉机器人");
+    if (form.enabled && !robotValid) throw new Error("请选择已启用且配置完整的钉钉连接");
     return api(editing ? `/api/rss/subscriptions/${editing.id}` : "/api/rss/subscriptions", {
     method: editing ? "PATCH" : "POST", body: JSON.stringify(form),
   }).then(() => { setOpen(false); toast.success("订阅配置已保存"); return resource.reload(); });
@@ -108,11 +108,11 @@ export function Rss() {
             <Input type="number" min={5} max={1440} required value={form.intervalMinutes} onChange={(event) => setForm((current) => ({ ...current, intervalMinutes: Number(event.target.value) }))} />
           </Field>
           <Checkbox label="启用订阅" checked={form.enabled} onChange={(enabled) => setForm((current) => ({ ...current, enabled }))} />
-          <Field label="钉钉机器人" error={robots.error} hint={robots.loading ? "正在加载机器人…" : "启用订阅时必须选择已启用且配置 Webhook 的机器人。"}>
+          <Field label="钉钉连接" error={robots.error} hint={robots.loading ? "正在加载连接…" : "启用订阅时必须选择已启用且配置完整的 Webhook 或 CLI 连接。"}>
             <Select required={form.enabled} disabled={robots.loading || Boolean(robots.error)} value={form.dingtalkRobotId ?? ""} onChange={(event) => setForm((current) => ({ ...current, dingtalkRobotId: event.target.value || null }))}>
               <option value="">请选择机器人</option>
               {form.dingtalkRobotId && robots.data && !selectedRobot && <option value={form.dingtalkRobotId} disabled>原关联机器人不可用</option>}
-              {robots.data?.robots.map((robot) => <option key={robot.id} value={robot.id} disabled={!robot.enabled || !robot.hasWebhookUrl}>{robotLabel(robot.id)}</option>)}
+              {robots.data?.robots.map((robot) => <option key={robot.id} value={robot.id} disabled={!robot.enabled || !robot.isConfigured}>{robotLabel(robot.id)}</option>)}
             </Select>
           </Field>
         </FieldGroup>

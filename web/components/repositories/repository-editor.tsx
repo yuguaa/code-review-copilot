@@ -31,7 +31,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
   });
   const robots = useResource<{ robots: DingtalkRobot[] }>("/api/settings/dingtalk");
   const selectedRobot = robots.data?.robots.find((robot) => robot.id === form.dingtalkRobotId);
-  const robotValid = Boolean(selectedRobot?.enabled && selectedRobot.hasWebhookUrl);
+  const robotValid = Boolean(selectedRobot?.enabled && selectedRobot.isConfigured);
   const [search, setSearch] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [searched, setSearched] = useState(false);
@@ -47,7 +47,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
       .then((result) => { setProjects(result.projects); setSearched(true); });
   });
   const submit = () => action.execute("save", () => {
-    if (form.enableDingtalk && !robotValid) throw new Error("请选择已启用且配置 Webhook 的钉钉机器人");
+    if (form.enableDingtalk && !robotValid) throw new Error("请选择已启用且配置完整的钉钉连接");
     const { useCustomModel, ...values } = form;
     return api(repository ? `/api/repositories/${repository.id}` : "/api/repositories", { method: repository ? "PATCH" : "POST", body: JSON.stringify({
       ...values, gitLabProjectId: Number(form.gitLabProjectId), defaultAIModelId: form.defaultAIModelId || null,
@@ -107,11 +107,11 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
       <FormSection title="发布渠道"><FieldGroup>
         <Checkbox label="自动发布到 GitLab" checked={form.enableMrComment} onChange={(value) => update("enableMrComment", value)} />
         <Checkbox label="发送钉钉通知" checked={form.enableDingtalk} onChange={(value) => update("enableDingtalk", value)} />
-        <Field label="钉钉机器人" error={robots.error} hint={robots.loading ? "正在加载机器人…" : "启用通知时请选择已启用且配置 Webhook 的机器人。"}>
+        <Field label="钉钉连接" error={robots.error} hint={robots.loading ? "正在加载连接…" : "支持 Webhook 或 DWS CLI；CLI 必须已完成授权。"}>
           <Select required={form.enableDingtalk} disabled={robots.loading || Boolean(robots.error)} value={form.dingtalkRobotId ?? ""} onChange={(event) => update("dingtalkRobotId", event.target.value || null)}>
             <option value="">请选择机器人</option>
             {form.dingtalkRobotId && robots.data && !selectedRobot && <option value={form.dingtalkRobotId} disabled>原关联机器人不可用</option>}
-            {robots.data?.robots.map((robot) => <option key={robot.id} value={robot.id} disabled={!robot.enabled || !robot.hasWebhookUrl}>{robot.name}{!robot.enabled ? "（已停用）" : !robot.hasWebhookUrl ? "（未配置 Webhook）" : ""}</option>)}
+            {robots.data?.robots.map((robot) => <option key={robot.id} value={robot.id} disabled={!robot.enabled || !robot.isConfigured}>{robot.name} · {robot.transport === 'cli' ? 'CLI' : 'Webhook'}{!robot.enabled ? "（已停用）" : !robot.isConfigured ? "（配置不完整）" : ""}</option>)}
           </Select>
         </Field>
       </FieldGroup></FormSection>

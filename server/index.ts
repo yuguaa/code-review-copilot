@@ -5,6 +5,7 @@ import { createApp } from "./app";
 import { appConfig } from "./config/app.config";
 import { getMissingAuthEnv } from "./config/auth.config";
 import { prisma } from "./infrastructure/prisma/prisma.service";
+import { recoverDingtalkMessages } from './modules/notifications/dingtalk-messages.service';
 import { startRssScheduler, stopRssScheduler } from "./modules/rss/rss.scheduler";
 import { startSecurityScheduler, stopSecurityScheduler } from "./modules/security/security-scheduler";
 import { stopChatSessions } from "./platform/chat/chat-runtime";
@@ -26,7 +27,7 @@ function shutdown(exitCode: number): void {
 
 const missing = getMissingAuthEnv();
 const startup = missing.length ? Promise.reject(new Error(`认证配置缺失：${missing.join(", ")}`)) : startTelemetry();
-startup.then(() => startRunWorker(() => shutdown(1))).then(() => {
+startup.then(recoverDingtalkMessages).then(() => startRunWorker(() => shutdown(1))).then(() => {
   if (closing) return;
   server = serve({ fetch: createApp().fetch, port: appConfig.port });
   startRssScheduler();

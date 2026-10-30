@@ -211,7 +211,7 @@ function notifyTicket(
         `- 摘要：${summary}`,
         `- 详情：[打开工单](${link})`,
       ].join("\n"),
-    );
+    ).then(() => undefined);
   });
 }
 

@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 
+import { listDingtalkMessages, sendSessionDingtalkMessage } from '@server/modules/notifications/dingtalk-messages.service';
+
 import { subscribeSessionEvents, subscribeSessionListEvents } from './session-events.service';
 import { createChatSession, deleteSession, listSessionSummaries, loadSessionDetail, runReviewCommand, sessionExists, stopReviewSession, switchActiveMessage } from './sessions.service';
 
@@ -26,6 +28,9 @@ sessionRoutes.get('/:id/events', (c) => sessionExists(c.req.param('id')).then((e
   return new Response(subscribeSessionEvents(c.req.param('id'), c.req.raw.signal), { headers: eventHeaders });
 }));
 sessionRoutes.get('/:id', (c) => loadSessionDetail(c.req.param('id')).then((detail) => c.json(detail)));
+sessionRoutes.get('/:id/dingtalk-messages', (c) => listDingtalkMessages(c.req.param('id')).then((messages) => c.json({ messages })));
+sessionRoutes.post('/:id/dingtalk-messages', (c) => c.req.json()
+  .then((body) => sendSessionDingtalkMessage(c.req.param('id'), c.get('authUsername'), body)).then((message) => c.json({ message })));
 sessionRoutes.post('/:id/active-message', (c) => readBody(c.req.raw, activeMessageSchema)
   .then((body) => switchActiveMessage(c.req.param('id'), body.messageId))
   .then((tree) => c.json(tree)));
