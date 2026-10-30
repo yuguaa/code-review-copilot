@@ -25,7 +25,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
     customProvider: repository?.customProvider ?? "openai", customModelId: repository?.customModelId ?? "",
     customApiBaseUrl: repository?.customApiBaseUrl ?? "", customApiKey: "", customMaxSteps: repository?.customMaxSteps ?? 16,
     defaultReviewPrompt: repository?.defaultReviewPrompt ?? "", ocrConcurrency: repository?.ocrConcurrency ?? 2,
-    ocrTimeoutMinutes: repository?.ocrTimeoutMinutes ?? 10, ocrMaxTokensBudget: repository?.ocrMaxTokensBudget ?? 0,
+    ocrTimeoutMinutes: repository?.ocrTimeoutMinutes ?? 10, ocrMaxTokensBudget: repository?.ocrMaxTokensBudget ?? 1_000_000,
     enableMrComment: repository?.enableMrComment ?? false, enableDingtalk: repository?.enableDingtalk ?? false,
     dingtalkRobotId: (repository?.dingtalkRobotId ?? null) as string | null,
   });
@@ -83,7 +83,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
         <Checkbox label="收到变更事件后自动审查" checked={form.autoReview} onChange={(value) => update("autoReview", value)} />
       </FieldGroup>
       <FormSection title="OCR 审查参数"><FieldGroup>
-        <Field label="审查背景" hint="规则在仓库的 .opencodereview/rule.json 中维护。"><Textarea value={form.defaultReviewPrompt} onChange={(event) => update("defaultReviewPrompt", event.target.value)} /></Field>
+        <Field label="审查背景" hint="平台默认会附加 Token 使用约束；项目专项规则仍由仓库维护。"><Textarea value={form.defaultReviewPrompt} onChange={(event) => update("defaultReviewPrompt", event.target.value)} /></Field>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="并发任务数"><Input type="number" min={1} max={16} required value={form.ocrConcurrency} onChange={(event) => update("ocrConcurrency", Number(event.target.value))} /></Field>
           <Field label="任务超时（分钟）"><Input type="number" min={1} max={120} required value={form.ocrTimeoutMinutes} onChange={(event) => update("ocrTimeoutMinutes", Number(event.target.value))} /></Field>

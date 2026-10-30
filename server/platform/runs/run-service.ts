@@ -15,6 +15,7 @@ import { redactSecrets, runOcr, verifyOcrVersion } from '@server/platform/engine
 import { withRunSpan, withSpan } from '@server/platform/telemetry/telemetry.service';
 import { createLogger } from '@server/shared/logger/logger.service';
 import { isPublishableRunStatus, PublicationError, publishRun, recoverRunPublications } from './run-publication';
+import { withDefaultReviewRule } from './review-rule';
 
 import type { Prisma, Run } from '@prisma/client';
 
@@ -82,7 +83,7 @@ export function enqueueRun(request: EnqueueRequest): Promise<void> {
         const input = inputSchema.parse({
           context,
           background: ['请使用简体中文审查代码，依据仓库内 OCR 原生规则与项目上下文提出有证据的问题。', context].filter(Boolean).join('\n\n'),
-          reviewRule: repo.defaultReviewPrompt ?? '',
+          reviewRule: withDefaultReviewRule(repo.defaultReviewPrompt),
           model: { provider: model.provider, modelId: model.modelId, apiBaseUrl: model.apiBaseUrl ?? null },
           concurrency: repo.ocrConcurrency, timeoutMinutes: repo.ocrTimeoutMinutes, maxTokensBudget: repo.ocrMaxTokensBudget,
         });

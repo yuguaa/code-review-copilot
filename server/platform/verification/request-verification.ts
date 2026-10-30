@@ -130,7 +130,7 @@ export function verifyPlatformRequests(context: VerificationContext): Promise<vo
       repositoryId = repository.id;
       assert.equal(repository.ocrConcurrency, 2);
       assert.equal(repository.ocrTimeoutMinutes, 10);
-      assert.equal(repository.ocrMaxTokensBudget, 0);
+      assert.equal(repository.ocrMaxTokensBudget, 1_000_000);
       assert.equal(repository.hasCustomApiKey, true);
       return request('/api/repositories').then(json);
     }).then(() => request(`/api/repositories/${repositoryId}`, 'PATCH', { name: '平台验证更新', customApiKey: '' }).then(json))
