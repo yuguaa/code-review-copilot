@@ -24,3 +24,18 @@ datasources:
         datasourceUid: prometheus
       nodeGraph:
         enabled: true
+  - name: Review PostgreSQL
+    uid: review-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: code_review_copilot
+    user: code_review
+    isDefault: false
+    editable: false
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: $POSTGRES_PASSWORD

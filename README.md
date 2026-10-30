@@ -96,7 +96,7 @@ Compose 部署应用、安全测试执行器、PostgreSQL、Collector、Tempo、
 
 平台向 OCR 传递 W3C `TRACEPARENT`，运行记录保存 trace ID。Collector 通过 OTLP/gRPC 接收平台与 OCR 的 trace 和指标；指标仅保留有限取值的属性。Tempo 保留 14 天 trace，Prometheus 保留 30 天指标。源码、模型凭证和完整请求正文不由平台遥测导出。
 
-运行详情展示 OCR 汇总的输入、输出、总 Token 和缓存读取 Token；Grafana 看板提供按模型统计的 Token 消耗与趋势。
+运行详情展示 OCR 汇总的输入、输出、总 Token 和缓存读取 Token；Grafana 看板提供按模型统计的 Token 消耗与趋势，并通过 PostgreSQL 数据源按 Run 展示单次任务的完整 Token 明细。
 
 ## 配置与数据迁移
 

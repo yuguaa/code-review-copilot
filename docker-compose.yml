@@ -111,12 +111,13 @@ services:
     restart: unless-stopped
     environment:
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8787}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - ./deploy/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
-    networks: [telemetry]
+    networks: [telemetry, database]
     depends_on:
       tempo:
         condition: service_healthy

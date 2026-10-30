@@ -76,6 +76,32 @@
       "gridPos": { "x": 6, "y": 24, "w": 18, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
       "targets": [{ "refId": "A", "expr": "sum by (model) (increase(ocr_llm_tokens_used_total{type=\"total\"}[$__rate_interval]))", "legendFormat": "{{model}}" }]
+    },
+    {
+      "id": 9,
+      "title": "单次任务 Token 消耗",
+      "description": "按 Run 展示 OCR 汇总的输入、输出、总 Token 和缓存读取 Token。",
+      "type": "table",
+      "datasource": { "type": "postgres", "uid": "review-postgres" },
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 12 },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "postgres", "uid": "review-postgres" },
+        "format": "table",
+        "rawQuery": true,
+        "editorMode": "code",
+        "rawSql": "SELECT r.id AS \"Run ID\", r.\"createdAt\" AS \"时间\", r.status AS \"状态\", COALESCE(repository.name, '') AS \"仓库\", r.\"modelId\" AS \"模型\", COALESCE((r.\"rawResult\" #>> '{summary,input_tokens}')::bigint, 0) AS \"输入 Token\", COALESCE((r.\"rawResult\" #>> '{summary,output_tokens}')::bigint, 0) AS \"输出 Token\", COALESCE((r.\"rawResult\" #>> '{summary,total_tokens}')::bigint, 0) AS \"总 Token\", COALESCE((r.\"rawResult\" #>> '{summary,cache_read_tokens}')::bigint, 0) AS \"缓存读取 Token\" FROM runs r LEFT JOIN repositories repository ON repository.id = r.\"repositoryId\" WHERE jsonb_typeof(r.\"rawResult\" #> '{summary,total_tokens}') = 'number' AND $__timeFilter(r.\"createdAt\") ORDER BY r.\"createdAt\" DESC LIMIT 200"
+      }],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": "Token$" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "decimals", "value": 0 }] },
+          { "matcher": { "id": "byName", "options": "时间" }, "properties": [{ "id": "unit", "value": "dateTimeAsIso" }] },
+          { "matcher": { "id": "byName", "options": "Run ID" }, "properties": [{ "id": "custom.width", "value": 300 }] },
+          { "matcher": { "id": "byName", "options": "仓库" }, "properties": [{ "id": "custom.width", "value": 180 }] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "时间", "desc": true }] }
     }
   ]
 }
