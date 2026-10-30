@@ -25,7 +25,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
     customProvider: repository?.customProvider ?? "openai", customModelId: repository?.customModelId ?? "",
     customApiBaseUrl: repository?.customApiBaseUrl ?? "", customApiKey: "", customMaxSteps: repository?.customMaxSteps ?? 16,
     defaultReviewPrompt: repository?.defaultReviewPrompt ?? "", ocrConcurrency: repository?.ocrConcurrency ?? 2,
-    ocrTimeoutMinutes: repository?.ocrTimeoutMinutes ?? 10, ocrMaxTokensBudget: repository?.ocrMaxTokensBudget ?? 1_000_000,
+    ocrTimeoutMinutes: repository?.ocrTimeoutMinutes ?? 10, ocrMaxTokensBudget: repository?.ocrMaxTokensBudget ?? 2_000_000,
     enableMrComment: repository?.enableMrComment ?? false, enableDingtalk: repository?.enableDingtalk ?? false,
     dingtalkRobotId: (repository?.dingtalkRobotId ?? null) as string | null,
   });

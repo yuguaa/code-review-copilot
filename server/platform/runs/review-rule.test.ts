@@ -16,4 +16,9 @@ describe("默认审查规则", () => {
     const rule = `仓库规则\n\n${DEFAULT_REVIEW_RULE}`;
     expect(withDefaultReviewRule(rule)).toBe(rule);
   });
+
+  it("默认规则存在换行或空白差异时不重复追加", () => {
+    const rule = `仓库规则\r\n\r\n${DEFAULT_REVIEW_RULE.replace(/\n/g, "  \r\n")}`;
+    expect(withDefaultReviewRule(rule)).toBe(rule);
+  });
 });

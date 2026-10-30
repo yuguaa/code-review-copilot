@@ -71,7 +71,7 @@ export function preserveConfigurationAcrossMigration(
       after[2] = after[2].filter((row) => (row as { id: string }).id !== 'global-target-repository');
       assert.ok(isDeepStrictEqual(before, after), '迁移后配置内容、凭证或关联发生变化');
       return client.query(`SELECT "ocrConcurrency", "ocrTimeoutMinutes", "ocrMaxTokensBudget" FROM repositories WHERE id = 'preserved-repository'`);
-    }).then(({ rows }: { rows: unknown[] }) => assert.deepEqual(rows[0], { ocrConcurrency: 2, ocrTimeoutMinutes: 10, ocrMaxTokensBudget: 1_000_000 }))))
+    }).then(({ rows }: { rows: unknown[] }) => assert.deepEqual(rows[0], { ocrConcurrency: 2, ocrTimeoutMinutes: 10, ocrMaxTokensBudget: 2_000_000 }))))
     .then(() => check('独立机器人与全局机器人凭证分别保留，仓库和 RSS 绑定正确', () => client.query(`
       SELECT (SELECT "dingtalkRobotId" FROM repositories WHERE id = 'preserved-repository') AS repository_robot,
         (SELECT "dingtalkRobotId" FROM rss_subscriptions WHERE id = 'preserved-rss') AS rss_robot,

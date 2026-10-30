@@ -33,7 +33,7 @@ export const repositoryInput = z.object({
   isActive: z.boolean().default(true),
   ocrConcurrency: positiveInteger.max(16).default(2),
   ocrTimeoutMinutes: positiveInteger.max(120).default(10),
-  ocrMaxTokensBudget: nonNegativeInteger.default(1_000_000),
+  ocrMaxTokensBudget: nonNegativeInteger.default(2_000_000),
 }).strict();
 
 const repositorySelect = {

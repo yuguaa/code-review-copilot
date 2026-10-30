@@ -99,7 +99,7 @@ describe('运行事务、取消与重新执行', () => {
   it('入队时保存仓库审查规则快照', () => createSession().then((sessionId) => enqueue(sessionId)
     .then(() => latest(sessionId)).then((run) => {
       expect(run.input).toMatchObject({
-        reviewRule: expect.stringContaining('仓库审查要求'), maxTokensBudget: 1_000_000,
+        reviewRule: expect.stringContaining('仓库审查要求'), maxTokensBudget: 2_000_000,
       });
       return runs.cancelSessionReview(sessionId);
     })));
