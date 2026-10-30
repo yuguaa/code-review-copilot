@@ -10,6 +10,7 @@ export const httpUrl = z.string().trim().url().refine((value) => {
 }, "地址必须使用 HTTP 或 HTTPS，且不能包含用户名和密码");
 
 export const positiveInteger = z.number().int().positive().max(2_147_483_647);
+export const nonNegativeInteger = z.number().int().nonnegative().max(2_147_483_647);
 
 /** 密码表单留空时保留已保存的值，null 明确清除可选凭证。 */
 export const credentialInput = z.string().transform((value) => value.trim() ? value : undefined).optional();

@@ -56,7 +56,7 @@ model Repository {
   customMaxSteps      Int?
   ocrConcurrency      Int              @default(2)
   ocrTimeoutMinutes   Int              @default(10)
-  ocrMaxTokensBudget  Int              @default(200000)
+  ocrMaxTokensBudget  Int              @default(0)
   defaultReviewPrompt String?
   enableMrComment     Boolean          @default(false)
   enableDingtalk      Boolean          @default(false)

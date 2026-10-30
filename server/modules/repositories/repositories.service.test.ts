@@ -7,12 +7,18 @@ const repository = { gitLabAccountId: "account-1", gitLabProjectId: 1, name: "re
 describe("仓库配置输入", () => {
   it("创建时提供 OCR 默认参数", () => {
     expect(repositoryInput.parse(repository)).toMatchObject({
-      ocrConcurrency: 2, ocrTimeoutMinutes: 10, ocrMaxTokensBudget: 200000, enableDingtalk: false,
+      ocrConcurrency: 2, ocrTimeoutMinutes: 10, ocrMaxTokensBudget: 0, enableDingtalk: false,
     });
   });
-  it.each([0, -1, 1.5, "2", null, Number.POSITIVE_INFINITY])("拒绝无效 OCR 参数 %s", (value) => {
-    for (const key of ["ocrConcurrency", "ocrTimeoutMinutes", "ocrMaxTokensBudget"]) {
+  it.each([0, -1, 1.5, "2", null, Number.POSITIVE_INFINITY])("拒绝无效 OCR 并发与超时参数 %s", (value) => {
+    for (const key of ["ocrConcurrency", "ocrTimeoutMinutes"]) {
       expect(repositoryInput.safeParse({ ...repository, [key]: value }).success).toBe(false);
+    }
+  });
+  it("Token 预算允许 0 表示不限制", () => {
+    expect(repositoryInput.parse({ ...repository, ocrMaxTokensBudget: 0 }).ocrMaxTokensBudget).toBe(0);
+    for (const value of [-1, 1.5, "0", null, Number.POSITIVE_INFINITY]) {
+      expect(repositoryInput.safeParse({ ...repository, ocrMaxTokensBudget: value }).success).toBe(false);
     }
   });
   it("部分更新不填充创建默认值", () => {

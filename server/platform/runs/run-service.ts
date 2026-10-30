@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
 import { assertCommit, cleanupRunWorkspaces, prepareRunWorkspace } from '@server/infrastructure/workspace/workspace.service';
 import { loadGlobalDefaultModel, resolveRepositoryModelConfig } from '@server/modules/ai-models/ai-models.service';
+import { nonNegativeInteger } from '@server/modules/settings/config-input';
 import { publishSessionError, publishSessionListChanged, publishSessionMessages, publishSessionProgress, publishSessionStatus } from '@server/modules/sessions/session-events.service';
 import { busySessionStatuses } from '@server/modules/sessions/session-lifecycle.service';
 import { buildSessionMessageTree, getSessionWithRepository, lockSession } from '@server/modules/sessions/session-message-store.service';
@@ -30,7 +31,7 @@ const inputSchema = z.object({
   reviewRule: z.string().default(''),
   concurrency: z.number().int().positive(),
   timeoutMinutes: z.number().int().positive(),
-  maxTokensBudget: z.number().int().positive(),
+  maxTokensBudget: nonNegativeInteger,
   model: z.object({ provider: z.string(), modelId: z.string(), apiBaseUrl: z.string().nullable() }),
 });
 let timer: NodeJS.Timeout | undefined;

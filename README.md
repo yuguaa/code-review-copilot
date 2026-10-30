@@ -50,6 +50,8 @@ GitLab Webhook 地址为 `/api/webhook/gitlab`，接收 Merge Request 和 Push �
 
 OCR 固定使用 `@alibaba-group/open-code-review@1.9.10` 的原生可执行文件。调用参数包括 `--format json`、`--audience human`、确定的提交范围、并发数、任务超时和 Token 预算；stderr 的进度通过平台 SSE 展示，平台从 stdout 读取最终 JSON。
 
+仓库的 OCR Token 预算设置为 `0` 时不限制总 Token 用量，也是新仓库的默认值。
+
 OpenAI-compatible 的 DeepSeek 模型默认关闭 thinking 请求字段，以兼容不支持 thinking 与 tool_choice 同时使用的网关；如需覆盖该行为，可在部署环境设置 `OCR_DISABLE_THINKING=1` 或 `OCR_DISABLE_THINKING=0`。
 
 OCR 原生规则由仓库中的 `.opencodereview/rule.json` 管理。平台审查背景通过 `--background-file` 传入。OCR 会话与运行期上下文保存在每个仓库独立的 `ocr-home`；平台不维护另一套规则、Skills 或长期记忆。

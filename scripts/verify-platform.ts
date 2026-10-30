@@ -42,6 +42,7 @@ function main(): Promise<void> {
           '20261016160000_platform_runs',
           '20261019120000_dingtalk_robots',
           '20261019130000_add_security_testing',
+          '20261030120000_allow_unlimited_ocr_tokens',
         ].some((name) => source.endsWith(`/${name}`)),
       }),
       writeFile(join(runDirectory, 'package.json'), '{"private":true,"type":"module"}\n', { mode: 0o600 }),

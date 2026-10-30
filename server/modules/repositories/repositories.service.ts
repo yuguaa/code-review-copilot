@@ -8,7 +8,7 @@ import { validateDingtalkTarget } from "@server/modules/notifications/notificati
 import { createGitLabService } from "@server/shared/gitlab/gitlab.service";
 import { createLogger } from "@server/shared/logger/logger.service";
 import { maskModel } from "../settings/ai-model-settings.service";
-import { httpUrl, modelProvider, optionalCredentialInput, positiveInteger } from "../settings/config-input";
+import { httpUrl, modelProvider, nonNegativeInteger, optionalCredentialInput, positiveInteger } from "../settings/config-input";
 
 const log = createLogger("repositories");
 
@@ -33,7 +33,7 @@ export const repositoryInput = z.object({
   isActive: z.boolean().default(true),
   ocrConcurrency: positiveInteger.max(16).default(2),
   ocrTimeoutMinutes: positiveInteger.max(120).default(10),
-  ocrMaxTokensBudget: positiveInteger.default(200000),
+  ocrMaxTokensBudget: nonNegativeInteger.default(0),
 }).strict();
 
 const repositorySelect = {

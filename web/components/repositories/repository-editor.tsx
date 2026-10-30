@@ -25,7 +25,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
     customProvider: repository?.customProvider ?? "openai", customModelId: repository?.customModelId ?? "",
     customApiBaseUrl: repository?.customApiBaseUrl ?? "", customApiKey: "", customMaxSteps: repository?.customMaxSteps ?? 16,
     defaultReviewPrompt: repository?.defaultReviewPrompt ?? "", ocrConcurrency: repository?.ocrConcurrency ?? 2,
-    ocrTimeoutMinutes: repository?.ocrTimeoutMinutes ?? 10, ocrMaxTokensBudget: repository?.ocrMaxTokensBudget ?? 200000,
+    ocrTimeoutMinutes: repository?.ocrTimeoutMinutes ?? 10, ocrMaxTokensBudget: repository?.ocrMaxTokensBudget ?? 0,
     enableMrComment: repository?.enableMrComment ?? false, enableDingtalk: repository?.enableDingtalk ?? false,
     dingtalkRobotId: (repository?.dingtalkRobotId ?? null) as string | null,
   });
@@ -87,7 +87,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="并发任务数"><Input type="number" min={1} max={16} required value={form.ocrConcurrency} onChange={(event) => update("ocrConcurrency", Number(event.target.value))} /></Field>
           <Field label="任务超时（分钟）"><Input type="number" min={1} max={120} required value={form.ocrTimeoutMinutes} onChange={(event) => update("ocrTimeoutMinutes", Number(event.target.value))} /></Field>
-          <Field label="Token 预算"><Input type="number" min={1} required value={form.ocrMaxTokensBudget} onChange={(event) => update("ocrMaxTokensBudget", Number(event.target.value))} /></Field>
+          <Field label="Token 预算" hint="0 表示不限制。"><Input type="number" min={0} required value={form.ocrMaxTokensBudget} onChange={(event) => update("ocrMaxTokensBudget", Number(event.target.value))} /></Field>
         </div>
       </FieldGroup></FormSection>
       <FormSection title="模型"><FieldGroup>

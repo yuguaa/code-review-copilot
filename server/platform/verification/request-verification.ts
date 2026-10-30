@@ -130,7 +130,7 @@ export function verifyPlatformRequests(context: VerificationContext): Promise<vo
       repositoryId = repository.id;
       assert.equal(repository.ocrConcurrency, 2);
       assert.equal(repository.ocrTimeoutMinutes, 10);
-      assert.equal(repository.ocrMaxTokensBudget, 200000);
+      assert.equal(repository.ocrMaxTokensBudget, 0);
       assert.equal(repository.hasCustomApiKey, true);
       return request('/api/repositories').then(json);
     }).then(() => request(`/api/repositories/${repositoryId}`, 'PATCH', { name: '平台验证更新', customApiKey: '' }).then(json))
@@ -181,6 +181,7 @@ export function verifyPlatformRequests(context: VerificationContext): Promise<vo
     .then(() => check('配置输入、同源写入和重复记录校验', () => Promise.all([
       request(`/api/repositories/${repositoryId}`, 'PATCH', { ocrConcurrency: 0 }, {}, 400),
       request(`/api/repositories/${repositoryId}`, 'PATCH', { ocrMaxTokensBudget: 1.5 }, {}, 400),
+      request(`/api/repositories/${repositoryId}`, 'PATCH', { ocrMaxTokensBudget: 0 }).then(json),
       request(`/api/rss/subscriptions/${subscriptionId}`, 'PATCH', { intervalMinutes: 0 }, {}, 400),
       request(`/api/settings/models/${modelId}`, 'PATCH', { provider: 'unsupported' }, {}, 400),
       request('/api/rss/subscriptions', 'POST', { name: '重复地址', url: 'https://rss.example.invalid/feed.xml', enabled: false }, {}, 409),

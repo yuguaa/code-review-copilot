@@ -14,7 +14,7 @@ import { preserveConfigurationAcrossMigration } from './migration-verification';
 import type { VerificationContext } from './request-verification';
 
 const databasePort = 55433;
-const latestMigration = '20261019130000_add_security_testing';
+const latestMigration = '20261030120000_allow_unlimited_ocr_tokens';
 const require = createRequire(import.meta.url);
 
 function assertPortAvailable(): Promise<void> {
@@ -120,7 +120,7 @@ function main(): Promise<void> {
     }))
     .then(() => check('Prisma CLI 部署历史迁移', () => command('migrate-before', process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy', '--schema', join(directory, 'prisma')])))
     .then(() => preserveConfigurationAcrossMigration(postgres!, check, secrets, () =>
-      Promise.all(['20261016160000_platform_runs', '20261019120000_dingtalk_robots', latestMigration].map((name) =>
+      Promise.all(['20261016160000_platform_runs', '20261019120000_dingtalk_robots', '20261019130000_add_security_testing', latestMigration].map((name) =>
         cp(join(projectRoot, 'prisma/migrations', name), join(directory, 'prisma/migrations', name), { recursive: true })))
         .then(() => command('migrate-deploy', process.execPath, [require.resolve('prisma/build/index.js'), 'migrate', 'deploy', '--schema', join(directory, 'prisma')]))))
     .then(() => import('@server/infrastructure/prisma/prisma.service'))
