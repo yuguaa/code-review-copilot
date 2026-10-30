@@ -3,7 +3,15 @@ import { z } from 'zod';
 
 import { dingtalkPerson, dingtalkSearch } from '@shared/dingtalk';
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
+import { dingtalkConnectionConfigured } from '@server/modules/settings/dingtalk-robot-settings.service';
 import { callDingtalkCli } from '@server/shared/dingtalk/dingtalk-cli.service';
+
+export function listDingtalkCliConnections() {
+  return prisma.dingtalkRobot.findMany({ where: { enabled: true, transport: 'cli' }, orderBy: { name: 'asc' },
+    select: { id: true, name: true, transport: true, webhookUrl: true, cliProfile: true, cliRobotCode: true, cliGroupId: true },
+  }).then((connections) => connections.filter(dingtalkConnectionConfigured)
+    .map(({ id, name, cliProfile, cliGroupId }) => ({ id, name, cliProfile, cliGroupId })));
+}
 
 export function getCliConnection(id: string) {
   return prisma.dingtalkRobot.findUniqueOrThrow({ where: { id } }).then((connection) => {
@@ -20,9 +28,9 @@ export function checkDingtalkConnection(id: string) {
       userName: z.string().nullable(), corpName: z.string().nullable(), reason: z.string().nullable() }).parse(body));
 }
 
-export function searchDingtalkPeople(id: string, body: unknown) {
+export function searchDingtalkPeople(id: string, body: unknown, signal?: AbortSignal) {
   const input = dingtalkSearch.parse(body);
-  return getCliConnection(id).then((connection) => callDingtalkCli({ action: 'search', profile: connection.cliProfile, ...input }))
+  return getCliConnection(id).then((connection) => callDingtalkCli({ action: 'search', profile: connection.cliProfile, ...input }, signal))
     .then((result) => z.object({ people: z.array(dingtalkPerson), returnedCount: z.number().int() }).parse(result));
 }
 

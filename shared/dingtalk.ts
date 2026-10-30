@@ -5,6 +5,11 @@ export const dingtalkProfile = z.string().trim().regex(/^[A-Za-z0-9_-]+:[A-Za-z0
 export const dingtalkText = z.string().trim().min(1).max(60_000);
 export const dingtalkSearch = z.object({ query: z.string().trim().min(1).max(100), dimension: z.enum(['name', 'jobNumber']) }).strict();
 export const dingtalkPerson = z.object({ userId: dingtalkId, name: z.string().min(1).max(256) });
+export const dingtalkMessageDraft = z.object({
+  connectionId: z.string().min(1),
+  contactIds: z.array(z.string().min(1)).max(20).transform((ids) => [...new Set(ids)].sort()),
+  targetKind: z.enum(['group', 'direct']), title: z.string().trim().min(1).max(200), text: dingtalkText,
+}).strict();
 export const dingtalkCliRequest = z.discriminatedUnion('action', [
   z.object({ action: z.literal('status'), profile: dingtalkProfile }).strict(),
   z.object({ action: z.literal('search'), profile: dingtalkProfile, ...dingtalkSearch.shape }).strict(),
@@ -16,3 +21,4 @@ export const dingtalkCliRequest = z.discriminatedUnion('action', [
 
 export type DingtalkPerson = z.infer<typeof dingtalkPerson>;
 export type DingtalkCliRequest = z.infer<typeof dingtalkCliRequest>;
+export type DingtalkMessageDraft = z.infer<typeof dingtalkMessageDraft>;

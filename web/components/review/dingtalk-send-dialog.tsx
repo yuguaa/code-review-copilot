@@ -11,17 +11,20 @@ import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
 
 import type { DingtalkMessage, DingtalkRobot } from '@web/lib/types';
+import type { DingtalkMessageDraft } from '@shared/dingtalk';
 
 const statusLabels = { sending: '发送中或待核对', accepted: '钉钉已接受', failed: '发送失败', unknown: '结果未知，请先核对钉钉' } as const;
 
-export function DingtalkSendDialog({ sessionId, initialText, close }: { sessionId: string; initialText: string; close: () => void }) {
+export function DingtalkSendDialog({ sessionId, initialText, draft, close }: {
+  sessionId: string; initialText: string; draft?: DingtalkMessageDraft; close: () => void;
+}) {
   const connections = useResource<{ robots: DingtalkRobot[] }>('/api/settings/dingtalk');
   const history = useResource<{ messages: DingtalkMessage[] }>(`/api/sessions/${sessionId}/dingtalk-messages`);
-  const [connectionId, setConnectionId] = useState('');
-  const [targetKind, setTargetKind] = useState<'group' | 'direct'>('group');
-  const [contactIds, setContactIds] = useState<string[]>([]);
-  const [title, setTitle] = useState('代码审查讨论');
-  const [text, setText] = useState(initialText);
+  const [connectionId, setConnectionId] = useState(draft?.connectionId ?? '');
+  const [targetKind, setTargetKind] = useState<'group' | 'direct'>(draft?.targetKind ?? 'group');
+  const [contactIds, setContactIds] = useState<string[]>(draft?.contactIds ?? []);
+  const [title, setTitle] = useState(draft?.title ?? '代码审查讨论');
+  const [text, setText] = useState(draft?.text ?? initialText);
   const [requestId] = useState(() => crypto.randomUUID());
   const [receipt, setReceipt] = useState<DingtalkMessage | null>(null);
   const action = useAction();

@@ -1,28 +1,17 @@
 import path from "node:path";
 
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  SessionManager,
-  SettingsManager,
-  type AgentSession,
-} from "@earendil-works/pi-coding-agent";
-
 import { securityConfig } from "@server/config/security.config";
-import type { ModelConfig } from "@server/modules/ai-models/ai-models.service";
-
-import { createSecurityModel } from "./security-model";
+import { createPiRuntime } from "@server/platform/agent";
 import { assertUrlInScope } from "./security-scope";
 import {
   closeSecurityBrowserSession,
   createSecurityTools,
-  SECURITY_TOOL_NAMES,
-  type SecurityArtifactRecord,
-  type SecurityFindingRecord,
-  type SecurityFinishRecord,
-  type SecurityToolIdentity,
-  type SecurityTrafficRecord,
 } from "./security-tools";
+
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { ModelConfig } from "@server/modules/ai-models/ai-models.service";
+import type { PiRuntime } from "@server/platform/agent";
+import type { SecurityArtifactRecord, SecurityFindingRecord, SecurityFinishRecord, SecurityToolIdentity, SecurityTrafficRecord } from "./security-tools";
 
 export type SecurityAgentTarget = {
   name: string;
@@ -97,17 +86,6 @@ function parseAuthorizationDeadline(value: Date | string): Date {
   const deadline = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   if (Number.isNaN(deadline.getTime())) throw new Error("授权截止时间格式无效");
   return deadline;
-}
-
-function abortReason(signal: AbortSignal, fallback: string): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error) return reason;
-  if (typeof reason === "string" && reason) return new Error(reason);
-  return new Error(fallback);
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) throw abortReason(signal, "安全测试执行已经取消");
 }
 
 function lastAssistantReply(messages: AgentSession["messages"]): { text: string; stopReason: string } | null {
@@ -228,24 +206,9 @@ export async function createSecurityAgent(
   options: CreateSecurityAgentOptions,
 ): Promise<SecurityAgentResult> {
   const { deadline, scopeDomains, effectiveTimeoutMs } = assertTarget(options);
-  const controller = new AbortController();
-  const forwardExternalAbort = () => controller.abort(
-    options.signal?.reason ?? new Error("安全测试执行已经取消"),
-  );
-
-  if (options.signal?.aborted) forwardExternalAbort();
-  else options.signal?.addEventListener("abort", forwardExternalAbort, { once: true });
-
-  const timeoutHandle = setTimeout(
-    () => controller.abort(new Error("安全测试执行超时")),
-    effectiveTimeoutMs,
-  );
-  timeoutHandle.unref();
-
-  let session: AgentSession | undefined;
+  let runtime: PiRuntime | undefined;
   let browserSessionId: string | undefined;
   let unsubscribe: (() => void) | undefined;
-  let abortSession: (() => void) | undefined;
   let eventError: unknown;
   let finished: SecurityFinishRecord | undefined;
   let eventQueue = Promise.resolve();
@@ -254,39 +217,6 @@ export async function createSecurityAgent(
   let screenshotCount = 0;
 
   try {
-    throwIfAborted(controller.signal);
-    const { modelRuntime, model } = await createSecurityModel(options.modelConfig);
-    throwIfAborted(controller.signal);
-
-    const settingsManager = SettingsManager.inMemory({
-      compaction: { enabled: false },
-      retry: { enabled: false },
-    });
-    const resourceLoader = new DefaultResourceLoader({
-      cwd: process.cwd(),
-      agentDir: process.cwd(),
-      settingsManager,
-      additionalSkillPaths: securityConfig.skillNames.map((name) => path.join(securityConfig.skillsRoot, name)),
-      noExtensions: true,
-      noContextFiles: true,
-      noPromptTemplates: true,
-      skillsOverride: (current) => ({
-        skills: current.skills.filter((skill) => securityConfig.skillNames.includes(skill.name)),
-        diagnostics: current.diagnostics,
-      }),
-      systemPrompt: buildSystemPrompt(),
-      appendSystemPromptOverride: () => [],
-    });
-    await resourceLoader.reload();
-    throwIfAborted(controller.signal);
-
-    const loadedSkillNames = new Set(resourceLoader.getSkills().skills.map((skill) => skill.name));
-    const missingSkillNames = securityConfig.skillNames.filter((name) => !loadedSkillNames.has(name));
-    if (missingSkillNames.length) {
-      throw new Error(`安全测试 Skill 未加载：${missingSkillNames.join(", ")}`);
-    }
-
-    browserSessionId = `security-${options.ticketId}`;
     const tools = createSecurityTools({
       ticketId: options.ticketId,
       executionId: options.executionId,
@@ -294,7 +224,7 @@ export async function createSecurityAgent(
       artifactRoot: options.artifactRoot,
       agentBrowserBin: securityConfig.agentBrowserBin,
       actionPolicyPath: securityConfig.actionPolicyPath,
-      sessionId: browserSessionId,
+      sessionId: `security-${options.ticketId}`,
       getIdentity: (identityId) => {
         const identity = options.identities.find((item) => item.id === identityId && item.isActive !== false);
         return Promise.resolve(identity);
@@ -336,21 +266,13 @@ export async function createSecurityAgent(
       },
     });
 
-    const created = await createAgentSession({
-      cwd: process.cwd(),
-      agentDir: process.cwd(),
-      modelRuntime,
-      model,
-      thinkingLevel: "off",
-      noTools: "all",
-      tools: [...SECURITY_TOOL_NAMES],
-      customTools: tools,
-      resourceLoader,
-      sessionManager: SessionManager.inMemory(),
-      settingsManager,
+    const activeRuntime = await createPiRuntime({ modelConfig: options.modelConfig, systemPrompt: buildSystemPrompt(),
+      tools, signal: options.signal, timeoutMs: effectiveTimeoutMs,
+      skills: securityConfig.skillNames.map((name) => ({ name, path: path.join(securityConfig.skillsRoot, name) })),
     });
-    const activeSession = created.session;
-    session = activeSession;
+    runtime = activeRuntime;
+    browserSessionId = `security-${options.ticketId}`;
+    const activeSession = activeRuntime.session;
 
     const enqueueEvent = (type: string, message: string, data: Record<string, unknown>) => {
       eventQueue = eventQueue.then(() => Promise.resolve(options.callbacks.recordEvent({
@@ -363,7 +285,7 @@ export async function createSecurityAgent(
       eventQueue.catch((error: unknown) => {
         if (eventError) return;
         eventError = error;
-        controller.abort(error instanceof Error ? error : new Error("事件记录失败"));
+        activeRuntime.abort(error instanceof Error ? error : new Error("事件记录失败"));
       });
     };
 
@@ -386,15 +308,6 @@ export async function createSecurityAgent(
       }
     });
 
-    abortSession = () => {
-      void activeSession.abort().catch((error: unknown) => {
-        if (!eventError) eventError = error;
-      });
-    };
-    controller.signal.addEventListener("abort", abortSession, { once: true });
-    if (controller.signal.aborted) abortSession();
-    throwIfAborted(controller.signal);
-
     const prompt = buildPrompt({
       ticketId: options.ticketId,
       executionId: options.executionId,
@@ -407,7 +320,7 @@ export async function createSecurityAgent(
     });
 
     let promptError: unknown;
-    const runPrompt = (value: string) => activeSession.prompt(value).catch((error: unknown) => {
+    const runPrompt = (value: string) => activeRuntime.prompt(value).catch((error: unknown) => {
       promptError = error;
     }).then(() => eventQueue.catch((error: unknown) => {
       if (!eventError) eventError = error;
@@ -424,7 +337,7 @@ export async function createSecurityAgent(
           stopReason: reply.stopReason,
           text: redactAgentReply(
             reply.text.slice(0, 4000),
-            [options.modelConfig.apiKey, ...options.identities.map((identity) => identity.password)],
+            [options.modelConfig.apiKey.trim(), ...options.identities.map((identity) => identity.password)],
           ),
         },
       }));
@@ -444,7 +357,7 @@ export async function createSecurityAgent(
 
     if (eventError) throw eventError;
     if (promptError) throw promptError;
-    throwIfAborted(controller.signal);
+    activeRuntime.signal.throwIfAborted();
     if (finished && (!successfulTrafficCount || !screenshotCount)) {
       throw new Error("Agent 未保存完整的请求与截图证据");
     }
@@ -482,17 +395,13 @@ export async function createSecurityAgent(
     };
   } finally {
     unsubscribe?.();
-    if (abortSession) controller.signal.removeEventListener("abort", abortSession);
-    options.signal?.removeEventListener("abort", forwardExternalAbort);
-    clearTimeout(timeoutHandle);
-    if (browserSessionId) {
-      await closeSecurityBrowserSession({
-        scopeDomains,
-        agentBrowserBin: securityConfig.agentBrowserBin,
-        actionPolicyPath: securityConfig.actionPolicyPath,
-        sessionId: browserSessionId,
+    try {
+      await runtime?.dispose();
+    } finally {
+      if (browserSessionId) await closeSecurityBrowserSession({
+        scopeDomains, agentBrowserBin: securityConfig.agentBrowserBin,
+        actionPolicyPath: securityConfig.actionPolicyPath, sessionId: browserSessionId,
       });
     }
-    session?.dispose();
   }
 }

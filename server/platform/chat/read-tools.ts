@@ -1,13 +1,15 @@
-import { tool } from 'ai';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import { open, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
+import { Type } from 'typebox';
+
+import { definePiServiceTool } from '@server/platform/agent';
 
 const executeFile = promisify(execFile);
-const pathSchema = z.string().min(1).max(4096);
+const pathSchema = Type.String({ minLength: 1, maxLength: 4096 });
 const commitSchema = z.string().regex(/^[a-f0-9]{40}$/i);
 
 export function resolveWorkspacePath(root: string, requestedPath: string): Promise<string> {
@@ -31,13 +33,14 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
   const base = commitSchema.parse(run.baseSha);
   const head = commitSchema.parse(run.headSha);
   return realpath(workspace.dir).then((root) => {
-    const executeGit = (args: string[]) => executeFile('git', [
+    const executeGit = (args: string[], signal?: AbortSignal) => executeFile('git', [
       '--no-pager', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', ...args,
     ], {
       cwd: root,
       shell: false,
       timeout: 10_000,
       maxBuffer: 2 * 1024 * 1024,
+      signal,
       env: {
         PATH: process.env.PATH,
         GIT_CONFIG_NOSYSTEM: '1',
@@ -50,14 +53,15 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
     return executeGit(['rev-parse', '--verify', 'HEAD']).then((checkedOutHead) => {
       if (checkedOutHead.trim() !== head) throw new Error('聊天工作区与运行提交不一致');
       return {
-        read_file: tool({
+        read_file: definePiServiceTool({
+          name: 'read_file', label: '读取代码',
           description: '读取本次运行 head 提交工作区内的文本文件，返回行号和内容。',
-          inputSchema: z.object({
+          parameters: Type.Object({
             path: pathSchema,
-            startLine: z.number().int().positive().default(1),
-            lineCount: z.number().int().positive().max(500).default(200),
-          }).strict(),
-          execute: ({ path: filePath, startLine, lineCount }) => resolveWorkspacePath(root, filePath)
+            startLine: Type.Optional(Type.Integer({ minimum: 1 })),
+            lineCount: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
+          }, { additionalProperties: false }),
+          execute: ({ path: filePath, startLine = 1, lineCount = 200 }) => resolveWorkspacePath(root, filePath)
             .then((file) => open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK))
             .then((handle) => handle.stat().then((info) => {
               if (!info.isFile()) throw new Error('目标路径必须为普通文件');
@@ -82,10 +86,11 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
               };
             }),
         }),
-        search: tool({
+        search: definePiServiceTool({
+          name: 'search', label: '搜索代码',
           description: '在本次运行工作区搜索固定文本。path 必须为仓库内的文件或目录。',
-          inputSchema: z.object({ query: z.string().min(1).max(1000), path: pathSchema.default('.') }).strict(),
-          execute: ({ query, path: searchPath }) => resolveWorkspacePath(root, searchPath)
+          parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 1000 }), path: Type.Optional(pathSchema) }, { additionalProperties: false }),
+          execute: ({ query, path: searchPath = '.' }, signal) => resolveWorkspacePath(root, searchPath)
             .then((resolved) => stat(resolved).then((info) => {
               if (!info.isDirectory() && !info.isFile()) throw new Error('搜索路径必须为文件或目录');
               return executeFile('rg', [
@@ -96,6 +101,7 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
                 shell: false,
                 timeout: 10_000,
                 maxBuffer: 2 * 1024 * 1024,
+                signal,
                 env: { PATH: process.env.PATH },
               }).then(({ stdout }) => ({ content: stdout }), (error: unknown) => {
                 if (error && typeof error === 'object' && 'code' in error && error.code === 1) return { content: '' };
@@ -103,10 +109,11 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
               });
             })),
         }),
-        git_diff: tool({
+        git_diff: definePiServiceTool({
+          name: 'git_diff', label: '查看提交差异',
           description: '查看选中运行固定 base 与 head 提交之间的代码差异。',
-          inputSchema: z.object({ path: pathSchema.optional() }).strict(),
-          execute: ({ path: filePath }) => {
+          parameters: Type.Object({ path: Type.Optional(pathSchema) }, { additionalProperties: false }),
+          execute: ({ path: filePath }, signal) => {
             /* Git 比较提交对象，已删除文件同样允许通过仓库相对路径查询。 */
             const relative = filePath ? path.relative(root, path.resolve(root, filePath)) : '';
             if (filePath && (path.isAbsolute(filePath) || filePath.includes('\0') || relative === '..'
@@ -116,7 +123,7 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
             return executeGit([
               'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/',
               base, head, '--', ...(relative ? [relative] : []),
-            ]).then((content) => ({ baseSha: base, headSha: head, content }));
+            ], signal).then((content) => ({ baseSha: base, headSha: head, content }));
           },
         }),
       };
@@ -127,9 +134,10 @@ export function createChatTools(workspace: { dir: string; diffRef: string | null
 export function createRunDiagnosticTools(run: RunDiagnostic) {
   const report = run.error || run.report?.trim() || '本次运行没有保存错误或报告正文';
   return {
-    review_run_context: tool({
+    review_run_context: definePiServiceTool({
+      name: 'review_run_context', label: '读取运行信息',
       description: '读取当前审查运行的状态、提交范围、模型、Trace、错误和已保存报告。',
-      inputSchema: z.object({}).strict(),
+      parameters: Type.Object({}, { additionalProperties: false }),
       execute: () => ({
         id: run.id,
         status: run.status,

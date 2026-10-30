@@ -87,7 +87,6 @@ export function selectChatRun(runs: Run[], runId: string | undefined, repository
   if (runId && !selected) throw new HTTPException(404, { message: '运行记录不存在于当前会话' });
   if (!selected) return null;
   if (selected.repositoryId !== repositoryId) throw new HTTPException(409, { message: '运行记录与会话仓库不一致' });
-  if (!selected.baseSha || !selected.headSha) throw new HTTPException(409, { message: '运行记录缺少固定提交范围' });
   return selected;
 }
 
@@ -138,7 +137,7 @@ export function prepareChatStream(value: unknown): Promise<Response> {
         (selectedModel ? Promise.resolve(selectedModel) : loadGlobalDefaultModel().then((globalModel) => turn.session.repository
           ? resolveRepositoryModelConfig(turn.session.repository, globalModel) : resolveGlobalModelConfig(globalModel)))
           .then((modelConfig) => {
-            modelApiKey = modelConfig.apiKey;
+            modelApiKey = modelConfig.apiKey.trim();
             publishSessionListChanged();
             const report = turn.run?.reportMessageId
               ? prisma.message.findFirst({
@@ -158,14 +157,13 @@ export function prepareChatStream(value: unknown): Promise<Response> {
               report: reportText,
               modelConfig,
               abortSignal: controller.signal,
-              onError: reportError,
             })).then((stream) => {
               const save = (message: UIMessage) => persistChatResponse(body.sessionId, turn.userMessage.id, responseId, message)
                 .catch((error: unknown) => { controller.abort(error); throw error; });
               const messageStream = createUIMessageStream({
                 originalMessages: turn.messages,
                 generateId: () => responseId,
-                execute: ({ writer }) => writer.merge(stream.toUIMessageStream({ generateMessageId: () => responseId, onError: reportError })),
+                execute: ({ writer }) => stream(writer),
                 onError: reportError,
                 onStepEnd: ({ responseMessage }) => save(responseMessage),
                 onEnd: ({ responseMessage }) => save(responseMessage)

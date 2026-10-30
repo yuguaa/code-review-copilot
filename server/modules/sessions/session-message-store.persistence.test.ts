@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
+import { createServer as createModelServer } from 'node:http';
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -12,13 +13,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { UIMessage } from 'ai';
 
 const executeFile = promisify(execFile);
-const directory = resolve('.dev-postgres', `sessions-validation-${randomUUID()}`);
+const directory = resolve('temp', `sessions-validation-${randomUUID()}`);
 const originalEnv = { DATABASE_URL: process.env.DATABASE_URL, TMPDIR: process.env.TMPDIR };
 let postgres: EmbeddedPostgres;
 let prisma: typeof import('@server/infrastructure/prisma/prisma.service').prisma;
 let store: typeof import('./session-message-store.service');
 let services: typeof import('./sessions.service');
 let chat: typeof import('../chat/chat.service');
+let dingtalkTools: ReturnType<typeof import('@server/platform/chat/dingtalk-tools').createDingtalkTools>;
+let dingtalkMessages: typeof import('../notifications/dingtalk-messages.service');
 let app: Hono;
 let firstSession: string;
 let secondSession: string;
@@ -50,11 +53,14 @@ beforeAll(() => mkdir(directory, { recursive: true }).then(() => {
 }).then(() => Promise.all([
   import('@server/infrastructure/prisma/prisma.service'), import('./session-message-store.service'), import('./sessions.service'),
   import('../chat/chat.service'), import('./sessions.routes'),
-])).then(([database, messageStore, sessionServices, chatServices, routes]) => {
+  import('@server/platform/chat/dingtalk-tools'), import('../notifications/dingtalk-messages.service'),
+])).then(([database, messageStore, sessionServices, chatServices, routes, tools, messages]) => {
   prisma = database.prisma;
   store = messageStore;
   services = sessionServices;
   chat = chatServices;
+  dingtalkTools = tools.createDingtalkTools();
+  dingtalkMessages = messages;
   app = new Hono().route('/sessions', routes.sessionRoutes);
   return Promise.all([services.createChatSession({}), services.createChatSession({})]);
 }).then(([first, second]) => { firstSession = first.id; secondSession = second.id; }), 60_000);
@@ -127,11 +133,11 @@ describe('真实 PostgreSQL 会话与消息树', () => {
     const reportMessageId = history.at(-1)!.id;
     return prisma.run.create({ data: {
       sessionId: firstSession, engineKey: 'ocr-review', triggerType: 'manual', status: 'failed',
-      baseSha: 'a'.repeat(40), headSha: 'b'.repeat(40), reportMessageId,
+      reportMessageId,
     } }).then((run) => chat.acceptChatTurn({ sessionId: firstSession, runId: run.id, userMessage: message(randomUUID(), '根据本次运行解释') })
       .then((turn) => {
         expect(turn.run?.id).toBe(run.id);
-        expect(turn.run?.headSha).toBe('b'.repeat(40));
+        expect(turn.run?.headSha).toBeNull();
         expect(turn.run?.status).toBe('failed');
         return expect(chat.acceptChatTurn({ sessionId: secondSession, runId: run.id, userMessage: message(randomUUID(), '其他会话') })).rejects.toMatchObject({ status: 404 });
       }));
@@ -156,4 +162,118 @@ describe('真实 PostgreSQL 会话与消息树', () => {
       expect(response.status).toBe(200);
       return services.sessionExists(secondSession);
     }).then((exists) => expect(exists).toBe(false)));
+});
+
+describe('Pi 钉钉工具使用真实平台配置和名单', () => {
+  let connectionId: string;
+  let contactId: string;
+  let foreignContactId: string;
+  const execute = (name: string, input: Record<string, unknown>) => {
+    const tool = dingtalkTools.find((item) => item.name === name);
+    if (!tool) throw new Error(`未注册工具 ${name}`);
+    return tool.execute('dingtalk-test', input as never, undefined, undefined, {} as never);
+  };
+
+  it('连接与名单只暴露启用数据，不向 Pi 返回机器人凭据', () => prisma.dingtalkRobot.create({ data: {
+    name: 'Pi 连接', transport: 'cli', enabled: true, cliProfile: 'corp:user', cliRobotCode: 'private-robot-code', cliGroupId: 'group', secret: 'private-secret',
+  } }).then((connection) => {
+    connectionId = connection.id;
+    return Promise.all([
+      prisma.dingtalkContact.create({ data: { connectionId, userId: 'real-user', name: '启用人员', employeeNo: '251111' } }),
+      prisma.dingtalkContact.create({ data: { connectionId, userId: 'disabled-user', name: '停用人员', enabled: false } }),
+      prisma.dingtalkRobot.create({ data: { name: '停用连接', transport: 'cli', enabled: false, cliProfile: 'other:user', cliRobotCode: 'other', cliGroupId: 'other' } }),
+      prisma.dingtalkRobot.create({ data: { name: '缺少群配置', transport: 'cli', enabled: true, cliProfile: 'other:user', cliRobotCode: 'other' } }),
+      prisma.dingtalkRobot.create({ data: { name: '空 Profile', transport: 'cli', enabled: true, cliProfile: '', cliRobotCode: 'other', cliGroupId: 'other' } }),
+    ]);
+  }).then(([contact, _disabled, other]) => {
+    contactId = contact.id;
+    return prisma.dingtalkContact.create({ data: { connectionId: other.id, userId: 'foreign-user', name: '其他连接人员' } });
+  }).then((contact) => { foreignContactId = contact.id; return execute('dingtalk_connections', {}); }).then((result) => {
+    expect(result.details).toEqual([{ id: connectionId, name: 'Pi 连接', cliProfile: 'corp:user', cliGroupId: 'group' }]);
+    expect(JSON.stringify(result)).not.toContain('private-');
+    return execute('dingtalk_contacts', { connectionId });
+  }).then((result) => expect(result.details).toEqual([{ id: contactId, userId: 'real-user', name: '启用人员', employeeNo: '251111' }])));
+
+  it('只生成待确认草稿，不发消息、不写发送记录，并拒绝伪造或跨连接收件人', () => {
+    const draft = { connectionId, contactIds: [contactId], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
+    return execute('dingtalk_message_draft', draft).then((result) => {
+      expect(result.details).toMatchObject({ requiresConfirmation: true, draft, recipients: [{ name: '启用人员', employeeNo: '251111' }] });
+      expect(JSON.stringify(result)).not.toContain('private-');
+      return Promise.all([
+        expect(execute('dingtalk_message_draft', { ...draft, contactIds: ['251111'] })).rejects.toMatchObject({ status: 400 }),
+        expect(execute('dingtalk_message_draft', { ...draft, contactIds: [foreignContactId] })).rejects.toMatchObject({ status: 400 }),
+        expect(execute('dingtalk_message_draft', { ...draft, contactIds: [] })).rejects.toMatchObject({ status: 400 }),
+        prisma.dingtalkMessage.count(),
+      ]);
+    }).then((results) => expect(results.at(-1)).toBe(0));
+  });
+
+  it('模型不能伪造确认字段，实际发送仍要求确认', () => {
+    const draft = { connectionId, contactIds: [contactId], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
+    expect(() => dingtalkMessages.sendSessionDingtalkMessage(firstSession, 'tester', { ...draft, requestId: randomUUID() })).toThrow();
+    return expect(execute('dingtalk_message_draft', { ...draft, confirmed: true })).rejects.toThrow();
+  });
+});
+
+describe('Pi 追问的完整 Service 与持久化流程', () => {
+  it('通过配置模型生成钉钉草稿，SSE 和数据库一致，停止后释放聊天资格', async () => {
+    const connection = await prisma.dingtalkRobot.findFirstOrThrow({ where: { name: 'Pi 连接' } });
+    const contact = await prisma.dingtalkContact.findFirstOrThrow({ where: { connectionId: connection.id, enabled: true } });
+    const draft = { connectionId: connection.id, contactIds: [contact.id], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
+    let waiting = false;
+    let requestCount = 0;
+    let requestStarted: () => void;
+    const requested = new Promise<void>((resolve) => { requestStarted = resolve; });
+    const server = createModelServer((request, response) => {
+      request.resume();
+      request.on('end', () => {
+        requestCount += 1;
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.flushHeaders();
+        if (waiting) { requestStarted(); return; }
+        const tool = requestCount === 1 ? { name: 'dingtalk_connections', arguments: '{}' }
+          : requestCount === 2 ? { name: 'dingtalk_contacts', arguments: JSON.stringify({ connectionId: connection.id }) }
+            : requestCount === 3 ? { name: 'dingtalk_message_draft', arguments: JSON.stringify(draft) } : null;
+        const chunk = (delta: unknown, finish: string | null = null) => `data: ${JSON.stringify({ id: `service-${requestCount}`, object: 'chat.completion.chunk',
+          model: 'service-test', created: 1, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+        response.end(chunk({ role: 'assistant' }) + (tool
+          ? chunk({ tool_calls: [{ index: 0, id: `call-${requestCount}`, type: 'function', function: tool }] })
+          : chunk({ content: '消息草稿已准备好，尚未发送，请在平台确认。' }))
+          + chunk({}, tool ? 'tool_calls' : 'stop') + 'data: [DONE]\n\n');
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('未取得模型端口');
+      const model = await prisma.aIModel.create({ data: { provider: 'openai-compatible', modelId: 'service-test', apiKey: 'test-service-key',
+        apiBaseUrl: `http://127.0.0.1:${address.port}/v1`, maxSteps: 8 } });
+      const session = await services.createChatSession({});
+      const response = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, messages: [message(randomUUID(), '请私聊名单中的启用人员，请核对报告')] });
+      const sse = await response.text();
+      expect(requestCount).toBe(4);
+      expect(sse).toContain('dingtalk_message_draft');
+      expect(sse).toContain('requiresConfirmation');
+      expect(sse).not.toContain('private-');
+      const tree = await store.loadSessionMessageTree(session.id);
+      expect(tree.messages).toHaveLength(2);
+      expect(tree.messages[1].parts).toContainEqual(expect.objectContaining({ type: 'dynamic-tool', toolName: 'dingtalk_message_draft',
+        state: 'output-available', output: expect.objectContaining({ requiresConfirmation: true, draft }) }));
+      expect(await prisma.dingtalkMessage.count()).toBe(0);
+      const runtime = await import('@server/platform/chat/chat-runtime');
+      expect(runtime.isChatSessionActive(session.id)).toBe(false);
+
+      waiting = true;
+      const next = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, messages: [message(randomUUID(), '再解释一下')] });
+      const output = next.text();
+      await requested;
+      await runtime.stopChatSession(session.id);
+      expect(await output).toContain('"type":"abort"');
+      expect(runtime.isChatSessionActive(session.id)).toBe(false);
+      expect(requestCount).toBe(5);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
 });

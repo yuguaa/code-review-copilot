@@ -9,13 +9,13 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createChatTools, createRunDiagnosticTools, resolveWorkspacePath } from './read-tools';
 
 const executeFile = promisify(execFile);
-const directory = resolve('.workspaces', `chat-tools-validation-${randomUUID()}`);
+const directory = resolve('temp', `chat-tools-validation-${randomUUID()}`);
 const root = resolve(directory, 'repository');
 let tools: Awaited<ReturnType<typeof createChatTools>>;
 let base: string;
 let head: string;
 let canonicalRoot: string;
-const toolOptions = { toolCallId: 'read-tool-validation', messages: [], context: {} };
+const toolContext = {} as never;
 
 function git(args: string[]): Promise<string> {
   return executeFile('git', args, { cwd: root, shell: false, timeout: 10_000 }).then(({ stdout }) => stdout.trim());
@@ -51,8 +51,8 @@ beforeAll(() => mkdir(root, { recursive: true })
 describe('真实文件和 Git 只读工具', () => {
   it('代码工具只开放三个入口，读取指定行号', () => {
     expect(Object.keys(tools).sort()).toEqual(['git_diff', 'read_file', 'search']);
-    return Promise.resolve(tools.read_file.execute!({ path: 'source.txt', startLine: 2, lineCount: 1 }, toolOptions))
-      .then((output) => expect(output).toMatchObject({ startLine: 2, endLine: 2, content: '2: query; printf forbidden' }));
+    return tools.read_file.execute('read', { path: 'source.txt', startLine: 2, lineCount: 1 }, undefined, undefined, toolContext)
+      .then((output) => expect(output.details).toMatchObject({ startLine: 2, endLine: 2, content: '2: query; printf forbidden' }));
   });
 
   it('拒绝路径越界、外部符号链接和 Git 内部文件', () => Promise.all([
@@ -62,24 +62,34 @@ describe('真实文件和 Git 只读工具', () => {
     expect(resolveWorkspacePath(canonicalRoot, resolve(root, 'source.txt'))).rejects.toThrow('相对路径'),
   ]));
 
-  it('允许工作区内符号链接，并拒绝无效行号', () => Promise.resolve(tools.read_file.execute!({ path: 'inside-link', startLine: 1, lineCount: 1 }, toolOptions))
+  it('允许工作区内符号链接，并拒绝无效行号', () => tools.read_file.execute('read', { path: 'inside-link', startLine: 1, lineCount: 1 }, undefined, undefined, toolContext)
     .then((output) => {
-      expect(output).toMatchObject({ content: '1: after' });
-      return expect(Promise.resolve(tools.read_file.execute!({ path: 'source.txt', startLine: 100, lineCount: 1 }, toolOptions))).rejects.toThrow('行');
+      expect(output.details).toMatchObject({ content: '1: after' });
+      return expect(tools.read_file.execute('read', { path: 'source.txt', startLine: 100, lineCount: 1 }, undefined, undefined, toolContext)).rejects.toThrow('行');
     }));
 
-  it('搜索文本作为参数传递，空结果正常返回', () => Promise.resolve(tools.search.execute!({ query: 'query; printf forbidden', path: '.' }, toolOptions))
+  it('搜索文本作为参数传递，空结果正常返回', () => tools.search.execute('search', { query: 'query; printf forbidden', path: '.' }, undefined, undefined, toolContext)
     .then((output) => {
-      expect(output).toMatchObject({ content: expect.stringContaining('source.txt:2:query; printf forbidden') });
-      return tools.search.execute!({ query: 'absent search term', path: '.' }, toolOptions);
-    }).then((output) => expect(output).toEqual({ content: '' })));
+      expect(output.details).toMatchObject({ content: expect.stringContaining('source.txt:2:query; printf forbidden') });
+      return tools.search.execute('search', { query: 'absent search term', path: '.' }, undefined, undefined, toolContext);
+    }).then((output) => expect(output.details).toEqual({ content: '' })));
 
-  it('差异固定为选中 Run 的 base/head，并支持已删除文件', () => Promise.resolve(tools.git_diff.execute!({ path: 'deleted.txt' }, toolOptions))
-    .then((output) => expect(output).toMatchObject({ baseSha: base, headSha: head, content: expect.stringContaining('-removed file') })));
+  it('差异固定为选中 Run 的 base/head，并支持已删除文件', () => tools.git_diff.execute('diff', { path: 'deleted.txt' }, undefined, undefined, toolContext)
+    .then((output) => expect(output.details).toMatchObject({ baseSha: base, headSha: head, content: expect.stringContaining('-removed file') })));
 
   it('工作区提交不匹配时不创建工具', () => expect(createChatTools({ dir: root, diffRef: base }, { baseSha: base, headSha: base })).rejects.toThrow('运行提交不一致'));
 
-  it('运行诊断工具返回失败原因和固定范围', () => Promise.resolve(createRunDiagnosticTools({
+  it('校验 Pi 工具边界，并拒绝执行已经取消的读取', () => {
+    const controller = new AbortController();
+    controller.abort(new Error('已取消读取'));
+    return Promise.all([
+      expect(tools.read_file.execute('invalid', { path: 'source.txt', lineCount: 0 }, undefined, undefined, toolContext)).rejects.toThrow(),
+      expect(tools.git_diff.execute('invalid', { path: 'source.txt', baseSha: base } as never, undefined, undefined, toolContext)).rejects.toThrow(),
+      expect(tools.read_file.execute('cancelled', { path: 'source.txt' }, controller.signal, undefined, toolContext)).rejects.toThrow('已取消读取'),
+    ]);
+  });
+
+  it('运行诊断工具返回失败原因和固定范围', () => createRunDiagnosticTools({
     id: 'failed-run',
     status: 'failed',
     error: 'OCR 审查失败：模型请求超时',
@@ -95,7 +105,7 @@ describe('真实文件和 Git 只读工具', () => {
     startedAt: new Date('2026-10-19T08:00:00.000Z'),
     finishedAt: new Date('2026-10-19T08:01:00.000Z'),
     deliveries: {},
-  }).review_run_context.execute!({}, toolOptions)).then((output) => expect(output).toMatchObject({
+  }).review_run_context.execute('context', {}, undefined, undefined, toolContext).then((output) => expect(output.details).toMatchObject({
     id: 'failed-run',
     status: 'failed',
     error: 'OCR 审查失败：模型请求超时',
