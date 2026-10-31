@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { createServer as createModelServer } from 'node:http';
 import { createServer } from 'node:net';
@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { UIMessage } from 'ai';
+import type { DingtalkPerson } from '@shared/dingtalk';
 
 const executeFile = promisify(execFile);
 const directory = resolve('temp', `sessions-validation-${randomUUID()}`);
@@ -224,7 +225,7 @@ describe('Pi 追问的完整 Service 与持久化流程', () => {
       const run = withRun ? await prisma.run.create({ data: { sessionId: session.id, engineKey: 'ocr', status: 'failed', error: '提交范围解析失败' } }) : null;
       const messageCount = await prisma.dingtalkMessage.count();
       const response = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, ...(run ? { runId: run.id } : {}),
-        messages: [message(randomUUID(), '请私聊名单中的启用人员，请核对报告')] });
+        messages: [message(randomUUID(), '请私聊名单中的启用人员，请核对报告')] }, 'authenticated-tester');
       const sse = await response.text();
       expect(requestCount).toBe(1);
       expect((requests[0].tools ?? []).map((tool) => tool.function.name).sort()).toEqual([
@@ -240,7 +241,7 @@ describe('Pi 追问的完整 Service 与持久化流程', () => {
       expect(runtime.isChatSessionActive(session.id)).toBe(false);
 
       waiting = true;
-      const next = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, messages: [message(randomUUID(), '再解释一下')] });
+      const next = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, messages: [message(randomUUID(), '再解释一下')] }, 'authenticated-tester');
       const output = next.text();
       await requested;
       await runtime.stopChatSession(session.id);
@@ -256,7 +257,7 @@ describe('Pi 追问的完整 Service 与持久化流程', () => {
 
 async function withDingtalkSkillFixture(targetKind: 'group' | 'direct', operation: (fixture: {
   sessionId: string; sent: Array<{ kind: string; text: string; userId: string }>; state: {
-    profile: string; unknown: boolean; returnedCount: number; onPerson?: () => Promise<void>;
+    profile: string; unknown: boolean; returnedCount: number; candidateId?: string | null; personCalls: number; onPerson?: () => Promise<void>;
   }; ask(text: string): Promise<Awaited<ReturnType<typeof store.loadSessionMessageTree>>>;
 }) => Promise<void>) {
   const previous = { url: process.env.DINGTALK_WORKER_URL, token: process.env.DINGTALK_WORKER_TOKEN };
@@ -264,15 +265,18 @@ async function withDingtalkSkillFixture(targetKind: 'group' | 'direct', operatio
   const { ensureGlobalDingtalkCli } = await import('@server/modules/notifications/dingtalk-global.service');
   const connection = await ensureGlobalDingtalkCli();
   await prisma.dingtalkRobot.update({ where: { id: connection.id }, data: { enabled: true, cliProfile: 'corp:user' } });
-  const state: { profile: string; unknown: boolean; returnedCount: number; onPerson?: () => Promise<void> } = {
-    profile: 'corp:user', unknown: false, returnedCount: 1,
+  const state: { profile: string; unknown: boolean; returnedCount: number; candidateId?: string | null; personCalls: number; onPerson?: () => Promise<void> } = {
+    profile: 'corp:user', unknown: false, returnedCount: 1, candidateId: 'actual-colleague', personCalls: 0,
   };
   const sent: Array<{ kind: string; text: string; userId: string }> = [];
   const token = randomUUID();
   const worker = createDingtalkWorker(token, (input) => {
     if (input.action === 'auth-status') return Promise.resolve({ authenticated: true, tokenValid: true, profile: state.profile, userName: '授权人', corpName: '组织', reason: null });
-    if (input.action === 'search') return Promise.resolve({ people: [{ userId: 'actual-colleague', name: '测试同事' }], returnedCount: state.returnedCount });
-    if (input.action === 'person') return Promise.resolve().then(() => state.onPerson?.()).then(() => ({ userId: 'actual-colleague', name: '测试同事', employeeNo: '251111' }));
+    if (input.action === 'search') {
+      const people = [{ userId: state.candidateId, name: '测试同事' }] as unknown as DingtalkPerson[];
+      return Promise.resolve({ people, returnedCount: state.returnedCount });
+    }
+    if (input.action === 'person') { state.personCalls += 1; return Promise.resolve().then(() => state.onPerson?.()).then(() => ({ userId: 'actual-colleague', name: '测试同事', employeeNo: '251111' })); }
     if (input.action === 'message-user') {
       sent.push({ kind: 'direct', text: input.text, userId: input.userId });
       if (state.unknown) return Promise.reject(new Error('DWS 调用失败：delivery_unknown'));
@@ -352,6 +356,78 @@ async function withDingtalkSkillFixture(targetKind: 'group' | 'direct', operatio
 }
 
 describe('公共钉钉 Skill 的真实 Pi、HTTP 与 PostgreSQL 链路', () => {
+  it('升级前随机草稿 ID 的已发送记录仍可识别，不修改历史也不会重发', () => withDingtalkSkillFixture('direct', async (fixture) => {
+    const prepared = await fixture.ask('请私聊测试同事，告诉他今天没雨');
+    const answer = prepared.messages.at(-1)!;
+    const part = answer.parts.find((item) => item.type === 'dynamic-tool' && item.toolName === 'dingtalk_prepare_message' && item.state === 'output-available');
+    if (!part || part.type !== 'dynamic-tool' || part.state !== 'output-available') throw new Error('没有准备结果');
+    const output = part.output as Awaited<ReturnType<typeof import('../notifications/dingtalk-conversation.service').prepareDingtalkConversationMessage>>;
+    const draft = { ...output.draft, id: randomUUID() };
+    const confirmation: UIMessage = message(randomUUID(), '确认发送');
+    const { getDingtalkConversationDraft, sendDingtalkConversationMessage } = await import('../notifications/dingtalk-conversation.service');
+    const context = { sessionId: fixture.sessionId, userMessageId: confirmation.id, repositoryId: null, requestedBy: 'authenticated-tester',
+      messages: [prepared.messages[0], { ...answer, parts: [{ ...part, output: { ...output, draft } }] }, confirmation] };
+    const previousDraft = getDingtalkConversationDraft(context);
+    if (!previousDraft) throw new Error('没有旧版本准备记录');
+    const payloadHash = createHash('sha256').update(JSON.stringify(previousDraft)).digest('hex');
+    await prisma.dingtalkMessage.create({ data: { id: draft.id, connectionId: draft.connectionId, sessionId: fixture.sessionId,
+      requestedBy: 'historical-actor', payloadHash, cliProfile: draft.profile, targetKind: 'direct', recipients: [draft.recipient],
+      title: draft.title, text: draft.text, status: 'accepted', remoteIds: ['legacy-receipt'] } });
+    const receipt = await sendDingtalkConversationMessage(context, draft.id);
+    expect(receipt).toMatchObject({ id: draft.id, status: 'accepted', remoteIds: ['legacy-receipt'] });
+    expect(fixture.sent).toHaveLength(0);
+    expect(await prisma.dingtalkMessage.findUnique({ where: { id: draft.id } })).toMatchObject({ requestedBy: 'historical-actor', payloadHash });
+  }));
+
+  it('同一用户请求跨运行重新准备仍使用同一消息标识，时间变化和重放不能再次发送', () => withDingtalkSkillFixture('direct', async (fixture) => {
+    const prepared = await fixture.ask('请私聊测试同事，告诉他今天没雨');
+    const source = prepared.messages[0];
+    const answer = prepared.messages.at(-1)!;
+    const part = answer.parts.find((item) => item.type === 'dynamic-tool' && item.toolName === 'dingtalk_prepare_message' && item.state === 'output-available');
+    if (!part || part.type !== 'dynamic-tool' || part.state !== 'output-available') throw new Error('没有准备结果');
+    const original = part.output as Awaited<ReturnType<typeof import('../notifications/dingtalk-conversation.service').prepareDingtalkConversationMessage>>;
+    const { prepareDingtalkConversationMessage, sendDingtalkConversationMessage } = await import('../notifications/dingtalk-conversation.service');
+    const context = { sessionId: fixture.sessionId, userMessageId: source.id, repositoryId: null, requestedBy: 'authenticated-tester', messages: [source] };
+    const input = { query: '测试同事', dimension: 'name', targetKind: 'direct', title: '天气提醒', text: '今天没雨' };
+    const retries = await Promise.all([prepareDingtalkConversationMessage(context, input), prepareDingtalkConversationMessage(context, input)]);
+    expect(retries.map((item) => item.draft.id)).toEqual([original.draft.id, original.draft.id]);
+    const confirmed = await fixture.ask('确认发送');
+    const retry = retries[0];
+    retry.draft.createdAt = new Date(Date.parse(original.draft.createdAt) + 1).toISOString();
+    const confirmation = confirmed.messages.at(-2)!;
+    const replay = await sendDingtalkConversationMessage({ ...context, userMessageId: confirmation.id, messages: [source,
+      { ...answer, parts: [{ ...part, output: retry }] }, confirmation] }, retry.draft.id);
+    expect(replay.status).toBe('accepted');
+    retry.draft.text = '修改过的正文';
+    await expect(sendDingtalkConversationMessage({ ...context, userMessageId: confirmation.id, messages: [source,
+      { ...answer, parts: [{ ...part, output: retry }] }, confirmation] }, retry.draft.id)).rejects.toMatchObject({ status: 409 });
+    expect(fixture.sent).toHaveLength(1);
+    expect(await prisma.dingtalkMessage.count({ where: { sessionId: fixture.sessionId } })).toBe(1);
+  }));
+
+  it('用户重新提出同文消息并再次确认时，可以作为新意图发送', () => withDingtalkSkillFixture('direct', async (fixture) => {
+    await fixture.ask('请私聊测试同事，告诉他今天没雨');
+    await fixture.ask('确认发送');
+    await fixture.ask('请再私聊测试同事，告诉他今天没雨');
+    expect(fixture.sent).toHaveLength(1);
+    await fixture.ask('确认发送');
+    expect(fixture.sent).toHaveLength(2);
+    const records = await prisma.dingtalkMessage.findMany({ where: { sessionId: fixture.sessionId } });
+    expect(new Set(records.map((record) => record.id)).size).toBe(2);
+  }));
+
+  it('CLI 候选缺失、空白或错误的 userId 在详情请求前被拦截', () => withDingtalkSkillFixture('direct', async (fixture) => {
+    const { resolveDingtalkPerson } = await import('../notifications/dingtalk-directory.service');
+    expect(await resolveDingtalkPerson('corp:user', '测试同事', 'name')).toMatchObject({ userId: 'actual-colleague' });
+    expect(fixture.state.personCalls).toBe(1);
+    for (const candidateId of [undefined, null, '', '   ', 'bad,id']) {
+      fixture.state.candidateId = candidateId;
+      await expect(resolveDingtalkPerson('corp:user', '测试同事', 'name')).rejects.toThrow();
+    }
+    expect(fixture.state.personCalls).toBe(1);
+    expect(fixture.sent).toHaveLength(0);
+  }));
+
   it.each(['group', 'direct'] as const)('通过追问核实并准备 %s 消息，确认后并行工具仅发送一次并保存回执', (targetKind) => withDingtalkSkillFixture(targetKind, async (fixture) => {
     const prepared = await fixture.ask(targetKind === 'group' ? '@测试同事，告诉他今天没雨' : '请私聊测试同事，告诉他今天没雨');
     expect(fixture.sent).toHaveLength(0);

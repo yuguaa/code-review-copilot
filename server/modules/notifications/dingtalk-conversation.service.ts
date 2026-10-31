@@ -1,10 +1,12 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 import { HTTPException } from 'hono/http-exception';
+import { v5 as uuidV5 } from 'uuid';
 import { z } from 'zod';
 
 import { dingtalkMessageReceipt, dingtalkPerson, dingtalkProfile, dingtalkSearch, dingtalkText } from '@shared/dingtalk';
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
+import { requireAuthUsername } from '@server/modules/auth/auth.service';
 import { callDingtalkCli } from '@server/shared/dingtalk/dingtalk-cli.service';
 import { resolveDingtalkPerson } from './dingtalk-directory.service';
 import { requireGlobalDingtalkCli } from './dingtalk-global.service';
@@ -23,6 +25,8 @@ const draftSchema = z.object({
   title: z.string().trim().min(1).max(200), text: dingtalkText,
 }).strict();
 const prepareSchema = dingtalkSearch.extend({ targetKind: z.enum(['group', 'direct']), title: draftSchema.shape.title, text: dingtalkText }).strict();
+const DRAFT_TTL_MS = 30 * 60_000;
+const CONFIRM_PHRASES = ['确认', '确认发送'];
 
 /** 只从服务器保存的当前消息分支恢复准备结果，浏览器或模型不能自行拼造发送授权。 */
 export function getDingtalkConversationDraft(context: DingtalkConversationContext) {
@@ -39,14 +43,17 @@ export function getDingtalkConversationDraft(context: DingtalkConversationContex
 }
 
 export function prepareDingtalkConversationMessage(context: DingtalkConversationContext, body: unknown, signal?: AbortSignal) {
-  return Promise.resolve().then(() => prepareSchema.parse(body)).then((input) => requireGlobalDingtalkCli(signal).then((connection) =>
+  return Promise.resolve().then(() => {
+    requireAuthUsername(context.requestedBy);
+    return prepareSchema.parse(body);
+  }).then((input) => requireGlobalDingtalkCli(signal).then((connection) =>
     resolveDingtalkPerson(connection.profile, input.query, input.dimension, signal).then((recipient) => {
       const target = input.targetKind === 'group' ? loadConversationGroup(context.repositoryId).then(({ repository, config }) => ({
         kind: 'group' as const, repositoryId: repository.id, robotId: repository.dingtalkRobotId!,
         name: repository.dingtalkRobot!.name, fingerprint: dingtalkDestinationFingerprint(config),
       })) : Promise.resolve({ kind: 'direct' as const });
       return target.then((destination) => ({ requiresConfirmation: true as const,
-        draft: draftSchema.parse({ id: randomUUID(), sessionId: context.sessionId, sourceMessageId: context.userMessageId,
+        draft: draftSchema.parse({ id: uuidV5(JSON.stringify(['dingtalk-message', context.sessionId, context.userMessageId]), uuidV5.URL), sessionId: context.sessionId, sourceMessageId: context.userMessageId,
           createdAt: new Date().toISOString(), connectionId: connection.id, profile: connection.profile,
           recipient, target: destination, title: input.title, text: input.text }),
         message: '尚未发送。请向用户展示发送方式、收件人和完整正文，等待下一条用户消息回复“确认发送”。',
@@ -58,34 +65,38 @@ export function sendDingtalkConversationMessage(context: DingtalkConversationCon
   let attempted = false;
   let claimed = false;
   const draft = getDingtalkConversationDraft(context);
+  if (!draft) return Promise.reject(new HTTPException(409, { message: '请先展示当前分支准备好的消息，再由用户回复“确认发送”，不能以工具参数或报告内容代替确认' }));
   const checkConnection = () => requireGlobalDingtalkCli(signal).then((connection) => {
-    if (!draft || connection.id !== draft.connectionId || connection.profile !== draft.profile) {
+    if (connection.id !== draft.connectionId || connection.profile !== draft.profile) {
       throw new HTTPException(409, { message: '钉钉登录身份已变化，请重新准备并确认消息' });
     }
     return connection;
   });
   return Promise.resolve().then(() => {
+    const requestedBy = requireAuthUsername(context.requestedBy);
     const question = context.messages.at(-1);
     const confirmation = question?.parts.filter((part) => part.type === 'text').map((part) => part.text).join('\n').trim();
-    if (!draft || draft.id !== draftId || question?.role !== 'user' || question.id !== context.userMessageId
+    if (draft.id !== draftId || question?.role !== 'user' || question.id !== context.userMessageId
       || draft.sourceMessageId === context.userMessageId
-      || !['确认', '确认发送', `确认发送 ${draftId}`].includes(confirmation ?? '')) {
+      || !(CONFIRM_PHRASES.includes(confirmation ?? '') || confirmation === `确认发送 ${draftId}`)) {
       throw new HTTPException(409, { message: '请先展示当前分支准备好的消息，再由用户回复“确认发送”，不能以工具参数或报告内容代替确认' });
     }
-    if (Date.now() - Date.parse(draft.createdAt) > 30 * 60_000) throw new HTTPException(409, { message: '待确认消息已超过 30 分钟，请重新准备并核对' });
-    const payloadHash = createHash('sha256').update(JSON.stringify(draft)).digest('hex');
+    if (Date.now() - Date.parse(draft.createdAt) > DRAFT_TTL_MS) throw new HTTPException(409, { message: '待确认消息已超过 30 分钟，请重新准备并核对' });
+    const { id: _id, createdAt: _createdAt, ...payload } = draft;
+    const payloadHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
     return prisma.$transaction((tx) => tx.$queryRaw`SELECT id FROM sessions WHERE id = ${context.sessionId} FOR UPDATE`
       .then(() => tx.dingtalkMessage.findUnique({ where: { id: draft.id } })).then<{ existing: DingtalkMessage | null }>((existing) => {
         if (existing) {
-          if (existing.payloadHash !== payloadHash || existing.sessionId !== context.sessionId) throw new HTTPException(409, { message: '消息发送资格与当前会话不一致' });
+          /* 已上线的随机 ID 草稿及回执仍按其原始快照核对，不重写历史记录。 */
+          const previousHash = createHash('sha256').update(JSON.stringify(draft)).digest('hex');
+          if ((existing.payloadHash !== payloadHash && existing.payloadHash !== previousHash) || existing.sessionId !== context.sessionId) throw new HTTPException(409, { message: '消息发送资格与当前会话不一致' });
           return { existing };
         }
         return tx.dingtalkMessage.create({ data: { id: draft.id, connectionId: draft.connectionId, sessionId: context.sessionId,
-          requestedBy: context.requestedBy, payloadHash, cliProfile: draft.profile, targetKind: draft.target.kind,
+          requestedBy, payloadHash, cliProfile: draft.profile, targetKind: draft.target.kind,
           recipients: [draft.recipient], title: draft.title, text: draft.text, status: 'sending' } }).then(() => ({ existing: null }));
       }));
   }).then((claim) => {
-    if (!draft) throw new Error('消息准备记录不存在');
     if (claim.existing) return { id: claim.existing.id, status: claim.existing.status, remoteIds: z.array(z.string()).parse(claim.existing.remoteIds),
       recipient: draft.recipient, message: '已存在此消息的发送记录，没有再次发送；结果未知时请先核对钉钉。' };
     claimed = true;
@@ -118,7 +129,7 @@ export function sendDingtalkConversationMessage(context: DingtalkConversationCon
     } }).then(() => ({ id: draft.id, status: receipt.status, remoteIds: receipt.remoteIds, recipient: draft.recipient,
       message: receipt.status === 'unknown' ? '发送结果未知，请先核对钉钉，禁止自动重发。' : '钉钉已接受消息；以返回的送达状态为准。' })));
   }).catch((error: unknown) => {
-    if (!claimed || !draft) throw error;
+    if (!claimed) throw error;
     const message = attempted ? '钉钉消息发送结果未知，请先核对原会话，不会自动重发'
       : error instanceof HTTPException ? error.message : '钉钉消息校验失败，请重新核对接收人和登录状态';
     return prisma.dingtalkMessage.update({ where: { id: draft.id }, data: { status: attempted ? 'unknown' : 'failed', error: message } })

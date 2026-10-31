@@ -36,4 +36,15 @@ describe('钉钉对话确认归属', () => {
       expect(sendDingtalkConversationMessage({ ...context, userMessageId: request.id, messages: [request] }, draft.id)).rejects.toMatchObject({ status: 409 }),
     ]);
   });
+
+  it.each([undefined, '', '   '])('有效草稿也必须由明确授权人发送：%j', (requestedBy) =>
+    expect(sendDingtalkConversationMessage({ ...context, requestedBy: requestedBy as unknown as string,
+      messages: [request, prepared, confirmation] }, draft.id)).rejects.toMatchObject({ status: 401 }));
+
+  it('超过公开的 30 分钟有效期后拒绝发送，保留准备信息供重新核对', () => {
+    const expired = { ...draft, createdAt: new Date(Date.now() - 31 * 60_000).toISOString() };
+    return expect(sendDingtalkConversationMessage({ ...context, messages: [request,
+      { ...prepared, parts: [{ type: 'dynamic-tool', toolCallId: 'prepare', toolName: 'dingtalk_prepare_message',
+        state: 'output-available', input: {}, output: { draft: expired } }] }, confirmation] }, expired.id)).rejects.toMatchObject({ status: 409 });
+  });
 });

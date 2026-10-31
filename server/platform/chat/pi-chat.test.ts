@@ -75,11 +75,16 @@ beforeEach(() => { requests.length = 0; authorizations.clear(); respond = (_requ
 afterAll(() => new Promise<void>((resolve, reject) => { server.closeAllConnections(); server.close((error) => error ? reject(error) : resolve()); }));
 
 describe('真实 Pi SDK 与 UIMessageStream', () => {
+  it.each([undefined, '', '   '])('未提供有效授权人时拒绝创建对话，不请求模型：%j', (requestedBy) =>
+    expect(createChatStream({ session: { repository: null } as SessionWithRepository, run: null, messages: [question],
+      modelConfig: config, abortSignal: controller().signal, requestedBy: requestedBy as unknown as string,
+    })).rejects.toMatchObject({ status: 401 }).then(() => expect(requests).toHaveLength(0)));
+
   it('普通追问也加载公共钉钉 Skill 和可执行工具，不受代码工具缺失影响', () => {
     const signal = controller().signal;
     return createChatStream({ session: { id: 'chat-without-repository', repository: null } as SessionWithRepository, run: null,
       messages: [{ id: 'request-dingtalk', role: 'user', parts: [{ type: 'text', text: '帮我通过钉钉联系同事' }] }],
-      modelConfig: config, abortSignal: signal,
+      modelConfig: config, abortSignal: signal, requestedBy: 'authenticated-tester',
     }).then((execute) => readMessages(createUIMessageStream({ execute: ({ writer }) => execute(writer) }))).then(() => {
       expect(requests).toHaveLength(1);
       expect((requests[0].tools ?? []).map((tool: any) => tool.function.name).sort()).toEqual([
@@ -106,7 +111,7 @@ describe('真实 Pi SDK 与 UIMessageStream', () => {
     const errors: unknown[] = [];
     const saved: UIMessage[] = [];
     return createChatStream({ session: { repository: null } as SessionWithRepository, run, report: '已保存报告',
-      messages: originalMessages, modelConfig: config, abortSignal: signal }).then((execute) => readMessages(createUIMessageStream({
+      messages: originalMessages, modelConfig: config, abortSignal: signal, requestedBy: 'authenticated-tester' }).then((execute) => readMessages(createUIMessageStream({
         originalMessages, generateId: () => 'pi-response', execute: ({ writer }) => execute(writer),
         onError: (error) => { errors.push(error); return String(error); },
         onStepEnd: ({ responseMessage }) => { saved.push(structuredClone(responseMessage)); },
@@ -145,7 +150,7 @@ describe('真实 Pi SDK 与 UIMessageStream', () => {
     const signal = controller().signal;
     return createChatStream({ session: { repository: { id: 'not-prepared' } } as SessionWithRepository,
       run: { id: 'queued-run', status: 'queued', baseSha: null, headSha: null } as Run,
-      messages: [question], modelConfig: config, abortSignal: signal,
+      messages: [question], modelConfig: config, abortSignal: signal, requestedBy: 'authenticated-tester',
     }).then((execute) => readMessages(createUIMessageStream({ execute: ({ writer }) => execute(writer) }))).then(() => {
       expect(requests).toHaveLength(1);
       expect(requests[0].messages[0].content).toContain('当前运行缺少固定 base/head 提交范围');

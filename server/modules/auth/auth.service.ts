@@ -1,5 +1,7 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
+import { HTTPException } from 'hono/http-exception';
+
 import { getAuthConfig } from '../../config/auth.config';
 import { prisma } from '../../infrastructure/prisma/prisma.service';
 
@@ -11,6 +13,11 @@ declare module 'hono' {
 
 export const AUTH_COOKIE_NAME = 'code_review_copilot_session';
 export const AUTH_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+export function requireAuthUsername(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) throw new HTTPException(401, { message: '登录身份缺失，请重新登录' });
+  return value.trim();
+}
 
 export function verifyLoginCredential(username: string, secret: string): boolean {
   const config = getAuthConfig();

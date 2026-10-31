@@ -1,5 +1,6 @@
 import { executeChecked } from '@server/infrastructure/process/process.service';
 import { prepareChatWorkspace } from '@server/infrastructure/workspace/workspace.service';
+import { requireAuthUsername } from '@server/modules/auth/auth.service';
 import { createPiRuntime } from '@server/platform/agent';
 import { createDingtalkConversationSkill } from '@server/platform/dingtalk';
 import { streamPiMessages } from './pi-message-stream';
@@ -28,15 +29,16 @@ export function toChatHistory(messages: UIMessage[]): UIMessage[] {
     });
 }
 
-export function createChatStream(options: {
+export async function createChatStream(options: {
   session: SessionWithRepository;
   run: Run | null;
   report?: string | null;
   messages: UIMessage[];
   modelConfig: ModelConfig;
   abortSignal: AbortSignal;
-  requestedBy?: string;
+  requestedBy: string;
 }) {
+  const requestedBy = requireAuthUsername(options.requestedBy);
   const run = options.run;
   const history = toChatHistory(options.messages).map((message) => ({ id: message.id, role: message.role as 'user' | 'assistant',
     text: message.parts.filter((part) => part.type === 'text').map((part) => part.text).join('\n') }));
@@ -61,7 +63,7 @@ export function createChatStream(options: {
       systemPrompt: `${chatInstructions}\n本轮能力限制：${codeCapability}${run ? `\n当前运行：${run.id}\n状态：${run.status}\nbase：${run.baseSha}\nhead：${run.headSha}` : ''}`,
       tools: [...tools, ...diagnostic], history,
       skills: [createDingtalkConversationSkill({ sessionId: options.session.id, userMessageId: question.id,
-        repositoryId: options.session.repository?.id ?? null, requestedBy: options.requestedBy ?? '平台用户', messages: options.messages })],
+        repositoryId: options.session.repository?.id ?? null, requestedBy, messages: options.messages })],
       signal: options.abortSignal, maxSteps: options.modelConfig.maxSteps, timeoutMs: 10 * 60_000,
     }).then((runtime) => streamPiMessages(runtime, question.text, writer, { signal: options.abortSignal,
       redact: (text) => text.replaceAll(options.modelConfig.apiKey.trim(), '[REDACTED]'),

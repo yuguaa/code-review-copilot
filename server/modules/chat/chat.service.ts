@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
+import { requireAuthUsername } from '@server/modules/auth/auth.service';
 import { loadActiveModelConfig, loadGlobalDefaultModel, resolveGlobalModelConfig, resolveRepositoryModelConfig } from '@server/modules/ai-models/ai-models.service';
 import { publishSessionError, publishSessionListChanged, publishSessionMessages } from '@server/modules/sessions/session-events.service';
 import { busySessionStatuses, isSessionBusy } from '@server/modules/sessions/session-lifecycle.service';
@@ -116,7 +117,8 @@ export function persistChatResponse(sessionId: string, userMessageId: string, re
     .then(() => undefined));
 }
 
-export function prepareChatStream(value: unknown, requestedBy = '平台用户'): Promise<Response> {
+export async function prepareChatStream(value: unknown, requestedBy: string): Promise<Response> {
+  requestedBy = requireAuthUsername(requestedBy);
   return validateChatRequest(value).then((body) => {
     const controller = new AbortController();
     const release = claimChatSession(body.sessionId, () => controller.abort(new Error("服务正在关闭")));
