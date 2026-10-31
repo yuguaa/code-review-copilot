@@ -116,7 +116,7 @@ export function persistChatResponse(sessionId: string, userMessageId: string, re
     .then(() => undefined));
 }
 
-export function prepareChatStream(value: unknown): Promise<Response> {
+export function prepareChatStream(value: unknown, requestedBy = '平台用户'): Promise<Response> {
   return validateChatRequest(value).then((body) => {
     const controller = new AbortController();
     const release = claimChatSession(body.sessionId, () => controller.abort(new Error("服务正在关闭")));
@@ -157,6 +157,7 @@ export function prepareChatStream(value: unknown): Promise<Response> {
               report: reportText,
               modelConfig,
               abortSignal: controller.signal,
+              requestedBy,
             })).then((stream) => {
               const save = (message: UIMessage) => persistChatResponse(body.sessionId, turn.userMessage.id, responseId, message)
                 .catch((error: unknown) => { controller.abort(error); throw error; });

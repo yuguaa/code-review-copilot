@@ -5,7 +5,7 @@ import type { DingtalkCliRequest } from '@shared/dingtalk';
 export function callDingtalkCli(request: DingtalkCliRequest, signal?: AbortSignal): Promise<unknown> {
   const token = process.env.DINGTALK_WORKER_TOKEN;
   const url = process.env.DINGTALK_WORKER_URL;
-  const sending = request.action === 'send' || request.action === 'send-user';
+  const sending = request.action === 'send' || request.action === 'send-user' || request.action === 'message-user';
   if (!token || !url) return Promise.reject(new HTTPException(503, { message: '尚未配置钉钉 CLI Worker，请先启用 dingtalk 部署配置' }));
   return fetch(new URL('/execute', url), { method: 'POST', redirect: 'error',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },

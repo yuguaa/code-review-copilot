@@ -44,7 +44,7 @@ export function createDingtalkWorker(token: string, execute = runDws, login = cr
       }
       return execute(request).then((body) => {
         /* 已进入发送命令的请求保留真实回执，不能以身份变化伪装成未发送。 */
-        if (request.action !== 'send' && loginChanged()) return c.json({ error: '登录身份已变化，请重新查询人员' }, 409);
+        if (request.action !== 'send' && request.action !== 'message-user' && loginChanged()) return c.json({ error: '登录身份已变化，请重新查询人员' }, 409);
         return c.json(body);
       });
     });

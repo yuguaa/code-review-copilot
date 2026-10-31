@@ -30,6 +30,23 @@ export function searchDingtalkPeople(id: string, body: unknown, signal?: AbortSi
     .then((result) => z.object({ people: z.array(dingtalkPerson), returnedCount: z.number().int() }).parse(result));
 }
 
+export function resolveDingtalkPerson(profile: string, query: string, dimension: 'name' | 'jobNumber', signal?: AbortSignal) {
+  return callDingtalkCli({ action: 'search', profile, query, dimension }, signal)
+    .then((body) => z.object({ people: z.array(dingtalkPerson), returnedCount: z.number().int() }).parse(body))
+    .then((result) => {
+      if (result.returnedCount !== 1 || result.people.length !== 1) throw new HTTPException(409, { message: '钉钉人员没有唯一匹配，请提供完整姓名或工号，不会猜测收件人' });
+      const candidate = result.people[0];
+      return callDingtalkCli({ action: 'person', profile, userId: candidate.userId }, signal)
+        .then((body) => dingtalkPerson.parse(body)).then((person) => {
+          const identity = dimension === 'jobNumber' ? person.employeeNo : person.name;
+          if (person.userId !== candidate.userId || identity?.trim() !== query.trim()) {
+            throw new HTTPException(409, { message: '钉钉人员详情与指定姓名或工号不一致，请核对后重试' });
+          }
+          return person;
+        });
+    });
+}
+
 export function listDingtalkContacts(connectionId: string) {
   return getCliConnection(connectionId).then((connection) => prisma.dingtalkContact.findMany({ where: { connectionId, cliProfile: connection.cliProfile, enabled: true }, orderBy: { name: 'asc' } }));
 }

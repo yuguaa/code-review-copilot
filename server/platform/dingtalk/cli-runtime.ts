@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { dingtalkCliRequest, dingtalkPerson } from '@shared/dingtalk';
+import { dingtalkCliRequest, dingtalkMessageReceipt, dingtalkPerson } from '@shared/dingtalk';
 import { executeProcess } from '@server/infrastructure/process/process.service';
 
 import type { DingtalkCliRequest } from '@shared/dingtalk';
@@ -19,6 +19,8 @@ export function buildDwsCommand(input: DingtalkCliRequest): { args: string[]; st
   if (request.action === 'search') return { args: ['aisearch', 'person', `--query=${request.query}`, `--dimension=${request.dimension}`, ...common] };
   if (request.action === 'person') return { args: ['contact', 'user', 'get', `--ids=${request.userId}`, ...common] };
   if (request.action === 'send-user') throw new Error('个人私聊已停用，审查通知仅支持机器人群消息');
+  if (request.action === 'message-user') return { args: ['chat', '+messages-send', '--as=user', `--user=${request.userId}`,
+    '--msg-type=text', '--text=-', '--body-stdin', '--wait-delivery', `--idempotency-key=${request.idempotencyKey}`, '--yes', ...common], stdin: request.text };
   if (!request.groupId) throw new Error('审查通知必须指定机器人群，不支持私聊');
   const mentions = request.groupId && request.userIds.length ? request.userIds.map((id) => `@${id}`).join(' ') + '\n\n' : '';
   return { args: ['chat', '+messages-send', '--as=bot', `--robot-code=${request.robotCode}`,
@@ -54,6 +56,13 @@ export function parseDwsResult(request: DingtalkCliRequest, value: unknown) {
       ...(person.jobNumber ? { employeeNo: person.jobNumber } : {}) });
   }
   if (request.action === 'send-user') throw new Error('个人私聊已停用');
+  if (request.action === 'message-user') {
+    const receipt = z.object({ openMessageId: z.string(), conversationId: z.string(), deliveryStatus: z.enum(['delivered', 'unknown']),
+      idempotencyKey: z.literal(request.idempotencyKey), dry_run: z.never().optional() }).parse(value);
+    if (receipt.deliveryStatus === 'delivered' && !receipt.openMessageId.trim()) throw new Error('DWS 送达回执缺少消息 ID，请勿重发');
+    return dingtalkMessageReceipt.parse({ status: receipt.deliveryStatus, remoteIds: receipt.openMessageId ? [receipt.openMessageId] : [],
+      conversationId: receipt.conversationId, idempotencyKey: receipt.idempotencyKey });
+  }
   const response = z.object({ ok: z.literal(true), identity: z.literal('bot'), tool: z.string(),
     result: z.unknown(), dry_run: z.never().optional() }).parse(value);
   const result = z.object({ success: z.boolean().optional(), processQueryKey: z.string().optional() }).passthrough().parse(response.result);

@@ -108,7 +108,7 @@ export function RepositoryEditor({ repository, accounts, models, close, saved }:
         <Checkbox label="自动发布到 GitLab" checked={form.enableMrComment} onChange={(value) => update("enableMrComment", value)} />
         <Checkbox label="发送 Webhook 群通知" checked={form.enableDingtalk} onChange={(value) => update("enableDingtalk", value)} />
         <p className="text-xs text-muted-foreground">报告发送到所选机器人原有的群。平台共享 CLI 已启用时，由 Pi 核实提交人工号，在同一条问题报告里 @ 他，不发送私聊。</p>
-        <Field label="钉钉连接" error={robots.error} hint={robots.loading ? "正在加载连接…" : "支持 Webhook 或 DWS CLI；CLI 必须已完成授权。"}>
+        <Field label="钉钉连接" error={robots.error} hint={robots.loading ? "正在加载连接…" : "选择已启用的群机器人；共享 CLI 在连接器中统一授权。"}>
           <Select required={form.enableDingtalk} disabled={robots.loading || Boolean(robots.error)} value={form.dingtalkRobotId ?? ""} onChange={(event) => update("dingtalkRobotId", event.target.value || null)}>
             <option value="">请选择机器人</option>
             {form.dingtalkRobotId && robots.data && !selectedRobot && <option value={form.dingtalkRobotId} disabled>原关联机器人不可用</option>}

@@ -75,6 +75,21 @@ beforeEach(() => { requests.length = 0; authorizations.clear(); respond = (_requ
 afterAll(() => new Promise<void>((resolve, reject) => { server.closeAllConnections(); server.close((error) => error ? reject(error) : resolve()); }));
 
 describe('真实 Pi SDK 与 UIMessageStream', () => {
+  it('普通追问也加载公共钉钉 Skill 和可执行工具，不受代码工具缺失影响', () => {
+    const signal = controller().signal;
+    return createChatStream({ session: { id: 'chat-without-repository', repository: null } as SessionWithRepository, run: null,
+      messages: [{ id: 'request-dingtalk', role: 'user', parts: [{ type: 'text', text: '帮我通过钉钉联系同事' }] }],
+      modelConfig: config, abortSignal: signal,
+    }).then((execute) => readMessages(createUIMessageStream({ execute: ({ writer }) => execute(writer) }))).then(() => {
+      expect(requests).toHaveLength(1);
+      expect((requests[0].tools ?? []).map((tool: any) => tool.function.name).sort()).toEqual([
+        'dingtalk_people_search', 'dingtalk_prepare_message', 'dingtalk_send_message',
+      ]);
+      expect(requests[0].messages[0].content).toContain('钉钉通用能力');
+      expect(requests[0].messages[0].content).not.toContain('继续对话不发送钉钉消息');
+    });
+  });
+
   it('恢复数据库分支上下文，通过 Pi 完成诊断工具循环并流式显示推理、工具和文字', () => {
     respond = (_request, response) => requests.length === 1
       ? sendChunks(response, [{ reasoning_content: '核查已保存的运行状态。' }, { content: '先查看运行。' },
@@ -109,8 +124,10 @@ describe('真实 Pi SDK 与 UIMessageStream', () => {
         expect(first.max_tokens).toBe(8192);
         expect(first).not.toHaveProperty('max_completion_tokens');
         expect(first).not.toHaveProperty('store');
-        expect(first.tools.map((tool: any) => tool.function.name).sort()).toEqual(['review_run_context']);
-        expect(first.messages[0].content).toContain('继续对话不发送钉钉消息');
+        expect(first.tools.map((tool: any) => tool.function.name).sort()).toEqual([
+          'dingtalk_people_search', 'dingtalk_prepare_message', 'dingtalk_send_message', 'review_run_context',
+        ]);
+        expect(first.messages[0].content).toContain('钉钉通用能力');
         expect(requests[1].messages.find((item: any) => item.role === 'tool')).toMatchObject({ tool_call_id: 'diagnostic', content: expect.stringContaining('模型超时') });
         expect(message).toMatchObject({ id: 'pi-response', role: 'assistant' });
         expect(message?.parts).toEqual(expect.arrayContaining([

@@ -17,6 +17,8 @@ const identityRequests: DingtalkCliRequest[] = [
   { action: 'search', profile: 'corp:user', query: '251111', dimension: 'jobNumber' },
   { action: 'person', profile: 'corp:user', userId: 'real-user' },
 ];
+const directRequest = { action: 'message-user' as const, profile: 'corp:user', userId: 'actual-dingtalk-user',
+  text: '![只发送文本](./credentials) $(whoami)', idempotencyKey: randomUUID() };
 
 describe('DWS 调用边界', () => {
   it('实际子进程同时使用持久化配置目录和加密钥匙串目录', async () => {
@@ -70,7 +72,7 @@ describe('DWS 调用边界', () => {
     expect(sends).toBe(0);
   });
 
-  it.each([...identityRequests, request])('扫码期间拒绝 $action，不执行旧身份命令', async (input) => {
+  it.each([...identityRequests, request, directRequest])('扫码期间拒绝 $action，不执行旧身份命令', async (input) => {
     let completeLogin!: () => void;
     const login = createDwsLoginManager(() => new Promise((resolve) => { completeLogin = () => resolve({ code: 0, signal: null, stderr: '',
       stdout: JSON.stringify({ success: true, token_valid: true, corp_id: 'new-corp', user_id: 'new-user' }) }); }));
@@ -85,13 +87,14 @@ describe('DWS 调用边界', () => {
     } finally { completeLogin(); await login.stop(); }
   });
 
-  it.each([...identityRequests, request])('切换登录后 $action 的查询结果失效，已发送回执仍保留', async (input) => {
+  it.each([...identityRequests, request, directRequest])('切换登录后 $action 的查询结果失效，已发送回执仍保留', async (input) => {
     let completeLogin!: () => void;
     const login = createDwsLoginManager(() => new Promise((resolve) => { completeLogin = () => resolve({ code: 0, signal: null, stderr: '',
       stdout: JSON.stringify({ success: true, token_valid: true, corp_id: 'new-corp', user_id: 'new-user' }) }); }));
     let queryStarted!: () => void;
     const started = new Promise<void>((resolve) => { queryStarted = resolve; });
-    const result = input.action === 'send' ? { status: 'accepted' as const, remoteIds: ['actual-receipt'] }
+    const sending = input.action === 'send' || input.action === 'message-user';
+    const result = sending ? { status: 'accepted' as const, remoteIds: ['actual-receipt'] }
       : { userId: 'old-user', name: '旧身份人员', employeeNo: '251111' };
     let completeQuery!: (value: typeof result) => void;
     let defer = false;
@@ -114,13 +117,13 @@ describe('DWS 调用边界', () => {
       expect(login.state()?.status).toBe('completed');
       completeQuery(result);
       const stale = await pending;
-      expect(stale.status).toBe(input.action === 'send' ? 200 : 409);
-      if (input.action === 'send') expect(await stale.json()).toEqual(result);
+      expect(stale.status).toBe(sending ? 200 : 409);
+      if (sending) expect(await stale.json()).toEqual(result);
       else expect(await stale.text()).not.toContain('old-user');
     } finally { completeLogin(); completeQuery(result); await login.stop(); }
   });
 
-  it.each([...identityRequests, request])('旧 Profile 的 $action 延迟到新身份登录后到达时，不执行 CLI', async (input) => {
+  it.each([...identityRequests, request, directRequest])('旧 Profile 的 $action 延迟到新身份登录后到达时，不执行 CLI', async (input) => {
     const token = 'x'.repeat(32);
     let activeProfile = 'corp:user';
     let executions = 0;
@@ -148,6 +151,35 @@ describe('DWS 调用边界', () => {
     expect(command.args).toContain('--body-stdin');
     expect(command.args.join(' ')).not.toContain('secret');
     expect(command.stdin).toBe(`@actual-dingtalk-user\n\n${request.text}`);
+  });
+
+  it('已确认的 Pi 个人消息走原生 user 命令，正文按纯文本 stdin 传递并固定幂等键', () => {
+    const command = buildDwsCommand(directRequest);
+    expect(command.args).toEqual(expect.arrayContaining(['chat', '+messages-send', '--as=user', '--user=actual-dingtalk-user',
+      '--msg-type=text', '--text=-', '--body-stdin', '--wait-delivery', `--idempotency-key=${directRequest.idempotencyKey}`, '--yes']));
+    expect(command.args.join(' ')).not.toContain('credentials');
+    expect(command.stdin).toBe(directRequest.text);
+    const receipt = { openMessageId: 'actual-message', conversationId: 'actual-conversation', deliveryStatus: 'delivered', idempotencyKey: directRequest.idempotencyKey };
+    expect(parseDwsResult(directRequest, receipt)).toEqual({ status: 'delivered', remoteIds: ['actual-message'], conversationId: 'actual-conversation', idempotencyKey: directRequest.idempotencyKey });
+    expect(() => parseDwsResult(directRequest, { ...receipt, dry_run: true })).toThrow();
+    expect(() => parseDwsResult(directRequest, { ...receipt, idempotencyKey: randomUUID() })).toThrow();
+    expect(() => parseDwsResult(directRequest, { ...receipt, openMessageId: '' })).toThrow('消息 ID');
+  });
+
+  it('真实子进程收到完整的字面量正文并返回固定发送回执', async () => {
+    const directory = path.resolve('temp', `dws-message-${randomUUID()}`);
+    const binary = path.join(directory, 'message-fixture.cjs');
+    await mkdir(directory, { recursive: true });
+    await writeFile(binary, `#!/usr/bin/env node
+const fs=require('node:fs');const args=process.argv.slice(2);
+if(args.slice(0,2).join(' ')!=='chat +messages-send'||!args.includes('--as=user')||!args.includes('--msg-type=text')||args.some(a=>a.startsWith('--markdown')))process.exit(7);
+if(fs.readFileSync(0,'utf8')!==${JSON.stringify(directRequest.text)})process.exit(8);
+console.log(JSON.stringify({openMessageId:'child-message',conversationId:'child-conversation',deliveryStatus:'delivered',idempotencyKey:args.find(a=>a.startsWith('--idempotency-key=')).split('=')[1]}));
+`, { mode: 0o700 });
+    const previous = process.env.DWS_BIN;
+    process.env.DWS_BIN = binary;
+    try { expect(await runDws(directRequest)).toMatchObject({ status: 'delivered', remoteIds: ['child-message'], idempotencyKey: directRequest.idempotencyKey }); }
+    finally { if (previous === undefined) delete process.env.DWS_BIN; else process.env.DWS_BIN = previous; }
   });
 
   it('机器人发送缺少群 ID 时拒绝，不能变成机器人私聊', () => {

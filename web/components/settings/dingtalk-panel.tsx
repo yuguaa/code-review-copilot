@@ -30,7 +30,7 @@ export function DingtalkPanel() {
   return <div className="flex max-w-3xl flex-col gap-5">
     <ActionError error={action.error} />
     <DingtalkCliCard />
-        <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">Webhook 决定报告发送到哪个机器人群；共享 CLI 负责识别提交人，问题报告在原群内 @ 他，不另发私聊。</p>
+        <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">Webhook 决定群内报告和 @ 消息的目标；共享 CLI 提供 Pi 查人和消息能力。OCR 自动通知只发送一条原群报告，对话发送由你确认。</p>
           <Button disabled={Boolean(action.pending)} onClick={() => { setEditing(null); setForm(emptyForm); setOpen(true); }}>添加 Webhook</Button></div>
         <ResourceState loading={resource.loading && !resource.data} error={resource.error} empty={resource.data?.robots.length === 0} title="尚未添加 Webhook" description="群通知可单独添加 Webhook；CLI 只需在上方扫码授权。" retry={resource.reload} />
         {resource.data?.robots.map((robot) => <Card key={robot.id}>

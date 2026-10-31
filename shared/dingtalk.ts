@@ -20,7 +20,13 @@ export const dingtalkCliRequest = z.discriminatedUnion('action', [
   z.object({ action: z.literal('send-user'), profile: dingtalkProfile, userId: dingtalkId,
     title: z.string().trim().min(1).max(200), text: dingtalkText, idempotencyKey: z.string().min(1).max(200),
   }).strict(),
+  z.object({ action: z.literal('message-user'), profile: dingtalkProfile, userId: dingtalkId,
+    text: dingtalkText, idempotencyKey: z.string().uuid(),
+  }).strict(),
 ]);
+
+export const dingtalkMessageReceipt = z.object({ status: z.enum(['delivered', 'unknown']), remoteIds: z.array(dingtalkId),
+  conversationId: z.string(), idempotencyKey: z.string().uuid() }).strict();
 
 export const dingtalkAuthStatus = z.object({ authenticated: z.boolean(), tokenValid: z.boolean(), profile: dingtalkProfile.nullable(),
   userName: z.string().nullable(), corpName: z.string().nullable(), reason: z.string().nullable() });

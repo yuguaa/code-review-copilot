@@ -9,4 +9,4 @@ chatRoutes.post("/:id/stop", (context) => stopChatSession(context.req.param("id"
 
 chatRoutes.post('/', (c) => c.req.json()
   .catch(() => { throw new HTTPException(400, { message: '请求体必须为有效 JSON' }); })
-  .then(prepareChatStream));
+  .then((body) => prepareChatStream(body, c.get('authUsername'))));

@@ -1,5 +1,7 @@
+import { readFile } from 'node:fs/promises';
+
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
-import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from '@earendil-works/pi-coding-agent';
+import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, stripFrontmatter } from '@earendil-works/pi-coding-agent';
 
 import type { AgentSession, ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { ModelConfig } from '@server/modules/ai-models/ai-models.service';
@@ -47,12 +49,17 @@ export async function createPiRuntime(options: PiRuntimeOptions): Promise<PiRunt
   const cwd = options.cwd ?? process.cwd();
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false }, cacheWarming: 'off' });
   const skills = options.skills ?? [];
+  const tools = [...options.tools, ...skills.flatMap((skill) => skill.tools ?? [])];
+  if (new Set(tools.map((tool) => tool.name)).size !== tools.length) throw new Error('Agent 工具名称不能重复');
+  let skillPrompts: string[] = [];
   const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: cwd, settingsManager,
     noExtensions: true, noContextFiles: true, noPromptTemplates: true, noThemes: true, noSkills: true,
     additionalSkillPaths: skills.map((skill) => skill.path),
     skillsOverride: (current) => ({ skills: current.skills.filter((skill) => skills.some((allowed) => allowed.name === skill.name)), diagnostics: current.diagnostics }),
-    systemPrompt: options.systemPrompt, appendSystemPromptOverride: () => [],
+    systemPrompt: options.systemPrompt,
   });
+  /* Skill 正文在发现后读取，创建会话时才提供完整的附加提示。 */
+  resourceLoader.getAppendSystemPrompt = () => skillPrompts;
   let session: AgentSession | undefined;
   let aborting: Promise<void> | undefined;
   let disposal: Promise<void> | undefined;
@@ -84,6 +91,13 @@ export async function createPiRuntime(options: PiRuntimeOptions): Promise<PiRunt
       controller.signal.throwIfAborted();
       const missing = skills.filter((allowed) => !resourceLoader.getSkills().skills.some((skill) => skill.name === allowed.name));
       if (missing.length) throw new Error(`Agent Skill 未加载：${missing.map((skill) => skill.name).join(', ')}`);
+      return Promise.all(resourceLoader.getSkills().skills.map((skill) => readFile(skill.filePath, 'utf8').then((content) => {
+        const context = skills.find((allowed) => allowed.name === skill.name)?.context;
+        return `<skill name="${skill.name}">\n${stripFrontmatter(content).trim()}${context ? `\n\n${context}` : ''}\n</skill>`;
+      })));
+    }).then((prompts) => {
+      skillPrompts = prompts;
+      controller.signal.throwIfAborted();
       const sessionManager = SessionManager.inMemory(cwd);
       /* 历史仅恢复文本上下文，零用量不计入本轮统计；会话分支由数据库管理。 */
       for (const message of options.history ?? []) {
@@ -94,7 +108,7 @@ export async function createPiRuntime(options: PiRuntimeOptions): Promise<PiRunt
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } });
       }
       return createAgentSession({ cwd, agentDir: cwd, modelRuntime, model, thinkingLevel: 'off',
-        noTools: 'all', tools: options.tools.map((tool) => tool.name), customTools: options.tools,
+        noTools: 'all', tools: tools.map((tool) => tool.name), customTools: tools,
         resourceLoader, sessionManager, settingsManager,
       });
     }))
@@ -142,8 +156,9 @@ export async function createPiRuntime(options: PiRuntimeOptions): Promise<PiRunt
 export type PiRuntimeOptions = {
   modelConfig: ModelConfig; systemPrompt: string; tools: ToolDefinition[]; timeoutMs: number;
   cwd?: string; signal?: AbortSignal; maxSteps?: number;
-  skills?: Array<{ name: string; path: string }>;
+  skills?: PiSkill[];
   history?: Array<{ role: 'user' | 'assistant'; text: string }>;
 };
+export type PiSkill = { name: string; path: string; tools?: ToolDefinition[]; context?: string };
 export type PiRuntime = { session: AgentSession; resourceLoader: DefaultResourceLoader; signal: AbortSignal;
   prompt(text: string): Promise<void>; abort(reason: unknown): void; dispose(): Promise<void> };
