@@ -9,15 +9,20 @@ const request: Extract<DingtalkCliRequest, { action: 'send' }> = { action: 'send
   robotCode: 'bot-1', groupId: 'cid-test', userIds: ['actual-dingtalk-user'], title: 'Review', text: '@./secret $(whoami)\n报告正文' };
 
 describe('DWS 调用边界', () => {
-  it('个人私聊使用 CLI 登录身份、单个 userId、固定幂等键和投递回执，正文按纯文本处理', () => {
+  it('个人私聊命令和回执解析已停用，不能绕过群通知流程', () => {
     const input = { action: 'send-user' as const, profile: 'corp:user', userId: 'actual-dingtalk-user', idempotencyKey: 'review-fixed-key', title: 'Review', text: '![不得上传](./credentials) @literal' };
-    const command = buildDwsCommand(input);
-    expect(command.args).toEqual(expect.arrayContaining(['--as=user', '--user=actual-dingtalk-user', '--idempotency-key=review-fixed-key', '--wait-delivery', '--text=-', '--body-stdin', '--yes']));
-    expect(command.args.some((arg) => arg.startsWith('--robot-code') || arg.startsWith('--group') || arg.startsWith('--users') || arg.startsWith('--markdown'))).toBe(false);
-    expect(command.stdin).toBe(`${input.title}\n\n${input.text}`);
+    expect(() => buildDwsCommand(input)).toThrow('私聊已停用');
     expect(() => parseDwsResult(input, { openMessageId: 'message', deliveryStatus: 'unknown', idempotencyKey: input.idempotencyKey })).toThrow();
     expect(() => parseDwsResult(input, { openMessageId: 'message', deliveryStatus: 'delivered', idempotencyKey: 'wrong-key' })).toThrow();
-    expect(parseDwsResult(input, { openMessageId: 'message', deliveryStatus: 'delivered', idempotencyKey: input.idempotencyKey })).toEqual({ status: 'accepted', remoteIds: ['message'] });
+    expect(() => parseDwsResult(input, { openMessageId: 'message', deliveryStatus: 'delivered', idempotencyKey: input.idempotencyKey })).toThrow('私聊已停用');
+  });
+
+  it('按候选 userId 读取人员详情核对工号，过滤电话邮箱等无关字段', () => {
+    const input = { action: 'person' as const, profile: 'corp:user', userId: 'real-user' };
+    expect(buildDwsCommand(input).args).toEqual(expect.arrayContaining(['contact', 'user', 'get', '--ids=real-user', '--profile=corp:user']));
+    const body = { success: true, result: [{ orgEmployeeModel: { orgUserId: 'real-user', orgUserName: '提交人', jobNumber: '251111', orgAuthEmail: 'not-returned@example.invalid' } }] };
+    expect(parseDwsResult(input, body)).toEqual({ userId: 'real-user', name: '提交人', employeeNo: '251111' });
+    expect(() => parseDwsResult({ ...input, userId: 'different-user' }, body)).toThrow('不一致');
   });
 
   it('登录身份从原生 CLI 元数据解析，不接受 Token 作为身份', () => {
@@ -27,7 +32,7 @@ describe('DWS 调用边界', () => {
     expect(JSON.stringify(result)).not.toContain('not-a-real-credential');
   });
 
-  it('Worker 在登录身份不匹配时拒绝个人发送', async () => {
+  it('Worker 一律拒绝个人发送，不执行 CLI', async () => {
     let sends = 0;
     const token = 'x'.repeat(32);
     const app = createDingtalkWorker(token, (input) => {
@@ -36,7 +41,7 @@ describe('DWS 调用边界', () => {
     });
     const response = await app.request('/execute', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'send-user', profile: 'corp:user', userId: 'recipient', idempotencyKey: 'fixed-key', title: 'Review', text: '正文' }) });
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(410);
     expect(sends).toBe(0);
   });
 
@@ -50,10 +55,8 @@ describe('DWS 调用边界', () => {
     expect(command.stdin).toBe(`@actual-dingtalk-user\n\n${request.text}`);
   });
 
-  it('私聊不包含群 ID 和群 @ 参数', () => {
-    const args = buildDwsCommand({ ...request, groupId: undefined }).args;
-    expect(args).toContain('--users=actual-dingtalk-user');
-    expect(args.some((arg) => arg.startsWith('--group=') || arg.startsWith('--at-'))).toBe(false);
+  it('机器人发送缺少群 ID 时拒绝，不能变成机器人私聊', () => {
+    expect(() => buildDwsCommand({ ...request, groupId: undefined })).toThrow('不支持私聊');
   });
 
   it('退出码成功不等于发送成功，拒绝 dry-run 和业务失败', () => {

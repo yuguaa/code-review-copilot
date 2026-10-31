@@ -205,7 +205,7 @@ export function executeRun(id: string, signal: AbortSignal): Promise<void> {
       .then(() => { throw new RunExecutionError(message, { cause: error }); });
   }).then(() => prisma.run.findUnique({ where: { id } })).then((run) => {
     if (!run || !isPublishableRunStatus(run.status)) return;
-    return Promise.allSettled([publishRun(id, 'gitlab', false), publishRun(id, 'dingtalk', false), publishRun(id, 'dingtalk-cli', false, signal)]).then((results) => {
+    return Promise.allSettled([publishRun(id, 'gitlab', false), publishRun(id, 'dingtalk', false, signal)]).then((results) => {
       const unexpected: unknown[] = [];
       for (const result of results) {
         if (result.status !== 'rejected') continue;

@@ -46,10 +46,10 @@ const deliveryLabels: Record<string, string> = {
 export function RunDeliveries({ run, reload }: { run: ReviewRun; reload: () => Promise<unknown> }) {
   const action = useAction();
   const confirmation = useConfirm();
-  const publish = (channel: 'gitlab' | 'dingtalk' | 'dingtalk-cli') => {
+  const publish = (channel: 'gitlab' | 'dingtalk') => {
     void confirmation.confirm({
       title: `发布到 ${channel === 'gitlab' ? 'GitLab' : '钉钉'}`,
-      description: channel === 'dingtalk-cli' ? '由 Pi 核实本次提交人的工号，使用全局登录的钉钉身份发送问题通知。结果未知时请先核对钉钉，避免重复发送。' : `将运行 ${run.id.slice(0, 8)} 的报告发送到仓库配置的渠道。已有发布记录和提交版本由服务端核查。`, confirmLabel: '确认发布',
+      description: `将运行 ${run.id.slice(0, 8)} 的报告发送到仓库配置的渠道。钉钉只发一条机器人群报告；有问题且 CLI 已启用时核实工号并 @ 提交人，不发送私聊。已有发布记录由服务端核查。`, confirmLabel: '确认发布',
     }).then((approved) => {
       if (approved) action.execute(channel, () => api(`/api/runs/${run.id}/publish`, { method: 'POST', body: JSON.stringify({ channel }) }).then(() => {
         toast.success('发布请求已处理'); return reload();
@@ -61,14 +61,15 @@ export function RunDeliveries({ run, reload }: { run: ReviewRun; reload: () => P
     <div><h2 className="text-sm font-semibold">发布结果</h2><p className="mt-2 text-xs leading-6 text-muted-foreground">报告保存状态与渠道发送状态分别记录。</p></div>
     {(['gitlab', 'dingtalk', 'dingtalk-cli'] as const).map((channel) => {
       const delivery = run.deliveries[channel];
+      if (channel === 'dingtalk-cli' && (!delivery || delivery.status === 'skipped')) return null;
       const disabled = Boolean(action.pending) || !run.reportMessageId || !['completed', 'partial', 'skipped'].includes(run.status) || delivery?.status === 'sending' || delivery?.status === 'sent';
       return <section key={channel} className="rounded-lg border p-4">
-        <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium">{channel === 'gitlab' ? 'GitLab 评论' : channel === 'dingtalk-cli' ? 'Pi → 钉钉 CLI → 提交人' : 'Webhook 群通知'}</h3><Button variant="outline" size="sm" disabled={disabled} onClick={() => publish(channel)}><SendIcon />{action.pending === channel ? '正在发布…' : '发布报告'}</Button></div>
+        <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium">{channel === 'gitlab' ? 'GitLab 评论' : channel === 'dingtalk-cli' ? '历史 CLI 投递（已停用）' : '钉钉机器人群通知'}</h3>{channel !== 'dingtalk-cli' && <Button variant="outline" size="sm" disabled={disabled} onClick={() => publish(channel)}><SendIcon />{action.pending === channel ? '正在发布…' : '发布报告'}</Button>}</div>
         {!delivery ? <p className="mt-4 text-xs text-muted-foreground">尚未发布</p> : <div className="mt-4 flex flex-col gap-2 border-t pt-3">
           <div className="flex items-center justify-between"><Badge variant={delivery.status === 'failed' ? 'destructive' : 'secondary'}>{deliveryLabels[delivery.status] ?? delivery.status}</Badge><span className="text-[11px] text-muted-foreground">{formatDate(delivery.finishedAt ?? delivery.startedAt)}</span></div>
           {delivery.remoteIds?.map((id) => <p key={id} className="break-all font-mono text-xs">{id}</p>)}
           {delivery.error && <p className="text-xs leading-6 text-destructive">{delivery.error}</p>}
-          {delivery.recipient && <p className="text-xs">通知收件人：{delivery.recipient.name} · {delivery.recipient.employeeNo} · {delivery.recipient.userId}</p>}
+          {delivery.recipient && <p className="text-xs">{channel === 'dingtalk-cli' ? '历史收件人' : '群内 @'}：{delivery.recipient.name} · {delivery.recipient.employeeNo} · {delivery.recipient.userId}</p>}
           {delivery.steps?.map((step, index) => <p key={index} className="text-xs text-muted-foreground">{step}</p>)}
         </div>}
       </section>;

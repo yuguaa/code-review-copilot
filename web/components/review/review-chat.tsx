@@ -4,7 +4,6 @@ import { DefaultChatTransport } from 'ai';
 import { ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, SquareIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { dingtalkMessageDraft } from '@shared/dingtalk';
 import { ActionError, ResourceState } from '@web/components/common/resource-state';
 import { Conversation, ConversationContent, ConversationScrollButton } from '@web/components/ai-elements/conversation';
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from '@web/components/ai-elements/message';
@@ -16,15 +15,13 @@ import { Button } from '@web/components/ui/button';
 import { Select } from '@web/components/ui/forms';
 import { useAction, useResource } from '@web/hooks/use-resource';
 import { api } from '@web/lib/api';
-import { DingtalkSendDialog } from './dingtalk-send-dialog';
 
 import type { AIModelSummary, ReviewProgress, ReviewRun, SessionDetail } from '@web/lib/types';
 import type { UIMessage } from 'ai';
-import type { DingtalkMessageDraft } from '@shared/dingtalk';
 
 type ToolPartView = { type: string; state?: string; toolName?: string; input?: unknown; output?: unknown; errorText?: string };
 
-function renderPart(part: UIMessage['parts'][number], key: number, streaming: boolean, openDraft: (draft: DingtalkMessageDraft) => void) {
+function renderPart(part: UIMessage['parts'][number], key: number, streaming: boolean) {
   if (part.type === 'text') return <MessageResponse key={key} streaming={streaming}>{part.text}</MessageResponse>;
   if (part.type === 'reasoning') return <Reasoning key={key} isStreaming={streaming && part.state !== 'done'} defaultOpen={streaming}>
     <ReasoningTrigger /><ReasoningContent>{part.text}</ReasoningContent>
@@ -33,12 +30,9 @@ function renderPart(part: UIMessage['parts'][number], key: number, streaming: bo
     const tool = part as ToolPartView;
     const title = tool.toolName ?? tool.type.replace(/^tool-/, '');
     const state = tool.state ?? 'input-streaming';
-    const draft = title === 'dingtalk_message_draft' && state === 'output-available'
-      && tool.output && typeof tool.output === 'object' && 'requiresConfirmation' in tool.output && tool.output.requiresConfirmation === true
-      && 'draft' in tool.output ? dingtalkMessageDraft.safeParse(tool.output.draft) : null;
-    return <div key={key} className="flex flex-col gap-2"><Tool defaultOpen={state === 'output-error'}><ToolHeader title={title} state={state} />
+    return <Tool key={key} defaultOpen={state === 'output-error'}><ToolHeader title={title} state={state} />
       <ToolContent><ToolInput input={tool.input} /><ToolOutput output={tool.output} errorText={tool.errorText} /></ToolContent>
-    </Tool>{draft?.success && <Button variant="outline" size="sm" disabled={streaming} onClick={() => openDraft(draft.data)}>确认钉钉消息（尚未发送）</Button>}</div>;
+    </Tool>;
   }
   return null;
 }
@@ -73,8 +67,6 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
 }) {
   const [input, setInput] = useState('');
   const [modelId, setModelId] = useState('');
-  const [dingtalkText, setDingtalkText] = useState<string | null>(null);
-  const [dingtalkDraft, setDingtalkDraft] = useState<DingtalkMessageDraft | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const submittedText = useRef('');
   const busyRef = useRef(false);
@@ -133,12 +125,9 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
               return <Message key={message.id} from={message.role}>
                   <span className="text-xs font-medium text-muted-foreground">{isUser ? '你' : '助手'}</span>
                   <MessageContent>
-                    {message.parts.map((part, index) => renderPart(part, index, streaming, setDingtalkDraft))}
+                    {message.parts.map((part, index) => renderPart(part, index, streaming))}
                     {streaming && !hasRenderablePart(message) && <MessageResponse streaming>{''}</MessageResponse>}
                   </MessageContent>
-                    {!streaming && message.parts.some((part) => part.type === 'text') && <MessageActions>
-                      <Button variant="ghost" size="sm" onClick={() => setDingtalkText(message.parts.filter((part) => part.type === 'text').map((part) => part.text).join('\n\n'))}>发到钉钉</Button>
-                    </MessageActions>}
                     {node && node.siblingCount > 1 && <MessageActions>
                       <div className="ml-auto flex items-center gap-2">
                         <MessageAction tooltip="上一个消息分支" size="icon-xs" disabled={disabled || node.siblingIndex <= 0} onClick={() => changeBranch(node.siblingIds[node.siblingIndex - 1])}><ChevronLeftIcon /></MessageAction>
@@ -162,7 +151,6 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); }
           }} /></PromptInputBody>
           <PromptInputFooter><PromptInputTools>
-            <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => setDingtalkText(input)}>钉钉私聊</Button>
             <Select aria-label="对话模型" className="max-w-64" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={disabled || models.loading}>
               <option value="">仓库默认模型</option>
               {models.data?.models.filter((model) => model.isActive).map((model) => <option value={model.id} key={model.id}>{model.provider}/{model.modelId}{model.isDefault ? '（默认）' : ''} · {model.id.slice(-6)}</option>)}
@@ -174,7 +162,5 @@ export function ReviewChat({ detail, run, runId, blocked, refresh, progress }: {
         </PromptInput>
       </div>
     </div>
-    {(dingtalkText !== null || dingtalkDraft) && <DingtalkSendDialog sessionId={detail.session.id} initialText={dingtalkText ?? ''}
-      draft={dingtalkDraft ?? undefined} close={() => { setDingtalkText(null); setDingtalkDraft(null); }} />}
   </div>;
 }

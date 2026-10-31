@@ -12,13 +12,12 @@ export function buildDwsCommand(input: DingtalkCliRequest): { args: string[]; st
   const common = [`--profile=${request.profile}`, '--format=json', '--timeout=30'];
   if (request.action === 'status') return { args: ['auth', 'status', ...common] };
   if (request.action === 'search') return { args: ['aisearch', 'person', `--query=${request.query}`, `--dimension=${request.dimension}`, ...common] };
-  if (request.action === 'send-user') return { args: ['chat', '+messages-send', '--as=user', `--user=${request.userId}`,
-    `--idempotency-key=${request.idempotencyKey}`, '--wait-delivery', '--text=-', '--body-stdin', '--yes', ...common], stdin: `${request.title}\n\n${request.text}` };
-  if (!request.groupId && !request.userIds.length) throw new Error('缺少钉钉收件人');
+  if (request.action === 'person') return { args: ['contact', 'user', 'get', `--ids=${request.userId}`, ...common] };
+  if (request.action === 'send-user') throw new Error('个人私聊已停用，审查通知仅支持机器人群消息');
+  if (!request.groupId) throw new Error('审查通知必须指定机器人群，不支持私聊');
   const mentions = request.groupId && request.userIds.length ? request.userIds.map((id) => `@${id}`).join(' ') + '\n\n' : '';
   return { args: ['chat', '+messages-send', '--as=bot', `--robot-code=${request.robotCode}`,
-    ...(request.groupId ? [`--group=${request.groupId}`, ...(request.userIds.length ? [`--at-user-ids=${request.userIds.join(',')}`] : [])]
-      : [`--users=${request.userIds.join(',')}`]),
+    `--group=${request.groupId}`, ...(request.userIds.length ? [`--at-user-ids=${request.userIds.join(',')}`] : []),
     `--title=${request.title}`, '--markdown=-', '--body-stdin', '--yes', ...common], stdin: mentions + request.text };
 }
 
@@ -40,10 +39,16 @@ export function parseDwsResult(request: DingtalkCliRequest, value: unknown) {
       ...(person.jobNumber ? { employeeNo: person.jobNumber } : {}) })),
       returnedCount: response.searchEvidence?.returnedCandidateCount ?? response.result.length };
   }
-  if (request.action === 'send-user') {
-    const receipt = z.object({ openMessageId: z.string().min(1), deliveryStatus: z.literal('delivered'), idempotencyKey: z.literal(request.idempotencyKey) }).parse(value);
-    return { status: 'accepted' as const, remoteIds: [receipt.openMessageId] };
+  if (request.action === 'person') {
+    const response = z.object({ success: z.literal(true), result: z.array(z.object({ orgEmployeeModel: z.object({
+      orgUserId: dingtalkPerson.shape.userId, orgUserName: dingtalkPerson.shape.name, jobNumber: z.string().nullish(),
+    }) })).length(1) }).parse(value);
+    const person = response.result[0].orgEmployeeModel;
+    if (person.orgUserId !== request.userId) throw new Error('DWS 返回的人员与指定 userId 不一致');
+    return dingtalkPerson.parse({ userId: person.orgUserId, name: person.orgUserName,
+      ...(person.jobNumber ? { employeeNo: person.jobNumber } : {}) });
   }
+  if (request.action === 'send-user') throw new Error('个人私聊已停用');
   const response = z.object({ ok: z.literal(true), identity: z.literal('bot'), tool: z.string(),
     result: z.unknown(), dry_run: z.never().optional() }).parse(value);
   const result = z.object({ success: z.boolean().optional(), processQueryKey: z.string().optional() }).passthrough().parse(response.result);

@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
 import { loadGlobalDefaultModel, resolveRepositoryModelConfig } from '@server/modules/ai-models/ai-models.service';
-import { loadRepositoryDingtalkConfig, sendDingtalkNotification } from '@server/modules/notifications/notifications.service';
+import { dingtalkDestinationFingerprint, loadRepositoryDingtalkConfig, sendDingtalkNotification } from '@server/modules/notifications/notifications.service';
 import { publishSessionListChanged } from '@server/modules/sessions/session-events.service';
 import { parseOcrResult } from '@server/platform/engines/ocr-result';
 import { withSpan } from '@server/platform/telemetry/telemetry.service';
@@ -84,29 +84,6 @@ export function publishRun(id: string, channel: Channel, manual: boolean, signal
         ? `${repo.id}:${claim.run.session.mrIid == null ? `commit:${claim.run.headSha}` : `mr:${claim.run.session.mrIid}`}`
         : repo.id;
       return withPublicationLock(`${channel}:${target}`, () => {
-        if (channel === 'dingtalk-cli') {
-          const result = parseOcrResult(JSON.stringify(claim.run.rawResult));
-          if (!result.comments.length) return Promise.resolve('skipped' as const);
-          const publicUrl = process.env.APP_PUBLIC_URL;
-          if (!publicUrl) throw new Error('APP_PUBLIC_URL 未配置');
-          const text = [`项目：${repo.name}`, `提交人：${claim.run.session.author ?? ''}（${claim.run.session.authorUsername ?? '缺少工号'}）`,
-            `提交：${claim.run.baseSha} → ${claim.run.headSha}`, `OCR 发现 ${result.comments.length} 个问题：`,
-            ...result.comments.slice(0, 10).map((item, index) => `${index + 1}. ${item.path}:${item.start_line}\n${item.content.slice(0, 500)}`),
-            `完整报告与继续问答：${publicUrl.replace(/\/$/, '')}/runs/${id}`].join('\n\n');
-          const steps: string[] = [];
-          return loadGlobalDefaultModel().then((model) => notifyReviewSubmitter({ runId: id,
-            employeeNo: claim.run.session.authorUsername ?? '', title: `[代码审查问题] ${repo.name}`, text,
-            model: resolveRepositoryModelConfig(repo, model), signal, onSending: () => { mayHaveSent = true; },
-            onStep: (step) => { steps.push(step); return saveRunDelivery(id, channel, claim.attemptId, { status: 'sending', steps: steps.slice(-50) }); },
-          })).then((receipt) => {
-            notification = { recipient: receipt.recipient, profile: receipt.profile };
-            for (const remoteId of receipt.remoteIds) remoteIds.add(remoteId);
-            return 'sent' as const;
-          }).catch((error: unknown) => {
-            if (mayHaveSent) throw new Error('CLI 通知已尝试发送，结果需要核对，不会自动重发', { cause: error });
-            throw error;
-          });
-        }
         if (channel === 'dingtalk') {
           return loadRepositoryDingtalkConfig(repo).then((config) => {
             if (!config) return 'skipped' as const;
@@ -119,10 +96,25 @@ export function publishRun(id: string, channel: Channel, manual: boolean, signal
               session: { author: claim.run.session.author, sourceBranch: claim.run.session.sourceBranch,
                 targetBranch: claim.run.session.targetBranch, mrIid: claim.run.session.mrIid },
             });
-            mayHaveSent = true;
-            return sendDingtalkNotification(config, message.title, message.text).then((receipt) => {
-              for (const remoteId of receipt.remoteIds) remoteIds.add(remoteId);
-              return 'sent' as const;
+            const result = parseOcrResult(JSON.stringify(claim.run.rawResult));
+            return prisma.dingtalkRobot.findUnique({ where: { cliSingleton: true }, select: { enabled: true, cliEnableAfterLogin: true } }).then((cli) => {
+              if (result.comments.length && cli && (cli.enabled || cli.cliEnableAfterLogin)) {
+                const steps: string[] = [];
+                return loadGlobalDefaultModel().then((model) => notifyReviewSubmitter({ repositoryId: repo.id, robotId: repo.dingtalkRobotId,
+                  destinationFingerprint: dingtalkDestinationFingerprint(config), employeeNo: claim.run.session.authorUsername ?? '', ...message,
+                  model: resolveRepositoryModelConfig(repo, model), signal, onSending: () => { mayHaveSent = true; },
+                  onStep: (step) => { steps.push(step); return saveRunDelivery(id, channel, claim.attemptId, { status: 'sending', steps: steps.slice(-50) }); },
+                })).then((receipt) => {
+                  notification = { recipient: receipt.recipient, profile: receipt.profile };
+                  for (const remoteId of receipt.remoteIds) remoteIds.add(remoteId);
+                  return 'sent' as const;
+                });
+              }
+              mayHaveSent = true;
+              return sendDingtalkNotification(config, message.title, message.text).then((receipt) => {
+                for (const remoteId of receipt.remoteIds) remoteIds.add(remoteId);
+                return 'sent' as const;
+              });
             });
           });
         }
@@ -215,6 +207,7 @@ export function classifyDeliveryError(error: unknown, mayHaveSent: boolean, prev
 
 /** 同一 Run 的发送资格和报告归属在行锁中检查。 */
 export function claimRunDelivery(id: string, channel: Channel, manual: boolean) {
+  if (channel === 'dingtalk-cli') return Promise.reject(new HTTPException(410, { message: '独立 CLI 私聊通知已停用，请使用仓库机器人群通知' }));
   return prisma.$transaction((tx) => tx.$queryRaw`SELECT id FROM runs WHERE id = ${id} FOR UPDATE`
     .then(() => tx.run.findUnique({ where: { id }, include: { session: { include: { repository: { include: { gitLabAccount: true, defaultAIModel: true } } } } } }))
     .then((run) => {
@@ -230,10 +223,7 @@ export function claimRunDelivery(id: string, channel: Channel, manual: boolean) 
       const deliveries = deliveriesSchema.parse(run.deliveries);
       const previous = deliveries[channel];
       if (previous?.status === 'sent' || previous?.status === 'sending' || (!manual && previous)) return null;
-      const active = channel === 'dingtalk-cli'
-        ? tx.dingtalkRobot.findUnique({ where: { cliSingleton: true }, select: { enabled: true, cliEnableAfterLogin: true } })
-          .then((connection) => Boolean(connection && (connection.enabled || connection.cliEnableAfterLogin)))
-        : Promise.resolve(channel === 'gitlab' ? repo.enableMrComment : repo.enableDingtalk);
+      const active = Promise.resolve(channel === 'gitlab' ? repo.enableMrComment : repo.enableDingtalk);
       return active.then((enabled) => {
         if (!enabled && previous) return null;
         if (!enabled) return tx.run.update({ where: { id }, data: {

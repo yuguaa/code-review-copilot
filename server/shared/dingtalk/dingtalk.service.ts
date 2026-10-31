@@ -4,6 +4,11 @@ import { z } from 'zod';
 
 import { callDingtalkCli } from './dingtalk-cli.service';
 
+export function dingtalkDestinationFingerprint(config: DingtalkConfig): string {
+  const destination = config.transport === 'cli' ? [config.cliProfile, config.cliRobotCode, config.cliGroupId] : [config.webhook, config.secret ?? null];
+  return crypto.createHash('sha256').update(JSON.stringify(destination)).digest('hex');
+}
+
 /** 钉钉加签：sign = base64(HMAC-SHA256(secret, `${ts}\n${secret}`))，拼到 URL。 */
 export function signedUrl(webhook: string, secret?: string | null): string {
   if (!secret) return webhook;
@@ -19,12 +24,12 @@ export function signedUrl(webhook: string, secret?: string | null): string {
  */
 export function sendDingtalk(config: DingtalkConfig, title: string, text: string,
   target: { userIds: string[]; direct?: boolean } = { userIds: [] }): Promise<{ remoteIds: string[] }> {
+  if (target.direct) return Promise.reject(new Error('钉钉审查通知仅支持机器人群消息，不支持私聊'));
   if (config.transport === 'cli') {
     return callDingtalkCli({ action: 'send', profile: config.cliProfile, robotCode: config.cliRobotCode,
-      ...(target.direct ? {} : { groupId: config.cliGroupId }), userIds: target.userIds, title, text,
+      groupId: config.cliGroupId, userIds: target.userIds, title, text,
     }).then((body) => z.object({ status: z.literal('accepted'), remoteIds: z.array(z.string()) }).parse(body));
   }
-  if (target.direct) return Promise.reject(new Error('Webhook 不支持私聊'));
   const mentions = target.userIds.length ? target.userIds.map((id) => `@${id}`).join(' ') + '\n\n' : '';
   const url = signedUrl(config.webhook, config.secret);
   return axios

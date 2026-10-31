@@ -109,9 +109,8 @@ describe('真实 Pi SDK 与 UIMessageStream', () => {
         expect(first.max_tokens).toBe(8192);
         expect(first).not.toHaveProperty('max_completion_tokens');
         expect(first).not.toHaveProperty('store');
-        expect(first.tools.map((tool: any) => tool.function.name).sort()).toEqual([
-          'dingtalk_connections', 'dingtalk_contacts', 'dingtalk_message_draft', 'dingtalk_people_search', 'review_run_context',
-        ]);
+        expect(first.tools.map((tool: any) => tool.function.name).sort()).toEqual(['review_run_context']);
+        expect(first.messages[0].content).toContain('继续对话不发送钉钉消息');
         expect(requests[1].messages.find((item: any) => item.role === 'tool')).toMatchObject({ tool_call_id: 'diagnostic', content: expect.stringContaining('模型超时') });
         expect(message).toMatchObject({ id: 'pi-response', role: 'assistant' });
         expect(message?.parts).toEqual(expect.arrayContaining([

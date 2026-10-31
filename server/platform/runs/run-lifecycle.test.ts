@@ -99,23 +99,29 @@ function completedRun(): Promise<Run> {
   }));
 }
 
-async function withNotificationFixture(mode: 'unique' | 'ambiguous' | 'unknown' | 'parallel', operation: (sent: Array<{ userId: string; text: string }>) => Promise<void>) {
+async function withNotificationFixture(mode: 'unique' | 'ambiguous' | 'unknown' | 'parallel' | 'wrong-employee' | 'disabled-repo' | 'changed-robot', operation: (sent: Array<{ userId: string; text: string }>, payloads: Array<Record<string, unknown>>) => Promise<void>) {
   const previous = { url: process.env.DINGTALK_WORKER_URL, token: process.env.DINGTALK_WORKER_TOKEN, publicUrl: process.env.APP_PUBLIC_URL };
   const model = await prisma.aIModel.findUniqueOrThrow({ where: { id: modelId } });
+  const repository = await prisma.repository.findUniqueOrThrow({ where: { id: repositoryId }, select: { enableDingtalk: true, dingtalkRobotId: true } });
   const sent: Array<{ userId: string; text: string }> = [];
+  const payloads: Array<Record<string, unknown>> = [];
+  let webhookRobotId: string;
   const { createDingtalkWorker } = await import('@server/platform/dingtalk/cli-worker');
   const token = randomUUID();
   const worker = createDingtalkWorker(token, (input) => {
     if (input.action === 'auth-status') return Promise.resolve({ authenticated: true, tokenValid: true, profile: 'corp:user', userName: '授权人', corpName: '测试组织', reason: null });
     if (input.action === 'search') {
       expect(input.query).toBe('251111'); expect(input.dimension).toBe('jobNumber');
-      return Promise.resolve({ people: [{ userId: 'verified-submitter', name: '提交人', employeeNo: '251111' }], returnedCount: mode === 'ambiguous' ? 2 : 1 });
+      return Promise.resolve({ people: [{ userId: 'verified-submitter', name: '提交人' }], returnedCount: mode === 'ambiguous' ? 2 : 1 });
     }
-    if (input.action !== 'send-user') throw new Error('通知调用了非预期命令');
-    expect(input.profile).toBe('corp:user');
-    expect(input.idempotencyKey).toContain('review');
-    sent.push({ userId: input.userId, text: input.text });
-    return mode === 'unknown' ? Promise.reject(new Error('模拟外部连接中断')) : Promise.resolve({ status: 'accepted' as const, remoteIds: ['confirmed-message'] });
+    if (input.action === 'person') {
+      expect(input.userId).toBe('verified-submitter');
+      const detail = { userId: input.userId, name: '提交人', employeeNo: mode === 'wrong-employee' ? 'different-employee' : '251111' };
+      if (mode === 'changed-robot') return prisma.dingtalkRobot.findUniqueOrThrow({ where: { id: webhookRobotId } }).then((row) =>
+        prisma.dingtalkRobot.update({ where: { id: row.id }, data: { webhookUrl: row.webhookUrl!.replace('/webhook', '/other-group') } })).then(() => detail);
+      return mode === 'disabled-repo' ? prisma.repository.update({ where: { id: repositoryId }, data: { enableDingtalk: false } }).then(() => detail) : Promise.resolve(detail);
+    }
+    throw new Error('群通知不得调用个人私聊命令');
   });
   let workerServer: ReturnType<typeof serve>;
   const modelServer = createModelServer((request, response) => {
@@ -123,6 +129,14 @@ async function withNotificationFixture(mode: 'unique' | 'ambiguous' | 'unknown' 
     request.on('data', (chunk) => { body += chunk; });
     request.on('end', () => {
       const input = JSON.parse(body);
+      if (request.url?.startsWith('/webhook') || request.url?.startsWith('/other-group')) {
+        payloads.push(input);
+        sent.push({ userId: input.at?.atUserIds?.join(',') ?? '', text: input.markdown?.text ?? '' });
+        if (mode === 'unknown') { request.socket.destroy(); return; }
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ errcode: 0, errmsg: 'ok' }));
+        return;
+      }
       const result = input.messages.filter((item: any) => item.role === 'tool').at(-1);
       const lastAssistant = input.messages.filter((item: any) => item.role === 'assistant').at(-1);
       const lastTool = lastAssistant?.tool_calls?.at(-1)?.function?.name;
@@ -139,12 +153,16 @@ async function withNotificationFixture(mode: 'unique' | 'ambiguous' | 'unknown' 
   process.env.DINGTALK_WORKER_TOKEN = token;
   process.env.APP_PUBLIC_URL = 'http://platform.example.invalid';
   await prisma.aIModel.update({ where: { id: modelId }, data: { apiBaseUrl: `http://127.0.0.1:${(modelServer.address() as { port: number }).port}/v1` } });
+  const robot = await prisma.dingtalkRobot.create({ data: { name: '本地群报告机器人', webhookUrl: `http://127.0.0.1:${(modelServer.address() as { port: number }).port}/webhook`, secret: 'fixture-signing-secret' } });
+  webhookRobotId = robot.id;
+  await prisma.repository.update({ where: { id: repositoryId }, data: { enableDingtalk: true, dingtalkRobotId: robot.id } });
   const { ensureGlobalDingtalkCli } = await import('@server/modules/notifications/dingtalk-global.service');
   const global = await ensureGlobalDingtalkCli();
   await prisma.dingtalkRobot.update({ where: { id: global.id }, data: { enabled: true } });
-  try { await operation(sent); } finally {
+  try { await operation(sent, payloads); } finally {
     workerServer!.close(); modelServer.closeAllConnections(); await new Promise<void>((resolve) => modelServer.close(() => resolve()));
     await prisma.aIModel.update({ where: { id: modelId }, data: { apiBaseUrl: model.apiBaseUrl } });
+    await prisma.repository.update({ where: { id: repositoryId }, data: repository });
     for (const [key, value] of Object.entries({ DINGTALK_WORKER_URL: previous.url, DINGTALK_WORKER_TOKEN: previous.token, APP_PUBLIC_URL: previous.publicUrl })) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
@@ -322,29 +340,29 @@ describe('发布资格与恢复', () => {
     .then(() => expect(publication.claimRunDelivery(run.id, 'gitlab', true)).rejects.toMatchObject({ status: 409 }))
     .finally(() => prisma.repository.update({ where: { id: repositoryId }, data: { enableMrComment: false } }))));
 
-  it('OCR 没有发现问题时跳过 CLI，不创建 Agent 或发送请求', () => completedRun().then((run) => publication.publishRun(run.id, 'dingtalk-cli', false)
-    .then(() => prisma.run.findUniqueOrThrow({ where: { id: run.id } }))
-    .then((saved) => expect(saved.deliveries).toMatchObject({ 'dingtalk-cli': { status: 'skipped' } }))));
+  it('OCR 没有发现问题时只发原群报告，不 @ 人或私聊', () => withNotificationFixture('unique', async (sent) => {
+    const run = await completedRun();
+    await publication.publishRun(run.id, 'dingtalk', false);
+    expect(sent).toEqual([{ userId: '', text: expect.stringContaining('本次报告正文') }]);
+  }));
 
   it('未配置共享 CLI 时跳过问题通知，不把未启用记成失败', async () => {
-    expect(await prisma.dingtalkRobot.count({ where: { cliSingleton: true } })).toBe(0);
     const run = await completedRun();
     await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
-    await publication.publishRun(run.id, 'dingtalk-cli', false);
-    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ 'dingtalk-cli': { status: 'skipped' } });
-    expect(await prisma.dingtalkRobot.count({ where: { cliSingleton: true } })).toBe(0);
+    await publication.publishRun(run.id, 'dingtalk', false);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ dingtalk: { status: 'skipped' } });
   });
 
-  it('停用全局 CLI 时正常跳过通知，不记为发送失败', () => withNotificationFixture('unique', async (sent) => {
+  it('停用全局 CLI 只关闭 @，仍发送原机器人群报告', () => withNotificationFixture('unique', async (sent) => {
     const { ensureGlobalDingtalkCli } = await import('@server/modules/notifications/dingtalk-global.service');
     const connection = await ensureGlobalDingtalkCli();
     await prisma.dingtalkRobot.update({ where: { id: connection.id }, data: { enabled: false } });
     try {
       const run = await completedRun();
       await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
-      await publication.publishRun(run.id, 'dingtalk-cli', false);
-      expect(sent).toHaveLength(0);
-      expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ 'dingtalk-cli': { status: 'skipped' } });
+      await publication.publishRun(run.id, 'dingtalk', false);
+      expect(sent).toEqual([{ userId: '', text: expect.stringContaining('本次报告正文') }]);
+      expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ dingtalk: { status: 'sent' } });
     } finally { await prisma.dingtalkRobot.update({ where: { id: connection.id }, data: { enabled: true } }); }
   }));
 
@@ -374,44 +392,62 @@ describe('发布资格与恢复', () => {
     }
   });
 
-  it('仓库未启用 Webhook 也由全局 Pi 核实工号并私聊提交人，重复发布不重发', () => withNotificationFixture('unique', async (sent) => {
+  it('OCR 问题报告只向原机器人群发送一条，并 @ 已核实提交人，不私聊', () => withNotificationFixture('unique', async (sent, payloads) => {
     const run = await completedRun();
     await prisma.session.update({ where: { id: run.sessionId }, data: { author: '提交人', authorUsername: '251111' } });
     await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在重复提交问题' }] } } });
-    expect((await prisma.repository.findUniqueOrThrow({ where: { id: repositoryId } })).enableDingtalk).toBe(false);
-    await Promise.all([publication.publishRun(run.id, 'dingtalk-cli', false), publication.publishRun(run.id, 'dingtalk-cli', false)]);
+    await Promise.all([publication.publishRun(run.id, 'dingtalk', false), publication.publishRun(run.id, 'dingtalk', false)]);
     expect(sent).toEqual([{ userId: 'verified-submitter', text: expect.stringContaining(`/runs/${run.id}`) }]);
+    expect(sent[0].text).toMatch(/^@verified-submitter\s/);
+    expect(sent[0].text).toContain('本次报告正文');
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0].at).toEqual({ atUserIds: ['verified-submitter'], isAtAll: false });
     const saved = await prisma.run.findUniqueOrThrow({ where: { id: run.id } });
-    expect(saved.deliveries).toMatchObject({ 'dingtalk-cli': { status: 'sent', remoteIds: ['confirmed-message'], steps: expect.arrayContaining(['dingtalk_notify_submitter：完成']) } });
+    expect(saved.deliveries).toMatchObject({ dingtalk: { status: 'sent', steps: expect.arrayContaining(['dingtalk_notify_submitter：完成']) } });
+    expect(saved.deliveries).not.toHaveProperty('dingtalk-cli');
   }));
 
   it('工号不能唯一核实则停止通知，不按名字或 GitLab ID 猜测', () => withNotificationFixture('ambiguous', async (sent) => {
     const run = await completedRun();
     await prisma.session.update({ where: { id: run.sessionId }, data: { authorUsername: '251111' } });
     await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'partial', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
-    await expect(publication.publishRun(run.id, 'dingtalk-cli', false)).rejects.toBeInstanceOf(publication.PublicationError);
+    await expect(publication.publishRun(run.id, 'dingtalk', false)).rejects.toBeInstanceOf(publication.PublicationError);
     expect(sent).toHaveLength(0);
-    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ 'dingtalk-cli': { status: 'failed' } });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ dingtalk: { status: 'failed' } });
   }));
 
-  it('Pi 同一轮并行请求两次通知时，只执行一次 CLI 发送', () => withNotificationFixture('parallel', async (sent) => {
+  it('Pi 同一轮并行请求两次通知时，只发送一条群报告', () => withNotificationFixture('parallel', async (sent) => {
     const run = await completedRun();
     await prisma.session.update({ where: { id: run.sessionId }, data: { authorUsername: '251111' } });
     await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
-    await publication.publishRun(run.id, 'dingtalk-cli', false);
+    await publication.publishRun(run.id, 'dingtalk', false);
     expect(sent).toHaveLength(1);
-    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ 'dingtalk-cli': { status: 'sent' } });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ dingtalk: { status: 'sent' } });
   }));
 
-  it('CLI 发送结果未知时记录 unknown，自动通知不会重发', () => withNotificationFixture('unknown', async (sent) => {
+  it('群发送结果未知时记录 unknown，自动通知不会重发', () => withNotificationFixture('unknown', async (sent) => {
     const run = await completedRun();
     await prisma.session.update({ where: { id: run.sessionId }, data: { authorUsername: '251111' } });
     await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
-    await expect(publication.publishRun(run.id, 'dingtalk-cli', false)).rejects.toBeInstanceOf(publication.PublicationError);
-    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ 'dingtalk-cli': { status: 'unknown' } });
-    await publication.publishRun(run.id, 'dingtalk-cli', false);
+    await expect(publication.publishRun(run.id, 'dingtalk', false)).rejects.toBeInstanceOf(publication.PublicationError);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ dingtalk: { status: 'unknown' } });
+    await publication.publishRun(run.id, 'dingtalk', false);
     expect(sent).toHaveLength(1);
   }));
+
+  it.each(['wrong-employee', 'disabled-repo', 'changed-robot'] as const)('工号不符或查人中群配置变化时停止发送：%s', (mode) => withNotificationFixture(mode, async (sent) => {
+    const run = await completedRun();
+    await prisma.session.update({ where: { id: run.sessionId }, data: { authorUsername: '251111' } });
+    await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
+    await expect(publication.publishRun(run.id, 'dingtalk', false)).rejects.toBeInstanceOf(publication.PublicationError);
+    expect(sent).toHaveLength(0);
+  }));
+
+  it('旧独立 CLI 私聊发布入口停用，不产生发送资格', async () => {
+    const run = await completedRun();
+    await expect(publication.publishRun(run.id, 'dingtalk-cli', true)).rejects.toMatchObject({ status: 410 });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).not.toHaveProperty('dingtalk-cli');
+  });
 
   it('重启结束丢失进程的任务，同时保留排队任务', () => Promise.all([createSession(), createSession()]).then(([runningSession, queuedSession]) => enqueue(runningSession)
     .then(() => runs.claimNextRun()).then((claimed) => enqueue(queuedSession)

@@ -1,15 +1,10 @@
-import { createHash } from 'node:crypto';
-
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 
-import { dingtalkId, dingtalkMessageDraft, dingtalkProfile, dingtalkSearch } from '@shared/dingtalk';
+import { dingtalkId, dingtalkMessageDraft, dingtalkSearch } from '@shared/dingtalk';
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
 import { requireGlobalDingtalkCli } from './dingtalk-global.service';
 import { saveDingtalkContact } from './dingtalk-directory.service';
-import { callDingtalkCli } from '@server/shared/dingtalk/dingtalk-cli.service';
-
-const sendInput = dingtalkMessageDraft.extend({ profile: dingtalkProfile, requestId: z.string().uuid(), confirmed: z.literal(true) });
 const messageSelect = { id: true, connectionId: true, targetKind: true, recipients: true, title: true,
   status: true, remoteIds: true, error: true, createdAt: true, requestedBy: true, cliProfile: true } as const;
 
@@ -43,34 +38,6 @@ export function prepareDingtalkMessageDraft(body: unknown, signal?: AbortSignal)
   });
 }
 
-export function sendSessionDingtalkMessage(sessionId: string, requestedBy: string, body: unknown) {
-  const input = sendInput.parse(body);
-  const payloadHash = createHash('sha256').update(JSON.stringify({ sessionId, requestedBy, ...input })).digest('hex');
-  return prisma.dingtalkMessage.findUnique({ where: { id: input.requestId } }).then((existing) => {
-    if (existing) {
-      if (existing.payloadHash !== payloadHash) throw new HTTPException(409, { message: '发送请求 ID 已被其他内容使用' });
-      return prisma.dingtalkMessage.findUniqueOrThrow({ where: { id: existing.id }, select: messageSelect });
-    }
-    return prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { id: true } })
-      .then(() => prepareDingtalkMessageDraft({ connectionId: input.connectionId, contactIds: input.contactIds,
-        targetKind: input.targetKind, title: input.title, text: input.text, profile: input.profile })).then(({ global, contacts }) =>
-        prisma.dingtalkMessage.create({ data: {
-          id: input.requestId, sessionId, requestedBy, payloadHash, connectionId: input.connectionId,
-          targetKind: input.targetKind, title: input.title, text: input.text,
-          cliProfile: global.profile,
-          recipients: contacts.map(({ userId, name, employeeNo }) => ({ userId, name, employeeNo })),
-        } }).then(() => callDingtalkCli({ action: 'send-user', profile: global.profile, userId: contacts[0].userId,
-          title: input.title, text: input.text, idempotencyKey: input.requestId,
-        }).then((body) => z.object({ status: z.literal('accepted'), remoteIds: z.array(z.string().min(1)).min(1) }).parse(body)).then((receipt) => prisma.dingtalkMessage.update({ where: { id: input.requestId }, select: messageSelect,
-          data: { status: 'accepted', remoteIds: receipt.remoteIds },
-        }), () => prisma.dingtalkMessage.update({ where: { id: input.requestId }, select: messageSelect, data: {
-          status: 'unknown', error: '发送结果无法确认，请检查钉钉后再决定是否新建发送请求。不会自动重发。',
-        } })), (error: unknown) => {
-          if ((error as { code?: string }).code !== 'P2002') throw error;
-          return prisma.dingtalkMessage.findUniqueOrThrow({ where: { id: input.requestId } }).then((message) => {
-            if (message.payloadHash !== payloadHash) throw new HTTPException(409, { message: '发送请求 ID 已被其他内容使用' });
-            return prisma.dingtalkMessage.findUniqueOrThrow({ where: { id: message.id }, select: messageSelect });
-          });
-        }));
-  });
+export function sendSessionDingtalkMessage(_sessionId: string, _requestedBy: string, _body: unknown): Promise<never> {
+  return Promise.reject(new HTTPException(410, { message: '继续对话中的钉钉私聊已停用，请使用审查报告的机器人群通知' }));
 }

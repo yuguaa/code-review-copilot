@@ -18,6 +18,7 @@ export const dingtalkCliRequest = z.discriminatedUnion('action', [
   z.object({ action: z.literal('login-cancel'), loginId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('status'), profile: dingtalkProfile }).strict(),
   z.object({ action: z.literal('search'), profile: dingtalkProfile, ...dingtalkSearch.shape }).strict(),
+  z.object({ action: z.literal('person'), profile: dingtalkProfile, userId: dingtalkId }).strict(),
   z.object({ action: z.literal('send'), profile: dingtalkProfile, robotCode: dingtalkId,
     groupId: dingtalkId.optional(), userIds: z.array(dingtalkId).max(20),
     title: z.string().trim().min(1).max(200), text: dingtalkText,

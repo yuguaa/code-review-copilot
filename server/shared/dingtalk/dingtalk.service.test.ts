@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { sendDingtalk } from './dingtalk.service';
+import { dingtalkDestinationFingerprint, sendDingtalk } from './dingtalk.service';
 
 const received: unknown[] = [];
 let webhook: string;
@@ -33,6 +33,14 @@ describe('Webhook 兼容发送', () => {
 
   it('HTTP 200 下的机器人业务错误仍然拒绝，Webhook 不模拟私聊', async () => {
     await expect(sendDingtalk({ webhook: `${webhook}/failed` }, '标题', '正文')).rejects.toThrow('钉钉发送失败：310000');
-    await expect(sendDingtalk({ webhook }, '标题', '正文', { userIds: ['ding-user'], direct: true })).rejects.toThrow('Webhook 不支持私聊');
+    await expect(sendDingtalk({ webhook }, '标题', '正文', { userIds: ['ding-user'], direct: true })).rejects.toThrow('不支持私聊');
+  });
+
+  it('同一机器人修改目标或 Secret 时指纹变化，不暴露配置原文', () => {
+    const current = dingtalkDestinationFingerprint({ webhook, secret: 'old-secret' });
+    expect(current).toMatch(/^[a-f0-9]{64}$/);
+    expect(current).not.toBe(dingtalkDestinationFingerprint({ webhook: `${webhook}/other-group`, secret: 'old-secret' }));
+    expect(current).not.toBe(dingtalkDestinationFingerprint({ webhook, secret: 'new-secret' }));
+    expect(dingtalkDestinationFingerprint({ webhook })).toBe(dingtalkDestinationFingerprint({ webhook, secret: null }));
   });
 });

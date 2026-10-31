@@ -178,7 +178,7 @@ describe('真实 PostgreSQL 会话与消息树', () => {
     }).then((exists) => expect(exists).toBe(false)));
 });
 
-describe('Pi 钉钉工具使用真实平台配置和名单', () => {
+describe('历史钉钉草稿与收件人缓存兼容', () => {
   let connectionId: string;
   let contactId: string;
   let foreignContactId: string;
@@ -187,6 +187,16 @@ describe('Pi 钉钉工具使用真实平台配置和名单', () => {
     if (!tool) throw new Error(`未注册工具 ${name}`);
     return tool.execute('dingtalk-test', input as never, undefined, undefined, {} as never);
   };
+
+  it('旧会话私聊 API 返回 410，读取历史仍可用，不产生发送记录', async () => {
+    const response = await app.request(`/sessions/${firstSession}/dingtalk-messages`, { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirmed: true, text: '不得发送' }) });
+    expect(response.status).toBe(410);
+    const history = await app.request(`/sessions/${firstSession}/dingtalk-messages`);
+    expect(history.status).toBe(200);
+    expect(await history.json()).toEqual({ messages: [] });
+    expect(await prisma.dingtalkMessage.count()).toBe(0);
+  });
 
   it('连接与名单只暴露启用数据，不向 Pi 返回机器人凭据', () => prisma.dingtalkRobot.create({ data: {
     name: 'Pi 连接', transport: 'cli', cliSingleton: true, enabled: true, cliProfile: 'corp:user', secret: 'private-secret',
@@ -221,38 +231,33 @@ describe('Pi 钉钉工具使用真实平台配置和名单', () => {
     }).then((results) => expect(results.at(-1)).toBe(0));
   });
 
-  it('模型不能伪造确认字段，实际发送仍要求确认', () => {
+  it('旧草稿不能用于私聊写入，确认字段也无法恢复此能力', () => {
     const draft = { connectionId, contactIds: [contactId], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
-    expect(() => dingtalkMessages.sendSessionDingtalkMessage(firstSession, 'tester', { ...draft, requestId: randomUUID() })).toThrow();
-    return expect(execute('dingtalk_message_draft', { ...draft, confirmed: true })).rejects.toThrow();
+    return expect(dingtalkMessages.sendSessionDingtalkMessage(firstSession, 'tester', { ...draft, requestId: randomUUID() })).rejects.toMatchObject({ status: 410 })
+      .then(() => expect(execute('dingtalk_message_draft', { ...draft, confirmed: true })).rejects.toThrow());
   });
 });
 
 describe('Pi 追问的完整 Service 与持久化流程', () => {
-  it('通过配置模型生成钉钉草稿，SSE 和数据库一致，停止后释放聊天资格', async () => {
-    const connection = await prisma.dingtalkRobot.findFirstOrThrow({ where: { name: 'Pi 连接' } });
-    const contact = await prisma.dingtalkContact.findFirstOrThrow({ where: { connectionId: connection.id, enabled: true } });
-    const draft = { connectionId: connection.id, contactIds: [contact.id], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
+  it('继续对话不开放钉钉发送工具，SSE 和数据库一致，停止后释放聊天资格', async () => {
     let waiting = false;
     let requestCount = 0;
+    const requests: Array<{ tools?: Array<{ function: { name: string } }> }> = [];
     let requestStarted: () => void;
     const requested = new Promise<void>((resolve) => { requestStarted = resolve; });
     const server = createModelServer((request, response) => {
-      request.resume();
+      let body = '';
+      request.on('data', (chunk) => { body += chunk; });
       request.on('end', () => {
+        requests.push(JSON.parse(body));
         requestCount += 1;
         response.writeHead(200, { 'content-type': 'text/event-stream' });
         response.flushHeaders();
         if (waiting) { requestStarted(); return; }
-        const tool = requestCount === 1 ? { name: 'dingtalk_connections', arguments: '{}' }
-          : requestCount === 2 ? { name: 'dingtalk_contacts', arguments: JSON.stringify({ connectionId: connection.id }) }
-            : requestCount === 3 ? { name: 'dingtalk_message_draft', arguments: JSON.stringify(draft) } : null;
         const chunk = (delta: unknown, finish: string | null = null) => `data: ${JSON.stringify({ id: `service-${requestCount}`, object: 'chat.completion.chunk',
           model: 'service-test', created: 1, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
-        response.end(chunk({ role: 'assistant' }) + (tool
-          ? chunk({ tool_calls: [{ index: 0, id: `call-${requestCount}`, type: 'function', function: tool }] })
-          : chunk({ content: '消息草稿已准备好，尚未发送，请在平台确认。' }))
-          + chunk({}, tool ? 'tool_calls' : 'stop') + 'data: [DONE]\n\n');
+        response.end(chunk({ role: 'assistant' }) + chunk({ content: '继续对话仅解释报告，群通知由审查发布流程处理。' })
+          + chunk({}, 'stop') + 'data: [DONE]\n\n');
       });
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -264,14 +269,13 @@ describe('Pi 追问的完整 Service 与持久化流程', () => {
       const session = await services.createChatSession({});
       const response = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, messages: [message(randomUUID(), '请私聊名单中的启用人员，请核对报告')] });
       const sse = await response.text();
-      expect(requestCount).toBe(4);
-      expect(sse).toContain('dingtalk_message_draft');
-      expect(sse).toContain('requiresConfirmation');
+      expect(requestCount).toBe(1);
+      expect(requests[0].tools ?? []).toHaveLength(0);
+      expect(sse).toContain('群通知由审查发布流程处理');
       expect(sse).not.toContain('private-');
       const tree = await store.loadSessionMessageTree(session.id);
       expect(tree.messages).toHaveLength(2);
-      expect(tree.messages[1].parts).toContainEqual(expect.objectContaining({ type: 'dynamic-tool', toolName: 'dingtalk_message_draft',
-        state: 'output-available', output: expect.objectContaining({ requiresConfirmation: true, draft: { ...draft, profile: 'corp:user' } }) }));
+      expect(tree.messages[1].parts).toContainEqual(expect.objectContaining({ type: 'text', text: '继续对话仅解释报告，群通知由审查发布流程处理。' }));
       expect(await prisma.dingtalkMessage.count()).toBe(0);
       const runtime = await import('@server/platform/chat/chat-runtime');
       expect(runtime.isChatSessionActive(session.id)).toBe(false);
@@ -283,7 +287,7 @@ describe('Pi 追问的完整 Service 与持久化流程', () => {
       await runtime.stopChatSession(session.id);
       expect(await output).toContain('"type":"abort"');
       expect(runtime.isChatSessionActive(session.id)).toBe(false);
-      expect(requestCount).toBe(5);
+      expect(requestCount).toBe(2);
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

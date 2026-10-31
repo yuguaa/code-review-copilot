@@ -29,13 +29,13 @@ export function DingtalkCliCard() {
   }, [pendingLogin, resource.reload]);
   return <Card>
     <CardHeader><CardTitle className="flex flex-wrap items-center gap-2">平台共享钉钉 CLI<Badge variant={authenticated ? 'outline' : 'secondary'}>{pendingLogin ? '等待扫码授权' : authenticated ? '已登录' : '未登录'}</Badge></CardTitle>
-      <CardDescription>全平台仅一条连接，所有仓库自动共用。OCR 发现问题后，由 Pi 按提交人工号核实身份并私聊通知；没有问题不发送。</CardDescription>
+      <CardDescription>全平台仅一条连接，所有仓库共用。OCR 发现问题后，由 Pi 通过 CLI 核实提交人工号，在仓库已配置的机器人群报告里 @ 他，不发送私聊。</CardDescription>
       {authenticated && <p className="text-sm">登录身份：{state?.auth.corpName} / {state?.auth.userName}</p>}
     </CardHeader>
     <CardContent className="flex flex-col gap-4">
       <ActionError error={resource.error ?? action.error} />
-      <p className="text-xs leading-6 text-muted-foreground">扫码后在钉钉官方页面确认登录和 CLI 数据权限，完成授权后启用全局问题通知。平台不要求填写 Profile、Robot Code 或群 ID，也不需要维护人员名单。收件人无法唯一核实时会停止通知并记录原因。</p>
-      {state && <Checkbox label="启用全局 CLI 和审查问题通知" checked={state.connection.enabled} disabled={Boolean(action.pending) || pendingLogin}
+      <p className="text-xs leading-6 text-muted-foreground">扫码后在钉钉官方页面确认 CLI 通讯录权限。群和机器人沿用仓库的 Webhook 配置，无需另填群 ID、Robot Code 或人员名单。同一次审查只发一条群报告，工号无法唯一核实时停止发送并记录原因。</p>
+      {state && <Checkbox label="启用 CLI 工号识别和群内 @ 提交人" checked={state.connection.enabled} disabled={Boolean(action.pending) || pendingLogin}
         onChange={(enabled) => action.execute('toggle', () => update('', 'PATCH', { enabled }))} />}
       <div className="flex flex-wrap gap-2">
         <Button disabled={Boolean(action.pending) || pendingLogin} onClick={() => action.execute('login', () => update('/login', 'POST'))}>{action.pending === 'login' ? '正在发起授权…' : authenticated ? '重新扫码登录' : '扫码登录并授权'}</Button>

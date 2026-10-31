@@ -12,13 +12,13 @@ export type DingtalkRepositoryConfig = {
   dingtalkRobotId: string | null;
 };
 
-export { sendDingtalk as sendDingtalkNotification } from "@server/shared/dingtalk/dingtalk.service";
+export { dingtalkDestinationFingerprint, sendDingtalk as sendDingtalkNotification } from "@server/shared/dingtalk/dingtalk.service";
 
 export function validateDingtalkTarget(client: Pick<Prisma.TransactionClient, "dingtalkRobot">, id: string | null | undefined, required: boolean): Promise<void> {
   if (!id) return required ? Promise.reject(new HTTPException(400, { message: "请选择钉钉机器人" })) : Promise.resolve();
   return client.dingtalkRobot.findUnique({ where: { id } }).then((robot) => {
     if (!robot) throw new HTTPException(400, { message: "所选钉钉机器人不存在" });
-    if (robot.transport === 'cli') throw new HTTPException(400, { message: '共享 CLI 自动通知所有仓库，不需也不能关联单个仓库、订阅或安全目标' });
+    if (robot.transport === 'cli') throw new HTTPException(400, { message: '共享 CLI 仅用于识别提交人，请选择群通知的 Webhook 机器人' });
     if (required && !robot.enabled) throw new HTTPException(400, { message: "所选钉钉机器人已停用" });
     if (required && !dingtalkConnectionConfigured(robot)) throw new HTTPException(400, { message: "所选钉钉连接配置不完整" });
   });

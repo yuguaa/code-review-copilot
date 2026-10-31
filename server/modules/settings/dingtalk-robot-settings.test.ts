@@ -171,7 +171,7 @@ describe('真实 PostgreSQL 多钉钉机器人', () => {
       .then(() => request(`/api/settings/dingtalk/${robotId}`, 'PATCH', { name: '不存在' }, 404));
   }, 60_000);
 
-  it('CLI 只允许一个扫码登录身份，所有仓库共享，私聊请求仍然去重并保留回执', async () => {
+  it('CLI 只允许一个扫码登录身份，私聊写入停用，历史投递记录保留', async () => {
     const connection = { name: 'CLI 连接', transport: 'cli', cliProfile: 'corp-a:user-a', cliRobotCode: 'test-bot', cliGroupId: 'test-group' };
     await request('/api/settings/dingtalk', 'POST', { name: '缺少 CLI 配置', transport: 'cli' }, 400);
     await request('/api/settings/dingtalk', 'POST', connection, 400);
@@ -194,23 +194,18 @@ describe('真实 PostgreSQL 多钉钉机器人', () => {
     const session = await prisma.session.create({ data: { kind: 'chat' } });
     const send = { requestId: randomUUID(), connectionId: robot.id, profile: connection.cliProfile, targetKind: 'direct', title: '审查讨论', text: '经用户确认的正文', contactIds: [contact.id], confirmed: true };
     const before = cliSendCount;
-    await Promise.all([messageServices.sendSessionDingtalkMessage(session.id, 'admin', send), messageServices.sendSessionDingtalkMessage(session.id, 'admin', send)]);
-    expect(cliSendCount - before).toBe(1);
+    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', send)).rejects.toMatchObject({ status: 410 });
+    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, confirmed: false })).rejects.toMatchObject({ status: 410 });
+    expect(cliSendCount).toBe(before);
+    await prisma.dingtalkMessage.create({ data: { id: send.requestId, connectionId: robot.id, sessionId: session.id,
+      requestedBy: 'admin', payloadHash: 'historical-message', targetKind: 'direct', recipients: [{ name: contact.name, userId: 'ding-user-1' }],
+      title: send.title, text: send.text, status: 'accepted', cliProfile: connection.cliProfile } });
     expect((await messageServices.listDingtalkMessages(session.id))[0]).toMatchObject({ status: 'accepted', recipients: [{ name: contact.name, userId: 'ding-user-1' }] });
-    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, text: '不同正文' })).rejects.toMatchObject({ status: 409 });
-    expect(() => messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), confirmed: false })).toThrow();
-    rejectSends = true;
-    const failedRequest = { ...send, requestId: randomUUID() };
-    const beforeFailure = cliSendCount;
-    expect(await messageServices.sendSessionDingtalkMessage(session.id, 'admin', failedRequest)).toMatchObject({ status: 'unknown' });
-    await messageServices.sendSessionDingtalkMessage(session.id, 'admin', failedRequest);
-    expect(cliSendCount - beforeFailure).toBe(1);
-    rejectSends = false;
     activeProfile = 'corp-b:user-b';
     await request('/api/settings/dingtalk/cli');
     expect(await prisma.dingtalkContact.findUniqueOrThrow({ where: { id: contact.id } })).toMatchObject({ enabled: false, employeeNo: null, cliProfile: connection.cliProfile });
     await request(`/api/settings/dingtalk/${robot.id}/contacts/${contact.id}`, 'PATCH', { enabled: true });
-    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), profile: activeProfile })).rejects.toMatchObject({ status: 400 });
+    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), profile: activeProfile })).rejects.toMatchObject({ status: 410 });
     expect((await messageServices.listDingtalkMessages(session.id)).find((item) => item.id === send.requestId)).toMatchObject({ cliProfile: connection.cliProfile });
     activeProfile = connection.cliProfile;
     await request('/api/settings/dingtalk/cli');
@@ -220,7 +215,7 @@ describe('真实 PostgreSQL 多钉钉机器人', () => {
     await messageServices.recoverDingtalkMessages();
     expect(await prisma.dingtalkMessage.findUniqueOrThrow({ where: { id: pendingId } })).toMatchObject({ status: 'unknown' });
     await request('/api/settings/dingtalk', 'POST', { ...connection, name: '其他组织', cliProfile: 'corp-b:user-b' }, 400);
-    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), profile: 'corp-b:user-b' })).rejects.toMatchObject({ status: 409 });
+    await expect(messageServices.sendSessionDingtalkMessage(session.id, 'admin', { ...send, requestId: randomUUID(), profile: 'corp-b:user-b' })).rejects.toMatchObject({ status: 410 });
     await request(`/api/settings/dingtalk/${robot.id}`, 'DELETE', undefined, 409);
     await request('/api/settings/dingtalk/cli', 'PATCH', { enabled: false });
     await expect(notifications.loadDingtalkConfig(robot.id)).rejects.toThrow('停用');
