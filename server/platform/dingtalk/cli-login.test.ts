@@ -20,9 +20,12 @@ describe('DWS 原生设备登录生命周期', () => {
     await mkdir(directory, { recursive: true });
     await writeFile(fixture, `console.error('授权码: TEST-CODE'); console.error('https://login.dingtalk.com/oauth/device?user_code=TEST-CODE'); setTimeout(()=>console.log(JSON.stringify({success:true,token_valid:true,corp_id:'corp',user_id:'user'})),200);`);
     let count = 0;
+    const previousKeychain = process.env.DWS_KEYCHAIN_DIR;
+    process.env.DWS_KEYCHAIN_DIR = path.join(directory, 'keychain');
     const manager = createDwsLoginManager((_command, args, options) => {
       count += 1;
       expect(args).toEqual(['auth', 'login', '--device', '--no-browser', '--recommend', '--yes', '--format=json']);
+      expect(options?.env?.DWS_KEYCHAIN_DIR).toBe(process.env.DWS_KEYCHAIN_DIR);
       return executeProcess(process.execPath, [fixture], options);
     });
     try {
@@ -34,7 +37,10 @@ describe('DWS 原生设备登录生命周期', () => {
       await vi.waitFor(() => expect(manager.state()?.status).toBe('completed'));
       expect(count).toBe(1);
       expect(JSON.stringify(manager.state())).not.toContain('token_valid');
-    } finally { await manager.stop(); }
+    } finally {
+      await manager.stop();
+      if (previousKeychain === undefined) delete process.env.DWS_KEYCHAIN_DIR; else process.env.DWS_KEYCHAIN_DIR = previousKeychain;
+    }
   });
 
   it('取消会终止并回收原生登录进程，不允许旧登录覆盖新状态', async () => {

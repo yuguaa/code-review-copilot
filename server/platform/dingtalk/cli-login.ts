@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 
 import { executeProcess } from '@server/infrastructure/process/process.service';
+import { dwsEnvironment } from './cli-runtime';
 
 import type { DingtalkLoginState } from '@shared/dingtalk';
 
@@ -48,8 +49,7 @@ export function createDwsLoginManager(execute = executeProcess) {
       };
       pending = execute(process.env.DWS_BIN || 'dws', ['auth', 'login', '--device', '--no-browser', '--recommend', '--yes', '--format=json'], {
         signal: controller.signal, timeoutMs: 10 * 60_000, maxBytes: 2 * 1024 * 1024, onStderr: consume,
-        env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C.UTF-8', DWS_LANG: 'zh',
-          DWS_CONFIG_DIR: process.env.DWS_CONFIG_DIR, DWS_NO_UPDATE_CHECK: '1' },
+        env: { ...dwsEnvironment(), DWS_LANG: 'zh' },
       }).then((result) => {
         if (login.status === 'cancelled') return;
         if (result.error || result.code !== 0) throw new Error('钉钉 CLI 授权未完成，请重新扫码并检查企业权限');

@@ -91,6 +91,8 @@ docker compose --profile dingtalk up -d --build dingtalk-worker
 
 认证状态保存在专用 `dingtalk_auth` 卷，不复制个人电脑登录态，不通过平台 API 返回 Token。更换登录身份时停用旧身份的人员缓存，核实提交人与发送群报告前重新检查 Profile。数据库约束确保平台最多只有一条 CLI 连接；历史环境存在多条 CLI 时，迁移会明确失败，必须先由管理员核对，不能静默删除配置。
 
+Linux CLI 的真实凭据默认放在 `$HOME/.local/share/dws-cli` 的原生加密钥匙串中，`.dws/token.json` 只是元数据。Worker 将 `DWS_KEYCHAIN_DIR` 固定到已持久化卷内的 `/home/node/.dws/keychain`，登录与查询子进程共用同一环境，连同加密密钥和凭据一起保留。仅挂载 `.dws` 元数据而未保存原钥匙串的旧部署，需要重新扫码一次；不能从元数据恢复已丢失的凭据。
+
 发起扫码时暂停全局 CLI 通知，仅在对应登录与授权完整成功后启用一次；取消、失败或手动关闭后保持停用。迟到的登录与身份查询响应不能覆盖后来的关闭操作或新身份。
 
 OCR 审查结果存在问题且共享 CLI 已启用时，Pi 使用已保存的 GitLab 用户名作为工号，通过 `aisearch person --dimension=jobNumber` 查询唯一候选，再用 `contact user get --ids=<真实 userId>` 从人员详情核对工号。搜索返回的 userId 即使与工号相同也只能作为工具真实返回使用，不允许自行拿工号或 GitLab 数字 ID 拼接收件人。工号缺失、不符、多候选或授权不足时停止发送并记录原因。

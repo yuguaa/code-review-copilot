@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
-import { buildDwsCommand, parseDwsResult } from './cli-runtime';
+import { buildDwsCommand, parseDwsResult, runDws } from './cli-runtime';
 import { createDingtalkWorker } from './cli-worker';
 
 import type { DingtalkCliRequest } from '@shared/dingtalk';
@@ -9,6 +13,21 @@ const request: Extract<DingtalkCliRequest, { action: 'send' }> = { action: 'send
   robotCode: 'bot-1', groupId: 'cid-test', userIds: ['actual-dingtalk-user'], title: 'Review', text: '@./secret $(whoami)\n报告正文' };
 
 describe('DWS 调用边界', () => {
+  it('实际子进程同时使用持久化配置目录和加密钥匙串目录', async () => {
+    const directory = path.resolve('temp', `dws-keychain-${randomUUID()}`);
+    const binary = path.join(directory, 'dws-fixture.cjs');
+    const keychain = path.join(directory, 'keychain');
+    await mkdir(directory, { recursive: true });
+    await writeFile(binary, `#!/usr/bin/env node\nif(process.env.DWS_KEYCHAIN_DIR!==${JSON.stringify(keychain)})process.exit(7);console.log(JSON.stringify({authenticated:true,token_valid:true,corp_id:'corp',user_id:'user'}));\n`, { mode: 0o700 });
+    const previous = { binary: process.env.DWS_BIN, keychain: process.env.DWS_KEYCHAIN_DIR };
+    process.env.DWS_BIN = binary; process.env.DWS_KEYCHAIN_DIR = keychain;
+    try { expect(await runDws({ action: 'auth-status' })).toMatchObject({ authenticated: true, tokenValid: true, profile: 'corp:user' }); }
+    finally {
+      if (previous.binary === undefined) delete process.env.DWS_BIN; else process.env.DWS_BIN = previous.binary;
+      if (previous.keychain === undefined) delete process.env.DWS_KEYCHAIN_DIR; else process.env.DWS_KEYCHAIN_DIR = previous.keychain;
+    }
+  });
+
   it('个人私聊命令和回执解析已停用，不能绕过群通知流程', () => {
     const input = { action: 'send-user' as const, profile: 'corp:user', userId: 'actual-dingtalk-user', idempotencyKey: 'review-fixed-key', title: 'Review', text: '![不得上传](./credentials) @literal' };
     expect(() => buildDwsCommand(input)).toThrow('私聊已停用');

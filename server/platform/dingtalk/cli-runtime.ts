@@ -5,6 +5,11 @@ import { executeProcess } from '@server/infrastructure/process/process.service';
 
 import type { DingtalkCliRequest } from '@shared/dingtalk';
 
+export function dwsEnvironment(): NodeJS.ProcessEnv {
+  return { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C.UTF-8',
+    DWS_CONFIG_DIR: process.env.DWS_CONFIG_DIR, DWS_KEYCHAIN_DIR: process.env.DWS_KEYCHAIN_DIR, DWS_NO_UPDATE_CHECK: '1' };
+}
+
 export function buildDwsCommand(input: DingtalkCliRequest): { args: string[]; stdin?: string } {
   const request = dingtalkCliRequest.parse(input);
   if (request.action === 'auth-status') return { args: ['auth', 'status', '--format=json', '--timeout=30'] };
@@ -62,8 +67,7 @@ export function runDws(request: DingtalkCliRequest) {
   const { args, stdin } = buildDwsCommand(request);
   return executeProcess(process.env.DWS_BIN || 'dws', args, {
     stdin, timeoutMs: 50_000, maxBytes: 2 * 1024 * 1024,
-    env: { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C.UTF-8',
-      DWS_CONFIG_DIR: process.env.DWS_CONFIG_DIR, DWS_NO_UPDATE_CHECK: '1' },
+    env: dwsEnvironment(),
   }).then((result) => {
     if (result.error || result.code !== 0) {
       /* CLI 输出可能包含正文或凭据，只向平台返回稳定错误码。 */

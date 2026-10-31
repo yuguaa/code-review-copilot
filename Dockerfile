@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
   && rm -rf /var/lib/apt/lists/* \
   && DWS_NO_SKILLS=1 npm install --prefix /opt/dws --global dingtalk-workspace-cli@1.0.66 \
   && mkdir -p /home/node/.dws && chown node:node /home/node/.dws
+ENV DWS_KEYCHAIN_DIR=/home/node/.dws/keychain
 COPY --from=builder --chown=node:node /app/dist/dingtalk-worker.cjs ./dingtalk-worker.cjs
 USER node
 CMD ["node", "dingtalk-worker.cjs"]
