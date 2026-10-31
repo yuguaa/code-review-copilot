@@ -7,7 +7,6 @@ import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import EmbeddedPostgres from 'embedded-postgres';
-import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -15,15 +14,12 @@ import type { UIMessage } from 'ai';
 
 const executeFile = promisify(execFile);
 const directory = resolve('temp', `sessions-validation-${randomUUID()}`);
-const originalEnv = { DATABASE_URL: process.env.DATABASE_URL, TMPDIR: process.env.TMPDIR,
-  DINGTALK_WORKER_URL: process.env.DINGTALK_WORKER_URL, DINGTALK_WORKER_TOKEN: process.env.DINGTALK_WORKER_TOKEN };
-let dwsServer: ReturnType<typeof serve>;
+const originalEnv = { DATABASE_URL: process.env.DATABASE_URL, TMPDIR: process.env.TMPDIR };
 let postgres: EmbeddedPostgres;
 let prisma: typeof import('@server/infrastructure/prisma/prisma.service').prisma;
 let store: typeof import('./session-message-store.service');
 let services: typeof import('./sessions.service');
 let chat: typeof import('../chat/chat.service');
-let dingtalkTools: ReturnType<typeof import('@server/platform/chat/dingtalk-tools').createDingtalkTools>;
 let dingtalkMessages: typeof import('../notifications/dingtalk-messages.service');
 let app: Hono;
 let firstSession: string;
@@ -56,31 +52,19 @@ beforeAll(() => mkdir(directory, { recursive: true }).then(() => {
 }).then(() => Promise.all([
   import('@server/infrastructure/prisma/prisma.service'), import('./session-message-store.service'), import('./sessions.service'),
   import('../chat/chat.service'), import('./sessions.routes'),
-  import('@server/platform/chat/dingtalk-tools'), import('../notifications/dingtalk-messages.service'),
-  import('@server/platform/dingtalk/cli-worker'),
-])).then(([database, messageStore, sessionServices, chatServices, routes, tools, messages, worker]) => {
+  import('../notifications/dingtalk-messages.service'),
+])).then(([database, messageStore, sessionServices, chatServices, routes, messages]) => {
   prisma = database.prisma;
   store = messageStore;
   services = sessionServices;
   chat = chatServices;
-  dingtalkTools = tools.createDingtalkTools();
   dingtalkMessages = messages;
   app = new Hono().route('/sessions', routes.sessionRoutes);
-  process.env.DINGTALK_WORKER_TOKEN = randomUUID();
-  const workerApp = worker.createDingtalkWorker(process.env.DINGTALK_WORKER_TOKEN, (input) => Promise.resolve(input.action === 'auth-status'
-    ? { authenticated: true, tokenValid: true, profile: 'corp:user', userName: '测试登录人', corpName: '测试组织', reason: null }
-    : input.action === 'search' ? { people: [{ userId: 'real-user', name: '启用人员', employeeNo: '251111' }], returnedCount: 1 }
-      : { status: 'accepted', remoteIds: ['test-receipt'] }));
-  return new Promise<void>((resolve) => {
-    dwsServer = serve({ fetch: workerApp.fetch, port: 0, hostname: '127.0.0.1' }, (address) => {
-      process.env.DINGTALK_WORKER_URL = `http://127.0.0.1:${address.port}`; resolve();
-    });
-  }).then(() => Promise.all([services.createChatSession({}), services.createChatSession({})]));
+  return Promise.all([services.createChatSession({}), services.createChatSession({})]);
 }).then(([first, second]) => { firstSession = first.id; secondSession = second.id; }), 60_000);
 
 afterAll(() => Promise.resolve().then(() => prisma?.$disconnect()).finally(() => postgres?.stop()).finally(() => {
-  dwsServer?.close();
-  for (const name of ['DATABASE_URL', 'TMPDIR', 'DINGTALK_WORKER_URL', 'DINGTALK_WORKER_TOKEN'] as const) {
+  for (const name of ['DATABASE_URL', 'TMPDIR'] as const) {
     if (originalEnv[name] === undefined) delete process.env[name];
     else process.env[name] = originalEnv[name];
   }
@@ -178,16 +162,7 @@ describe('真实 PostgreSQL 会话与消息树', () => {
     }).then((exists) => expect(exists).toBe(false)));
 });
 
-describe('历史钉钉草稿与收件人缓存兼容', () => {
-  let connectionId: string;
-  let contactId: string;
-  let foreignContactId: string;
-  const execute = (name: string, input: Record<string, unknown>) => {
-    const tool = dingtalkTools.find((item) => item.name === name);
-    if (!tool) throw new Error(`未注册工具 ${name}`);
-    return tool.execute('dingtalk-test', input as never, undefined, undefined, {} as never);
-  };
-
+describe('历史钉钉消息只读兼容', () => {
   it('旧会话私聊 API 返回 410，读取历史仍可用，不产生发送记录', async () => {
     const response = await app.request(`/sessions/${firstSession}/dingtalk-messages`, { method: 'POST',
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirmed: true, text: '不得发送' }) });
@@ -198,48 +173,26 @@ describe('历史钉钉草稿与收件人缓存兼容', () => {
     expect(await prisma.dingtalkMessage.count()).toBe(0);
   });
 
-  it('连接与名单只暴露启用数据，不向 Pi 返回机器人凭据', () => prisma.dingtalkRobot.create({ data: {
-    name: 'Pi 连接', transport: 'cli', cliSingleton: true, enabled: true, cliProfile: 'corp:user', secret: 'private-secret',
-  } }).then((connection) => {
-    connectionId = connection.id;
-    return Promise.all([
-      prisma.dingtalkContact.create({ data: { connectionId, cliProfile: 'corp:user', userId: 'real-user', name: '启用人员', employeeNo: '251111' } }),
-      prisma.dingtalkContact.create({ data: { connectionId, cliProfile: 'corp:user', userId: 'disabled-user', name: '停用人员', enabled: false } }),
-      prisma.dingtalkRobot.create({ data: { name: '停用 Webhook', enabled: false } }),
-      prisma.dingtalkRobot.create({ data: { name: '未配置 Webhook', enabled: true } }),
-    ]);
-  }).then(([contact, _disabled, other]) => {
-    contactId = contact.id;
-    return prisma.dingtalkContact.create({ data: { connectionId: other.id, userId: 'foreign-user', name: '其他连接人员' } });
-  }).then((contact) => { foreignContactId = contact.id; return execute('dingtalk_connections', {}); }).then((result) => {
-    expect(result.details).toEqual([{ id: connectionId, name: 'Pi 连接', cliProfile: 'corp:user', cliGroupId: null }]);
-    expect(JSON.stringify(result)).not.toContain('private-');
-    return execute('dingtalk_contacts', { connectionId });
-  }).then((result) => expect(result.details).toEqual([{ id: contactId, userId: 'real-user', name: '启用人员', employeeNo: '251111' }])));
-
-  it('只生成待确认草稿，不发消息、不写发送记录，并拒绝伪造或跨连接收件人', () => {
-    const draft = { connectionId, contactIds: [contactId], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
-    return execute('dingtalk_message_draft', draft).then((result) => {
-      expect(result.details).toMatchObject({ requiresConfirmation: true, draft: { ...draft, profile: 'corp:user' }, recipients: [{ name: '启用人员', employeeNo: '251111' }] });
-      expect(JSON.stringify(result)).not.toContain('private-');
-      return Promise.all([
-        expect(execute('dingtalk_message_draft', { ...draft, contactIds: ['251111'] })).rejects.toMatchObject({ status: 400 }),
-        expect(execute('dingtalk_message_draft', { ...draft, contactIds: [foreignContactId] })).rejects.toMatchObject({ status: 400 }),
-        expect(execute('dingtalk_message_draft', { ...draft, contactIds: [] })).rejects.toMatchObject({ status: 400 }),
-        prisma.dingtalkMessage.count(),
-      ]);
-    }).then((results) => expect(results.at(-1)).toBe(0));
-  });
-
   it('旧草稿不能用于私聊写入，确认字段也无法恢复此能力', () => {
-    const draft = { connectionId, contactIds: [contactId], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
-    return expect(dingtalkMessages.sendSessionDingtalkMessage(firstSession, 'tester', { ...draft, requestId: randomUUID() })).rejects.toMatchObject({ status: 410 })
-      .then(() => expect(execute('dingtalk_message_draft', { ...draft, confirmed: true })).rejects.toThrow());
+    const draft = { connectionId: 'retired-connection', contactIds: ['retired-contact'], targetKind: 'direct', title: '审查跟进', text: '请核对报告' };
+    return expect(dingtalkMessages.sendSessionDingtalkMessage(firstSession, 'tester', { ...draft, requestId: randomUUID(), confirmed: true })).rejects.toMatchObject({ status: 410 });
   });
+
+  it('旧发送记录仍可读取，不返回机器人凭据或恢复草稿工具', () => prisma.dingtalkRobot.create({ data: {
+    name: '历史 CLI', transport: 'cli', cliSingleton: true, enabled: false, cliProfile: 'corp:user', secret: 'private-secret',
+  } }).then((connection) => prisma.dingtalkMessage.create({ data: {
+    id: randomUUID(), sessionId: firstSession, connectionId: connection.id, requestedBy: 'tester', payloadHash: 'historical',
+    targetKind: 'direct', recipients: [{ userId: 'old-user', name: '历史收件人' }], title: '历史消息', text: '历史正文', status: 'accepted', remoteIds: ['historical-receipt'],
+  } })).then((record) => Promise.resolve(app.request(`/sessions/${firstSession}/dingtalk-messages`)).then(async (response) => {
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ messages: [expect.objectContaining({ id: record.id, title: '历史消息', status: 'accepted', remoteIds: ['historical-receipt'] })] });
+    expect(JSON.stringify(body)).not.toContain('private-secret');
+  })));
 });
 
 describe('Pi 追问的完整 Service 与持久化流程', () => {
-  it('继续对话不开放钉钉发送工具，SSE 和数据库一致，停止后释放聊天资格', async () => {
+  it.each([false, true])('继续对话仅保留只读工具，SSE 和数据库一致，是否关联运行：%s', async (withRun) => {
     let waiting = false;
     let requestCount = 0;
     const requests: Array<{ tools?: Array<{ function: { name: string } }> }> = [];
@@ -267,16 +220,19 @@ describe('Pi 追问的完整 Service 与持久化流程', () => {
       const model = await prisma.aIModel.create({ data: { provider: 'openai-compatible', modelId: 'service-test', apiKey: 'test-service-key',
         apiBaseUrl: `http://127.0.0.1:${address.port}/v1`, maxSteps: 8 } });
       const session = await services.createChatSession({});
-      const response = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, messages: [message(randomUUID(), '请私聊名单中的启用人员，请核对报告')] });
+      const run = withRun ? await prisma.run.create({ data: { sessionId: session.id, engineKey: 'ocr', status: 'failed', error: '提交范围解析失败' } }) : null;
+      const messageCount = await prisma.dingtalkMessage.count();
+      const response = await chat.prepareChatStream({ sessionId: session.id, aiModelId: model.id, ...(run ? { runId: run.id } : {}),
+        messages: [message(randomUUID(), '请私聊名单中的启用人员，请核对报告')] });
       const sse = await response.text();
       expect(requestCount).toBe(1);
-      expect(requests[0].tools ?? []).toHaveLength(0);
+      expect((requests[0].tools ?? []).map((tool) => tool.function.name)).toEqual(withRun ? ['review_run_context'] : []);
       expect(sse).toContain('群通知由审查发布流程处理');
       expect(sse).not.toContain('private-');
       const tree = await store.loadSessionMessageTree(session.id);
       expect(tree.messages).toHaveLength(2);
       expect(tree.messages[1].parts).toContainEqual(expect.objectContaining({ type: 'text', text: '继续对话仅解释报告，群通知由审查发布流程处理。' }));
-      expect(await prisma.dingtalkMessage.count()).toBe(0);
+      expect(await prisma.dingtalkMessage.count()).toBe(messageCount);
       const runtime = await import('@server/platform/chat/chat-runtime');
       expect(runtime.isChatSessionActive(session.id)).toBe(false);
 

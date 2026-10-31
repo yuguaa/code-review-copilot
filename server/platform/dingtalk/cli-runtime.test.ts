@@ -6,11 +6,17 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDwsCommand, parseDwsResult, runDws } from './cli-runtime';
 import { createDingtalkWorker } from './cli-worker';
+import { createDwsLoginManager } from './cli-login';
 
 import type { DingtalkCliRequest } from '@shared/dingtalk';
 
 const request: Extract<DingtalkCliRequest, { action: 'send' }> = { action: 'send', profile: 'corp:user',
   robotCode: 'bot-1', groupId: 'cid-test', userIds: ['actual-dingtalk-user'], title: 'Review', text: '@./secret $(whoami)\n报告正文' };
+const identityRequests: DingtalkCliRequest[] = [
+  { action: 'status', profile: 'corp:user' },
+  { action: 'search', profile: 'corp:user', query: '251111', dimension: 'jobNumber' },
+  { action: 'person', profile: 'corp:user', userId: 'real-user' },
+];
 
 describe('DWS 调用边界', () => {
   it('实际子进程同时使用持久化配置目录和加密钥匙串目录', async () => {
@@ -62,6 +68,76 @@ describe('DWS 调用边界', () => {
       body: JSON.stringify({ action: 'send-user', profile: 'corp:user', userId: 'recipient', idempotencyKey: 'fixed-key', title: 'Review', text: '正文' }) });
     expect(response.status).toBe(410);
     expect(sends).toBe(0);
+  });
+
+  it.each([...identityRequests, request])('扫码期间拒绝 $action，不执行旧身份命令', async (input) => {
+    let completeLogin!: () => void;
+    const login = createDwsLoginManager(() => new Promise((resolve) => { completeLogin = () => resolve({ code: 0, signal: null, stderr: '',
+      stdout: JSON.stringify({ success: true, token_valid: true, corp_id: 'new-corp', user_id: 'new-user' }) }); }));
+    let executions = 0;
+    const token = 'x'.repeat(32);
+    const app = createDingtalkWorker(token, () => { executions += 1; return Promise.resolve({ userId: 'old-user', name: '旧身份人员' }); }, login);
+    login.start();
+    try {
+      const response = await app.request('/execute', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(input) });
+      expect(response.status).toBe(409);
+      expect(executions).toBe(0);
+    } finally { completeLogin(); await login.stop(); }
+  });
+
+  it.each([...identityRequests, request])('切换登录后 $action 的查询结果失效，已发送回执仍保留', async (input) => {
+    let completeLogin!: () => void;
+    const login = createDwsLoginManager(() => new Promise((resolve) => { completeLogin = () => resolve({ code: 0, signal: null, stderr: '',
+      stdout: JSON.stringify({ success: true, token_valid: true, corp_id: 'new-corp', user_id: 'new-user' }) }); }));
+    let queryStarted!: () => void;
+    const started = new Promise<void>((resolve) => { queryStarted = resolve; });
+    const result = input.action === 'send' ? { status: 'accepted' as const, remoteIds: ['actual-receipt'] }
+      : { userId: 'old-user', name: '旧身份人员', employeeNo: '251111' };
+    let completeQuery!: (value: typeof result) => void;
+    let defer = false;
+    const token = 'x'.repeat(32);
+    const app = createDingtalkWorker(token, (operation) => {
+      if (operation.action === 'auth-status') return Promise.resolve({ authenticated: true, tokenValid: true, profile: 'corp:user', userName: '授权人', corpName: '测试组织', reason: null });
+      if (defer) return new Promise<typeof result>((resolve) => { completeQuery = resolve; queryStarted(); });
+      return Promise.resolve(result);
+    }, login);
+    const send = () => app.request('/execute', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(input) });
+    const stable = await send();
+    expect(stable.status).toBe(200);
+    expect(await stable.json()).toEqual(result);
+    defer = true;
+    const pending = send();
+    await started;
+    login.start();
+    try {
+      completeLogin(); await login.stop();
+      expect(login.state()?.status).toBe('completed');
+      completeQuery(result);
+      const stale = await pending;
+      expect(stale.status).toBe(input.action === 'send' ? 200 : 409);
+      if (input.action === 'send') expect(await stale.json()).toEqual(result);
+      else expect(await stale.text()).not.toContain('old-user');
+    } finally { completeLogin(); completeQuery(result); await login.stop(); }
+  });
+
+  it.each([...identityRequests, request])('旧 Profile 的 $action 延迟到新身份登录后到达时，不执行 CLI', async (input) => {
+    const token = 'x'.repeat(32);
+    let activeProfile = 'corp:user';
+    let executions = 0;
+    const app = createDingtalkWorker(token, (operation) => {
+      if (operation.action === 'auth-status') return Promise.resolve({ authenticated: true, tokenValid: true,
+        profile: activeProfile, userName: '授权人', corpName: '组织', reason: null });
+      executions += 1;
+      return Promise.resolve({ userId: 'old-user', name: '旧组织人员' });
+    });
+    const send = () => app.request('/execute', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(input) });
+    expect((await send()).status).toBe(200);
+    expect(executions).toBe(1);
+    activeProfile = 'new-corp:new-user';
+    const stale = await send();
+    expect(stale.status).toBe(409);
+    expect(await stale.text()).not.toContain('old-user');
+    expect(executions).toBe(1);
   });
 
   it('群消息使用明确的 Profile、机器人身份和 @ ID，正文只经 stdin 传递', () => {

@@ -99,7 +99,7 @@ function completedRun(): Promise<Run> {
   }));
 }
 
-async function withNotificationFixture(mode: 'unique' | 'ambiguous' | 'unknown' | 'parallel' | 'wrong-employee' | 'disabled-repo' | 'changed-robot', operation: (sent: Array<{ userId: string; text: string }>, payloads: Array<Record<string, unknown>>) => Promise<void>) {
+async function withNotificationFixture(mode: 'unique' | 'ambiguous' | 'unknown' | 'rejected' | 'parallel' | 'wrong-employee' | 'disabled-repo' | 'changed-robot', operation: (sent: Array<{ userId: string; text: string }>, payloads: Array<Record<string, unknown>>) => Promise<void>) {
   const previous = { url: process.env.DINGTALK_WORKER_URL, token: process.env.DINGTALK_WORKER_TOKEN, publicUrl: process.env.APP_PUBLIC_URL };
   const model = await prisma.aIModel.findUniqueOrThrow({ where: { id: modelId } });
   const repository = await prisma.repository.findUniqueOrThrow({ where: { id: repositoryId }, select: { enableDingtalk: true, dingtalkRobotId: true } });
@@ -134,7 +134,7 @@ async function withNotificationFixture(mode: 'unique' | 'ambiguous' | 'unknown' 
         sent.push({ userId: input.at?.atUserIds?.join(',') ?? '', text: input.markdown?.text ?? '' });
         if (mode === 'unknown') { request.socket.destroy(); return; }
         response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ errcode: 0, errmsg: 'ok' }));
+        response.end(JSON.stringify({ errcode: mode === 'rejected' ? 310000 : 0, errmsg: mode === 'rejected' ? 'rejected' : 'ok' }));
         return;
       }
       const result = input.messages.filter((item: any) => item.role === 'tool').at(-1);
@@ -431,6 +431,16 @@ describe('发布资格与恢复', () => {
     await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
     await expect(publication.publishRun(run.id, 'dingtalk', false)).rejects.toBeInstanceOf(publication.PublicationError);
     expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ dingtalk: { status: 'unknown' } });
+    await publication.publishRun(run.id, 'dingtalk', false);
+    expect(sent).toHaveLength(1);
+  }));
+
+  it('机器人明确拒绝群消息时记录 failed，Pi 和自动发布均不会重复发送', () => withNotificationFixture('rejected', async (sent) => {
+    const run = await completedRun();
+    await prisma.session.update({ where: { id: run.sessionId }, data: { authorUsername: '251111' } });
+    await prisma.run.update({ where: { id: run.id }, data: { rawResult: { status: 'complete', comments: [{ path: 'src/form.ts', start_line: 5, end_line: 5, content: '存在问题' }] } } });
+    await expect(publication.publishRun(run.id, 'dingtalk', false)).rejects.toBeInstanceOf(publication.PublicationError);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).deliveries).toMatchObject({ dingtalk: { status: 'failed' } });
     await publication.publishRun(run.id, 'dingtalk', false);
     expect(sent).toHaveLength(1);
   }));

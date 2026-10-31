@@ -1,7 +1,7 @@
 import { HTTPException } from "hono/http-exception";
 
 import { prisma } from "@server/infrastructure/prisma/prisma.service";
-import { sendDingtalk as sendDingtalkNotification } from "@server/shared/dingtalk/dingtalk.service";
+import { dingtalkDestinationFingerprint, sendDingtalk as sendDingtalkNotification } from "@server/shared/dingtalk/dingtalk.service";
 import { dingtalkConnectionConfigured } from "@server/modules/settings/dingtalk-robot-settings.service";
 
 import type { Prisma } from "@prisma/client";
@@ -12,7 +12,7 @@ export type DingtalkRepositoryConfig = {
   dingtalkRobotId: string | null;
 };
 
-export { dingtalkDestinationFingerprint, sendDingtalk as sendDingtalkNotification } from "@server/shared/dingtalk/dingtalk.service";
+export { dingtalkDestinationFingerprint, sendDingtalkNotification };
 
 export function validateDingtalkTarget(client: Pick<Prisma.TransactionClient, "dingtalkRobot">, id: string | null | undefined, required: boolean): Promise<void> {
   if (!id) return required ? Promise.reject(new HTTPException(400, { message: "请选择钉钉机器人" })) : Promise.resolve();

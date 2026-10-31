@@ -3,16 +3,8 @@ import { z } from 'zod';
 
 import { dingtalkPerson, dingtalkSearch } from '@shared/dingtalk';
 import { prisma } from '@server/infrastructure/prisma/prisma.service';
-import { dingtalkConnectionConfigured } from '@server/modules/settings/dingtalk-robot-settings.service';
 import { callDingtalkCli } from '@server/shared/dingtalk/dingtalk-cli.service';
 import { requireGlobalDingtalkCli } from './dingtalk-global.service';
-
-export function listDingtalkCliConnections() {
-  return prisma.dingtalkRobot.findMany({ where: { enabled: true, transport: 'cli', cliSingleton: true }, orderBy: { name: 'asc' },
-    select: { id: true, name: true, transport: true, webhookUrl: true, cliProfile: true, cliRobotCode: true, cliGroupId: true },
-  }).then((connections) => connections.filter(dingtalkConnectionConfigured)
-    .map(({ id, name, cliProfile, cliGroupId }) => ({ id, name, cliProfile, cliGroupId })));
-}
 
 export function getCliConnection(id: string, signal?: AbortSignal) {
   return requireGlobalDingtalkCli(signal).then((global) => {
